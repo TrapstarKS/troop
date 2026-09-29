@@ -397,6 +397,12 @@ object StrandAlpha {
     const val selectedBorder = 0.55f
     const val chartFillStrong = 0.28f
     const val chartFillSoft = 0.04f
+    const val chartZoneFillTopLight = 0.62f
+    const val chartZoneFillTopDark = 0.52f
+    const val chartZoneFillMiddleLight = 0.40f
+    const val chartZoneFillMiddleDark = 0.32f
+    const val chartZoneFillBottomLight = 0.20f
+    const val chartZoneFillBottomDark = 0.15f
     const val chartMarker = 0.35f
     const val chartShadow = 0.28f
     const val chartLabel = 0.95f
@@ -438,6 +444,7 @@ object Metrics {
     val dialogScrollableMaxHeight = 560.dp
     val divider = 1.dp
     val compactChartHeight = chartHeight - 90.dp
+    val chartAxisLabelWidth = 40.dp
     val selectorTopUp = sectionGap - screenRowSpacing
     val iconButton = 48.dp
     val iconSmall = 18.dp
