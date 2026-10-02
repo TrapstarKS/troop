@@ -340,6 +340,13 @@ public struct TrendChart: View {
     public var body: some View {
         // Resolve against current data so the marker and readout never refer to a removed date.
         let currentSelection = selectedPoint.flatMap { selected in points.first { $0.date == selected.date } }
+        // All marks share these styles. Resolve them once per chart update instead of rebuilding
+        // the same gradient for every vertex; segment identities and full-resolution data stay intact.
+        let stops = gradient.toStops()
+        let areaFill = LinearGradient(
+            colors: [StrandPalette.sample(stops: stops, at: unit(averageValue)).opacity(0.28), .clear],
+            startPoint: .top, endPoint: .bottom)
+        let lineStroke = valueGradient
         VStack(alignment: .leading, spacing: 8) {
         if largeSelection {
             let point = currentSelection ?? points.last
@@ -365,7 +372,7 @@ public struct TrendChart: View {
                         x: .value("Date", p.date),
                         y: .value("Value", p.value)
                     )
-                    .foregroundStyle(valueGradient)
+                    .foregroundStyle(lineStroke)
                     .cornerRadius(min(2, max(0, CGFloat(p.value / max(1, plotYDomain.upperBound)) * height * 0.2)))
                     .opacity(holdingBar && currentSelection != nil && currentSelection?.date != p.date ? 0.3 : 1)
                     .annotation(position: .top, spacing: 3) {
@@ -390,15 +397,7 @@ public struct TrendChart: View {
                             series: .value("Segment", p.segment)
                         )
                         .interpolationMethod(.catmullRom)
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [
-                                    StrandPalette.sample(stops: gradient.toStops(), at: unit(averageValue)).opacity(0.28),
-                                    Color.clear
-                                ],
-                                startPoint: .top, endPoint: .bottom
-                            )
-                        )
+                        .foregroundStyle(areaFill)
                     }
                 }
                 ForEach(displayPoints) { p in
@@ -409,7 +408,7 @@ public struct TrendChart: View {
                     )
                     .interpolationMethod(.catmullRom)
                     .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                    .foregroundStyle(valueGradient)
+                    .foregroundStyle(lineStroke)
                 }
                 // Dense calendar windows retain isolated readings, which have no line of their own.
                 ForEach(markerPoints) { p in
@@ -418,7 +417,7 @@ public struct TrendChart: View {
                         y: .value("Value", p.value)
                     )
                     .symbolSize(18)
-                    .foregroundStyle(StrandPalette.sample(stops: gradient.toStops(), at: unit(p.value)))
+                    .foregroundStyle(StrandPalette.sample(stops: stops, at: unit(p.value)))
                 }
             }
         }
