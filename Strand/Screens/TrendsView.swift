@@ -8,6 +8,7 @@ import Foundation
 
 struct TrendsView: View {
     @EnvironmentObject var repo: Repository
+    @Environment(\.locale) private var locale
     // NOTE: deliberately does NOT observe LiveState — Trends shows historical data only, and
     // observing it forced a full re-render of this subtree on every ~1 Hz live-HR tick.
 
@@ -88,6 +89,8 @@ struct TrendsView: View {
     /// the Today Rest score (#732). sleep_performance is a metricSeries, not a DailyMetric field, so load
     /// it once (mirroring TodayView's restScore source) and key by day for `resolve` below.
     @State private var sleepPerfByDay: [String: Double] = [:]
+    @State private var sleepPerfRevision = 0
+    @State private var resolvedCache = ResolvedCache()
 
     // #710 — browse previous weeks in the Week-in-review digest. 0 = the week containing today; each step
     // back is one Mon–Sun week earlier. Clamped so it never runs past the earliest day we hold (see
@@ -119,12 +122,59 @@ struct TrendsView: View {
     }()
     private func date(_ day: String) -> Date? { Self.dayParser.date(from: day) }
 
-    private struct ResolvedMetric {
+    struct ResolvedMetric {
         var points: [TrendPoint]
     }
 
-    private func resolve(_ value: (DailyMetric) -> Double?) -> ResolvedMetric {
+    struct ResolvedMetrics {
+        let recovery: ResolvedMetric
+        let hrv: ResolvedMetric
+        let rhr: ResolvedMetric
+        let strain: ResolvedMetric
+        let rest: ResolvedMetric
+    }
+
+    /// Repository status publications can redraw Trends without changing its historical data.
+    /// Retain the five resolved windows across those redraws; invalidate on the data generation,
+    /// selected calendar window, Rest-series revision, or locale so readings remain current.
+    /// This reference does not publish changes of its own, avoiding a body-to-state update loop.
+    @MainActor final class ResolvedCache {
+        private struct Key: Equatable {
+            let repo: ObjectIdentifier
+            let refreshSeq: Int
+            let window: TrendsWindow
+            let restRevision: Int
+            let locale: String
+        }
+
+        private var key: Key?
+        private var value: ResolvedMetrics?
+
+        func get(repo: Repository, window: TrendsWindow, restRevision: Int, locale: String,
+                 build: () -> ResolvedMetrics) -> ResolvedMetrics {
+            let next = Key(repo: ObjectIdentifier(repo), refreshSeq: repo.refreshSeq,
+                           window: window, restRevision: restRevision, locale: locale)
+            if key == next, let value { return value }
+            let result = build()
+            key = next
+            value = result
+            return result
+        }
+    }
+
+    private var resolvedMetrics: ResolvedMetrics {
         let window = selectedWindow
+        return resolvedCache.get(repo: repo, window: window, restRevision: sleepPerfRevision,
+                                 locale: locale.identifier) {
+            ResolvedMetrics(recovery: resolve(in: window) { $0.recovery },
+                            hrv: resolve(in: window) { $0.avgHrv },
+                            rhr: resolve(in: window) { $0.restingHr.map(Double.init) },
+                            strain: resolve(in: window) { $0.strain },
+                            rest: resolve(in: window) { sleepPerfByDay[$0.day] })
+        }
+    }
+
+    private func resolve(in window: TrendsWindow, _ value: (DailyMetric) -> Double?) -> ResolvedMetric {
         var points = repo.days.compactMap { day -> TrendPoint? in
             guard window.contains(day.day), let number = value(day), number.isFinite,
                   let date = date(day.day) else { return nil }
@@ -212,22 +262,15 @@ struct TrendsView: View {
                     ? "Trends need history to draw. Import your WHOOP export in Data Sources to see weeks, months and years instantly."
                     : "Loading your history…")
             } else {
-                // Resolve each metric's window ONCE per body and pass the results
-                // down — rangeBar/heroRecovery/smallMultiples all reuse these
-                // instead of re-filtering repo.days through caption/widened/
-                // windowPoints on every render (hover, animation, 1 Hz HR tick).
-                let recovery = resolve { $0.recovery }
-                let hrv = resolve { $0.avgHrv }
-                let rhr = resolve { $0.restingHr.map(Double.init) }
-                let strain = resolve { $0.strain }
-                // Rest = the sleep_performance composite — the same number the Today Rest score shows
-                // (#732); see sleepPerfByDay. resolve() still does the windowing/widening.
-                let rest = resolve { sleepPerfByDay[$0.day] }
+                // Reuse the resolved windows until the data, range, or loaded Rest series changes.
+                // An unrelated Repository publication must not re-filter five years of history.
+                let metrics = resolvedMetrics
                 VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
                     // The main card list ripples in once on appear (Reduce-Motion safe).
                     Group {
                         rangeBar
-                        selectedMetricChart(recovery: recovery, hrv: hrv, rhr: rhr, strain: strain, rest: rest)
+                        selectedMetricChart(recovery: metrics.recovery, hrv: metrics.hrv, rhr: metrics.rhr,
+                                            strain: metrics.strain, rest: metrics.rest)
                         monthlyPerformance
                         weeklyDigestNav
                         // Long-horizon training load (CTL/ATL/TSB). Uses the FULL history, not the
@@ -259,6 +302,7 @@ struct TrendsView: View {
         .task(id: repo.days) {
             let s = await repo.exploreSeries(key: "sleep_performance", source: "my-whoop")
             sleepPerfByDay = Dictionary(s.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
+            sleepPerfRevision += 1
         }
     }
 
