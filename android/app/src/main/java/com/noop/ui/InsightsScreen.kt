@@ -6,6 +6,8 @@ import android.content.Context
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,10 +31,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +52,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -73,8 +78,9 @@ import com.noop.analytics.EffectRanker
 //     logged "yes" vs the days it was logged "no" — a day it was not logged at all
 //     is in neither group) and compare a chosen outcome metric (Charge / HRV /
 //     Rest / RHR) between the two groups. Ranked by effect size (Cohen's d), with
-//     significant effects first. Each card carries a plain-English sentence, the
-//     with/without means, group counts, a significance pill, and the magnitude word.
+//     significant effects first. Compact summaries open the with/without means,
+//     group counts, the association note,
+//     significance, and the magnitude word.
 //     Tint is sign-aware: a behaviour that moves the outcome the "good" way (respecting
 //     higherIsBetter) reads positive/green, the "bad" way reads critical/red.
 //
@@ -129,6 +135,8 @@ private enum class Outcome(
             Rhr -> uiString(R.string.l10n_insights_screen_rhr_04edf9b3)
         }
 }
+
+private data class EffectSelection(val effect: BehaviorEffect, val outcome: Outcome, val displayName: String)
 
 // MARK: - Computed shapes (plain data; behaviour effects come from the analytics package)
 
@@ -283,6 +291,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
 
     // Selected outcome metric for the behaviour-effects half.
     var outcome by remember { mutableStateOf(Outcome.Recovery) }
+    var selectedEffect by remember { mutableStateOf<EffectSelection?>(null) }
 
     // --- Personal-experiment state (LOCAL ONLY, SharedPreferences, parity with the
     //     Swift @AppStorage keys). `experimentSeq` bumps after a save so the snapshot
@@ -515,6 +524,8 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
                 outcome = outcome,
                 onOutcome = { outcome = it },
                 ranked = ranked,
+                catalogItems = catalogItems,
+                onSelected = { selectedEffect = it },
             )
         }
         }
@@ -528,6 +539,20 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
 
         // --- Metric relationships ---------------------------------------------
         item { RelationshipsSection(relationships) }
+    }
+    selectedEffect?.let { selection ->
+        AlertDialog(
+            onDismissRequest = { selectedEffect = null },
+            title = { Text(uiString(R.string.plan_behavior_insights), style = NoopType.title2) },
+            text = {
+                Column(Modifier.heightIn(max = Metrics.dialogScrollableMaxHeight).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Metrics.space16)) {
+                    Text(selection.outcome.label, style = NoopType.overline, color = Palette.textSecondary)
+                    EffectCard(selection.effect, selection.outcome, selection.displayName, compact = false)
+                }
+            },
+            confirmButton = { TextButton(onClick = { selectedEffect = null }) { Text(uiString(R.string.weekly_plan_dismiss)) } },
+        )
     }
 }
 
@@ -739,6 +764,8 @@ private fun BehaviourSection(
     outcome: Outcome,
     onOutcome: (Outcome) -> Unit,
     ranked: List<BehaviorEffect>,
+    catalogItems: List<JournalCatalogItem>,
+    onSelected: (EffectSelection) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
         Row(
@@ -747,7 +774,7 @@ private fun BehaviourSection(
         ) {
             Box(modifier = Modifier.weight(1f)) {
                 SectionHeader(
-                    "Behaviour Effects",
+                    uiString(R.string.plan_behavior_insights),
                     overline = "What moves your ${outcome.outcomeName.lowercase(Locale.US)}",
                 )
             }
@@ -771,15 +798,21 @@ private fun BehaviourSection(
         } else {
             // Fade + rise the ranked cards in sequence (mirrors iOS .staggeredAppear(index:)).
             ranked.forEachIndexed { i, e ->
-                Box(modifier = Modifier.staggeredAppear(i)) { EffectCard(e, outcome) }
+                val item = catalogItems.firstOrNull { normJournalKey(it.canonical) == normJournalKey(e.behavior) } ?: JournalCatalogItem(e.behavior)
+                val displayName = journalLocalizedLabel(item)
+                Box(modifier = Modifier.staggeredAppear(i)) {
+                    EffectCard(e, outcome, displayName, compact = true, onOpen = {
+                        onSelected(EffectSelection(e, outcome, displayName))
+                    })
+                }
             }
         }
     }
 }
 
-/** One behaviour-effect card: sentence + with/without StatTiles + significance pill. */
+/** Compact impact summary, or its captured comparison detail. */
 @Composable
-private fun EffectCard(e: BehaviorEffect, outcome: Outcome) {
+private fun EffectCard(e: BehaviorEffect, outcome: Outcome, displayName: String, compact: Boolean, onOpen: (() -> Unit)? = null) {
     // Sign-aware tint: did this behaviour move the outcome the GOOD way?
     val movedGood: Boolean? = when {
         e.delta == 0.0 -> null
@@ -791,16 +824,19 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome) {
         false -> if (e.significant) StrandTone.Critical else StrandTone.Warning
     }
     val tintColor = when (movedGood) { true -> Palette.statusPositive; false -> Palette.statusWarning; null -> Palette.textSecondary }
-    val arrow = if (e.delta > 0) "↑" else if (e.delta < 0) "↓" else "→"
     val deltaText = e.pctChange?.let { "${if (it > 0) "+" else if (it < 0) "−" else ""}${abs(it).roundToInt()}%" } ?: outcome.format(e.delta)
     val sentence = uiString(R.string.plan_association_note)
 
     // The card wash reads as the OUTCOME's colour world (so the whole Behaviour Effects
-    // section sits in one world), while the dot / StatTile accents stay sign-aware.
-    NoopCard(tint = outcome.domain.color) {
-        Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
+    // section sits in one world), while the summary / StatTile accents stay sign-aware.
+    val modifier = if (compact && onOpen != null) Modifier.clickable(
+        role = Role.Button, onClickLabel = uiString(R.string.l10n_skin_temp_cards_screen_view_detail_27af4b67), onClick = onOpen,
+    )
+        .semantics(mergeDescendants = true) { contentDescription = "$displayName, $deltaText, ${outcome.label}" } else Modifier
+    NoopCard(modifier = modifier, tint = outcome.domain.color) {
+        Column(verticalArrangement = Arrangement.spacedBy(if (compact) Metrics.space8 else Metrics.space16)) {
 
-            // Header: behaviour name (tinted dot) + significance pill.
+            // Summary: wrapping behaviour name, change, and detail disclosure.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -808,67 +844,66 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome) {
                 Row(
                     modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Metrics.space8),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .drawBehind { drawCircle(tintColor) },
-                    )
                     Text(
-                        journalLocalizedLabel(JournalCatalogItem(e.behavior)).uppercase(),
+                        displayName.uppercase(),
                         style = NoopType.overline,
                         color = Palette.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 Text(deltaText, style = NoopType.bodyNumber, color = tintColor)
+                if (compact) {
+                    Spacer(Modifier.width(Metrics.space8))
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Palette.textSecondary, modifier = Modifier.size(Metrics.iconSmall))
+                }
             }
 
-            e.pctChange?.let { RBar(it / 50.0, tintColor) }
-            Text(sentence, style = NoopType.body, color = Palette.textSecondary)
+            e.pctChange?.let { RBar(it / 50.0, tintColor, decorative = true) }
+            if (!compact) {
+                Text(sentence, style = NoopType.body, color = Palette.textSecondary)
 
-            // With / without means as uniform StatTiles.
-            Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
-                StatTile(
-                    modifier = Modifier.weight(1f),
-                    label = uiString(R.string.l10n_insights_screen_with_564f8c6e),
-                    value = outcome.format(e.meanWith),
-                    caption = "n = ${e.nWith}",
-                    accent = tintColor,
-                    delta = null,
-                    deltaColor = tintColor,
-                )
-                StatTile(
-                    modifier = Modifier.weight(1f),
-                    label = uiString(R.string.l10n_insights_screen_without_cb735356),
-                    value = outcome.format(e.meanWithout),
-                    caption = "n = ${e.nWithout}",
-                    accent = Palette.textPrimary,
-                )
-            }
+                // With / without means as uniform StatTiles.
+                Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+                    StatTile(
+                        modifier = Modifier.fillMaxWidth(),
+                        label = uiString(R.string.l10n_insights_screen_with_564f8c6e),
+                        value = outcome.format(e.meanWith),
+                        caption = "n = ${e.nWith}",
+                        accent = tintColor,
+                        delta = null,
+                        deltaColor = tintColor,
+                    )
+                    StatTile(
+                        modifier = Modifier.fillMaxWidth(),
+                        label = uiString(R.string.l10n_insights_screen_without_cb735356),
+                        value = outcome.format(e.meanWithout),
+                        caption = "n = ${e.nWithout}",
+                        accent = Palette.textPrimary,
+                    )
+                }
 
-            HorizontalDivider(color = Palette.hairline)
+                HorizontalDivider(color = Palette.hairline)
+                StatePill(if (e.significant) "p < 0.05" else "n.s.", tone = tone, showsDot = false)
 
-            // Effect-size footer: Cohen's d + magnitude word.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Overline("Effect size", modifier = Modifier.weight(1f))
-                Text(
-                    String.format(Locale.US, "d = %.2f", e.cohensD),
-                    style = NoopType.captionNumber,
-                    color = tintColor,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    effectMagnitudeWord(e.cohensD),
-                    style = NoopType.caption,
-                    color = Palette.textTertiary,
-                )
+                // Effect-size footer: Cohen's d + magnitude word.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Overline("Effect size", modifier = Modifier.weight(1f))
+                    Text(
+                        String.format(Locale.US, "d = %.2f", e.cohensD),
+                        style = NoopType.captionNumber,
+                        color = tintColor,
+                    )
+                    Spacer(Modifier.width(Metrics.space6))
+                    Text(
+                        effectMagnitudeWord(e.cohensD),
+                        style = NoopType.caption,
+                        color = Palette.textTertiary,
+                    )
+                }
             }
         }
     }
@@ -1531,9 +1566,10 @@ private fun RelationshipRow(rel: Relationship) {
  * printed beside the title, so the bar is never an unexplained coloured shape on phone).
  */
 @Composable
-private fun RBar(r: Double, color: Color) {
+private fun RBar(r: Double, color: Color, decorative: Boolean = false) {
     Box(
         modifier = Modifier
+            .then(if (decorative) Modifier.clearAndSetSemantics { } else Modifier)
             .fillMaxWidth()
             .height(Metrics.space8)
             .clip(CircleShape)
