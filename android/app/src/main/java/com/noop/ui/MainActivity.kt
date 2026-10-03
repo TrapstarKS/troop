@@ -159,7 +159,11 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Request the BLE permissions appropriate to the running OS version. */
-    private fun requestBlePermissions() {
+    internal fun requestBlePermissions(
+        runtimePolicy: com.noop.DemoRuntimePolicy = com.noop.DemoRuntimePolicy.current,
+        launch: (Array<String>) -> Unit = { permissionLauncher.launch(it) },
+    ) {
+        if (!runtimePolicy.allowsBluetooth) return
         val needed = buildList {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 // Android 12+: granular Bluetooth permissions.
@@ -174,7 +178,7 @@ class MainActivity : ComponentActivity() {
             }
         }.toTypedArray()
 
-        if (needed.isNotEmpty()) permissionLauncher.launch(needed)
+        if (needed.isNotEmpty()) launch(needed)
     }
 }
 
