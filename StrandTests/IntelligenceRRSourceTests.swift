@@ -62,6 +62,7 @@ final class IntelligenceRRSourceTests: XCTestCase {
 
     func testEmptyAndPreservingPassesCannotReviveBoundaryLegacyHrv() async throws {
         try await withPreferences {
+            TestCentre.activate(.recovery)
             for preserve in [false, true] {
                 for marker: Double? in [nil, 0, 1] {
                     let store = try await WhoopStore.inMemory()
@@ -472,6 +473,13 @@ final class IntelligenceRRSourceTests: XCTestCase {
                 from: input.day, to: input.day)
             let promoted = try XCTUnwrap(after.first?.avgHrv)
             XCTAssertGreaterThan(promoted, 0, "the same engine must replace its cached R-R-less result")
+
+            // Promoted HRV enters the baseline signature before unchanged-cache reuse can be checked.
+            log.removeAll()
+            await engine.analyzeRecent(maxDays: 2, force: true)
+            let stabilized = try await store.dailyMetrics(deviceId: canonical + "-noop",
+                from: input.day, to: input.day)
+            XCTAssertEqual(stabilized.first?.avgHrv, promoted)
 
             log.removeAll()
             await engine.analyzeRecent(maxDays: 2, force: true)
