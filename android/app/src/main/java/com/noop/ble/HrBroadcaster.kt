@@ -1,5 +1,7 @@
 package com.noop.ble
 
+import com.noop.DemoRuntimePolicy
+
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -63,11 +65,13 @@ class HrBroadcaster(
      *  Every line is prefixed "HR-out: " so it's distinguishable from the WHOOP and HR-strap lines.
      *  Default no-op keeps existing call sites + tests silent. */
     private val log: (String) -> Unit = {},
+    private val runtimePolicy: DemoRuntimePolicy = DemoRuntimePolicy.current,
 ) {
 
     private val appContext = context.applicationContext
-    private val bluetoothManager: BluetoothManager? =
+    private val bluetoothManager: BluetoothManager? = runtimePolicy.createBluetooth {
         appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    }
     private val adapter get() = bluetoothManager?.adapter
     private val advertiser: BluetoothLeAdvertiser? get() = adapter?.bluetoothLeAdvertiser
 
@@ -134,6 +138,7 @@ class HrBroadcaster(
      * off, unsupported, or the runtime permission was revoked.
      */
     fun start() {
+        if (!runtimePolicy.allowsBluetooth) return
         wantAdvertising = true
         _statusNote.value = null
         // Listen for the radio toggling BEFORE the adapter check, so enabling the broadcast while

@@ -1,5 +1,7 @@
 package com.noop.ble
 
+import com.noop.DemoRuntimePolicy
+
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -163,6 +165,7 @@ class OuraLiveSource(
      * on RNG failure (then provisioning stays honest rather than installing a weak key).
      */
     private val randomKey: () -> IntArray? = { secureRandom16() },
+    private val runtimePolicy: DemoRuntimePolicy = DemoRuntimePolicy.current,
 ) : LiveHrSource {
 
     /**
@@ -287,8 +290,9 @@ class OuraLiveSource(
     // MARK: - Android Bluetooth handles (OWN scanner + GATT, separate from WHOOP)
 
     private val appContext = context.applicationContext
-    private val bluetoothManager: BluetoothManager? =
+    private val bluetoothManager: BluetoothManager? = runtimePolicy.createBluetooth {
         appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    }
     private val adapter: BluetoothAdapter? = bluetoothManager?.adapter
 
     /** Tier-B activity/MET research corpus writer (diagnostic JSONL sidecar; never scored, never a Streams
@@ -1129,6 +1133,7 @@ class OuraLiveSource(
 
     /** Begin scanning for Oura rings advertising the ring's base service. */
     override fun scan() {
+        if (!runtimePolicy.allowsBluetooth) return
         seen.clear()
         _discovered.value = emptyList()
         _scanning.value = true
@@ -1166,6 +1171,7 @@ class OuraLiveSource(
 
     /** Connect to the chosen discovered ring (by address) and start the auth → enable → stream flow. */
     override fun connect(address: String) {
+        if (!runtimePolicy.allowsBluetooth) return
         stopScan()
         _needsPairing.value = null
         // Remember the paired ring so an involuntary drop auto-reconnects to it (#912). An explicit connect
@@ -1190,6 +1196,7 @@ class OuraLiveSource(
      * Swift `reconnect()`.
      */
     fun reconnect() {
+        if (!runtimePolicy.allowsBluetooth) return
         _needsPairing.value = null
         intentionalDisconnect = false
         failedReconnectAttempts = 0
