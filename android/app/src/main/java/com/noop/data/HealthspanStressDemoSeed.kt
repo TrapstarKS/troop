@@ -6,6 +6,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 object HealthspanStressDemoSeed {
+    /** Swift twin: `HealthspanStressDemoSeed.seedIfDemo`. */
     suspend fun seedIfDemo(repo: WhoopRepository, seededNow: Boolean) {
         if (!BuildConfig.ENABLE_DEMO) return
         if (!seededNow && repo.pairedDevices().none { it.id == "demo-polar-h10" }) return
@@ -39,6 +40,7 @@ object HealthspanStressDemoSeed {
         repo.insertHr(hr)
     }
 
+    /** Swift twin: `HealthspanStressDemoSeed.seedDailyStressIfMissing`. */
     private suspend fun seedDailyStressIfMissing(repo: WhoopRepository, today: LocalDate) {
         if (repo.metricSeries("my-whoop", "stress", "0000-00-00", "9999-99-99").isNotEmpty()) return
 

@@ -10,6 +10,7 @@ object HealthspanPresentation {
         val pace: Double? get() = paceTenths?.div(10.0)
     }
 
+    /** Swift twin: `HealthspanPresentation.snapshot`. */
     fun snapshot(samples: List<AgeSample>, recoveryDays: Int, chronologicalAge: Double): Snapshot {
         val byDay = mutableMapOf<Int, Double>()
         for (sample in samples) {
@@ -31,7 +32,8 @@ object HealthspanPresentation {
         return Snapshot(age, paceTenths, recoveryDays.coerceAtLeast(0), recent.size, history.size)
     }
 
-    /** Counts non-overlapping buckets only; sliding timeline points are not duration inputs. */
+    /** Counts non-overlapping buckets only; sliding timeline points are not duration inputs.
+     * Swift twin: `HealthspanPresentation.zoneMinutes`. */
     fun zoneMinutes(hours: List<Pair<Double?, Int>>): List<Int> {
         val minutes = mutableListOf(0, 0, 0)
         for ((value, duration) in hours) {
