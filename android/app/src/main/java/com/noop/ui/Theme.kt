@@ -28,18 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// MARK: - Palette — the "Titanium & Gold" re-skin (mirrors StrandDesign/Palette.swift)
-//
-// A premium dark theme built on a deep NAVY canvas (NOT pure black) with per-domain
-// accent "colour worlds": Charge/recovery = GOLD, Effort/strain = amber, Rest/sleep =
-// blue, HRV = teal, high stress = burnt orange. Gold is the dominant brand anchor —
-// no greens anywhere.
-//
-// PUBLIC API IS FROZEN: every token NAME below is depended on by screens across the
-// app, so the names never change — only the VALUES were re-themed to Titanium & Gold.
-// New tokens (gold/titanium ramps + their gradients) are ADDED at the end of the
-// object; nothing existing was removed or renamed. Hex values mirror the macOS/iOS
-// StrandPalette so all three platforms share one visual language.
+// MARK: - Shared palette. Existing token names remain supported by every screen.
 
 object Palette {
 
@@ -220,6 +209,23 @@ object Palette {
     /** Gauge-tip / sparkline-head core — white on dark, deep ink on light. */
     val tipCore get() = active.tipCore
 
+    val canvasTop get() = scenicCenter
+    val canvasBottom get() = surfaceBase
+    val canvasGradient get() = Brush.verticalGradient(listOf(canvasTop, canvasBottom))
+    val ringTrack get() = if (isLight) hairlineStrong else Color(0xFF353D40)
+    val recoveryHigh get() = if (isLight) Color(0xFF158A08) else Color(0xFF16EC06)
+    val recoveryMedium get() = if (isLight) Color(0xFF957C00) else Color(0xFFFFDE00)
+    val recoveryLow get() = if (isLight) Color(0xFFCF0020) else Color(0xFFFF0026)
+    val strainPrimary get() = if (isLight) Color(0xFF0075B8) else Color(0xFF0093E7)
+    val sleepPrimary get() = restColor
+    val positive get() = statusPositive
+    val stressLow get() = stressDeep
+    val stressMedium get() = stressColor
+    val stressHigh get() = stressBright
+    val coachViolet = Color(0xFF8A72EE)
+    val coachCyan = Color(0xFF4EBAE8)
+    val coachGradient get() = Brush.horizontalGradient(listOf(coachViolet, coachCyan))
+
     // MARK: - Sampling helpers (mirror StrandPalette.sample / recoveryColor)
 
     /** Linear-interpolate two colors in sRGB space (matches StrandPalette.interpolate). */
@@ -253,7 +259,11 @@ object Palette {
     }
 
     /** Sample the recovery gradient at a recovery score 0..100. */
-    fun recoveryColor(score: Double): Color = sample(recoveryStops, (score / 100.0).toFloat())
+    fun recoveryColor(score: Double): Color = when {
+        score < 34 -> recoveryLow
+        score < 67 -> recoveryMedium
+        else -> recoveryHigh
+    }
 
     /** Sample the strain gradient at an Effort value on the 0..100 scale. */
     fun strainColor(strain: Double): Color = sample(strainStops, (strain / 100.0).toFloat())
@@ -425,7 +435,7 @@ object Metrics {
     val divider = 1.dp
     val compactChartHeight = chartHeight - 90.dp
     val selectorTopUp = sectionGap - screenRowSpacing
-    val iconButton = 36.dp
+    val iconButton = 48.dp
     val iconSmall = 18.dp
     val iconTiny = 12.dp
     val selectorPadding = 10.dp
@@ -452,6 +462,19 @@ object Metrics {
     val legendLineHeight = 3.dp
     val progressHeight = 10.dp
     val editorListMaxHeight = 390.dp
+    val detailDial = 260.dp
+    val compactDial = 90.dp
+    val detailDialStroke = 15.dp
+    val compactDialStroke = 5.dp
+    val chromeAvatar = 36.dp
+    val coachOrb = 60.dp
+    val tabHeight = 64.dp
+    val tabMaxWidth = 480.dp
+    val contributorMinHeight = 56.dp
+    val chromeMinHeight = 56.dp
+    val chartBarWidth = 12.dp
+    val chartLineWidth = 2.dp
+    val chartGridWidth = 1.dp
 }
 
 // MARK: - Typography (ported from StrandDesign/Typography.swift §9.2)
@@ -480,10 +503,10 @@ object NoopType {
      *  display(); exposed to mirror StrandFont.displayTracking. */
     fun displayTracking(size: Float = 72f): Float = -size * 0.04f
 
-    val title1 = TextStyle(fontFamily = sans, fontWeight = FontWeight.Bold, fontSize = 28.sp)
+    val title1 = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 26.sp)
     val title2 = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 22.sp)
     val headline = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-    val body = TextStyle(fontFamily = sans, fontWeight = FontWeight.Normal, fontSize = 15.sp)
+    val body = TextStyle(fontFamily = sans, fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 23.sp)
     val subhead = TextStyle(fontFamily = sans, fontWeight = FontWeight.Normal, fontSize = 13.sp)
     val caption = TextStyle(fontFamily = sans, fontWeight = FontWeight.Normal, fontSize = 12.sp)
     val footnote = TextStyle(fontFamily = sans, fontWeight = FontWeight.Normal, fontSize = 11.sp)
