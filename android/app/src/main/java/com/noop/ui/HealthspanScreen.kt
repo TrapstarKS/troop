@@ -74,10 +74,13 @@ fun HealthspanScreen(vm: AppViewModel, onCoach: (() -> Unit)? = null) {
     var selectedPillar by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
     val days = healthspanDays(vm)
     val bodyAge = healthspanSeries(vm, "body_age")
-    var referenceDay by remember { mutableStateOf(LocalDate.now()) }
+    var referenceIso by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    val referenceDay = LocalDate.parse(referenceIso)
     val today = LocalDate.now()
     val earliestDay = today.minusDays(HealthspanHistory.oldestReferenceOffset(days.mapNotNull { runCatching { ChronoUnit.DAYS.between(LocalDate.parse(it.day), today).toInt() }.getOrNull() }).toLong())
-    LaunchedEffect(earliestDay) { referenceDay = maxOf(referenceDay, earliestDay) }
+    LaunchedEffect(earliestDay, days.isNotEmpty()) {
+        if (days.isNotEmpty()) referenceIso = maxOf(referenceDay, earliestDay).toString()
+    }
     val profile = ProfileStore.from(LocalContext.current.applicationContext)
     val dateOfBirth = Instant.ofEpochMilli(profile.dateOfBirthMillis).atZone(ZoneId.systemDefault()).toLocalDate()
     val chronologicalAge = Period.between(dateOfBirth, referenceDay).years.toDouble().coerceAtLeast(0.0)
@@ -105,7 +108,7 @@ fun HealthspanScreen(vm: AppViewModel, onCoach: (() -> Unit)? = null) {
 
     LazyScreenScaffold(title = stringResource(R.string.healthspan_title), subtitle = stringResource(R.string.healthspan_subtitle)) {
         item {
-            HealthDateNavigation(referenceDay, 7, true, earliestDay) { referenceDay = it }
+            HealthDateNavigation(referenceDay, 7, true, earliestDay) { referenceIso = it.toString() }
         }
         item {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
