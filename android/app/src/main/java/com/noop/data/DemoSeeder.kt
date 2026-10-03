@@ -46,9 +46,10 @@ object DemoSeeder {
     )
 
     /** Seed only if the demo (and the user) has no daily history yet. Safe to call on every launch. */
-    suspend fun seedIfEmpty(repo: WhoopRepository) {
+    suspend fun seedIfEmpty(repo: WhoopRepository, context: android.content.Context? = null) {
         if (repo.days(WHOOP).isNotEmpty()) return
         seed(repo)
+        context?.let { seedWeeklyPlanDemo(it, LocalDate.now().toString()) }
     }
 
     /**
@@ -297,6 +298,20 @@ object DemoSeeder {
         if (workouts.isNotEmpty()) repo.upsertWorkouts(workouts)
         if (journal.isNotEmpty()) repo.upsertJournal(journal)
         RecoveryStrainDemoSeed.seed(repo)
+        seedPlanJournal(repo)
+    }
+
+    private suspend fun seedPlanJournal(repo: WhoopRepository) {
+        val today = LocalDate.now()
+        val rows = (1..90).flatMap { offset ->
+            val day = today.minusDays(offset.toLong()).toString()
+            listOf(
+                JournalEntry("noop-journal", day, "Did you read before bed?", offset % 3 != 0),
+                JournalEntry("noop-journal", day, "Did you drink any alcohol?", offset % 4 == 0),
+                JournalEntry("noop-journal", day, "How much caffeine did you consume?", true, numericValue = (50 + offset % 4 * 50).toDouble()),
+            )
+        }
+        repo.upsertJournal(rows)
     }
 
     // MARK: - helpers

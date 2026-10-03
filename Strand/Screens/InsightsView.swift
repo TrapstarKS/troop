@@ -30,7 +30,9 @@ import WhoopStore
 /// load re-runs both on a data change and on a calendar-day rollover (#860 item 4).
 private struct InsightsLoadKey: Equatable {
     let seq: Int
+    let journalSeq: Int
     let dayKey: String
+    let dayOffset: Int
 }
 
 /// #833 (Insights freeze): the snapshot InsightsView.load() builds, parked on the long-lived Repository so a
@@ -75,9 +77,9 @@ struct InsightsView: View {
         /// Short segment label.
         var label: String {
             switch self {
-            case .recovery: return String(localized: "Charge")
+            case .recovery: return String(localized: "Recovery")
             case .hrv:      return "HRV"
-            case .sleep:    return String(localized: "Rest")
+            case .sleep:    return String(localized: "Sleep Performance")
             case .rhr:      return "RHR"
             }
         }
@@ -93,9 +95,9 @@ struct InsightsView: View {
         /// The human outcome name used by BehaviorInsights.sentence.
         var outcomeName: String {
             switch self {
-            case .recovery: return String(localized: "Charge")
+            case .recovery: return String(localized: "Recovery")
             case .hrv:      return "HRV"
-            case .sleep:    return String(localized: "Rest")
+            case .sleep:    return String(localized: "Sleep Performance")
             case .rhr:      return String(localized: "Resting HR")
             }
         }
@@ -136,6 +138,7 @@ struct InsightsView: View {
     }
 
     @State private var outcome: Outcome = .recovery
+    @State private var showingWeeklyPlan = false
 
     // MARK: Personal-experiment state (LOCAL ONLY, UserDefaults-backed, single user)
     //
@@ -193,6 +196,7 @@ struct InsightsView: View {
     /// Distinct imported question strings, so the card adopts the export's exact wording.
     @State private var importedQuestions: [String] = []
     /// The selected day's native answers (question → answeredYes), drives the chip state.
+    @State private var answersDayKey = ""
     @State private var dayAnswers: [String: Bool] = [:]
     /// The selected day's native numeric values (question → value), drives the numeric fields (#322).
     @State private var dayNumeric: [String: Double] = [:]
@@ -209,7 +213,7 @@ struct InsightsView: View {
     @State private var currentDayKey = Repository.localDayKey(Date())
 
     var body: some View {
-        ScreenScaffold(title: "Insights", subtitle: "Interrogate what affects what.",
+        ScreenScaffold(title: "Journal", subtitle: "Your daily habits, recorded locally.",
                        // PERF (scroll): lazy column, byte-identical layout (LazyVStack == eager VStack
                        // alignment/spacing/header). The content is one inner eager VStack, so any nested
                        // staggered reveals are unchanged; this only defers building that stack on scroll-in.
@@ -226,11 +230,22 @@ struct InsightsView: View {
                     // + alcohol/caffeine dose-response. Reachable as its own destination too; this is the
                     // honest in-Insights entry point.
                     whatMovesYouLink
+                    Button { showingWeeklyPlan = true } label: {
+                        NoopCard {
+                            HStack {
+                                Text("Weekly Plan").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+                                Spacer()
+                                Image(systemName: "chevron.right").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                            }
+                        }
+                    }.buttonStyle(.plain)
                     // Native logging, always reachable: the account-free way into Insights.
                     JournalLogCard(importedQuestions: importedQuestions,
                                    answers: dayAnswers,
                                    numericAnswers: dayNumeric,
                                    dayOffset: $journalDayOffset,
+                                   answersDayKey: answersDayKey,
+                                   anchorDay: currentDayKey,
                                    onChanged: { Task { await load() } })
                     // Mind, daily mood check-in + mood↔body correlations.
                     // Self-contained (owns its own load/state); sits with the
@@ -258,10 +273,19 @@ struct InsightsView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingWeeklyPlan) {
+            NavigationStack {
+                WeeklyPlanView().environmentObject(repo)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showingWeeklyPlan = false } } }
+            }
+            #if os(macOS)
+            .frame(minWidth: NoopMetrics.detailSheetMinWidth, minHeight: NoopMetrics.detailSheetMinHeight)
+            #endif
+        }
         // #860 item 4: key on the data-refresh seq AND today's day-key, so the journal re-loads both on a
         // data change and the moment the calendar day rolls over (driven by the foreground/appear refresh
         // of `currentDayKey` below), so yesterday's answers leave "Today" and the new day starts fresh.
-        .task(id: InsightsLoadKey(seq: repo.refreshSeq, dayKey: currentDayKey)) { await load(allowCache: true) }
+        .task(id: InsightsLoadKey(seq: repo.refreshSeq, journalSeq: repo.journalSeq, dayKey: currentDayKey, dayOffset: journalDayOffset)) { await load(allowCache: true) }
         // Recompute the cached ranking only when the outcome selection changes.
         // (behaviours / outcomeByKey change only at load, which calls
         //  recomputeRanked() directly, so keying on `outcome` is sufficient.)
@@ -289,7 +313,12 @@ struct InsightsView: View {
     /// answers behind them snap to the new day (#860 item 4).
     private func refreshCurrentDayKey() {
         let key = Repository.localDayKey(Date())
-        if key != currentDayKey { currentDayKey = key }
+        if key != currentDayKey {
+            if journalDayOffset != 0, let old = JournalCalendar.date(currentDayKey), let new = JournalCalendar.date(key) {
+                journalDayOffset += Calendar.current.dateComponents([.day], from: old, to: new).day ?? 0
+            }
+            currentDayKey = key
+        }
     }
 
     /// The deep-link row into the v5 "What moves you" hub.
@@ -340,6 +369,10 @@ struct InsightsView: View {
     /// path (a re-mount / data-refresh / day-rollover); the direct write-then-reload sites (journal toggle,
     /// experiment mark) leave it false so a change that doesn't bump `refreshSeq` always re-reads.
     private func load(allowCache: Bool = false) async {
+        let requestedJournalSeq = repo.journalSeq
+        let requestedRefreshSeq = repo.refreshSeq
+        let requestedOffset = journalDayOffset
+        let requestedToday = currentDayKey
         // #833: same-state re-mount → restore from the repo-level cache (no store queries). The dayKey guard
         // mirrors the `.task(id:)` key so a day-rollover still re-loads even at an unchanged seq.
         if allowCache,
@@ -378,8 +411,7 @@ struct InsightsView: View {
         // merged list carries no deviceId to filter on.
         let imported = await repo.importedJournalEntries()
         let importedQs = NSOrderedSet(array: imported.map(\.question)).array as? [String] ?? []
-        let selectedDayKey = Repository.localDayKey(
-            Calendar.current.date(byAdding: .day, value: -journalDayOffset, to: Date()) ?? Date())
+        let selectedDayKey = WeeklyPlanCalendar.adding(days: -requestedOffset, to: requestedToday) ?? requestedToday
         let nativeAnswers = await repo.nativeJournalAnswers(day: selectedDayKey)
         let nativeNumeric = await repo.nativeJournalNumeric(day: selectedDayKey)
 
@@ -394,7 +426,9 @@ struct InsightsView: View {
         var byKey: [String: [String: Double]] = [:]
         var seriesMap: [String: [(day: String, value: Double)]] = [:]
         for key in outcomeKeys {
-            let s = await repo.series(key: key, source: "my-whoop")
+            let s = key == "sleep_performance"
+                ? await repo.exploreSeries(key: key, source: "my-whoop")
+                : await repo.series(key: key, source: "my-whoop")
             var dict: [String: Double] = [:]
             for row in s { dict[row.day] = row.value }
             for d in mergedDays where dict[d.day] == nil {
@@ -422,7 +456,10 @@ struct InsightsView: View {
         // honest). The recovery side is [localDayKey: Charge] off the merged DailyMetric.recovery.
         let costs = Self.computeActivityCosts(workouts: await repo.workoutRows(), days: mergedDays)
 
+        guard !Task.isCancelled, journalDayOffset == requestedOffset, currentDayKey == requestedToday,
+              repo.journalSeq == requestedJournalSeq, repo.refreshSeq == requestedRefreshSeq else { return }
         await MainActor.run {
+            self.answersDayKey = selectedDayKey
             self.behaviours = byBehaviour
             self.controls = controlsByBehaviour
             self.importedQuestions = importedQs
@@ -460,14 +497,14 @@ struct InsightsView: View {
     /// derived state as the first-load `MainActor.run` block above, byte-identical screen, no store queries.
     @MainActor
     private func restoreFromCache(_ c: InsightsLoadCache) {
+        answersDayKey = WeeklyPlanCalendar.adding(days: -c.journalDayOffset, to: currentDayKey) ?? currentDayKey
         behaviours = c.behaviours
         controls = c.controls
         importedQuestions = c.importedQuestions
         dayAnswers = c.dayAnswers
         // Numeric journal rows are native-only (imported WHOOP rows never carry a numericValue), so the
         // selected day's numeric fields can be derived from the cached per-question series (#322).
-        let selectedDayKey = Repository.localDayKey(
-            Calendar.current.date(byAdding: .day, value: -c.journalDayOffset, to: Date()) ?? Date())
+        let selectedDayKey = answersDayKey
         dayNumeric = c.numericJournalByKey.compactMapValues { $0[selectedDayKey] }
         outcomeByKey = c.outcomeByKey
         seriesByKey = c.seriesByKey
@@ -525,13 +562,14 @@ struct InsightsView: View {
     /// Rebuild the cached behaviour ranking for the current inputs.
     /// Called at load and whenever `outcome` changes, NOT in `body`.
     private func recomputeRanked() {
-        let outcomeDays = outcomeByKey[outcome.key] ?? [:]
+        let firstDay = WeeklyPlanCalendar.adding(days: -89, to: currentDayKey) ?? currentDayKey
+        let outcomeDays = (outcomeByKey[outcome.key] ?? [:]).filter { $0.key >= firstDay && $0.key <= currentDayKey }
         ranked = BehaviorInsights.rank(
             behaviors: behaviours,
             controls: controls,
             outcomeByDay: outcomeDays,
             outcome: outcome.outcomeName
-        )
+        ).filter { $0.nWith >= 5 && $0.nWithout >= 5 }
     }
 
     /// Rebuild the cached metric relationships from the loaded series.
@@ -596,7 +634,7 @@ struct InsightsView: View {
                     experimentField("Behaviour") {
                         Picker("Behaviour", selection: experimentBehaviourBinding) {
                             ForEach(candidates, id: \.self) { q in
-                                Text(verbatim: q).tag(q)
+                                Text(verbatim: catalog.localizedDisplayName(for: q)).tag(q)
                             }
                         }
                         .labelsHidden()
@@ -626,7 +664,7 @@ struct InsightsView: View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(verbatim: snapshot.behavior)
+                    Text(verbatim: catalog.localizedDisplayName(for: snapshot.behavior))
                         .font(StrandFont.headline)
                         .foregroundStyle(StrandPalette.textPrimary)
                         .lineLimit(2)
@@ -866,9 +904,13 @@ struct InsightsView: View {
 
     private func markExperimentToday(_ answeredYes: Bool) async {
         guard let behavior = activeExperimentSnapshot?.behavior else { return }
-        await repo.saveJournalAnswer(day: Repository.localDayKey(Date()),
+        let day = Repository.localDayKey(Date())
+        await repo.saveJournalAnswer(day: day,
                                      question: behavior,
                                      answeredYes: answeredYes)
+        if await repo.nativeJournalAnswers(day: day)[behavior] == answeredYes {
+            repo.noteJournalChanged()
+        }
         await load()
     }
 
@@ -1001,7 +1043,7 @@ struct InsightsView: View {
             // localization or Dynamic Type needs more room, move the control to its own row.
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .center) {
-                    SectionHeader("Behaviour Effects",
+                    SectionHeader("Behavior Insights",
                                   overline: "What moves your \(outcome.outcomeName.lowercased())")
                     Spacer(minLength: NoopMetrics.space2)
                     behaviourOutcomeControl
@@ -1009,13 +1051,15 @@ struct InsightsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: NoopMetrics.space2) {
-                    SectionHeader("Behaviour Effects",
+                    SectionHeader("Behavior Insights",
                                   overline: "What moves your \(outcome.outcomeName.lowercased())")
                     behaviourOutcomeControl
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
 
+            Text("Comparisons use the last 90 days and need at least five Yes and five No answers. Unanswered days are excluded.")
+                .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
             if ranked.isEmpty {
                 noEffects
             } else {
@@ -1058,15 +1102,13 @@ struct InsightsView: View {
             if e.significant { return good ? .positive : .critical }
             return good ? .positive : .warning
         }()
-        let tintColor = toneColor(tint)
-        let deltaText: String = {
-            let arrow = e.delta > 0 ? "↑" : (e.delta < 0 ? "↓" : "→")
-            if let pct = e.pctChange { return "\(arrow) \(Int(abs(pct).rounded()))%" }
-            return "\(arrow) \(String(format: "%.1f", abs(e.delta)))"
-        }()
+        let tintColor = movedGood == nil ? StrandPalette.textSecondary : movedGood == true ? StrandPalette.statusPositive : StrandPalette.statusWarning
+        let deltaText = e.pctChange.map { percent in
+            "\(percent > 0 ? "+" : percent < 0 ? "−" : "")\(Int(abs(percent).rounded()))%"
+        } ?? formatOutcome(e.delta)
         // Build the plain-English sentence ONCE and reuse it for both the visible
         // copy and the accessibility label (was computed twice per card).
-        let sentence = BehaviorInsights.sentence(e)
+        let sentence = String(localized: "Recorded days with and without this habit are compared below. An association does not establish cause.")
 
         // The card wash reads as the OUTCOME's colour world (so the whole Behaviour
         // Effects section sits in one world), while the dot / StatTile accents stay
@@ -1079,20 +1121,19 @@ struct InsightsView: View {
                 // the sign-aware tint, the leading-gauge idiom Today uses, so the strength reads at a glance.
                 HStack(alignment: .center) {
                     HStack(spacing: 10) {
-                        LiquidVessel(value: min(1, abs(e.cohensD) / 0.8), tint: tintColor, animated: false)
-                            .frame(width: 26, height: 26)
-                            .accessibilityHidden(true)
-                        Text(e.behavior)
-                            .font(StrandFont.headline)
+                        Text(verbatim: catalog.localizedDisplayName(for: e.behavior).uppercased())
+                            .font(StrandFont.overline)
                             .foregroundStyle(StrandPalette.textPrimary)
                     }
                     Spacer()
-                    StatePill(e.significant ? "SIGNIFICANT" : "EXPLORATORY",
-                              tone: e.significant ? .positive : .neutral,
-                              showsDot: false)
+                    Text(deltaText).font(StrandFont.bodyNumber).foregroundStyle(tintColor)
                 }
 
-                // Plain-English sentence.
+                if let percent = e.pctChange {
+                    RBar(r: percent / 50, color: tintColor, label: catalog.localizedDisplayName(for: e.behavior))
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
                 Text(sentence)
                     .font(StrandFont.body)
                     .foregroundStyle(StrandPalette.textSecondary)
@@ -1108,7 +1149,7 @@ struct InsightsView: View {
                              value: formatOutcome(e.meanWith),
                              caption: "n = \(e.nWith)",
                              accent: tintColor,
-                             delta: deltaText,
+                             delta: nil,
                              deltaColor: tintColor)
                     StatTile(label: "Without",
                              value: formatOutcome(e.meanWithout),
@@ -1446,7 +1487,7 @@ private struct RBar: View {
             }
             .clipShape(Capsule())
         }
-        .frame(height: 8)
+        .frame(height: NoopMetrics.space2)
         // Tooltip floats above the bar without affecting layout (overlays aren't
         // clipped), so the exact r value reads on hover, same affordance as charts.
         .overlay(alignment: .center) {

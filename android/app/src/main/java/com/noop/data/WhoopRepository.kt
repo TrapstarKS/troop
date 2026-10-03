@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlin.math.roundToInt
 
 /**
@@ -456,6 +457,10 @@ class WhoopRepository(
      *  so a shared counter would let one strap spend another's budget. Only the single-threaded offload
      *  path banks v18 rows, so a plain map is enough. Swift twin: `WhoopStore.v18AuxRowsSincePrune`. */
     private val v18AuxRowsSincePrune = mutableMapOf<String, Int>()
+
+    private val _journalRevision = MutableStateFlow(0L)
+    val journalRevision: StateFlow<Long> = _journalRevision.asStateFlow()
+    fun noteJournalChanged() { _journalRevision.update { it + 1 } }
 
     private val _sleepSampleRevision = MutableStateFlow(0L)
     val sleepSampleRevision: StateFlow<Long> = _sleepSampleRevision.asStateFlow()

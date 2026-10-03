@@ -15,6 +15,8 @@ import StrandDesign
 /// re-renders only this small leaf. Owns its own sheet-presentation state so nothing about it needs to
 /// live on the parent either.
 struct WorkoutStartControl: View {
+    var showsButton = true
+    var startRequested: Binding<Bool>? = nil
     @EnvironmentObject var model: AppModel
     @State private var showLiveWorkout = false
     @State private var showStartSport = false
@@ -26,8 +28,16 @@ struct WorkoutStartControl: View {
                    fullWidth: true) {
             // No active session → pick a named sport first (#519), then the sheet's onStart begins it
             // and opens the in-exercise view. Already active → jump straight back into the live view.
-            if model.activeWorkout == nil { showStartSport = true }
-            else { showLiveWorkout = true }
+            openWorkout()
+        }
+        .opacity(showsButton ? 1 : 0)
+        .frame(maxHeight: showsButton ? nil : 0)
+        .accessibilityHidden(!showsButton)
+        .allowsHitTesting(showsButton)
+        .onChange(of: startRequested?.wrappedValue ?? false) { requested in
+            guard requested else { return }
+            startRequested?.wrappedValue = false
+            openWorkout()
         }
         .accessibilityLabel(model.activeWorkout == nil ? "Start a workout" : "View the active workout")
         // #459: the in-exercise view, presented when Start Workout is tapped here (same screen LiveView
@@ -46,5 +56,11 @@ struct WorkoutStartControl: View {
                 showLiveWorkout = true
             }
         }
+    }
+
+    private func openWorkout() {
+        guard !showStartSport, !showLiveWorkout else { return }
+        if model.activeWorkout == nil { showStartSport = true }
+        else { showLiveWorkout = true }
     }
 }

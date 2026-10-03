@@ -187,7 +187,13 @@ private fun StartSportRow(sp: Sport, isSelected: Boolean, onPick: () -> Unit) {
  * a live session needs the strap to stream) beside Add — or just Add when there's no strap.
  */
 @Composable
-fun WorkoutStartSection(vm: AppViewModel, onAdd: () -> Unit) {
+fun WorkoutStartSection(
+    vm: AppViewModel,
+    onAdd: () -> Unit,
+    startRequested: Boolean = false,
+    onStartRequestConsumed: () -> Unit = {},
+    showIdleControls: Boolean = true,
+) {
     val live by vm.live.collectAsStateWithLifecycle()
     val activeWorkout by vm.activeWorkout.collectAsStateWithLifecycle()
     var showSportPicker by remember { mutableStateOf(false) }
@@ -196,6 +202,13 @@ fun WorkoutStartSection(vm: AppViewModel, onAdd: () -> Unit) {
     // moment a workout begins; this re-entry lets the user re-open it from the compact banner after
     // dismissing. Closing just hides the overlay — the workout keeps recording in the background.
     var showLiveWorkout by remember { mutableStateOf(false) }
+    LaunchedEffect(startRequested) {
+        if (startRequested) {
+            if (activeWorkout != null) showLiveWorkout = true
+            else if (live.bonded) showSportPicker = true
+            onStartRequestConsumed()
+        }
+    }
 
     val w = activeWorkout
     if (w != null) {
@@ -261,9 +274,9 @@ fun WorkoutStartSection(vm: AppViewModel, onAdd: () -> Unit) {
                     }
                 }
             }
-            AddWorkoutButton(onAdd, Modifier.fillMaxWidth())
+            if (showIdleControls) AddWorkoutButton(onAdd, Modifier.fillMaxWidth())
         }
-    } else if (live.bonded) {
+    } else if (showIdleControls && live.bonded) {
         // Start + Add as an equal-width action row (EXP-018 parity with the iOS workoutActionRow).
         // Both actions use the shared opaque button surfaces: unlike the old accent-muted/translucent
         // pair, their fills and labels keep their contrast over the full-bleed daytime scene (#1625).
@@ -280,7 +293,7 @@ fun WorkoutStartSection(vm: AppViewModel, onAdd: () -> Unit) {
             )
             AddWorkoutButton(onAdd, Modifier.weight(1f))
         }
-    } else {
+    } else if (showIdleControls) {
         // No strap to stream from: no live Start, but keep Add so a user with no imports can still log.
         // PRIMARY here, unlike the pair above. There is no Start to be secondary to, and this is the
         // only action the screen offers, so the secondary treatment would leave a wearer with no strap

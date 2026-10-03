@@ -2012,21 +2012,23 @@ internal fun ManualWorkoutDialog(
     isCopy: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (row: WorkoutRow, replacing: WorkoutRow?) -> Unit,
+    initialEndMillis: Long? = null,
 ) {
     val nowSec = System.currentTimeMillis() / 1000
+    val initialEndSec = initialEndMillis?.div(1000L)?.coerceAtMost(nowSec)
     // Pre-fill from the edited row ("detected" shown as "Activity" so a re-label starts clean).
     var sport by remember { mutableStateOf(editing?.let { WorkoutEditing.displaySport(it.sport) } ?: "") }
     // #598 — absolute start date+time (parity with the macOS/iOS sheet's DatePicker) instead of the old
-    // "minutes ago" field. Defaults to the edited row's start, or one hour ago for a fresh add.
+    // "minutes ago" field. A supplied end seeds a 45-minute span; other fresh adds start one hour ago.
     var startMillis by remember {
-        mutableStateOf((editing?.startTs ?: (nowSec - 3_600)) * 1000L)
+        mutableStateOf((editing?.startTs ?: initialEndSec?.minus(45 * 60) ?: (nowSec - 3_600)) * 1000L)
     }
     // #2034: the END is state of record beside the start, not something re-derived from whole minutes on
     // save. Duration stays as an input, two-way bound below, because "a 45 minute run" is how a session
     // is often remembered; it is just no longer the thing that gets stored. A row opened only to fix its
     // sport therefore keeps its exact span instead of snapping to the nearest minute.
     var endMillis by remember {
-        mutableStateOf((editing?.endTs ?: (nowSec - 3_600 + 45 * 60)) * 1000L)
+        mutableStateOf((editing?.endTs ?: initialEndSec ?: (nowSec - 3_600 + 45 * 60)) * 1000L)
     }
     var durationMin by remember {
         mutableStateOf(
