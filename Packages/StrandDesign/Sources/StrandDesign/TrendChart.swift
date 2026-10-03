@@ -72,6 +72,21 @@ public struct TrendPoint: Identifiable, Sendable {
     }
 }
 
+private struct CalendarTimeAxisModifier: ViewModifier {
+    let range: ClosedRange<Date>?
+
+    func body(content: Content) -> some View {
+        if let range {
+            let domain = range.lowerBound == range.upperBound
+                ? range.lowerBound.addingTimeInterval(-43_200)...range.upperBound.addingTimeInterval(43_200)
+                : range
+            content.chartXScale(domain: domain)
+        } else {
+            content
+        }
+    }
+}
+
 private struct WorkoutTimeAxisModifier: ViewModifier {
     let range: ClosedRange<Date>?
 
@@ -153,6 +168,8 @@ public struct TrendChart: View {
     public var yDomain: ClosedRange<Double>?
     /// Optional elapsed time window for a workout trace, with workout-relative tick labels.
     public var workoutTimeAxis: ClosedRange<Date>?
+    /// Optional calendar window represented by UTC civil-day keys. Missing readings do not shrink it.
+    public var calendarTimeAxis: ClosedRange<Date>?
 
     /// Mean of all point values, computed once in `init` so the area fill's gradient
     /// stop doesn't run an O(n) reduce for every mark on every render.
@@ -176,6 +193,7 @@ public struct TrendChart: View {
         nowCapColor: Color? = nil,
         yDomain: ClosedRange<Double>? = nil,
         workoutTimeAxis: ClosedRange<Date>? = nil,
+        calendarTimeAxis: ClosedRange<Date>? = nil,
         yAxisStep: Double? = nil,
         showsBarValues: Bool = false,
         largeSelection: Bool = false
@@ -195,6 +213,7 @@ public struct TrendChart: View {
         self.nowCapColor = nowCapColor
         self.yDomain = yDomain
         self.workoutTimeAxis = workoutTimeAxis
+        self.calendarTimeAxis = calendarTimeAxis
         self.yAxisStep = yAxisStep
         self.showsBarValues = showsBarValues
         self.largeSelection = largeSelection
@@ -259,10 +278,36 @@ public struct TrendChart: View {
 
     /// The days the x-axis marks, so the marks and their label format agree about which days are shown.
     ///
-    /// Spans `displayPoints`, the set the marks are actually built from, rather than `points`. Bucketing
-    /// keeps the extremes, so the two agree today; deriving the axis from a collection the chart is not
-    /// drawing is the kind of thing that stops being true quietly.
-    private var axisDays: [Date] { ChartAxisDays.spanning(displayPoints.map(\.date)) }
+    /// A fixed calendar window keeps both ends visible, including days with no readings. Other charts
+    /// derive their day labels from the displayed points as before.
+    var axisDays: [Date] {
+        guard let range = calendarTimeAxis else { return ChartAxisDays.spanning(displayPoints.map(\.date)) }
+        let span = axisCalendar.dateComponents([.day], from: range.lowerBound, to: range.upperBound).day ?? 0
+        let middle = axisCalendar.date(byAdding: .day, value: span / 2, to: range.lowerBound) ?? range.lowerBound
+        return Array(Set([range.lowerBound, middle, range.upperBound])).sorted()
+    }
+
+    private var axisCalendar: Calendar {
+        guard calendarTimeAxis != nil else { return .current }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private var axisLabelFormat: Date.FormatStyle {
+        var format = ChartAxisDays.labelFormat(for: axisDays, calendar: axisCalendar)
+        format.calendar = axisCalendar
+        format.timeZone = axisCalendar.timeZone
+        return format
+    }
+
+    var markerPoints: [TrendPoint] {
+        if points.count <= 60 { return displayPoints }
+        guard calendarTimeAxis != nil else { return [] }
+        return hrGapRuns(segments: points.map(\.segment))
+            .filter { $0.lowerBound == $0.upperBound }
+            .map { points[$0.lowerBound] }
+    }
 
     // Map data values onto the unit interval for gradient stops.
     private func unit(_ value: Double) -> Double {
@@ -366,18 +411,14 @@ public struct TrendChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                     .foregroundStyle(valueGradient)
                 }
-                // 18pt dots are invisible on dense series (e.g. a 365-day year) but still cost the
-                // GPU a mark each — hide them past a threshold; the line carries the data there. The gate
-                // stays on the full `points.count` (≤60 is never downsampled, so displayPoints == points).
-                if points.count <= 60 {
-                    ForEach(displayPoints) { p in
-                        PointMark(
-                            x: .value("Date", p.date),
-                            y: .value("Value", p.value)
-                        )
-                        .symbolSize(18)
-                        .foregroundStyle(StrandPalette.sample(stops: gradient.toStops(), at: unit(p.value)))
-                    }
+                // Dense calendar windows retain isolated readings, which have no line of their own.
+                ForEach(markerPoints) { p in
+                    PointMark(
+                        x: .value("Date", p.date),
+                        y: .value("Value", p.value)
+                    )
+                    .symbolSize(18)
+                    .foregroundStyle(StrandPalette.sample(stops: gradient.toStops(), at: unit(p.value)))
                 }
             }
         }
@@ -412,11 +453,12 @@ public struct TrendChart: View {
         .chartXAxis {
             AxisMarks(values: axisDays) { _ in
                 AxisGridLine().foregroundStyle(StrandPalette.hairline.opacity(0.4))
-                AxisValueLabel(format: ChartAxisDays.labelFormat(for: axisDays))
+                AxisValueLabel(format: axisLabelFormat)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .font(StrandFont.footnote)
             }
         }
+        .modifier(CalendarTimeAxisModifier(range: calendarTimeAxis))
         .modifier(WorkoutTimeAxisModifier(workoutTimeAxis))
         .chartYAxis {
             if let step = yAxisStep, step > 0 {
