@@ -20,10 +20,10 @@ struct SmartAlarmView: View {
     @State private var showSaveError = false
     @State private var showNotifDenied = false
     @State private var savedMessage = false
-    private static let weekdayOrder = [2, 3, 4, 5, 6, 7, 1]
+    nonisolated private static let weekdayOrder = [2, 3, 4, 5, 6, 7, 1]
 
     var body: some View {
-        ScreenScaffold(title: "Sleep Planner", subtitle: String(localized: "Plan tonight. Choose how to wake tomorrow.")) {
+        ScreenScaffold(title: "Sleep Planner", subtitle: "Plan tonight. Choose how to wake tomorrow.") {
             TimelineView(.periodic(from: .now, by: 60)) { tick in
                 VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                     if let snapshot = model.sleepPlannerSnapshot(from: tick.date) {
