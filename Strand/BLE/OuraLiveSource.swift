@@ -599,6 +599,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
     ///
     /// No new outbound command: `central.connect` is the same call `connect(_:)` already makes.
     private func issueStandingConnect(_ id: UUID) {
+        guard central != nil else { return }
         guard !intentionalDisconnect, reconnectID == id else { return }
         // The same trap as `connect(_:)` (#2433), and worse here: a retrieve before `.poweredOn` answers
         // nothing, the fallback below reads that as "never seen" and calls `connect(id)`, which scans.
@@ -1442,7 +1443,9 @@ public final class OuraLiveSource: NSObject, ObservableObject {
                 onsetKeying: @escaping () -> Bool = { false },
                 notifyMaskFull: @escaping () -> Bool = { false },
                 feedsLive: Bool = true,
-                adoptIntent: Bool = false) {
+                adoptIntent: Bool = false,
+                allowsLiveTransports: Bool? = nil,
+                centralFactory: ((CBCentralManagerDelegate) -> CBCentralManager?)? = nil) {
         self.live = live
         self.deviceId = deviceId
         self.ringGen = ringGen
@@ -1468,24 +1471,18 @@ public final class OuraLiveSource: NSObject, ObservableObject {
         // 0x7E/0x7F real_steps research corpus: same gate as the other Tier-B dumps.
         self.realStepsDump = feedsLive && !deviceId.isEmpty ? OuraRealStepsDump(deviceId: deviceId, log: log) : nil
         super.init()
-        // Dedicated queue-less central -> callbacks arrive on the main queue, matching @MainActor.
-        #if os(iOS)
-        // iOS state restoration (#1213): only the PERSISTENT live source (feedsLive, real deviceId) carries a
-        // restore identifier, so CoreBluetooth relaunches the app into the background and delivers
-        // willRestoreState after a suspend-then-jettison — without it an overnight Oura session dies with the
-        // process and nothing reconnects until the user re-opens the app. The discovery-only wizard scanner
-        // (feedsLive == false, deviceId "scan-preview") must NOT restore, and two centrals may never share one
-        // restore identifier, so it is deliberately excluded. Mirrors the WHOOP central in BLEManager.
-        if feedsLive && !deviceId.isEmpty {
-            self.central = CBCentralManager(delegate: self, queue: nil,
-                                            options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreID])
-        } else {
-            self.central = CBCentralManager(delegate: self, queue: nil)
+        central = LiveTransportPolicy.makeTransport(
+            allowed: allowsLiveTransports ?? LiveTransportPolicy.enabled) {
+            if let centralFactory { return centralFactory(self) }
+            #if os(iOS)
+            if feedsLive && !deviceId.isEmpty {
+                return CBCentralManager(delegate: self, queue: nil,
+                    options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreID])
+            }
+            #endif
+            return CBCentralManager(delegate: self, queue: nil)
         }
-        #else
-        // Strand (macOS desktop): no state-restoration identifier (iOS background feature).
-        self.central = CBCentralManager(delegate: self, queue: nil)
-        #endif
+        guard central != nil else { return }
         installScreenStateObservers()
         seedScreenOffFromLaunchState()
     }
@@ -1599,6 +1596,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
     /// Scan for Oura rings advertising the Oura GATT service, keeping only ones the ring-gen recogniser
     /// accepts as an Oura ring.
     public func scan() {
+        guard central != nil else { return }
         discovered.removeAll()
         seenPeripherals.removeAll()
         scanning = true
@@ -1614,7 +1612,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
 
     public func stopScan() {
         scanning = false
-        if central.state == .poweredOn { central.stopScan() }
+        if central?.state == .poweredOn { central?.stopScan() }
     }
 
     // MARK: - Connecting
@@ -1622,6 +1620,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
     /// Connect to the chosen ring and start the auth -> enable -> stream flow. Mirrors the
     /// StandardHRSource cached-by-identifier-first, else scan-then-connect pattern.
     public func connect(_ id: UUID) {
+        guard central != nil else { return }
         stopScan()
         needsPairing = nil
         // Remember the paired ring so an involuntary drop auto-reconnects to it (#912). An explicit connect
@@ -1665,13 +1664,14 @@ public final class OuraLiveSource: NSObject, ObservableObject {
     /// connect is simply superseded by a fresh one. Also clears a `needsPairing` latch — a user reconnect
     /// is the documented way out of that dead end — and never scans past a known ring.
     public func reconnect() {
+        guard central != nil else { return }
         needsPairing = nil
         intentionalDisconnect = false
         failedReconnectAttempts = 0
         if let p = peripheral, p.state == .connected {
             log("Oura: reconnect requested - dropping the current link and connecting again")
             pendingUserReconnectID = reconnectID ?? p.identifier
-            central.cancelPeripheralConnection(p)
+            central?.cancelPeripheralConnection(p)
             return
         }
         guard let id = reconnectID ?? peripheral?.identifier else {
@@ -1680,7 +1680,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
             return
         }
         if let p = peripheral, p.state == .connecting {
-            central.cancelPeripheralConnection(p)   // supersede the pending / standing connect
+            central?.cancelPeripheralConnection(p)   // supersede the pending / standing connect
         }
         log("Oura: reconnect requested")
         connect(id)
@@ -1715,7 +1715,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
         // all, which is a limit of the transport rather than of this fix.
         disableLiveHR()
         clearAuthWatchdog()
-        if let p = peripheral { central.cancelPeripheralConnection(p) }
+        if let p = peripheral { central?.cancelPeripheralConnection(p) }
         peripheral = nil
         writeCharacteristic = nil
         notifyCharacteristic = nil
@@ -2612,7 +2612,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
                 log(silent + " - no notify characteristic to toggle, dropping the link (3/3)")
                 authEscalations = 3
                 clearAuthWatchdog()
-                central.cancelPeripheralConnection(p)
+                central?.cancelPeripheralConnection(p)
                 return
             }
             log(silent + " - toggling the notify subscription and re-sending get_nonce (2/3)")
@@ -2636,7 +2636,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
             authToggleInFlight = false
             // NOT an intentional teardown: `intentionalDisconnect` stays false and `reconnectID` stays
             // set, so `didDisconnectPeripheral` schedules the normal backoff reconnect (#912).
-            central.cancelPeripheralConnection(p)
+            central?.cancelPeripheralConnection(p)
         }
     }
 
@@ -2818,7 +2818,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
         reconnectID = nil
         failedReconnectAttempts = 0
         standingConnectAt = nil   // the cancel below also drops any standing connect
-        if let p = peripheral { central.cancelPeripheralConnection(p) }
+        if let p = peripheral { central?.cancelPeripheralConnection(p) }
         guard needsPairing == nil else { return }
         let detail: String
         switch reason {
