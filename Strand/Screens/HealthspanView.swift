@@ -16,6 +16,8 @@ struct HealthspanView: View {
     @State private var days: [DailyMetric] = []
     @State private var reference = Calendar.current.startOfDay(for: Date())
     @State private var showMethod = false
+    @State private var selectedAgeDay: String?
+    @GestureState private var ageDragIsHorizontal: Bool?
 
     private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     private var sourceLoaded: Bool { loadedSource == sourceID }
@@ -34,10 +36,18 @@ struct HealthspanView: View {
         (sourceLoaded ? days : []).filter { healthspanDaysAgo($0.day, reference: reference).map { (0..<7).contains($0) } ?? false }
     }
     private var trendPoints: [HealthspanTrendPoint] {
-        (sourceLoaded ? series : []).filter {
-            $0.value.isFinite && (20...90).contains($0.value)
-                && (healthspanDaysAgo($0.day, reference: reference).map { (0..<180).contains($0) } ?? false)
-        }.map { HealthspanTrendPoint(day: $0.day, value: $0.value) }
+        var points: [HealthspanTrendPoint] = []
+        var previousOffset: Int?
+        var segment = 0
+        for sample in sourceLoaded ? series : [] {
+            guard sample.value.isFinite, (20...90).contains(sample.value),
+                  let offset = healthspanDaysAgo(sample.day, reference: reference), (0..<180).contains(offset),
+                  let date = healthspanDate(sample.day) else { continue }
+            if let previousOffset, previousOffset - offset > 14 { segment += 1 }
+            points.append(HealthspanTrendPoint(day: sample.day, value: sample.value, date: date, segment: segment))
+            previousOffset = offset
+        }
+        return points
     }
 
     var body: some View {
@@ -82,6 +92,9 @@ struct HealthspanView: View {
         }
         .background(StrandPalette.surfaceBase)
         .navigationTitle(String(localized: "Healthspan"))
+        .onChange(of: sourceID) { _ in selectedAgeDay = nil }
+        .onChange(of: reference) { _ in selectedAgeDay = nil }
+        .onChange(of: trendPoints) { _ in selectedAgeDay = nil }
         .onReceive(healthspanSourcePublisher(model: model, repo: repo)) { observedSource = $0 }
         .task(id: "\(sourceID)|\(repo.refreshSeq)") {
             let source = sourceID
@@ -111,16 +124,23 @@ struct HealthspanView: View {
     }
 
     private var ageTrend: some View {
-        NoopCard {
+        let points = trendPoints
+        let reading = points.first { $0.day == selectedAgeDay } ?? points.last
+        return NoopCard {
             VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                 TrackedSectionHeader(title: String(localized: "NOOP Age trend"))
                 Chart {
-                    ForEach(trendPoints) { point in
-                        if let date = healthspanDate(point.day) {
-                            LineMark(x: .value("Date", date), y: .value("Age", point.value))
-                                .foregroundStyle(StrandPalette.positive)
-                            PointMark(x: .value("Date", date), y: .value("Age", point.value))
-                                .foregroundStyle(StrandPalette.positive)
+                    ForEach(points) { point in
+                        LineMark(x: .value("Date", point.date), y: .value("Age", point.value), series: .value("Segment", point.segment))
+                            .foregroundStyle(StrandPalette.positive)
+                        PointMark(x: .value("Date", point.date), y: .value("Age", point.value))
+                            .foregroundStyle(StrandPalette.positive)
+                    }
+                    if let reading {
+                        PointMark(x: .value("Date", reading.date), y: .value("Age", reading.value))
+                            .foregroundStyle(StrandPalette.textPrimary)
+                        if selectedAgeDay != nil {
+                            RuleMark(x: .value("Date", reading.date)).foregroundStyle(StrandPalette.textSecondary)
                         }
                     }
                 }.frame(height: NoopMetrics.chartHeight)
@@ -128,6 +148,33 @@ struct HealthspanView: View {
                 .chartYScale(domain: .automatic(includesZero: false))
                 .chartYAxisLabel(String(localized: "Age"))
                 .accessibilityLabel(String(localized: "NOOP Age trend"))
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        let select: (CGPoint) -> Void = { location in
+                            let x = location.x - geometry[proxy.plotAreaFrame].origin.x
+                            guard let date: Date = proxy.value(atX: x) else { return }
+                            selectedAgeDay = points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }?.day
+                        }
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .simultaneousGesture(SpatialTapGesture().onEnded { select($0.location) })
+                            .simultaneousGesture(DragGesture()
+                                .updating($ageDragIsHorizontal) { event, horizontal, _ in
+                                    if horizontal == nil { horizontal = abs(event.translation.width) > abs(event.translation.height) }
+                                }
+                                .onChanged { event in
+                                    guard ageDragIsHorizontal ?? (abs(event.translation.width) > abs(event.translation.height)) else { return }
+                                    select(event.location)
+                                })
+                    }
+                }
+                if let reading {
+                    HStack {
+                        Text(reading.date, style: .date)
+                        Spacer()
+                        Text("NOOP Age")
+                        Text(String(format: "%.1f", locale: .current, reading.value))
+                    }.font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                }
             }
         }
     }
@@ -236,9 +283,11 @@ struct HealthSupportingMetricCards: View {
     }
 }
 
-private struct HealthspanTrendPoint: Identifiable {
+private struct HealthspanTrendPoint: Identifiable, Equatable {
     let day: String
     let value: Double
+    let date: Date
+    let segment: Int
     var id: String { day }
 }
 
