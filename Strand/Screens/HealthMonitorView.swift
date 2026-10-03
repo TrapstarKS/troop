@@ -115,7 +115,8 @@ struct HealthMonitorView: View {
                                     hrvReliability: evidence, respReliability: respEvidence,
                                     skinKind: skinKind, temperatureUnit: temperatureUnit)
         let name = FileExport.timestampedName("noop-health-report-\(reportDays)d", ext: "pdf")
-        guard let url = TrendsReportRenderer.makePDF(page: page, fileName: name) else {
+        let renderName = "\(name.dropLast(4))-\(UUID().uuidString).pdf"
+        guard let url = TrendsReportRenderer.makePDF(page: page, fileName: renderName) else {
             reportFailed = true
             return
         }

@@ -14,6 +14,7 @@ import com.noop.R
 import com.noop.analytics.SkinTempDisplay
 import java.io.File
 import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
@@ -93,7 +94,7 @@ internal object HealthMonitorReportShare {
             text(context.getString(R.string.health_monitor_wellness_note), NoopType.footnote, Palette.textTertiary.toArgb())
             document.finishPage(page)
             val directory = File(context.cacheDir, "reports").apply { mkdirs() }
-            val file = File(directory, "NOOP-health-${report.start}_to_${report.end}.pdf")
+            val file = File(directory, "NOOP-health-${report.start}_to_${report.end}-${UUID.randomUUID()}.pdf")
             file.outputStream().use { document.writeTo(it) }
             return file
         } finally {
