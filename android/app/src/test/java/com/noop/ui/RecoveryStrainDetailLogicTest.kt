@@ -140,7 +140,7 @@ class RecoveryStrainDetailLogicTest {
         val wholeValues = listOf(null, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
             -1.0, -0.0, 0.0, 0.49, 0.5, 1.49, 1.5, 1e300,
             9_223_372_036_854_775_808.0, Math.nextDown(9_223_372_036_854_775_808.0))
-        val durations = listOf(-1.0, Double.NaN, 1e300, 59.0, 60.0, 89.0, 90.0, 119.9, 120.0)
+        val durations = listOf(-1.0, Double.NaN, 1e300, 29.9, 30.0, 59.0, 60.0, 89.0, 90.0, 119.9, 120.0, 1482.5, 1499.0, 1500.0)
         val durationFallbacks: List<Pair<Double?, Double?>> = listOf(null to null, null to 3661.0, 0.0 to 3661.0,
             59.0 to 3661.0, 60.0 to 3661.0, null to -1.0, null to Double.NaN, null to Double.POSITIVE_INFINITY,
             null to 1e300, -1.0 to 3600.0, Double.NaN to 3600.0, Double.POSITIVE_INFINITY to 3600.0, 1e300 to 3600.0)
@@ -157,8 +157,8 @@ class RecoveryStrainDetailLogicTest {
         unavailable,unavailable,under,under,optimal,optimal,over,over
         unavailable,unavailable,unavailable,unavailable,0,33,33,34,66,66,67,99,100,unavailable
         unavailable,unavailable,unavailable,unavailable,unavailable,0,0,0,1,1,2,unavailable,unavailable,9223372036854774784
-        unavailable,unavailable,unavailable,0,1,1,1,1,2
-        unavailable,61,0,0,1,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable
+        unavailable,unavailable,unavailable,0,1,1,1,1,2,2,2,25,25,25
+        unavailable,61,0,1,1,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable
         """.trimIndent() + "\n"
         assertEquals(expected, actual)
     }

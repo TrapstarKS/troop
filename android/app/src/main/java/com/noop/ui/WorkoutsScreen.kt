@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -125,6 +126,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.noop.analytics.WorkoutSport
 import com.noop.analytics.HeartRateRecovery
 import com.noop.data.WorkoutRow
@@ -2023,6 +2025,8 @@ internal fun ManualWorkoutDialog(
     }
 
     AlertDialog(
+        modifier = Modifier.imePadding(),
+        properties = DialogProperties(decorFitsSystemWindows = false),
         onDismissRequest = onDismiss,
         containerColor = Palette.surfaceOverlay,
         title = {
@@ -2048,7 +2052,11 @@ internal fun ManualWorkoutDialog(
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                Modifier.heightIn(max = Metrics.dialogScrollableMaxHeight)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Metrics.space12),
+            ) {
                 if (isCopy) Text(uiString(R.string.d2b_copy_note), style = NoopType.footnote, color = Palette.textSecondary)
                 SportPickerField(sport, onChange = { sport = it })
                 SpanTimeField(

@@ -28,7 +28,7 @@ Android detail reads collect the registry's active strap and reset the day/HR re
 
 Android's primary Recovery, Strain and Activity dialogs draw the shared canvas gradient through the system bars and inset their scrollable content by the safe drawing area. Home content is not used as a navigation-bar backdrop. The expanded legacy activity details remain reachable through their existing sheet.
 
-The detail wrapper explicitly uses a match-parent window with system-bar fit insets disabled. Its Compose dialog keeps platform measurement enabled: Compose UI 1.6.8's alternate measurement path caps height at `screenHeightDp` and rewrites the window size during layout. The wrapper therefore receives the full window constraints without that cap, while retaining the dialog's lifecycle, state restoration, dismissal and keyboard handling.
+The detail wrapper explicitly uses a match-parent window laid out inside the screen with system-bar fit insets disabled. Its Compose dialog keeps platform measurement enabled: Compose UI 1.6.8's alternate measurement path caps height at `screenHeightDp` and rewrites the window size during layout. The wrapper therefore receives the full window constraints without that cap, while retaining the dialog's lifecycle, state restoration, dismissal and keyboard handling.
 
 `WorkoutRow.energyKcal` does not persist an active/total discriminator. Its display is therefore “Recorded energy”, with an explicit explanation. No resting energy is added and no stored row is reinterpreted.
 
@@ -43,3 +43,7 @@ Expanded detail disclosures describe the difference between a recorded average a
 The visible zone caption identifies percentages as the share of classified time in Zones 1–5. It does not imply that a partial imported split covers the whole activity or add unrecorded zone minutes.
 
 Strain uses the scaffold’s eager column so its daily chart, zones and bounded day activity list enter scroll layout together. This is the isolated response to the c15 iOS lazy-layout hang; native scroll acceptance is recorded separately and remains required.
+
+Displayed activity durations use nearest whole minutes, with positive half ties rounded up, matching the editor’s precision. Detail and list displays prefer a stored duration; editors resolve the selected start/end span. Neither presentation helper changes exact timestamps, stored duration or scoring. The paired standalone Swift oracle includes sub-minute ties and the reported 1,482.5-second example.
+
+Android’s manual activity dialog applies keyboard insets once at the dialog and keeps its form in a bounded scroll area, with save and cancel actions outside that area. Copy and replacement behavior remain unchanged.

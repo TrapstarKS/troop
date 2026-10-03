@@ -59,7 +59,7 @@ enum RecoveryStrainDetailLogic {
     }
 
     static func durationMinutes(seconds: Double?, fallbackSeconds: Double? = nil) -> Int64? {
-        (seconds ?? fallbackSeconds).flatMap { wholeNumber(floor($0 / 60)) }
+        (seconds ?? fallbackSeconds).flatMap { wholeNumber($0 / 60) }
     }
 
     static func recoveryPercent(_ score: Double?) -> Int? {

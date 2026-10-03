@@ -65,7 +65,7 @@ internal object RecoveryStrainDetailLogic {
         value?.takeIf { it.isFinite() && it >= 0 && it < Long.MAX_VALUE.toDouble() }?.roundToLong()
 
     fun durationMinutes(seconds: Double?, fallbackSeconds: Double? = null): Long? =
-        (seconds ?: fallbackSeconds)?.let { wholeNumber(floor(it / 60)) }
+        (seconds ?: fallbackSeconds)?.let { wholeNumber(it / 60) }
 
     fun priorMean(
         dayKeys: List<String>,
