@@ -127,6 +127,7 @@ fun HealthspanScreen(vm: AppViewModel) {
         item {
             HealthspanSupportingCards(vm, referenceDay, days)
         }
+        item { HealthSupportingMetricCards(vm) }
     }
 }
 
