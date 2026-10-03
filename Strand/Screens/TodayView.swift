@@ -194,6 +194,7 @@ struct TodayView: View {
     /// classification and tint selection stable when the app language changes.
     private static let whoopBrandName = "WHOOP"
     @EnvironmentObject var repo: Repository
+    @State private var homeActivitiesRevision = 0
     // PERF (scroll stutter): TodayView deliberately does NOT observe `LiveState` directly. A connected
     // strap publishes `LiveState` ~1 Hz (heart rate + each R-R packet), and an `@EnvironmentObject live`
     // here would invalidate the ENTIRE Today `body` on every tick, re-evaluating the scene backdrop, the
@@ -1626,6 +1627,7 @@ struct TodayView: View {
             strain: effortStrain(displayDay), stress: selectedDayOffset == 0 ? stressToday : homeStressByDay[selectedDayKey],
             workouts: workouts, onEdit: { customizationDestination = .keyMetrics },
             onWorkout: { workoutDetail = WorkoutDetailTarget(row: $0) },
+            onActivitySaved: { await reloadHomeActivities() },
             onGuidance: coachEnabled ? { showCoachLauncher = true } : nil) {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: NoopMetrics.gap),
                                     GridItem(.flexible(), spacing: NoopMetrics.gap)], spacing: NoopMetrics.gap) {
@@ -4559,7 +4561,7 @@ struct TodayView: View {
         // first pass also makes the mount-during-sync flag race harmless: with no data yet we load regardless
         // of the flag. The deferred set is guaranteed to run later via the coalesced refresh (see .task note).
         if !backfillActivelyWriting || !loadedHistoryWideOnce {
-            await loadHistoryWide()
+            guard await loadHistoryWide() else { return }
             guard !Task.isCancelled, repo.refreshSeq == currentSeq else { return }
             loadedHistoryWideOnce = true
             // Record the seq we just loaded so a later re-mount with unchanged data short-circuits above.
@@ -4619,10 +4621,27 @@ struct TodayView: View {
     /// defer the bulk history-wide reads so they don't contend with the offload's bulk writes (#755).
     private var backfillActivelyWriting: Bool { liveBackfillingFlag }
 
+    private func reloadHomeActivities() async {
+        homeActivitiesRevision += 1
+        repo.todayHistoryWideLoadedSeq = -1
+        repo.todayHistoryWideCache = nil
+        let currentSeq = repo.refreshSeq
+        guard await loadHistoryWide(), repo.refreshSeq == currentSeq else { return }
+        loadedHistoryWideOnce = true
+        repo.todayHistoryWideLoadedSeq = currentSeq
+    }
+
     /// 14-day sparklines + the cross-source bundles + the "your cards" series + workouts, everything that
     /// does NOT depend on `selectedDayOffset`. The bulk of the dashboard's reads; deferred during an active
     /// backfill (see `loadAll`). Same reads, same derivations, same assignment order as before.
-    private func loadHistoryWide() async {
+    private func loadHistoryWide() async -> Bool {
+        let activityRevision = homeActivitiesRevision
+        let loadSeq = repo.refreshSeq
+        let deviceId = repo.deviceId
+        func isCurrentRequest() -> Bool {
+            !Task.isCancelled && activityRevision == homeActivitiesRevision
+                && loadSeq == repo.refreshSeq && deviceId == repo.deviceId
+        }
         // 14-day sparklines, Whoop + Apple Health. These reads are mutually independent (distinct
         // metric keys/sources), so kick them all off concurrently with `async let` and await the
         // results below. Each hits the @MainActor Repository, fires its `await store.*` on the
@@ -4708,7 +4727,9 @@ struct TodayView: View {
         stepsEstByDay = Dictionary(stepsEstSeries.map { ($0.day, Int($0.value.rounded())) },
                                    uniquingKeysWith: { _, last in last })
 
-        workouts = await workoutsA
+        let loadedWorkouts = await workoutsA
+        guard isCurrentRequest() else { return false }
+        workouts = loadedWorkouts
         appleDays = await appleDaysA
         // Mi Band (Mi Fitness import), distinct days across its representative metric keys.
         let xSteps = await xStepsA
@@ -4733,6 +4754,7 @@ struct TodayView: View {
             let farFuture = Int(Date.distantFuture.timeIntervalSince1970)
             xiaomiSleeps = ((try? await store.sleepSessions(deviceId: "xiaomi-band", from: 0, to: farFuture, limit: 4000))?.count) ?? 0
         }
+        guard isCurrentRequest() else { return false }
         // #849: snapshot everything just computed onto the long-lived `repo`, keyed by the seq we loaded for,
         // so a later re-mount with unchanged data restores it in-memory instead of re-running this pass.
         // Note the Rest-tile spark (`sparks["sleep_performance"]`) is written by loadDayScoped, which always
@@ -4755,6 +4777,7 @@ struct TodayView: View {
             vo2maxToday: vo2maxToday,
             vitalityToday: vitalityToday
         )
+        return true
     }
 
     /// #849: restore the history-wide outputs from a same-seq cache on a re-mount, so the dashboard repaints

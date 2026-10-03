@@ -187,7 +187,12 @@ private fun StartSportRow(sp: Sport, isSelected: Boolean, onPick: () -> Unit) {
  * a live session needs the strap to stream) beside Add — or just Add when there's no strap.
  */
 @Composable
-fun WorkoutStartSection(vm: AppViewModel, onAdd: () -> Unit) {
+fun WorkoutStartSection(
+    vm: AppViewModel,
+    onAdd: () -> Unit,
+    startRequested: Boolean = false,
+    onStartRequestConsumed: () -> Unit = {},
+) {
     val live by vm.live.collectAsStateWithLifecycle()
     val activeWorkout by vm.activeWorkout.collectAsStateWithLifecycle()
     var showSportPicker by remember { mutableStateOf(false) }
@@ -196,6 +201,13 @@ fun WorkoutStartSection(vm: AppViewModel, onAdd: () -> Unit) {
     // moment a workout begins; this re-entry lets the user re-open it from the compact banner after
     // dismissing. Closing just hides the overlay — the workout keeps recording in the background.
     var showLiveWorkout by remember { mutableStateOf(false) }
+    LaunchedEffect(startRequested) {
+        if (startRequested) {
+            if (activeWorkout != null) showLiveWorkout = true
+            else if (live.bonded) showSportPicker = true
+            onStartRequestConsumed()
+        }
+    }
 
     val w = activeWorkout
     if (w != null) {

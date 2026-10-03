@@ -1198,9 +1198,18 @@ fun TodayScreen(
 
     var homeDayWorkouts by remember { mutableStateOf<List<WorkoutRow>>(emptyList()) }
     var homeDayStress by remember { mutableStateOf<Double?>(null) }
+    var manualActivityEndMillis by remember { mutableStateOf<Long?>(null) }
+    var homeStartRequested by remember { mutableStateOf(false) }
+    val openAddActivity: () -> Unit = {
+        val now = java.time.ZonedDateTime.now()
+        val nowMillis = now.toInstant().toEpochMilli()
+        manualActivityEndMillis = LocalDate.parse(selectedDayKey).atTime(now.toLocalTime()).atZone(now.zone)
+            .toInstant().toEpochMilli().coerceAtMost(nowMillis)
+    }
+    val homeWorkoutRows by viewModel.workouts.collectAsStateWithLifecycle()
     val publishedHomeStrap by viewModel.activeStrapIdFlow.collectAsStateWithLifecycle()
     val homeStrapId = effectiveActiveStrapId(publishedHomeStrap, viewModel.deviceId)
-    LaunchedEffect(days, selectedDayKey, homeStrapId) {
+    LaunchedEffect(days, selectedDayKey, homeStrapId, homeWorkoutRows) {
         val effectDayKey = selectedDayKey
         val effectStrapId = homeStrapId
         homeDayWorkouts = emptyList()
@@ -1343,8 +1352,11 @@ fun TodayScreen(
         }
         item(key = "home-my-day") {
             Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
-                HomeDayHeader(dayLabel, onQuickActions)
-                if (selectedDayOffset == 0) WorkoutStartSection(viewModel, onAdd = onQuickActions)
+                HomeDayHeader(dayLabel, onAdd = openAddActivity,
+                    onStart = if (selectedDayOffset == 0) ({ homeStartRequested = true }) else null,
+                    startEnabled = liveSnap.bonded && activeWorkout == null)
+                if (selectedDayOffset == 0) WorkoutStartSection(viewModel, onAdd = openAddActivity,
+                    startRequested = homeStartRequested, onStartRequestConsumed = { homeStartRequested = false })
                 if (selectedDayOffset == 0 && activeLiveSession != null) {
                     LiveSessionEntryCard(onOpen = { showLiveSession = true })
                 }
@@ -1458,6 +1470,18 @@ fun TodayScreen(
                 onDismiss = { showCycleTracker = false },
             )
         }
+    }
+
+    manualActivityEndMillis?.let { endMillis ->
+        ManualWorkoutDialog(
+            editing = null,
+            initialEndMillis = endMillis,
+            onDismiss = { manualActivityEndMillis = null },
+            onSave = { row, _ ->
+                viewModel.saveManualWorkout(row)
+                manualActivityEndMillis = null
+            },
+        )
     }
 
     if (showWeeklyPlan) {

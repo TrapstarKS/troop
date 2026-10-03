@@ -17,10 +17,16 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     let workouts: [WorkoutRow]
     let onEdit: () -> Void
     let onWorkout: (WorkoutRow) -> Void
+    let onActivitySaved: () async -> Void
     let onGuidance: (() -> Void)?
     @ViewBuilder let dashboard: () -> Dashboard
     @ViewBuilder let extras: () -> Extras
     @EnvironmentObject private var router: NavRouter
+    @EnvironmentObject private var repo: Repository
+    @EnvironmentObject private var intelligence: IntelligenceEngine
+    @State private var showManualActivity = false
+    @State private var manualEndDate = Date()
+    @State private var startWorkoutRequested = false
     @ScaledMetric private var columnWidth = NoopMetrics.compactScoreDialDiameter
 
     var body: some View {
@@ -48,6 +54,15 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 extras()
             } label: {
                 Text("Your Cards").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+            }
+        }
+        .sheet(isPresented: $showManualActivity) {
+            ManualWorkoutSheet(initialEndDate: manualEndDate) { row, _ in
+                Task {
+                    await repo.saveManualWorkout(row)
+                    await intelligence.analyzeRecent()
+                    await onActivitySaved()
+                }
             }
         }
     }
@@ -153,7 +168,21 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
         VStack(alignment: .leading, spacing: NoopMetrics.space3) {
             HStack {
                 TrackedSectionHeader(title: String(localized: "My Day"))
-                Button { router.requestQuickActions() } label: {
+                Menu {
+                    Button {
+                        manualEndDate = HomeDayActivities.manualEnd(dayKey: dayKey)
+                        showManualActivity = true
+                    } label: {
+                        Label("Add activity", systemImage: "plus")
+                    }
+                    if isToday {
+                        Button {
+                            startWorkoutRequested = true
+                        } label: {
+                            Label("Start workout", systemImage: "figure.run")
+                        }
+                    }
+                } label: {
                     Image(systemName: "plus").font(StrandFont.headline)
                         .frame(width: NoopMetrics.touchTarget, height: NoopMetrics.touchTarget)
                         .foregroundStyle(StrandPalette.onPrimaryAction)
@@ -190,7 +219,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 .buttonStyle(.plain)
             }
             if isToday {
-                WorkoutStartControl()
+                WorkoutStartControl(startRequested: $startWorkoutRequested)
                 Text("Current day is still in progress.")
                     .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
             }
@@ -227,6 +256,15 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
 }
 
 enum HomeDayActivities {
+    static func manualEnd(dayKey: String, now: Date = Date(), calendar: Calendar = .current) -> Date {
+        let parts = dayKey.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return now }
+        let time = calendar.dateComponents([.hour, .minute, .second], from: now)
+        let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2],
+            hour: time.hour, minute: time.minute, second: time.second)) ?? now
+        return min(date, now)
+    }
+
     static func duration(_ minutes: Double) -> String {
         guard minutes.isFinite else { return "—" }
         let rounded = Int(max(0, minutes).rounded())

@@ -1553,6 +1553,7 @@ struct LiquidTodayView: View {
             stress: selectedDayOffset == 0 ? stress : homeStressByDay[selectedDayKey], workouts: workouts,
             onEdit: { customizationDestination = .keyMetrics },
             onWorkout: { homeWorkout = HomeWorkoutTarget(row: $0) },
+            onActivitySaved: { await load() },
             onGuidance: coachEnabled ? { showCoachLauncher = true } : nil) {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: NoopMetrics.gap),
                                     GridItem(.flexible(), spacing: NoopMetrics.gap)], spacing: NoopMetrics.gap) {
