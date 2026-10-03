@@ -432,6 +432,15 @@
       "platform": "kotlin",
       "rationale": "Swift Repository.unionChargeComputedDailyMetrics contains the same first-raw-source proof selection and post-coalescing HRV filter in the excluded app layer. This Kotlin extraction serves suspend/Flow readers and regression fixtures; it does not waive numeric parity. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
       "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/IntelligencePersistence.kt::appendImportedRecoveryDays/10#1",
+      "identity_sha256": "0de32156f914d7c7be5d57adf5d260538cc82ffdfe02ab65b0ce45b60d5b26fd",
+      "platform": "kotlin",
+      "rationale": "Swift app-layer IntelligenceEngine.analyzeRecent keeps the source-only imported recovery fold inline. Kotlin mechanically extracts the unchanged fold into the existing persistence helper to keep its instrumented scoring coroutine under the unchanged JaCoCo bytecode budget. The call preserves source precedence, freshness marker zero, provenance, and persistence ordering; actual-engine regressions and shared Charge oracles cover behavior. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/IntelligenceEngine.swift"
     }
   ]
 }
