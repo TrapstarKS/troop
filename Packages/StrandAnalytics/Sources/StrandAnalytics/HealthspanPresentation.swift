@@ -21,6 +21,7 @@ public enum HealthspanPresentation {
     }
 
     public struct Snapshot: Equatable, Sendable {
+        public let eligibility: HealthspanHistory.Eligibility
         public let age: Double?
         public let paceTenths: Int?
         public let recoveryDays: Int
@@ -29,11 +30,11 @@ public enum HealthspanPresentation {
         public var pace: Double? { paceTenths.map { Double($0) / 10 } }
     }
 
-    /// Local calibration: 21 recoveries in 31 days; pace also needs 90 days of history.
+    /// Age requires initial 90-day recovery span and continuing 21-in-31 coverage.
     /// Pace = 1 + 2 × (30-day mean Body Age − up-to-180-day mean Body Age), clamped to −1…3.
     /// The factor 2 is a chosen display scale, not an annualized biological-aging rate.
     /// Kotlin twin: `HealthspanPresentation.snapshot`.
-    public static func snapshot(samples: [AgeSample], recoveryDays: Int, chronologicalAge: Double) -> Snapshot {
+    public static func snapshot(samples: [AgeSample], recoveryOffsets: [Int], chronologicalAge: Double) -> Snapshot {
         var byDay: [Int: Double] = [:]
         for sample in samples where (0..<180).contains(sample.daysAgo) && sample.age.isFinite && (20...90).contains(sample.age) {
             byDay[sample.daysAgo] = sample.age
@@ -41,9 +42,8 @@ public enum HealthspanPresentation {
         let offsets = byDay.keys.sorted()
         let recent = offsets.filter { $0 < 30 }.compactMap { byDay[$0] }
         let history = offsets.compactMap { byDay[$0] }
-        let ready = chronologicalAge >= 18 && chronologicalAge.isFinite && recoveryDays >= 21
-        let latest = offsets.first.flatMap { $0 <= 14 ? byDay[$0] : nil }
-        let age = ready ? latest : nil
+        let eligibility = HealthspanHistory.eligibility(recoveryOffsets: recoveryOffsets, chronologicalAge: chronologicalAge, latestAgeDaysAgo: offsets.first)
+        let age = eligibility.state == .ready ? offsets.first.flatMap { byDay[$0] } : nil
         var paceTenths: Int?
         if age != nil, recent.count >= 3, history.count >= 8, (offsets.last ?? 0) >= 89 {
             let recentMean = recent.reduce(0, +) / Double(recent.count)
@@ -51,7 +51,7 @@ public enum HealthspanPresentation {
             let pace = min(3, max(-1, 1 + 2 * (recentMean - historyMean)))
             paceTenths = Int(floor(pace * 10 + 0.5))
         }
-        return Snapshot(age: age, paceTenths: paceTenths, recoveryDays: max(0, recoveryDays),
+        return Snapshot(eligibility: eligibility, age: age, paceTenths: paceTenths, recoveryDays: eligibility.recoveryDays,
                         recentSamples: recent.count, historySamples: history.count)
     }
 

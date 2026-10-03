@@ -2123,6 +2123,21 @@ class WhoopRepository(
             )
         }
 
+    /** Bounded historical read with the incumbent source and edited-sleep precedence.
+     * Swift UI twin: HealthspanView reads Repository.refresh's same 4,000-day range. */
+    fun daysMergedRangeFlow(deviceId: String, from: String, to: String): Flow<List<DailyMetric>> =
+        combine(
+            unionDaysFlow(importedSourceIds(deviceId).map { dao.dailyMetricsRangeFlow(it, from, to) }),
+            unionDaysFlow(computedSourceIds(deviceId).map { dao.dailyMetricsRangeFlow(it, from, to) }),
+            dao.dailyMetricsRangeFlow(ACTIVITY_FILE_SOURCE, from, to),
+            editedSleepSessionsFlow(deviceId),
+        ) { imported, computed, activityFile, edited ->
+            mergeActivityFileSteps(
+                mergeDaily(imported = imported, computed = computed, userEditedDays = userEditedDays(edited)),
+                activityFile,
+            )
+        }
+
     /** Pooled user-edited sleep sessions across every computed source in the active∪canonical union, so a
      *  re-add doesn't drop an earlier-id night's edit precedence (#509 + HIGH-2). Single-source ⇒ the plain
      *  flow. */
