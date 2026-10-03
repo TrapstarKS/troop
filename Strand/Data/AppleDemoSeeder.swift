@@ -250,6 +250,7 @@ enum AppleDemoSeeder {
 
         _ = try await store.upsertDailyMetrics(daily, deviceId: whoop)
         try await seedHealthMonitor(into: store, days: daily)
+        sleeps.append(contentsOf: sleepDetailExamples(calendar: cal))
         _ = try await store.upsertSleepSessions(sleeps, deviceId: whoop)
         _ = try await store.upsertMetricSeries(series, deviceId: whoop)
         _ = try await store.upsertAppleDaily(appleRows, deviceId: apple)
@@ -281,6 +282,16 @@ enum AppleDemoSeeder {
             rows.append(JournalEntry(day: day, question: "How much caffeine did you consume?", answeredYes: true, notes: nil, numericValue: Double(50 + offset % 4 * 50)))
         }
         _ = try await store.upsertJournal(rows, deviceId: Repository.journalDeviceId)
+    }
+
+    private static func sleepDetailExamples(calendar: Calendar) -> [CachedSleepSession] {
+        let today = calendar.startOfDay(for: Date())
+        guard let day = calendar.date(byAdding: .day, value: -1, to: today),
+              let onset = calendar.date(bySettingHour: 14, minute: 15, second: 0, of: day) else { return [] }
+        let start = Int(onset.timeIntervalSince1970)
+        return [CachedSleepSession(startTs: start, endTs: start + 30 * 60, efficiency: 100,
+                                   restingHr: nil, avgHrv: nil,
+                                   stagesJSON: segmentsJSON(onset: start, deep: 0, rem: 0, light: 30, awakeMin: 0))]
     }
 
     // MARK: - helpers

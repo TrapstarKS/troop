@@ -45,6 +45,12 @@ class HypnogramScrubTest {
         assertEquals((origin + 3.5 * 3600.0).toLong(), hit.timestamp)
     }
 
+    @Test fun exactBoundariesUseTheFollowingRecordedInterval() {
+        assertEquals("rem", scrubHitAt(100f, 400f, intervals, origin, span)!!.stage)
+        assertEquals("", scrubHitAt(150f, 400f, intervals, origin, span)!!.stage)
+        assertEquals("", scrubHitAt(400f, 400f, intervals, origin, span)!!.stage)
+    }
+
     @Test fun theEndsClampToTheWindow() {
         assertEquals(origin.toLong(), scrubHitAt(0f, 400f, intervals, origin, span)!!.timestamp)
         assertEquals((origin + span).toLong(), scrubHitAt(400f, 400f, intervals, origin, span)!!.timestamp)
