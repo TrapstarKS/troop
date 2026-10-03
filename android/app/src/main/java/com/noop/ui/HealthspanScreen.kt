@@ -265,7 +265,7 @@ private fun HealthspanHalo(value: String, state: String, chronologicalAge: Doubl
 
 @Composable
 private fun HealthspanAgeTrend(rows: List<MetricSeriesRow>, reference: LocalDate) {
-    val firstDay = reference.minusDays(167)
+    val firstDay = reference.minusDays(179)
     val points = remember(rows, reference) {
         rows.filter { it.day in firstDay.toString()..reference.toString() && it.value.isFinite() && it.value in 20.0..90.0 }
             .mapNotNull { row -> runCatching { LocalDate.parse(row.day) to row.value }.getOrNull() }
