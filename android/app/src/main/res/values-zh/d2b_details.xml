@@ -57,7 +57,8 @@
     <string name="d2b_duration_minutes">%1$d分钟</string>
     <string name="d2b_hours_minutes">%1$d小时%2$d分钟</string>
     <string name="d2b_average_hr">平均心率</string>
-    <string name="d2b_average_disclosure">保存的平均值与此记录不同。图表使用记录的心率；已保存的强度和区间数据保持不变。</string>
+    <string name="d2b_average_disclosure">显示的平均值与此曲线不同。心率来自记录的样本；现有强度和区间值保持不变。</string>
+    <string name="d2b_trace_source_note">手动创建和导入活动的心率图使用当前选择的手环，以及此时间段保留的记录历史。原始记录的数据来源可能不同。</string>
     <string name="d2b_maximum_hr">最大心率</string>
     <string name="d2b_active_energy">活动能量</string>
     <string name="d2b_recorded_energy">已记录能量</string>

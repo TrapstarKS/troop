@@ -57,7 +57,8 @@
     <string name="d2b_duration_minutes">%1$d Min</string>
     <string name="d2b_hours_minutes">%1$d Std %2$d Min</string>
     <string name="d2b_average_hr">Durchschnittliche Herzfrequenz</string>
-    <string name="d2b_average_disclosure">Der gespeicherte Durchschnitt weicht von dieser Aufzeichnung ab. Das Diagramm verwendet die aufgezeichnete Herzfrequenz; gespeicherte Belastungs- und Zonendaten bleiben erhalten.</string>
+    <string name="d2b_average_disclosure">Der angezeigte Durchschnitt weicht von diesem Verlauf ab. Die Herzfrequenz stammt aus aufgezeichneten Messwerten; bestehende Belastungs- und Zonenwerte bleiben erhalten.</string>
+    <string name="d2b_trace_source_note">Herzfrequenzdiagramme für manuelle und importierte Aktivitäten verwenden den aktuell ausgewählten Strap und die erhaltenen Aufzeichnungen für dieses Zeitfenster. Die ursprüngliche Aufzeichnungsquelle kann abweichen.</string>
     <string name="d2b_maximum_hr">Maximale Herzfrequenz</string>
     <string name="d2b_active_energy">Aktive Energie</string>
     <string name="d2b_recorded_energy">Aufgezeichnete Energie</string>

@@ -281,6 +281,9 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
                     style = NoopType.body, color = Palette.textSecondary)
             }
         }
+        if (source != WorkoutSource.DETECTED) item {
+            Text(uiString(R.string.d2b_trace_source_note), style = NoopType.footnote, color = Palette.textTertiary)
+        }
         item { DetailHrChart(hr, uiString(R.string.d2b_activity_heart_rate), ((current.endTs - current.startTs) / 120).coerceIn(15, 300)) }
         item {
             NoopCard {

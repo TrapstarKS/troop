@@ -57,7 +57,8 @@
     <string name="d2b_duration_minutes">%1$d min</string>
     <string name="d2b_hours_minutes">%1$d h %2$d min</string>
     <string name="d2b_average_hr">Frequência cardíaca média</string>
-    <string name="d2b_average_disclosure">A média guardada difere deste registo. O gráfico utiliza a frequência cardíaca registada; os dados guardados de esforço e zonas são preservados.</string>
+    <string name="d2b_average_disclosure">A média apresentada difere deste traçado. A frequência cardíaca provém de amostras registadas; os valores existentes de esforço e zonas são preservados.</string>
+    <string name="d2b_trace_source_note">Os gráficos de frequência cardíaca das atividades manuais e importadas utilizam a pulseira atualmente selecionada e o histórico de registos conservado para este intervalo. A origem do registo original pode ser diferente.</string>
     <string name="d2b_maximum_hr">Frequência cardíaca máxima</string>
     <string name="d2b_active_energy">Energia ativa</string>
     <string name="d2b_recorded_energy">Energia registada</string>

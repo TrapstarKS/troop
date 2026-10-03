@@ -63,11 +63,15 @@ struct ActivityDetailView: View {
                     }
                 }
             }
+            if WorkoutSource.classify(row.source) != .detected {
+                Text("Heart-rate charts for manual and imported activities use the currently selected strap and retained recording history for this time window. The original recording source may differ.")
+                    .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+            }
             DetailHeartRateChart(points: points, loaded: loaded)
             if let average = row.avgHr, !points.isEmpty,
                abs(Double(average) - points.map(\.value).reduce(0, +) / Double(points.count)) > 3,
                row.strain != nil || row.zonesJSON != nil {
-                Text("The saved average differs from this recording. The graph uses recorded heart rate; saved strain and zone data are preserved.")
+                Text("The displayed average differs from this trace. Heart rate comes from recorded samples; existing strain and zone values are preserved.")
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
             }
             DetailZoneBars(minutes: minutes, zoneSet: profile.hrZoneSet, imported: importedZones)

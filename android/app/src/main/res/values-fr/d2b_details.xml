@@ -57,7 +57,8 @@
     <string name="d2b_duration_minutes">%1$d min</string>
     <string name="d2b_hours_minutes">%1$d h %2$d min</string>
     <string name="d2b_average_hr">Fréquence cardiaque moyenne</string>
-    <string name="d2b_average_disclosure">La moyenne enregistrée diffère de cet enregistrement. Le graphique utilise la fréquence cardiaque enregistrée ; les données d’effort et de zones sauvegardées sont préservées.</string>
+    <string name="d2b_average_disclosure">La moyenne affichée diffère de cette courbe. La fréquence cardiaque provient des échantillons enregistrés ; les valeurs existantes d’effort et de zones sont préservées.</string>
+    <string name="d2b_trace_source_note">Les graphiques de fréquence cardiaque des activités manuelles et importées utilisent le bracelet actuellement sélectionné et l’historique des enregistrements conservés pour cette fenêtre. La source de l’enregistrement d’origine peut être différente.</string>
     <string name="d2b_maximum_hr">Fréquence cardiaque maximale</string>
     <string name="d2b_active_energy">Énergie active</string>
     <string name="d2b_recorded_energy">Énergie enregistrée</string>
