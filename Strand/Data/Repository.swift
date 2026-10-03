@@ -729,14 +729,6 @@ final class Repository: ObservableObject {
                 resp.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) })
     }
 
-    func hrvReliabilityByDay(from: String, to: String) async throws -> [String: HealthSignalReliability.Record] {
-        try await signalReliabilityByDay(from: from, to: to).hrv
-    }
-
-    func respReliabilityByDay(from: String, to: String) async throws -> [String: HealthSignalReliability.Record] {
-        try await signalReliabilityByDay(from: from, to: to).resp
-    }
-
     /// Source-aware rows for vital-sign cards. During previews/tests that set `days` directly,
     /// fall back to the merged local cache so the component still renders.
     var vitalMetricRows: [SourcedDailyMetric] {

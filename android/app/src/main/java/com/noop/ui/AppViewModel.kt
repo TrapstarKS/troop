@@ -779,15 +779,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val healthSignalEvidence: StateFlow<IllnessHistory.Snapshot?> get() = illnessHistory
 
-    /** Null while provenance loads; computed HRV needs a fresh valid scan before it can corroborate. */
-    val hrvReliabilityByDay: StateFlow<Map<String, HealthSignalReliability.Record>?> =
-        illnessHistory.map { it?.hrvReliabilityByDay }
-            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val respReliabilityByDay: StateFlow<Map<String, HealthSignalReliability.Record>?> =
-        illnessHistory.map { it?.respReliabilityByDay }
-            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
     /**
      * Today's measured steps follow the newest confirmed sleep-onset cycle, independently of the fixed
      * 04:00 presentation day used by the rest of the dashboard. The marker is persisted by the analytics
