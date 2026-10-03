@@ -69,6 +69,8 @@ final class SourceCoordinator: ObservableObject {
     /// `scan`s / `stop`s it. Built by `makeSource(for:)`; each source owns its OWN `CBCentralManager` and
     /// never references `BLEManager`/`WhoopBleClient`, so the WHOOP path cannot regress.
     private var activeSource: (any LiveHRSource)?
+    private let allowsLiveTransports: Bool
+    private let sourceFactory: ((String) -> any LiveHRSource)?
     /// The live Oura source, TYPED, kept ALONGSIDE `activeSource` purely so `AppModel` can observe its
     /// `adoptPhase` / `needsPairing` for the adopt wizard (`coordinator.$ouraSource`). Set in `makeOura`
     /// (the same object as `activeSource` while an Oura ring is live) and cleared in
@@ -120,7 +122,11 @@ final class SourceCoordinator: ObservableObject {
          setWhoopActiveDeviceId: @escaping (String) -> Void,
          connectedPeripheralUUID: AnyPublisher<String?, Never>,
          straplog: @escaping (String) -> Void = { _ in },
-         ouraNightBand: @escaping () -> NightStandDown.Band? = { nil }) {
+         ouraNightBand: @escaping () -> NightStandDown.Band? = { nil },
+         allowsLiveTransports: Bool? = nil,
+         sourceFactory: ((String) -> any LiveHRSource)? = nil) {
+        self.allowsLiveTransports = allowsLiveTransports ?? LiveTransportPolicy.enabled
+        self.sourceFactory = sourceFactory
         self.registry = registry
         self.live = live
         self.storeHandle = storeHandle
@@ -168,6 +174,7 @@ final class SourceCoordinator: ObservableObject {
         // charge need it to know the number is not the active device's, and the Apple Watch path below
         // short-circuits, so setting it inside the WHOOP/strap split would leave a watch reading `true`.
         live.activeIsWhoop = isWhoop(id)
+        guard allowsLiveTransports else { return }
 
         // The Apple Watch is a HealthKit source with `peripheralId: nil` (see `AppleWatchDevice`): there is
         // no BLE peripheral to connect, and the M1 live read happens entirely in `HealthKitBridge`'s
@@ -295,6 +302,7 @@ final class SourceCoordinator: ObservableObject {
     /// onBattery closures, plus Oura's ringGen / authKey / adoptIntent). Returns the source WITHOUT
     /// connecting — the caller (`switchToStrap`) does the connect-by-identifier-else-scan bring-up.
     private func makeSource(for id: String) -> any LiveHRSource {
+        if let sourceFactory { return sourceFactory(id) }
         switch sourceKind(for: id) {
         case .ftms:  return makeFTMSSource(id: id)
         case .huami: return makeHuamiSource(id: id)
