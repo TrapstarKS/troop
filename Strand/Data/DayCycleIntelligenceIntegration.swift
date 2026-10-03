@@ -131,8 +131,10 @@ import WhoopStore
             }
             let classified = PhysiologicalSteps.classifyForCycle(
                 blocks, offsetSec: offsetSec, habitualMidsleepSec: habitualMidsleepSec)
-            guard let winner = classified.filter({ $0.kind == .mainSleep })
-                .min(by: { $0.effectiveOnset < $1.effectiveOnset }), winner.effectiveOnset <= now else { continue }
+            guard let onset = PhysiologicalSteps.mainSleepOnset(
+                blocks, offsetSec: offsetSec, habitualMidsleepSec: habitualMidsleepSec),
+                let winner = classified.first(where: { $0.kind == .mainSleep && $0.effectiveOnset == onset }),
+                onset <= now else { continue }
             boundaries.append(.init(sleepId: winner.id, onset: winner.effectiveOnset))
             wakeDayById[winner.id] = night.daily.day; ownerById[winner.id] = night.owner
         }
