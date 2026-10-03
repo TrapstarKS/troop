@@ -260,23 +260,26 @@ enum ScheduledDebugExport {
     /// the same as a manual share. `markDay` records today so the daily dedup/catch-up doesn't
     /// double-write; the "Run now" button passes false so a manual tap always produces a file.
     @discardableResult
-    private static func performExport(markDay: Bool, captureURL: URL? = nil, directory: URL? = nil) -> URL? {
+    static func performExport(markDay: Bool, captureURL: URL? = nil, directory: URL? = nil,
+                              now: Date = Date()) -> URL? {
         guard let docs = directory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
             return nil
         }
-        let stamp = FileExport.timestamp()
+        let stamp = FileExport.timestamp(now)
         let logURL = docs.appendingPathComponent("noop-strap-log-\(stamp).txt")
         let text = LiveState.scheduledExportText(extraHeaderLines: DebugDataDiagnostics.strapStateLines())
         let entries = captureURL.map { DebugExportReview.pairEntries(file: $0, text: text, textName: "report.txt") }
             ?? [.init(name: "report.txt", data: Data(text.utf8))]
         guard let prepared = try? DebugExportReview.prepare(entries) else { return nil }
         guard let log = prepared.first(where: { $0.name == "report.txt" }) else { return nil }
-        do { try log.data.write(to: logURL, options: .atomic) } catch { return nil }
-        if let raw = prepared.first(where: { $0.name == "raw-capture.jsonl" }) {
-            try? raw.data.write(to: docs.appendingPathComponent("noop-raw-capture-\(stamp).json"), options: .atomic)
-        }
+        do {
+            try log.data.write(to: logURL, options: .atomic)
+            if let raw = prepared.first(where: { $0.name == "raw-capture.jsonl" }) {
+                try raw.data.write(to: docs.appendingPathComponent("noop-raw-capture-\(stamp).json"), options: .atomic)
+            }
+        } catch { return nil }
         if markDay {
-            UserDefaults.standard.set(dayKey(Date()), forKey: K.lastRun)
+            UserDefaults.standard.set(dayKey(now), forKey: K.lastRun)
         }
         // Retention (#650): these accumulate in Documents with no UI in the loop to notice, so prune
         // after every write (scheduled OR manual "Run now") — mirrors Android pruning on every

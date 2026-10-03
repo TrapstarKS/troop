@@ -55,12 +55,7 @@ enum FileExport {
         // The previous `try?` swallowed write failures, then handed an empty/missing path to the
         // share sheet — the user saw a broken export with no error. Clean up the temp file after the
         // share sheet closes so the temporaryDirectory doesn't accumulate dead exports across runs.
-        let url = NoopScratch.file(suggestedName)
-        do {
-            try text.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            return
-        }
+        guard let url = stageText(text, suggestedName: suggestedName) else { return }
         present(activityItems: [url], cleanup: [url])
         #endif
     }
@@ -128,13 +123,16 @@ enum FileExport {
     /// Present `UIActivityViewController` and, once it closes, best-effort remove the URLs in
     /// `cleanup` so staged exports don't accumulate in `temporaryDirectory` across runs.
     @MainActor
-    private static func present(activityItems: [Any], cleanup: [URL], completion: (() -> Void)? = nil) {
+    private static func present(activityItems: [Any], cleanup: [URL], completion: ((Bool) -> Void)? = nil) {
+        let finish: (Bool) -> Void = { completed in
+            for url in cleanup { removeStaged(url) }
+            completion?(completed)
+        }
         guard let scene = UIApplication.shared.connectedScenes
                 .compactMap({ $0 as? UIWindowScene })
-                .first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared
-                .connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+                .first(where: { $0.activationState == .foregroundActive }),
               let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController
-                ?? scene.windows.first?.rootViewController else { completion?(); return }
+                ?? scene.windows.first?.rootViewController else { finish(false); return }
         // Present from the TOP-MOST controller, not the root (#455). When the caller is itself inside a
         // SwiftUI sheet — e.g. the Trends report is shown via `.sheet` — root already has that sheet
         // presented, so `root.present(...)` is a no-op ("already presenting…") and the share sheet never
@@ -142,20 +140,12 @@ enum FileExport {
         // up. (The Share-strap-log path worked only because Settings isn't a sheet — root had nothing on it.)
         var presenter = root
         while let next = presenter.presentedViewController, !next.isBeingDismissed { presenter = next }
+        guard presenter.viewIfLoaded?.window != nil,
+              presenter.presentedViewController == nil,
+              !presenter.isBeingDismissed, !presenter.isBeingPresented else { finish(false); return }
         let vc = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-        if !cleanup.isEmpty || completion != nil {
-            // Fires after the share sheet is dismissed (saved or cancelled). We clean up staged files and
-            // then run `completion`. That hook existed for the Test Centre report, which opened a prefilled
-            // GitHub issue once the sheet was gone; that step has been removed and nothing passes a
-            // completion today. Kept because it is the only point at which "the sheet has closed" is
-            // observable, which any future caller needing to follow a share will want.
-            vc.completionWithItemsHandler = { _, _, _, _ in
-                let fm = FileManager.default
-                for url in cleanup where fm.fileExists(atPath: url.path) {
-                    try? fm.removeItem(at: url)
-                }
-                completion?()
-            }
+        vc.completionWithItemsHandler = { _, completed, _, error in
+            Task { @MainActor in finish(completed && error == nil) }
         }
         // iPad: anchor the popover to the screen centre to avoid a crash.
         if let pop = vc.popoverPresentationController {
@@ -175,46 +165,95 @@ enum FileExport {
     /// Equatable so the assembler cap can assert an undersized bundle is returned untouched (section 5.4).
     struct BundleEntry: Equatable, Sendable { let name: String; let data: Data }
 
+    private static func stagedURL(_ name: String) -> URL {
+        NoopScratch.subdirectory("export-" + UUID().uuidString).appendingPathComponent(name)
+    }
+
+    static func stageText(_ text: String, suggestedName: String) -> URL? {
+        let url = stagedURL(suggestedName)
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            removeStaged(url)
+            return nil
+        }
+    }
+
     /// Zip `entries` into a single staged `.zip` under the temporary directory and return its URL, or nil
     /// if there are no entries. Pure file IO, no UI, so it is unit-testable. Uses ZIPFoundation's `Archive`
     /// which is available on macOS and iOS without shelling out. The caller presents the URL (NSSavePanel
     /// on macOS, share sheet on iOS) and cleans it up.
-    static func zipData(entries: [BundleEntry], baseName: String) -> URL? {
+    static func zipData(entries: [BundleEntry], baseName: String,
+                        writeEntry: ((Archive, BundleEntry) throws -> Void)? = nil) -> URL? {
         guard !entries.isEmpty else { return nil }
-        let url = NoopScratch.file("\(baseName).zip")
-        try? FileManager.default.removeItem(at: url)
-        guard let archive = try? Archive(url: url, accessMode: .create) else { return nil }
-        for entry in entries {
-            try? archive.addEntry(with: entry.name, type: .file, uncompressedSize: Int64(entry.data.count)) { position, size in
-                let start = Int(position)
-                let end = min(start + size, entry.data.count)
-                return entry.data.subdata(in: start..<end)
+        let url = stagedURL("\(baseName).zip")
+        do {
+            let archive = try Archive(url: url, accessMode: .create)
+            for entry in entries {
+                if let writeEntry { try writeEntry(archive, entry) }
+                else {
+                    try archive.addEntry(with: entry.name, type: .file, uncompressedSize: Int64(entry.data.count)) { position, size in
+                        let start = Int(position)
+                        let end = min(start + size, entry.data.count)
+                        return entry.data.subdata(in: start..<end)
+                    }
+                }
             }
+        } catch {
+            removeStaged(url)
+            return nil
         }
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        guard FileManager.default.fileExists(atPath: url.path) else { removeStaged(url); return nil }
+        return url
+    }
+
+    private static func removeStaged(_ file: URL) {
+        try? FileManager.default.removeItem(at: file)
+        let directory = file.deletingLastPathComponent()
+        if directory.lastPathComponent.hasPrefix("export-"),
+           directory.deletingLastPathComponent().standardizedFileURL == NoopScratch.root().standardizedFileURL {
+            try? FileManager.default.removeItem(at: directory)
+        }
+    }
+
+    @MainActor
+    static func sharePrepared(_ staged: URL, output: (URL) async -> Bool) async -> URL? {
+        defer { removeStaged(staged) }
+        guard !Task.isCancelled else { return nil }
+        let completed = await output(staged)
+        return completed && !Task.isCancelled ? staged : nil
     }
 
     /// Zip `entries` into one `.zip` and hand it to the user (NSSavePanel on macOS, share sheet on iOS).
     /// EVERY entry must already be redacted by the caller (section 5.3); the 20 MB cap (section 5.4) is the
-    /// assembler's job before it calls here. Returns the staged / saved zip URL, nil on cancel or failure.
+    /// assembler's job before it calls here. Returns the saved URL on macOS, or the staged URL as a receipt
+    /// after a completed iOS activity. The staged file is removed after completion; cancel/failure returns nil.
     ///
     /// #646/#651: `zipData` (the actual DEFLATE + write) runs off the main actor via a detached task, same
     /// pattern as `DataBackup.runExport`, so building a multi-entry bundle never beach-balls the UI. Only
     /// the save panel / share sheet presentation below hops back to the main actor.
     @MainActor @discardableResult
     static func exportBundle(entries: [BundleEntry], suggestedName: String,
-                             completion: (() -> Void)? = nil) async -> URL? {
+                             completion: (() -> Void)? = nil,
+                             share: ((URL) async -> Bool)? = nil) async -> URL? {
+        guard !Task.isCancelled else { return nil }
         let base = suggestedName.hasSuffix(".zip") ? String(suggestedName.dropLast(4)) : suggestedName
         let stagingTask = Task.detached(priority: .userInitiated) {
             zipData(entries: entries, baseName: base)
         }
         guard let staged = await stagingTask.value else { completion?(); return nil }
+        guard !Task.isCancelled else {
+            removeStaged(staged)
+            return nil
+        }
+        if let share { return await sharePrepared(staged, output: share) }
         #if os(macOS)
         let panel = NSSavePanel()
         panel.nameFieldStringValue = suggestedName
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let dest = panel.url else {
-            try? FileManager.default.removeItem(at: staged)
+            removeStaged(staged)
             return nil
         }
         let fm = FileManager.default
@@ -222,14 +261,20 @@ enum FileExport {
             if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
             try fm.copyItem(at: staged, to: dest)
         } catch {
-            try? fm.removeItem(at: staged)
+            removeStaged(staged)
             return nil
         }
-        try? fm.removeItem(at: staged)
+        removeStaged(staged)
         return dest
         #else
-        present(activityItems: [staged], cleanup: [staged], completion: completion)
-        return staged
+        return await sharePrepared(staged) { file in
+            await withCheckedContinuation { continuation in
+                present(activityItems: [file], cleanup: []) { completed in
+                    continuation.resume(returning: completed)
+                    completion?()
+                }
+            }
+        }
         #endif
     }
 }
