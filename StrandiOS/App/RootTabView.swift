@@ -30,6 +30,8 @@ struct RootTabView: View {
     @State private var routedPillar: NavRouter.Destination?
     @State private var pendingCoach = false
     @State private var pendingRoutedRequest: RoutedSheetRequest?
+    // Keep the outgoing sheet occupied until SwiftUI finishes its dismissal animation.
+    @State private var routedSheetActive = false
     /// Selected tab — bound so tab switches can crossfade (README §Motion: ~240ms opacity swap
     /// between tab roots, calm easing). Defaults to Today.
     @State private var selectedTab: Int = 0
@@ -158,6 +160,7 @@ struct RootTabView: View {
         // their own nav stack — the same idiom the quick-action + Devices screens use on iPhone.
         .sheet(item: $routedPillar, onDismiss: presentPendingRoutedRequest) { dest in
             pillarScreen(dest)
+                .onAppear { routedSheetActive = true }
         }
         // Honour a router request: Devices keeps its dedicated sheet; the v5 pillars route through the
         // shared pillar sheet. Cleared so the same tap can fire again later.
@@ -250,7 +253,7 @@ struct RootTabView: View {
 
     private func presentCoach() {
         guard coachEnabled else { return }
-        if pendingRoutedRequest != nil {
+        if pendingRoutedRequest != nil || (routedSheetActive && routedPillar == nil) {
             pendingRoutedRequest = .coach
             return
         }
@@ -271,6 +274,7 @@ struct RootTabView: View {
     }
 
     private func presentPendingRoutedRequest() {
+        routedSheetActive = false
         guard let request = pendingRoutedRequest else { return }
         pendingRoutedRequest = nil
         switch request {
@@ -298,7 +302,7 @@ struct RootTabView: View {
         withAnimation(Self.sheetEase) {
             pendingCoach = false
             showDevices = false
-            if routedPillar != nil || pendingRoutedRequest != nil {
+            if routedPillar != nil || routedSheetActive || pendingRoutedRequest != nil {
                 pendingRoutedRequest = .quickAction(destination)
                 quickAction = nil
                 routedPillar = nil
@@ -369,7 +373,7 @@ struct RootTabView: View {
                 quickAction = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     guard quickAction == nil, !pendingCoach, routedPillar == nil,
-                          pendingRoutedRequest == nil, !showDevices,
+                          pendingRoutedRequest == nil, !routedSheetActive, !showDevices,
                           !liftSession.isPresented else { return }
                     withAnimation(Self.sheetEase) { quickAction = picked }
                 }
