@@ -33,6 +33,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     @State private var manualActivity: ManualActivityTarget?
     @State private var startWorkoutRequested = false
     @ScaledMetric private var columnWidth = NoopMetrics.compactScoreDialDiameter
+    @State private var viewportWidth: CGFloat?
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
@@ -61,6 +62,9 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 Text("Your Cards").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
             }
         }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            geometry.size.width + NoopMetrics.screenHPadding * 2
+        } action: { viewportWidth = $0 }
         .sheet(item: $manualActivity) { target in
             ManualWorkoutSheet(initialEndDate: target.endDate) { row, _ in
                 Task {
@@ -130,7 +134,8 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
         VStack(spacing: NoopMetrics.space1) {
             ScoreDial(label: "\(label) ›", value: display, unit: value == nil ? "" : unit,
                       progress: value.map { $0 / 100 }, color: color, size: .compact,
-                      accessibilityLabel: "\(label), \(display)\(value == nil ? "" : unit)")
+                      accessibilityLabel: "\(label), \(display)\(value == nil ? "" : unit)",
+                      viewportWidth: viewportWidth)
             if let caption {
                 Text(caption).font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                     .multilineTextAlignment(.center)
@@ -338,13 +343,12 @@ struct HomeDateChrome: View {
             TopChrome(dateLabel: headerLabel, previousLabel: String(localized: "Previous day"),
                       nextLabel: String(localized: "Next day"), profileLabel: String(localized: "Menu and settings"),
                       strapLabel: live.connected ? String(localized: "Connected") : String(localized: "Disconnected"),
+                      streakCount: streak,
+                      streakLabel: [String(localized: "Scored-day streak"), streak.formatted(.number)].joined(separator: ", "),
                       batteryPercent: batteryPercent, isConnected: live.connected, canGoNext: selectedOffset > 0,
                       onPrevious: { step(1) }, onNext: { step(-1) }, onDate: { showCalendar = true },
                       onProfile: onProfile, onStrap: { router.openDevices() })
             HStack(spacing: NoopMetrics.space2) {
-                Label("\(streak)", systemImage: "flame.fill")
-                    .font(StrandFont.captionNumber).foregroundStyle(StrandPalette.textSecondary)
-                    .accessibilityLabel("Scored-day streak")
                 Spacer()
                 if selectedOffset == 0 {
                     if live.backfilling {

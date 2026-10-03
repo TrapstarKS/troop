@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -36,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
@@ -107,6 +109,8 @@ internal fun HomeChrome(
             profileLabel = uiString(R.string.home_profile),
             strapLabel = uiString(if (connected) R.string.home_device_connected else R.string.home_device_disconnected),
             avatarInitials = uiString(R.string.home_avatar),
+            streakCount = streak,
+            streakLabel = uiPlural(R.plurals.settings_streak_run, streak, streak),
             batteryPercent = (battery as? HeaderBatteryDisplay.State.Charge)?.pct?.roundToInt(),
             isConnected = connected,
             canGoNext = offset > 0,
@@ -123,12 +127,6 @@ internal fun HomeChrome(
             onProfile = onProfile,
             onStrap = onDevices,
         )
-        Row(verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Metrics.space4)) {
-            Icon(Icons.Filled.LocalFireDepartment, null, tint = Palette.textSecondary,
-                modifier = Modifier.size(Metrics.iconSmall))
-            Text(uiPlural(R.plurals.settings_streak_run, streak, streak), style = NoopType.captionNumber, color = Palette.textSecondary)
-        }
         recordingState?.let { state ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { HomeRecordingStatus(state) }
         }
@@ -147,27 +145,31 @@ internal fun HomeDials(
     val availableRecovery = homeScoreValue(recovery)
     val availableStrain = homeScoreValue(strain)
     val sleepValue = homeScoreValue(sleep)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val viewportWidth = maxWidth + Metrics.screenPadding * 2
     Row(Modifier.fillMaxWidth().padding(vertical = Metrics.space16),
         horizontalArrangement = Arrangement.spacedBy(Metrics.space8), verticalAlignment = Alignment.Top) {
         HomeDial(uiString(R.string.home_sleep), sleepValue?.roundToInt()?.toString(), "%", sleepValue,
-            Palette.sleepPrimary, Modifier.weight(1f), onSleep)
+            Palette.sleepPrimary, Modifier.weight(1f), viewportWidth, onSleep)
         HomeDial(uiString(R.string.home_recovery), RecoveryStrainDetailLogic.recoveryPercent(availableRecovery)?.toString(), "%", availableRecovery,
-            availableRecovery?.let { Palette.recoveryColor(it) } ?: Palette.ringTrack, Modifier.weight(1f), onRecovery)
+            availableRecovery?.let { Palette.recoveryColor(it) } ?: Palette.ringTrack, Modifier.weight(1f), viewportWidth, onRecovery)
         HomeDial(uiString(R.string.home_strain), availableStrain?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) }, "", availableStrain,
-            Palette.strainPrimary, Modifier.weight(1f), onStrain)
+            Palette.strainPrimary, Modifier.weight(1f), viewportWidth, onStrain)
+    }
     }
 }
 
 @Composable
 private fun HomeDial(label: String, value: String?, unit: String, progress: Double?, color: Color,
-    modifier: Modifier, onClick: () -> Unit) {
+    modifier: Modifier, viewportWidth: Dp, onClick: () -> Unit) {
     val displayValue = value ?: uiString(R.string.home_no_value)
     val displayUnit = if (value != null) unit else ""
     Column(modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         ScoreDial(label = uiString(R.string.home_dial_label, label), value = displayValue,
             unit = displayUnit, progress = progress?.div(100)?.toFloat(),
             color = color, size = ScoreDialSize.Compact,
-            accessibilityLabel = listOf(label, displayValue + displayUnit).joinToString(", "))
+            accessibilityLabel = listOf(label, displayValue + displayUnit).joinToString(", "),
+            viewportWidth = viewportWidth)
     }
 }
 
