@@ -391,7 +391,7 @@ struct CoupledView: View {
     /// Active calories for the day from the stored whole-day estimate. Never fabricated, a day with no
     /// estimate reads a dash.
     private var caloriesText: String {
-        guard let k = day?.activeKcalEst else { return "—" }
+        guard let k = day?.activeEnergyKcalEst else { return "—" }
         return "\(Int(k.rounded())) kcal"
     }
 
@@ -738,7 +738,7 @@ struct CoupledView: View {
             restingHr: 51, avgHrv: 68, recovery: 74, strain: 62,
             exerciseCount: 2,
             spo2Pct: 97, skinTempDevC: 0.1, respRateBpm: 14.4,
-            steps: 8200, activeKcalEst: 640
+            steps: 8200, activeKcalEst: 640, activeEnergyKcalEst: 640
         )
     ]
     repo.loaded = true

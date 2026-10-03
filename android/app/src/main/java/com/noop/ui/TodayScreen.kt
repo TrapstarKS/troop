@@ -678,7 +678,7 @@ fun TodayScreen(
 
     // #616: ONE calorie definition across the card, the Key-Metrics tile and the detail — resolve per day,
     // IMPORTED-FIRST (the phone's Apple/Health-Connect activeKcal, the figure these surfaces already showed),
-    // falling back to NOOP's on-device HR estimate (activeKcalEst) only for days the phone didn't cover.
+    // falling back to NOOP's on-device HR estimate (activeEnergyKcalEst) only for days the phone didn't cover.
     // Keyed by day; `caloriesByDay` feeds the SELECTED-day value the dashboard card + Key-Metrics tile both
     // read — day-scoped like every other card, and like steps.
     var caloriesByDay by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }

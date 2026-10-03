@@ -15,7 +15,7 @@ final class DayCycleRecoveryTests: XCTestCase {
             steps: 10, activeKcalEst: nil, skinTempC: 34.2, sleepHrOnly: true)
         let result = DayCycleIntelligenceIntegration.Result(
             stepsByWakeDay: [daily.day: 42], strainByWakeDay: [daily.day: 61],
-            caloriesByWakeDay: [daily.day: 1_840], workoutCountByWakeDay: [daily.day: 2],
+            caloriesByWakeDay: [daily.day: 1_840], activeCaloriesByWakeDay: [daily.day: 420], workoutCountByWakeDay: [daily.day: 2],
             onsetByWakeDay: [:], firstWakeDay: daily.day,
             markerUpdate: .preserve)
 
@@ -24,9 +24,28 @@ final class DayCycleRecoveryTests: XCTestCase {
         XCTAssertEqual(updated.steps, 42)
         XCTAssertEqual(updated.strain, 61)
         XCTAssertEqual(updated.activeKcalEst, 1_840)
+        XCTAssertEqual(updated.activeEnergyKcalEst, 420)
         XCTAssertEqual(updated.exerciseCount, 2)
         XCTAssertEqual(updated.skinTempC, 34.2)
         XCTAssertEqual(updated.sleepHrOnly, true)
+    }
+
+    func testCycleWithoutHRDoesNotBorrowCalendarActiveEnergy() {
+        let daily = DailyMetric(day: "2026-09-04", totalSleepMin: nil, efficiency: nil,
+            deepMin: nil, remMin: nil, lightMin: nil, disturbances: nil, restingHr: nil,
+            avgHrv: nil, recovery: 72, strain: nil, exerciseCount: nil,
+            activeKcalEst: 2345, activeEnergyKcalEst: 456)
+        let before = DayCycleIntelligenceIntegration.Result(stepsByWakeDay: [:], strainByWakeDay: [:],
+            caloriesByWakeDay: [:], workoutCountByWakeDay: [:], onsetByWakeDay: [:],
+            firstWakeDay: nil, markerUpdate: .preserve)
+        XCTAssertEqual(DayCycleIntelligenceIntegration.applying(before, to: daily).activeEnergyKcalEst, 456)
+        let established = DayCycleIntelligenceIntegration.Result(stepsByWakeDay: [:], strainByWakeDay: [:],
+            caloriesByWakeDay: [:], workoutCountByWakeDay: [:], onsetByWakeDay: [:],
+            firstWakeDay: daily.day, markerUpdate: .preserve)
+        let updated = DayCycleIntelligenceIntegration.applying(established, to: daily)
+        XCTAssertNil(updated.activeEnergyKcalEst)
+        XCTAssertNil(updated.activeKcalEst)
+        XCTAssertEqual(updated.recovery, 72)
     }
 
     func testBoundaryRecoveryPropagatesSessionReadFailure() async {

@@ -360,6 +360,8 @@ data class DailyMetric(
     // misreading. Appended LAST so the column order matches the Room CREATE TABLE and the Swift row.
     // Null on every row scored before v36 and on any day with no sleep at all.
     val sleepHrOnly: Boolean? = null,
+    // Active share of the HR energy estimate; legacy rows remain unknown until rescored.
+    val activeEnergyKcalEst: Double? = null,
 )
 
 /**

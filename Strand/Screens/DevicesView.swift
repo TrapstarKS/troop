@@ -506,7 +506,7 @@ private struct DevicesContent: View {
         if let v = d.skinTempDevC { out[.skinTemp] = v }
         if let v = d.steps { out[.steps] = Double(v) }
         if let v = d.totalSleepMin { out[.sleep] = v }
-        if let v = d.activeKcalEst { out[.calories] = v }
+        if let v = d.activeEnergyKcalEst { out[.calories] = v }
         return out
     }
 

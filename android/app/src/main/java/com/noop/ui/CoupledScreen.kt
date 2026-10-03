@@ -224,7 +224,7 @@ fun CoupledScreen(
         StrainCard(
             dayStrain21 = dayStrain21,
             recovery = recovery,
-            calories = todayRow?.activeKcalEst,
+            calories = todayRow?.activeEnergyKcalEst,
             workouts = workoutsToday,
         )
         SleepCard(

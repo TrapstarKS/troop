@@ -441,6 +441,7 @@ final class Repository: ObservableObject {
             respRateBpm: winner.respRateBpm ?? filler.respRateBpm,
             steps: winner.steps ?? filler.steps,
             activeKcalEst: winner.activeKcalEst ?? filler.activeKcalEst,
+            activeEnergyKcalEst: winner.activeEnergyKcalEst ?? filler.activeEnergyKcalEst,
             spo2Red: rawSpo2FromFiller ? filler.spo2Red : winner.spo2Red,
             spo2Ir: rawSpo2FromFiller ? filler.spo2Ir : winner.spo2Ir,
             // Strap-only, like raw SpO2: an imported winner carries no absolute skin temp, so take the
@@ -1097,6 +1098,7 @@ final class Repository: ObservableObject {
                         respRateBpm: existing.respRateBpm,
                         steps: steps,
                         activeKcalEst: existing.activeKcalEst,
+                        activeEnergyKcalEst: existing.activeEnergyKcalEst,
                         spo2Red: existing.spo2Red,
                         spo2Ir: existing.spo2Ir,
                         skinTempC: existing.skinTempC
@@ -2568,7 +2570,8 @@ final class Repository: ObservableObject {
         case "sleep_light_min", "core_min": return d.lightMin
         case "sleep_performance": return AnalyticsEngine.Rest.composite(daily: d)
         case "steps":            return d.steps.map(Double.init)
-        case "active_kcal", "energy_kcal": return d.activeKcalEst
+        case "active_kcal": return d.activeEnergyKcalEst
+        case "energy_kcal": return d.activeKcalEst
         default:                 return nil
         }
     }
@@ -3489,6 +3492,7 @@ extension DailyMetric {
             respRateBpm: respRateBpm ?? fallback.respRateBpm,
             steps: steps ?? fallback.steps,
             activeKcalEst: activeKcalEst ?? fallback.activeKcalEst,
+            activeEnergyKcalEst: activeEnergyKcalEst ?? fallback.activeEnergyKcalEst,
             // Raw SpO2 is on-device only (imports never carry it), so the imported row's nil is
             // backfilled from the computed fallback — otherwise the nightly means would be lost. (#93)
             spo2Red: spo2Red ?? fallback.spo2Red,
@@ -3526,6 +3530,7 @@ extension DailyMetric {
             respRateBpm: respRateBpm,
             steps: steps,
             activeKcalEst: activeKcalEst,
+            activeEnergyKcalEst: activeEnergyKcalEst,
             spo2Red: spo2Red,   // non-sleep field: preserved as-is (#93)
             spo2Ir: spo2Ir,
             avgSdnn: avgSdnn,   // non-sleep (HRV) field: preserved as-is

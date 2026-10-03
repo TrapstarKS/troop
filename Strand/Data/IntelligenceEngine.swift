@@ -3567,7 +3567,7 @@ extension DailyMetric {
                     remMin: remMin, lightMin: lightMin, disturbances: disturbances, restingHr: restingHr,
                     avgHrv: hrv, recovery: r, strain: strain, exerciseCount: exerciseCount,
                     spo2Pct: spo2Pct, skinTempDevC: skinTempDevC, respRateBpm: resp,
-                    steps: steps, activeKcalEst: activeKcalEst,
+                    steps: steps, activeKcalEst: activeKcalEst, activeEnergyKcalEst: activeEnergyKcalEst,
                     spo2Red: spo2Red, spo2Ir: spo2Ir, avgSdnn: sdnn, skinTempC: skinTempC,
                     sleepHrOnly: sleepHrOnly)
     }
@@ -3579,7 +3579,7 @@ extension DailyMetric {
                     remMin: remMin, lightMin: lightMin, disturbances: disturbances, restingHr: restingHr,
                     avgHrv: avgHrv, recovery: r, strain: strain, exerciseCount: exerciseCount,
                     spo2Pct: spo2Pct, skinTempDevC: sd, respRateBpm: respRateBpm,
-                    steps: steps, activeKcalEst: activeKcalEst,
+                    steps: steps, activeKcalEst: activeKcalEst, activeEnergyKcalEst: activeEnergyKcalEst,
                     spo2Red: spo2Red, spo2Ir: spo2Ir, avgSdnn: avgSdnn, skinTempC: sa,
                     sleepHrOnly: sleepHrOnly)
     }
@@ -3592,7 +3592,7 @@ extension DailyMetric {
                     disturbances: disturbances, restingHr: restingHr, avgHrv: avgHrv, recovery: recovery,
                     strain: strain, exerciseCount: exerciseCount, spo2Pct: spo2Pct,
                     skinTempDevC: skinTempDevC, respRateBpm: respRateBpm, steps: steps,
-                    activeKcalEst: activeKcalEst, spo2Red: spo2Red, spo2Ir: spo2Ir, avgSdnn: avgSdnn,
+                    activeKcalEst: activeKcalEst, activeEnergyKcalEst: activeEnergyKcalEst, spo2Red: spo2Red, spo2Ir: spo2Ir, avgSdnn: avgSdnn,
                     skinTempC: skinTempC, sleepHrOnly: sleepHrOnly)
     }
 }

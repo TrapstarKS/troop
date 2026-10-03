@@ -636,7 +636,7 @@ public enum Calories {
                                   fitAlpha: -77.58445)
 
     static let activeHRRFraction = 0.30
-    /// Whole-day active gate (`estimateDayCalories` only). The Keytel 2005 equation is
+    /// Whole-day active gate (`estimateDayEnergy` only). The Keytel 2005 equation is
     /// validated for genuine EXERCISE HR; applying it to ordinary low-intensity daytime
     /// HR (walking, stairs, standing — typically ~95–110 bpm) across the WHOLE day credits
     /// the full gross-exercise rate to every elevated second and over-counts by ~1000+ kcal
@@ -704,7 +704,7 @@ public enum Calories {
     /// This elapsed-time weighting is justified ONLY for the bout path: a bout's intra-sample
     /// gaps are motion-gated and ≤ mergeGapS (150 s) by construction, so each gap really is
     /// continuous active/resting time. The whole-day estimator deliberately does NOT use it
-    /// (see `estimateDayCalories`) — its raw, non-gap-filled day HR union would otherwise
+    /// (see `estimateDayEnergy`) — its raw, non-gap-filled day HR union would otherwise
     /// credit up to 150 s of active burn to a single isolated elevated sample.
     public static func estimateBoutCalories(_ hrSamples: [HRSample],
                                             profile: UserProfile,
