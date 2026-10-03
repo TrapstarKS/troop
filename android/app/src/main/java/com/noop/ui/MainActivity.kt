@@ -96,7 +96,7 @@ class MainActivity : ComponentActivity() {
         // out of the box (no strap, no import). No-op once seeded; never runs on the full app.
         if (BuildConfig.ENABLE_DEMO) {
             lifecycleScope.launch(Dispatchers.IO) {
-                runCatching { DemoSeeder.seedIfEmpty(WhoopRepository.from(applicationContext)) }
+                runCatching { DemoSeeder.seedIfEmpty(WhoopRepository.from(applicationContext), applicationContext) }
                 // Also seed a 2nd PAIRED device (Polar H10) so the Devices screen shows WHOOP (Active)
                 // + a paired strap out of the box. No-op once seeded / if a real pairing exists.
                 runCatching {
