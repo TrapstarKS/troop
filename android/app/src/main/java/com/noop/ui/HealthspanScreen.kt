@@ -205,20 +205,10 @@ private fun HealthspanSupportingCards(vm: AppViewModel, referenceDay: LocalDate,
     val fitnessAge = healthspanSeries(vm, "fitness_age").lastOrNull {
         it.day in referenceDay.minusDays(14).toString()..referenceDay.toString() && it.value.isFinite()
     }
-    val workouts by vm.workouts.collectAsStateWithLifecycle()
     val firstDay = referenceDay.minusDays(6)
     val week = days.filter { it.day in firstDay.toString()..referenceDay.toString() }
     val sleep = week.mapNotNull { it.totalSleepMin?.takeIf { value -> value.isFinite() && value > 0 } }
     val strain = week.mapNotNull { it.strain?.takeIf { value -> value.isFinite() && value in 0.0..100.0 } }
-    val steps = week.mapNotNull { it.steps?.takeIf { value -> value >= 0 } }
-    val zone = ZoneId.systemDefault()
-    val from = firstDay.atStartOfDay(zone).toEpochSecond()
-    val to = referenceDay.plusDays(1).atStartOfDay(zone).toEpochSecond()
-    val activity = remember(workouts, from, to) {
-        workouts.filter { it.endTs > from && it.startTs < to }.sumOf {
-            (minOf(it.endTs, to) - maxOf(it.startTs, from)).coerceAtLeast(0L)
-        }.div(60).toInt()
-    }
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
         TrackedSectionHeader(stringResource(R.string.healthspan_supporting), microLabel = stringResource(R.string.healthspan_weekly_context))
         NoopCard {
@@ -230,12 +220,7 @@ private fun HealthspanSupportingCards(vm: AppViewModel, referenceDay: LocalDate,
                 ContributorRow(stringResource(R.string.healthspan_strain), if (strain.isEmpty()) "—" else strain.average().roundToInt().toString(),
                     unit = "/ 100", icon = Icons.Filled.DirectionsRun,
                     comparison = stringResource(R.string.healthspan_sleep_detail, strain.size))
-                ContributorRow(stringResource(R.string.healthspan_activity), healthDuration(activity), icon = Icons.Filled.DirectionsRun,
-                    comparison = stringResource(R.string.healthspan_activity_detail))
-                if (steps.isNotEmpty()) {
-                    ContributorRow(stringResource(R.string.healthspan_steps), NumberFormat.getIntegerInstance().format(steps.average().roundToInt()),
-                        comparison = stringResource(R.string.healthspan_steps_detail, steps.size))
-                }
+
             }
         }
         NoopCard {
