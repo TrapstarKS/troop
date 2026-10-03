@@ -95,7 +95,6 @@ import com.noop.analytics.EffectRanker
 /** One interrogable outcome metric: how to read it off a DailyMetric, its label,
  *  units, and whether higher is the "good" direction (drives sign-aware tint). */
 private enum class Outcome(
-    val label: String,
     val outcomeName: String,
     val higherIsBetter: Boolean,
     /** The Bevel colour world the outcome belongs to, drives the card wash so the
@@ -106,21 +105,29 @@ private enum class Outcome(
     val format: (Double) -> String,
 ) {
     Recovery(
-        label = uiString(R.string.plan_trends_recovery), outcomeName = "Recovery", higherIsBetter = true, domain = DomainTheme.Charge,
+        outcomeName = "Recovery", higherIsBetter = true, domain = DomainTheme.Charge,
         pick = { it.recovery }, format = { "${it.roundToInt()}%" },
     ),
     Hrv(
-        label = "HRV", outcomeName = "HRV", higherIsBetter = true, domain = DomainTheme.Rest,
+        outcomeName = "HRV", higherIsBetter = true, domain = DomainTheme.Rest,
         pick = { it.avgHrv }, format = { "${it.roundToInt()} ms" },
     ),
     Sleep(
-        label = uiString(R.string.plan_trends_sleep_performance), outcomeName = "Sleep Performance", higherIsBetter = true, domain = DomainTheme.Rest,
+        outcomeName = "Sleep Performance", higherIsBetter = true, domain = DomainTheme.Rest,
         pick = { null }, format = { "${it.roundToInt()}%" },
     ),
     Rhr(
-        label = uiString(R.string.l10n_insights_screen_rhr_04edf9b3), outcomeName = "Resting HR", higherIsBetter = false, domain = DomainTheme.Stress,
+        outcomeName = "Resting HR", higherIsBetter = false, domain = DomainTheme.Stress,
         pick = { it.restingHr?.toDouble() }, format = { "${it.roundToInt()} bpm" },
-    ),
+    );
+
+    val label: String
+        get() = when (this) {
+            Recovery -> uiString(R.string.plan_trends_recovery)
+            Hrv -> "HRV"
+            Sleep -> uiString(R.string.plan_trends_sleep_performance)
+            Rhr -> uiString(R.string.l10n_insights_screen_rhr_04edf9b3)
+        }
 }
 
 // MARK: - Computed shapes (plain data; behaviour effects come from the analytics package)
@@ -414,7 +421,11 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
             // Hidden canonicals come from the v2 catalog now (#322), same triage-fix semantics.
             val hiddenQuestions = catalogItems.filter { it.hidden }.map { it.canonical }
             val candidates = experimentCandidates(behaviours, importedQuestions, hiddenQuestions, experimentBehaviour)
-            val expOutcome = Outcome.entries.firstOrNull { it.outcomeName == experimentOutcomeName } ?: Outcome.Recovery
+            val expOutcome = when (experimentOutcomeName) {
+                "Charge" -> Outcome.Recovery
+                "Rest" -> Outcome.Sleep
+                else -> Outcome.entries.firstOrNull { it.outcomeName == experimentOutcomeName } ?: Outcome.Recovery
+            }
             val resolvedBehaviour = resolveExperimentBehaviour(candidates, experimentBehaviour)
             val snapshot = remember(model, behaviours, experimentStartedDay, experimentOutcomeName, experimentDurationDays, experimentBaselineDays, experimentSeq) {
                 buildExperimentSnapshot(
