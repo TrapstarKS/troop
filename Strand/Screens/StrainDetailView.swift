@@ -14,10 +14,14 @@ struct StrainDetailView: View {
     @State private var belowZoneMinutes: Double? = nil
     @State private var workouts: [WorkoutRow] = []
     @State private var loaded = false
+    @State private var openedDeviceId: String?
 
     private var key: String { dayKey ?? repo.today?.day ?? Repository.logicalDayKey(Date()) }
     private var row: DailyMetric? { repo.days.first { $0.day == key } ?? (repo.today?.day == key ? repo.today : nil) }
-    private var rawEffort: Double? { (effortOverride ?? row?.strain).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil } }
+    private var rawEffort: Double? {
+        let displayedOverride = openedDeviceId == nil || openedDeviceId == repo.deviceId ? effortOverride : nil
+        return (displayedOverride ?? row?.strain).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }
+    }
     private var strain: Double? { rawEffort.map { UnitFormatter.effortValue($0, scale: .whoop) } }
     private var band: ClosedRange<Int>? { CoupledView.optimalStrainRange(recovery: row?.recovery.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }) }
     private var targetStatus: RecoveryStrainDetailLogic.TargetStatus {
@@ -89,6 +93,7 @@ struct StrainDetailView: View {
     }
 
     private func load() async {
+        if openedDeviceId == nil { openedDeviceId = repo.deviceId }
         loaded = false
         points = []
         zoneMinutes = nil
