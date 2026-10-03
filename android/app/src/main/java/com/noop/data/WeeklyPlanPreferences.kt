@@ -6,17 +6,21 @@ class WeeklyPlanPreferences(context: Context) {
     private val preferences = context.getSharedPreferences("noop_prefs", Context.MODE_PRIVATE)
     private val prefix = "noop.weeklyPlan."
 
+    // Swift twin: `WeeklyPlanPreferences.hasPlan`.
     fun hasPlan(weekStart: String): Boolean = preferences.contains("$prefix$weekStart.sleepMinutes")
 
+    // Swift twin: `WeeklyPlanPreferences.goals`.
     fun goals(weekStart: String, suggested: WeeklyPlanGoals = WeeklyPlanGoals()): WeeklyPlanGoals =
         read(if (hasPlan(weekStart)) weekStart else "template", suggested)
 
+    // Swift twin: `WeeklyPlanPreferences.save`.
     fun save(goals: WeeklyPlanGoals, weekStart: String, updateTemplate: Boolean = true) {
         if (WeeklyPlanCalendar.weekStart(weekStart) != weekStart) return
         write(goals.normalized, weekStart)
         if (updateTemplate) write(goals.normalized, "template")
     }
 
+    // Swift twin: `WeeklyPlanPreferences.notice`.
     fun notice(today: String): WeeklyPlanNotice? {
         val week = WeeklyPlanCalendar.weekStart(today) ?: return null
         val previous = WeeklyPlanCalendar.adding(-7, week) ?: return null
@@ -25,10 +29,12 @@ class WeeklyPlanPreferences(context: Context) {
         return WeeklyPlanNoticeResolver.resolve(today, available, dismissed)
     }
 
+    // Swift twin: `WeeklyPlanPreferences.dismiss`.
     fun dismiss(notice: WeeklyPlanNotice) {
         preferences.edit().putString("${prefix}dismissed.${notice.kind.key}", notice.id).apply()
     }
 
+    // Swift twin: `WeeklyPlanPreferences.read`.
     private fun read(scope: String, fallback: WeeklyPlanGoals): WeeklyPlanGoals {
         val key = "$prefix$scope."
         return WeeklyPlanGoals(
@@ -42,6 +48,7 @@ class WeeklyPlanPreferences(context: Context) {
         ).normalized
     }
 
+    // Swift twin: `WeeklyPlanPreferences.write`.
     private fun write(goals: WeeklyPlanGoals, scope: String) {
         val key = "$prefix$scope."
         preferences.edit()
@@ -56,6 +63,7 @@ class WeeklyPlanPreferences(context: Context) {
     }
 }
 
+// Swift twin: `seedWeeklyPlanDemo`.
 fun seedWeeklyPlanDemo(context: Context, today: String) {
     val week = WeeklyPlanCalendar.weekStart(today) ?: return
     val previous = WeeklyPlanCalendar.adding(-7, week) ?: return
