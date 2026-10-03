@@ -192,11 +192,9 @@ jobs:
           umask 077
           printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/troop-release.keystore"
           python3 - <<'CONFIG'
-          import os
+          import os, runpy
           from pathlib import Path
-          def escaped(value):
-              encoded = value.encode('utf-16-be')
-              return ''.join('\\u' + encoded[i:i+2].hex() for i in range(0, len(encoded), 2))
+          escaped = runpy.run_path('../Tools/verify-release-artifacts.py')['properties_value']
           fields = {'storeFile': os.environ['RUNNER_TEMP'] + '/troop-release.keystore',
                     'storePassword': os.environ['STORE_PASSWORD'], 'keyAlias': os.environ['KEY_ALIAS'],
                     'keyPassword': os.environ['KEY_PASSWORD']}
@@ -219,6 +217,7 @@ jobs:
           NORMALIZED_CERT=$(printf '%s' "${CERT//:/}" | tr '[:upper:]' '[:lower:]')
           test "$NORMALIZED_CERT" != "$PUBLIC_CERT" || { echo "::error::Stable signer must not be the public staging key"; exit 1; }
           PREVIOUS_CODE=0
+          PREVIOUS_ARGS=()
           PREVIOUS_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease --jq 'map(select(.isDraft==false and .isPrerelease==false)) | .[0].tagName // empty')
           if [ -n "$PREVIOUS_TAG" ]; then
             mkdir -p "$RUNNER_TEMP/previous"
@@ -227,11 +226,12 @@ jobs:
             test -f "$PREVIOUS_APK"
             if [ "$("$ANALYZER" manifest application-id "$PREVIOUS_APK")" = com.trapstarks.troop ]; then
               PREVIOUS_CODE=$("$ANALYZER" manifest version-code "$PREVIOUS_APK")
+              PREVIOUS_ARGS=(--previous-apk "$PREVIOUS_APK")
             fi
           fi
           python3 ../Tools/verify-release-artifacts.py apk "$APK" --package-id com.trapstarks.troop \
             --version "$VER" --cert-sha256 "$CERT" --previous-code "$PREVIOUS_CODE" \
-            --apkanalyzer "$ANALYZER" --apksigner "$SIGNER" > "NOOP-android-v${VER}-metadata.json"
+            --apkanalyzer "$ANALYZER" --apksigner "$SIGNER" "${PREVIOUS_ARGS[@]}" > "NOOP-android-v${VER}-metadata.json"
       - name: Remove private signing material
         if: always()
         run: rm -f keystore.properties "$RUNNER_TEMP/troop-release.keystore"

@@ -117,6 +117,26 @@ class ReleaseArtifactTests(unittest.TestCase):
             with patch.object(release.subprocess, 'check_output', side_effect=bad), self.assertRaises(ValueError):
                 release.apk_metadata(args)
 
+class StableSigningRegressionTests(unittest.TestCase):
+    def test_properties_preserve_unicode_whitespace_and_backslashes(self):
+        value = ' é\\alias\t😀 '
+        self.assertEqual(release.properties_value(value), r'\u0020\u00e9\u005c\u0061\u006c\u0069\u0061\u0073\u0009\ud83d\ude00\u0020')
+
+    def test_configured_replacement_signer_cannot_replace_established_signer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'current.apk'; path.write_bytes(b'fixture')
+            args = argparse.Namespace(path=str(path), apkanalyzer='analyzer', apksigner='signer',
+                                      package_id='com.trapstarks.troop', version='1.2.3', cert_sha256='b'*64,
+                                      previous_code=8, previous_apk='previous.apk')
+            outputs = ['com.trapstarks.troop', '1.2.3', '9', 'false',
+                       'Signer #1 certificate SHA-256 digest: ' + 'b'*64,
+                       'com.trapstarks.troop', '8', 'Signer #1 certificate SHA-256 digest: ' + 'a'*64]
+            with patch.object(release.subprocess, 'check_output', side_effect=outputs), self.assertRaisesRegex(ValueError, 'signer changed'):
+                release.apk_metadata(args)
+            outputs[-1] = 'Signer #1 certificate SHA-256 digest: ' + 'b'*64
+            with patch.object(release.subprocess, 'check_output', side_effect=outputs):
+                self.assertEqual(release.apk_metadata(args)['certificateSHA256'], 'b'*64)
+
 
 if __name__ == '__main__':
     unittest.main()

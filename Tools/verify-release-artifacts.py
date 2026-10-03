@@ -124,20 +124,35 @@ def update_manifest(args):
     return meta
 
 
+def apk_certificate(path, apksigner):
+    result = subprocess.check_output([apksigner, 'verify', '--verbose', '--print-certs', path], text=True)
+    signers = re.findall(r'Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-fA-F]+)', result)
+    require(len(signers) == 1, 'Expected one APK signer')
+    return signers[0].lower()
+
+
+def properties_value(value):
+    encoded = value.encode('utf-16-be')
+    return ''.join('\\u' + encoded[i:i+2].hex() for i in range(0, len(encoded), 2))
+
+
 def apk_metadata(args):
-    def query(field):
-        return subprocess.check_output([args.apkanalyzer, 'manifest', field, args.path], text=True).strip()
+    def query(field, path=None):
+        return subprocess.check_output([args.apkanalyzer, 'manifest', field, path or args.path], text=True).strip()
     require(query('application-id') == args.package_id, 'APK package mismatch')
     require(query('version-name') == args.version, 'APK version mismatch')
     code = int(query('version-code'))
     require(code > args.previous_code, 'APK versionCode must increase')
     require(query('debuggable') == 'false', 'Stable APK is debuggable')
-    result = subprocess.check_output([args.apksigner, 'verify', '--verbose', '--print-certs', args.path], text=True)
-    signers = re.findall(r'Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-fA-F]+)', result)
-    require(len(signers) == 1, 'Expected one APK signer')
-    require(signers[0].lower() == args.cert_sha256.replace(':', '').lower(), 'APK signer mismatch')
+    signer = apk_certificate(args.path, args.apksigner)
+    require(signer == args.cert_sha256.replace(':', '').lower(), 'APK signer mismatch')
+    if getattr(args, 'previous_apk', None):
+        require(query('application-id', args.previous_apk) == args.package_id, 'Previous APK package mismatch')
+        require(code > int(query('version-code', args.previous_apk)), 'APK versionCode must increase')
+        previous_signer = apk_certificate(args.previous_apk, args.apksigner)
+        require(signer == previous_signer, 'Stable APK signer changed; existing installs cannot upgrade')
     return dict(package=args.package_id, version=args.version, versionCode=code,
-                certificateSHA256=signers[0].lower(), sha256=digest(args.path))
+                certificateSHA256=signer, sha256=digest(args.path))
 
 
 def main():
@@ -156,6 +171,7 @@ def main():
     for name in ['package-id', 'version', 'cert-sha256', 'apkanalyzer', 'apksigner']:
         apk.add_argument('--' + name, required=True)
     apk.add_argument('--previous-code', type=int, default=0)
+    apk.add_argument('--previous-apk')
     checksums = sub.add_parser('checksums')
     checksums.add_argument('paths', nargs='+')
     args = parser.parse_args()
