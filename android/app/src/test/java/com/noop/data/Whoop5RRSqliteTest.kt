@@ -481,7 +481,9 @@ class Whoop5RRSqliteTest {
         if (quiet) {
             assertEquals(if (preserve) 100.0 else null, days["$id-noop" to anchor]?.avgHrv)
             assertEquals(preserve, resolved.hrvHistory.dayKeys.contains(anchor))
-            assertEquals(if (preserve) 15 else 14, resolved.hrvHistory.ownValidNights)
+            assertEquals(if (preserve) 15 else 14, resolved.hrvHistory.values.count { it != null })
+            // The retained 100 ms night stays in history but is a hard outlier for this settled baseline.
+            assertEquals(14, resolved.hrvHistory.ownValidNights)
         }
     }
 
