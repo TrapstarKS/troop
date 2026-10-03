@@ -7,6 +7,9 @@ import org.junit.Test
 import java.io.File
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import com.noop.data.DailyMetric
 
 /** Home activity actions stay in the shared detail flow and survive lazy-item disposal. */
@@ -91,6 +94,35 @@ class TodayWorkoutTapTest {
             assertTrue(text.contains("HomeDashboardContent(dayKey: selectedDayKey"))
             assertTrue(text.contains("windowDayKey: Repository.localDayKey(selectedLogicalDay)"))
         }
+    }
+
+    @Test
+    fun manualEntryMatchesSwiftISODayOracleAcrossPreferredCalendars() {
+        val zone = ZoneId.of("America/Sao_Paulo")
+        val now = Instant.ofEpochMilli(1791003600000).atZone(zone)
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US)
+        val previousLocale = Locale.getDefault()
+        val actual = try {
+            listOf("gregorian" to "en-US-u-ca-gregory", "buddhist" to "th-TH-u-ca-buddhist",
+                "islamic" to "ar-SA-u-ca-islamic").flatMap { (calendar, locale) ->
+                Locale.setDefault(Locale.forLanguageTag(locale))
+                listOf("2026-10-03", "2026-10-02").map { dayKey ->
+                    val end = homeManualActivityEnd(dayKey, now)
+                    "$calendar|$dayKey|${formatter.format(Instant.ofEpochMilli(end).atZone(zone))}|$end"
+                }
+            }.joinToString("\n")
+        } finally {
+            Locale.setDefault(previousLocale)
+        }
+        // Verbatim stdout of the extracted Swift HomeDayActivities.manualEnd oracle.
+        assertEquals("""
+            gregorian|2026-10-03|2026-10-03 02:00:00|1791003600000
+            gregorian|2026-10-02|2026-10-02 02:00:00|1790917200000
+            buddhist|2026-10-03|2026-10-03 02:00:00|1791003600000
+            buddhist|2026-10-02|2026-10-02 02:00:00|1790917200000
+            islamic|2026-10-03|2026-10-03 02:00:00|1791003600000
+            islamic|2026-10-02|2026-10-02 02:00:00|1790917200000
+        """.trimIndent(), actual)
     }
 
     @Test

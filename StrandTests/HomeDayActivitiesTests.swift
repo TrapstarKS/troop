@@ -25,6 +25,22 @@ final class HomeDayActivitiesTests: XCTestCase {
         XCTAssertEqual(HomeDayActivities.manualEnd(dayKey: "invalid", now: now, calendar: calendar), now)
     }
 
+    func testManualEntryUsesISODayRegardlessOfThePreferredCalendar() {
+        let now = Date(timeIntervalSince1970: 1_791_003_600)
+        let expected: [(String, TimeInterval)] = [
+            ("2026-10-03", 1_791_003_600),
+            ("2026-10-02", 1_790_917_200),
+        ]
+        for identifier in [Calendar.Identifier.gregorian, .buddhist, .islamic] {
+            var calendar = Calendar(identifier: identifier)
+            calendar.timeZone = TimeZone(identifier: "America/Sao_Paulo")!
+            for (dayKey, timestamp) in expected {
+                XCTAssertEqual(HomeDayActivities.manualEnd(dayKey: dayKey, now: now, calendar: calendar),
+                               Date(timeIntervalSince1970: timestamp), "\(identifier) \(dayKey)")
+            }
+        }
+    }
+
     func testDayFeedUsesSelectedCivilDateAndKeepsChronologicalOrder() {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())

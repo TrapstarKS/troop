@@ -309,8 +309,10 @@ enum HomeDayActivities {
     static func manualEnd(dayKey: String, now: Date = Date(), calendar: Calendar = .current) -> Date {
         let parts = dayKey.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return now }
-        let time = calendar.dateComponents([.hour, .minute, .second], from: now)
-        let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2],
+        var civilCalendar = Calendar(identifier: .gregorian)
+        civilCalendar.timeZone = calendar.timeZone
+        let time = civilCalendar.dateComponents([.hour, .minute, .second], from: now)
+        let date = civilCalendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2],
             hour: time.hour, minute: time.minute, second: time.second)) ?? now
         return min(date, now)
     }
