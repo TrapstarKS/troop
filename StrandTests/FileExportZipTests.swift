@@ -123,4 +123,57 @@ final class FileExportZipTests: XCTestCase {
         XCTAssertNil(result)
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
     }
+
+    @MainActor
+    func testCancellationResolvesShareAndIgnoresLateActivityCompletion() async throws {
+        let file = try XCTUnwrap(FileExport.stageText("reviewed", suggestedName: UUID().uuidString + ".txt"))
+        let receipt = FileExport.ShareReceipt()
+        let started = expectation(description: "presented"), finished = expectation(description: "cancelled")
+        var callback: (@MainActor (Bool) -> Void)?
+        var dismissals = 0
+        let task = Task {
+            let result = await FileExport.sharePrepared(file) { _ in
+                await receipt.wait { completion in
+                    callback = completion
+                    started.fulfill()
+                    return { dismissals += 1 }
+                }
+            }
+            XCTAssertNil(result)
+            finished.fulfill()
+        }
+        await fulfillment(of: [started], timeout: 5)
+        task.cancel()
+        await fulfillment(of: [finished], timeout: 5)
+        await task.value
+        callback?(true)
+        callback?(false)
+        receipt.cancel()
+        XCTAssertEqual(dismissals, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.deletingLastPathComponent().path))
+    }
+
+    @MainActor
+    func testUnavailablePresenterResolvesReceiptWithoutWaiting() async {
+        let receipt = FileExport.ShareReceipt()
+        let completed = await receipt.wait { _ in nil }
+        XCTAssertFalse(completed)
+    }
+
+    @MainActor
+    func testLifecycleCancellationResolvesOnceAndCannotBecomeSuccess() async {
+        let receipt = FileExport.ShareReceipt()
+        var callback: (@MainActor (Bool) -> Void)?
+        let started = expectation(description: "presented")
+        let task = Task { await receipt.wait { completion in
+            callback = completion
+            started.fulfill()
+            return {}
+        } }
+        await fulfillment(of: [started], timeout: 5)
+        callback?(false)
+        callback?(true)
+        let completed = await task.value
+        XCTAssertFalse(completed)
+    }
 }

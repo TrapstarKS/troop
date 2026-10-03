@@ -123,8 +123,16 @@ enum FileExport {
     /// Present `UIActivityViewController` and, once it closes, best-effort remove the URLs in
     /// `cleanup` so staged exports don't accumulate in `temporaryDirectory` across runs.
     @MainActor
-    private static func present(activityItems: [Any], cleanup: [URL], completion: ((Bool) -> Void)? = nil) {
-        let finish: (Bool) -> Void = { completed in
+    @discardableResult
+    private static func present(activityItems: [Any], cleanup: [URL],
+                                completion: (@MainActor (Bool) -> Void)? = nil) -> (@MainActor () -> Void)? {
+        var observer: NSObjectProtocol?
+        var finished = false
+        let finish: @MainActor (Bool) -> Void = { completed in
+            guard !finished else { return }
+            finished = true
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
             for url in cleanup { removeStaged(url) }
             completion?(completed)
         }
@@ -132,7 +140,7 @@ enum FileExport {
                 .compactMap({ $0 as? UIWindowScene })
                 .first(where: { $0.activationState == .foregroundActive }),
               let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController
-                ?? scene.windows.first?.rootViewController else { finish(false); return }
+                ?? scene.windows.first?.rootViewController else { finish(false); return nil }
         // Present from the TOP-MOST controller, not the root (#455). When the caller is itself inside a
         // SwiftUI sheet — e.g. the Trends report is shown via `.sheet` — root already has that sheet
         // presented, so `root.present(...)` is a no-op ("already presenting…") and the share sheet never
@@ -142,11 +150,13 @@ enum FileExport {
         while let next = presenter.presentedViewController, !next.isBeingDismissed { presenter = next }
         guard presenter.viewIfLoaded?.window != nil,
               presenter.presentedViewController == nil,
-              !presenter.isBeingDismissed, !presenter.isBeingPresented else { finish(false); return }
+              !presenter.isBeingDismissed, !presenter.isBeingPresented else { finish(false); return nil }
         let vc = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
         vc.completionWithItemsHandler = { _, completed, _, error in
             Task { @MainActor in finish(completed && error == nil) }
         }
+        observer = NotificationCenter.default.addObserver(forName: UIScene.didDisconnectNotification,
+            object: scene, queue: .main) { _ in Task { @MainActor in finish(false) } }
         // iPad: anchor the popover to the screen centre to avoid a crash.
         if let pop = vc.popoverPresentationController {
             pop.sourceView = presenter.view
@@ -154,6 +164,10 @@ enum FileExport {
             pop.permittedArrowDirections = []
         }
         presenter.present(vc, animated: true)
+        return {
+            finish(false)
+            if vc.presentingViewController != nil { vc.dismiss(animated: true) }
+        }
     }
     #endif
 
@@ -166,7 +180,9 @@ enum FileExport {
     struct BundleEntry: Equatable, Sendable { let name: String; let data: Data }
 
     private static func stagedURL(_ name: String) -> URL {
-        NoopScratch.subdirectory("export-" + UUID().uuidString).appendingPathComponent(name)
+        let directory = NoopScratch.subdirectory("export-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent(name)
     }
 
     static func stageText(_ text: String, suggestedName: String) -> URL? {
@@ -225,6 +241,45 @@ enum FileExport {
         return completed && !Task.isCancelled ? staged : nil
     }
 
+    @MainActor
+    final class ShareReceipt {
+        private var continuation: CheckedContinuation<Bool, Never>?
+        private var cancelOutput: (@MainActor () -> Void)?
+        private var result: Bool?
+
+        func wait(start: (@escaping @MainActor (Bool) -> Void) -> (@MainActor () -> Void)?) async -> Bool {
+            if let result { return result }
+            return await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    self.continuation = continuation
+                    guard !Task.isCancelled else { finish(false); return }
+                    let cancelOutput = start { self.finish($0) }
+                    if result == nil {
+                        self.cancelOutput = cancelOutput
+                        if cancelOutput == nil { finish(false) }
+                    }
+                }
+            } onCancel: {
+                Task { @MainActor in self.cancel() }
+            }
+        }
+
+        func cancel() {
+            guard result == nil else { return }
+            let dismiss = cancelOutput
+            finish(false)
+            dismiss?()
+        }
+
+        private func finish(_ completed: Bool) {
+            guard result == nil else { return }
+            result = completed
+            cancelOutput = nil
+            continuation?.resume(returning: completed)
+            continuation = nil
+        }
+    }
+
     /// Zip `entries` into one `.zip` and hand it to the user (NSSavePanel on macOS, share sheet on iOS).
     /// EVERY entry must already be redacted by the caller (section 5.3); the 20 MB cap (section 5.4) is the
     /// assembler's job before it calls here. Returns the saved URL on macOS, or the staged URL as a receipt
@@ -268,9 +323,9 @@ enum FileExport {
         return dest
         #else
         return await sharePrepared(staged) { file in
-            await withCheckedContinuation { continuation in
+            await ShareReceipt().wait { receive in
                 present(activityItems: [file], cleanup: []) { completed in
-                    continuation.resume(returning: completed)
+                    receive(completed)
                     completion?()
                 }
             }
