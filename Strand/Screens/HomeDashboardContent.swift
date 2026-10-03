@@ -159,7 +159,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
         }
         .padding(NoopMetrics.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius).fill(StrandPalette.surfaceBase))
+        .background(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius).fill(StrandPalette.surfaceRaised))
         .background {
             RoundedRectangle(cornerRadius: NoopMetrics.cardRadius).fill(StrandPalette.surfaceRaised)
                 .padding(.horizontal, NoopMetrics.space2).offset(y: NoopMetrics.space1)

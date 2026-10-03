@@ -196,7 +196,7 @@ internal fun HomeGuidance(title: String, detail: String, onCoach: (() -> Unit)?)
             .offset(y = Metrics.space8).background(Palette.surfaceOverlay, shape))
         Box(Modifier.matchParentSize().padding(horizontal = Metrics.space8)
             .offset(y = Metrics.space4).background(Palette.surfaceRaised, shape))
-        Column(Modifier.fillMaxWidth().background(Palette.surfaceBase, shape).padding(Metrics.cardPadding),
+        Column(Modifier.fillMaxWidth().background(Palette.surfaceRaised, shape).padding(Metrics.cardPadding),
             verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = NoopType.headline, color = Palette.textPrimary, modifier = Modifier.weight(1f))
