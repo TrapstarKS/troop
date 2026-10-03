@@ -235,6 +235,7 @@ enum AppleDemoSeeder {
     private static func seedHealthMonitor(into store: WhoopStore, days: [DailyMetric]) async throws {
         let points = days.flatMap { day in
             [MetricPoint(day: day.day, key: "hrv_fresh_scoring_valid", value: day.avgHrv?.isFinite == true ? 1 : 0),
+             MetricPoint(day: day.day, key: "resp_fresh_scoring_valid", value: day.respRateBpm?.isFinite == true ? 1 : 0),
              MetricPoint(day: day.day, key: "hrv_rr_overcount", value: 0)]
         }
         _ = try await store.upsertMetricSeries(points, deviceId: whoop + "-noop")

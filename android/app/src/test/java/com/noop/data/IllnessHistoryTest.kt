@@ -15,9 +15,67 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class IllnessHistoryTest {
+    @Test fun respirationHasIndependentFreshnessAndImportedPrecedence() {
+        val day = DailyMetric("active-noop", "2026-06-10", avgHrv = 40.0, respRateBpm = 16.0)
+        val raw = HrvProvenanceRow("active-noop", day.day, 40.0, 0.0, 1.0, 16.0, 1.0)
+        val independent = IllnessHistory.resolve(listOf(day), listOf(raw), listOf("active-noop"), listOf("active-noop"))
+        assertNull(independent.alertDays.single().avgHrv)
+        assertEquals(16.0, independent.alertDays.single().respRateBpm!!, 0.0)
+        val imported = raw.copy(deviceId = "my-whoop", respFreshScoringValid = 0.0)
+        val winningImport = IllnessHistory.resolve(listOf(day), listOf(raw, imported),
+            listOf("my-whoop", "active-noop"), listOf("active-noop"))
+        assertEquals(16.0, winningImport.alertDays.single().respRateBpm!!, 0.0)
+        val vendorOnly = raw.copy(value = null, freshScoringValid = null)
+        val vendor = IllnessHistory.resolve(listOf(day.copy(avgHrv = null)), listOf(vendorOnly),
+            listOf("active-noop"), listOf("active-noop"))
+        assertEquals(16.0, vendor.alertDays.single().respRateBpm!!, 0.0)
+    }
+
+    @Test fun respiratoryMarkerCannotBeBorrowedOrAppliedToADifferentValue() {
+        val day = DailyMetric("active-noop", "2026-06-10", respRateBpm = 16.0)
+        val active = HrvProvenanceRow("active-noop", day.day, null, null, null, 16.0, null)
+        val canonical = active.copy(deviceId = "my-whoop-noop", respFreshScoringValid = 1.0)
+        val result = IllnessHistory.resolve(listOf(day), listOf(active, canonical),
+            listOf("active-noop", "my-whoop-noop"), listOf("active-noop", "my-whoop-noop"))
+        assertNull(result.alertDays.single().respRateBpm)
+        assertFalse(result.respReliabilityByDay.getValue(day.day).matches(day.respRateBpm))
+        val changed = IllnessHistory.resolve(listOf(day.copy(respRateBpm = 20.0)), listOf(canonical),
+            listOf("my-whoop-noop"), listOf("my-whoop-noop"))
+        assertNull(changed.alertDays.single().respRateBpm)
+    }
+
+    @Test fun hrvAndRespirationMayHaveDifferentPhysicalOwners() {
+        val day = DailyMetric("active-noop", "2026-06-10", avgHrv = 40.0, respRateBpm = 16.0)
+        val active = HrvProvenanceRow("active-noop", day.day, null, null, null, 16.0, 1.0)
+        val canonical = HrvProvenanceRow("my-whoop-noop", day.day, 40.0, 1.0, 0.0, 18.0, 0.0)
+        val result = IllnessHistory.resolve(listOf(day), listOf(active, canonical),
+            listOf("active-noop", "my-whoop-noop"), listOf("active-noop", "my-whoop-noop"))
+        assertEquals(40.0, result.alertDays.single().avgHrv!!, 0.0)
+        assertEquals(16.0, result.alertDays.single().respRateBpm!!, 0.0)
+    }
+
+    @Test fun unknownRespirationDoesNotClearAnExistingRaisedPattern() {
+        val baseline = (1..31).map { DailyMetric("active-noop", "2026-01-%02d".format(it), restingHr = 50, respRateBpm = 16.0) }
+        val current = listOf("2026-02-01", "2026-02-02").map { DailyMetric("active-noop", it, restingHr = 58, respRateBpm = 22.0) }
+        val days = baseline + current
+        val rows = days.map { HrvProvenanceRow("active-noop", it.day, null, null, null, it.respRateBpm,
+            if (it.day < "2026-02-01") 1.0 else null) }
+        val unknown = IllnessHistory.resolve(days, rows, listOf("active-noop"), listOf("active-noop"))
+        val evaluation = IllnessWatch.evaluateWindow(unknown.alertDays)
+        assertFalse(evaluation.valid)
+        var previous: Boolean? = true
+        if (IllnessAlertPolicy.shouldRecordEvaluation(true, evaluation.valid)) previous = evaluation.alert != null
+        val fresh = IllnessHistory.resolve(days, rows.map { it.copy(respFreshScoringValid = 1.0) },
+            listOf("active-noop"), listOf("active-noop"))
+        val raised = IllnessWatch.evaluateWindow(fresh.alertDays)
+        assertTrue(raised.valid)
+        assertNotNull(raised.alert)
+        assertFalse(IllnessAlertPolicy.shouldNotify(raised.alert, previous, "2026-02-01", "2026-02-02"))
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test fun sourceSwitchInvalidatesTheOldRecordWhileTheNewJoinedReadLoads() = runTest {
-        val day = DailyMetric("alpha-noop", "2026-06-10", avgHrv = 40.0)
+        val day = DailyMetric("alpha-noop", "2026-06-10", avgHrv = 40.0, respRateBpm = 16.0)
         val windows = MutableStateFlow("alpha" to listOf(day))
         val alpha = MutableSharedFlow<List<HrvProvenanceRow>>()
         val beta = MutableSharedFlow<List<HrvProvenanceRow>>()
@@ -33,22 +91,24 @@ class IllnessHistoryTest {
         }
         runCurrent()
         assertNull(seen.last())
-        alpha.emit(listOf(HrvProvenanceRow("alpha-noop", day.day, 40.0, 1.0, 0.0)))
+        alpha.emit(listOf(HrvProvenanceRow("alpha-noop", day.day, 40.0, 1.0, 0.0, 16.0, 1.0)))
         runCurrent()
         val old = seen.last()!!
         assertTrue(old.hrvReliabilityByDay.getValue(day.day).matches(day.avgHrv))
+        assertTrue(old.respReliabilityByDay.getValue(day.day).matches(day.respRateBpm))
         windows.value = "beta" to listOf(day)
         runCurrent()
         assertNull(seen.last())
         assertFalse(old.isCurrent(listOf(day), "beta"))
         assertFalse(old.isCurrent(listOf(day.copy(avgHrv = 20.0)), "alpha"))
-        alpha.emit(listOf(HrvProvenanceRow("alpha-noop", day.day, 40.0, 1.0, 0.0)))
+        alpha.emit(listOf(HrvProvenanceRow("alpha-noop", day.day, 40.0, 1.0, 0.0, 16.0, 1.0)))
         assertNull(seen.last())
-        beta.emit(listOf(HrvProvenanceRow("beta-noop", day.day, 40.0, null, null)))
+        beta.emit(listOf(HrvProvenanceRow("beta-noop", day.day, 40.0, null, null, 16.0, null)))
         runCurrent()
         val current = seen.last()!!
         assertTrue(current.isCurrent(listOf(day), "beta"))
         assertFalse(current.hrvReliabilityByDay.getValue(day.day).matches(day.avgHrv))
+        assertFalse(current.respReliabilityByDay.getValue(day.day).matches(day.respRateBpm))
     }
 
     private fun resolve(days: List<DailyMetric>, imported: List<DailyMetric>,

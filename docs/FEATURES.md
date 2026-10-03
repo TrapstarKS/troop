@@ -312,18 +312,29 @@ Windows are taken relative to your latest recorded day and auto-widen on sparse 
 
 ## Health Monitor
 
-**Sidebar: Health · live HR needs a bonded strap; vitals come from imported WHOOP data.**
+**Health tab → Health Monitor · all processing and storage stay on-device.**
 
-`HealthView.swift` — live vitals:
+`HealthView.swift` / `HealthScreen.kt` show the Health landing, with Healthspan, Health Monitor and
+Stress Monitor entry cards followed by supported local health features. `HealthMonitorView.swift` /
+`HealthMonitorScreen.kt` show five overnight readings: HRV, resting HR, respiratory rate, recorded
+blood oxygen and skin temperature. Each row compares the current day with a personal normal range;
+green, amber and red indicate progressively larger deviations. Missing, stale and unverified readings
+are distinguished from normal readings. Raw optical channels are not converted into blood oxygen.
 
-- **Live heart rate hero** — a streaming HR sparkline tinted by zone, with a zone pill, "% Max",
-  your Max HR (from Settings) and a streaming/idle state. When the strap reports HR as 0, NOOP
-  derives it from the latest R-R interval and notes "from R-R".
-- **Vital Signs** — a tile grid from your most recent imported day: Respiratory Rate, Blood O₂,
-  Resting HR, HRV and Skin Temp, each colored by whether it sits in a healthy range ("In range" /
-  "Out of range").
+Normal ranges use the existing local baseline engine, require 14 trusted nights and exclude the
+shown day, recalibration history and unverified signal values. The display uses two- and three-sigma
+bands; these are local wellness estimates rather than a reproduction of a proprietary scoring model.
+Computed HRV and respiration require independent freshness evidence attached to their exact source,
+day and value. A retained legacy R-R snapshot cannot establish fresh evidence; valid respiration is
+not rejected merely because HRV failed its separate scoring checks.
 
-With no live HR and no imported day, NOOP prompts you to connect or import.
+Live heart rate uses received samples while connected and does not start a stream from this screen.
+Health Report creates 30- or 180-day PDFs after 14 recorded recoveries, preserving missing values and
+separate temperature scales. Sharing is an explicit native file-share action; there is no server upload.
+
+Optional local wellness notifications require explicit opt-in and trusted, corroborating overnight
+changes. Durable clear-to-raised edge detection suppresses repeated notifications across refreshes and
+process restarts. Disabled or unknown evaluations do not silently reset an existing raised edge.
 
 ---
 

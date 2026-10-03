@@ -699,8 +699,9 @@ final class Repository: ObservableObject {
         return days.filter { $0.day >= cutoff }
     }
 
-    /// Value-bound HRV eligibility before source coalescing; imports, computed, then Apple retain precedence.
-    func hrvReliabilityByDay(from: String, to: String) async throws -> [String: HealthSignalReliability.Record] {
+    /// Value-bound eligibility before source coalescing; both signals share one committed read snapshot.
+    func signalReliabilityByDay(from: String, to: String) async throws ->
+        (hrv: [String: HealthSignalReliability.Record], resp: [String: HealthSignalReliability.Record]) {
         let importedIds = importedReadIds
         let computedIds = computedReadIds
         let sourceIds = importedIds + computedIds + [Self.appleHealthSource]
@@ -709,13 +710,31 @@ final class Repository: ObservableObject {
         guard !Task.isCancelled, importedIds == importedReadIds, computedIds == computedReadIds else {
             throw CancellationError()
         }
-        var byDay: [String: [String: HealthSignalReliability.Record]] = [:]
+        var hrv: [String: [String: HealthSignalReliability.Record]] = [:]
+        var resp: [String: [String: HealthSignalReliability.Record]] = [:]
         for row in rows {
-            let eligible = HealthSignalReliability.hrv(row.value, computed: computedIds.contains(row.deviceId),
-                freshScoringValid: row.freshScoringValid, overcount: row.overcount) != nil
-            byDay[row.day, default: [:]][row.deviceId] = HealthSignalReliability.Record(value: row.value, eligible: eligible)
+            let computed = computedIds.contains(row.deviceId)
+            if let value = row.value {
+                let eligible = HealthSignalReliability.hrv(value, computed: computed,
+                    freshScoringValid: row.freshScoringValid, overcount: row.overcount) != nil
+                hrv[row.day, default: [:]][row.deviceId] = HealthSignalReliability.Record(value: value, eligible: eligible)
+            }
+            if let value = row.respValue {
+                let eligible = HealthSignalReliability.respiration(value, computed: computed,
+                    freshScoringValid: row.respFreshScoringValid) != nil
+                resp[row.day, default: [:]][row.deviceId] = HealthSignalReliability.Record(value: value, eligible: eligible)
+            }
         }
-        return byDay.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) }
+        return (hrv.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) },
+                resp.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) })
+    }
+
+    func hrvReliabilityByDay(from: String, to: String) async throws -> [String: HealthSignalReliability.Record] {
+        try await signalReliabilityByDay(from: from, to: to).hrv
+    }
+
+    func respReliabilityByDay(from: String, to: String) async throws -> [String: HealthSignalReliability.Record] {
+        try await signalReliabilityByDay(from: from, to: to).resp
     }
 
     /// Source-aware rows for vital-sign cards. During previews/tests that set `days` directly,

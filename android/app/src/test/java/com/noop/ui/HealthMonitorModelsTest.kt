@@ -68,20 +68,23 @@ class HealthMonitorModelsTest {
         assertEquals(Double.NaN, prior.avgHrv!!, 0.0)
     }
 
-    @Test fun demoMarkersUseComputedUnionAndReflectOnlyValidSyntheticHrv() {
+    @Test fun demoMarkersUseComputedUnionAndSeparateValidSyntheticSignals() {
         val days = listOf(
-            DailyMetric("my-whoop", "2026-10-01", avgHrv = 60.0),
-            DailyMetric("my-whoop", "2026-10-02", avgHrv = Double.NaN),
+            DailyMetric("my-whoop", "2026-10-01", avgHrv = 60.0, respRateBpm = 14.0),
+            DailyMetric("my-whoop", "2026-10-02", avgHrv = Double.NaN, respRateBpm = Double.NaN),
         )
         val markers = mutableListOf<MetricSeriesRow>()
         DemoSeeder.seedHealthMonitor(markers, days)
-        assertEquals(4, markers.size)
+        assertEquals(6, markers.size)
         assertEquals(setOf("my-whoop-noop"), markers.map { it.deviceId }.toSet())
         val valid = markers.filter { it.day == "2026-10-01" }.associate { it.key to it.value }
         assertEquals(60.0, HealthSignalReliability.hrv(60.0, computed = true,
             freshScoringValid = valid["hrv_fresh_scoring_valid"], overcount = valid["hrv_rr_overcount"])!!, 0.0)
         val invalid = markers.first { it.day == "2026-10-02" && it.key == "hrv_fresh_scoring_valid" }
         assertEquals(0.0, invalid.value, 0.0)
+        assertEquals(14.0, HealthSignalReliability.respiration(14.0, computed = true,
+            freshScoringValid = valid["resp_fresh_scoring_valid"])!!, 0.0)
+        assertEquals(0.0, markers.first { it.day == "2026-10-02" && it.key == "resp_fresh_scoring_valid" }.value, 0.0)
         assertEquals(listOf(0.0, 0.0), markers.filter { it.key == "hrv_rr_overcount" }.map { it.value })
     }
 
@@ -138,6 +141,21 @@ class HealthMonitorModelsTest {
         val oxygen = report.rows.first { it.key == "spo2" }
         assertNull(oxygen.mean)
         assertEquals(0, oxygen.nights)
+    }
+
+    @Test fun reportRequiresMatchingRespirationEvidenceIndependentlyOfHrv() {
+        val day = DailyMetric("strap", "2026-10-01", avgHrv = 60.0, respRateBpm = 14.0)
+        for (record in listOf(null, HealthSignalReliability.Record(14.0, false), HealthSignalReliability.Record(15.0, true))) {
+            val evidence = record?.let { mapOf(day.day to it) }
+            val report = healthMonitorReport(listOf(day), LocalDate.parse("2026-10-02"), 30,
+                SkinTempDisplay.Kind.ABSOLUTE, respReliabilityByDay = evidence)
+            assertNull(report.rows.first { it.key == "resp" }.mean)
+        }
+        val trusted = healthMonitorReport(listOf(day), LocalDate.parse("2026-10-02"), 30,
+            SkinTempDisplay.Kind.ABSOLUTE, hrvReliabilityByDay = mapOf(day.day to HealthSignalReliability.Record(60.0, false)),
+            respReliabilityByDay = mapOf(day.day to HealthSignalReliability.Record(14.0, true)))
+        assertEquals(14.0, trusted.rows.first { it.key == "resp" }.mean!!, 0.0)
+        assertNull(trusted.rows.first { it.key == "hrv" }.mean)
     }
 
     @Test fun reportEligibilityCountsUniqueRecordedRecoveriesThroughCurrentDay() {

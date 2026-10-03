@@ -21,13 +21,15 @@ private struct HealthLandingContent: View {
     @EnvironmentObject var repo: Repository
     @EnvironmentObject var intelligence: IntelligenceEngine
     @State private var hrvReliability: [String: HealthSignalReliability.Record]? = nil
+    @State private var respReliability: [String: HealthSignalReliability.Record]? = nil
     @State private var evidenceIdentity: String? = nil
 
     var body: some View {
         let day = HealthMonitorSnapshot.dayKey(days: repo.days, now: now)
         let identity = "\(repo.importedReadIds + repo.computedReadIds):\(repo.refreshSeq):\(intelligence.computing):\(day)"
         let rows = HealthMonitorSnapshot.rows(sourceRows: repo.vitalMetricRows,
-                                              now: now, todayKey: day, hrvReliabilityByDay: evidenceIdentity == identity ? hrvReliability : nil)
+                                              now: now, todayKey: day, hrvReliabilityByDay: evidenceIdentity == identity ? hrvReliability : nil,
+                                              respReliabilityByDay: evidenceIdentity == identity ? respReliability : nil)
         VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
             NavigationLink(value: TabRoute.healthspan) {
                 NoopCard(tint: StrandPalette.positive) {
@@ -88,12 +90,14 @@ private struct HealthLandingContent: View {
         }
         .task(id: identity) {
             hrvReliability = nil
+            respReliability = nil
             evidenceIdentity = nil
             guard !intelligence.computing else { return }
             let end = day
-            let records = try? await repo.hrvReliabilityByDay(from: Baselines.cutoffKey(todayKey: end, carryDays: 180), to: end)
+            let records = try? await repo.signalReliabilityByDay(from: Baselines.cutoffKey(todayKey: end, carryDays: 180), to: end)
             guard !Task.isCancelled else { return }
-            hrvReliability = records
+            hrvReliability = records?.hrv
+            respReliability = records?.resp
             evidenceIdentity = identity
         }
     }

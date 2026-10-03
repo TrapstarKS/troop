@@ -1962,14 +1962,16 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             let sourceIds = self.repo.computedReadIds
             guard let firstDay = days.first?.day else { return }
-            let records: [String: HealthSignalReliability.Record]
-            do { records = try await self.repo.hrvReliabilityByDay(from: firstDay, to: latestDay) }
+            let records: (hrv: [String: HealthSignalReliability.Record], resp: [String: HealthSignalReliability.Record])
+            do { records = try await self.repo.signalReliabilityByDay(from: firstDay, to: latestDay) }
             catch { return }
             var hrvByDay: [String: Double] = [:]
+            var respByDay: [String: Double] = [:]
             for row in self.repo.vitalMetricRows.sorted(by: { $0.source.vitalPriority < $1.source.vitalPriority }) {
-                guard hrvByDay[row.metric.day] == nil, let value = row.metric.avgHrv,
-                      records[row.metric.day]?.matches(value) == true else { continue }
-                hrvByDay[row.metric.day] = value
+                if hrvByDay[row.metric.day] == nil, let value = row.metric.avgHrv,
+                   records.hrv[row.metric.day]?.matches(value) == true { hrvByDay[row.metric.day] = value }
+                if respByDay[row.metric.day] == nil, let value = row.metric.respRateBpm,
+                   records.resp[row.metric.day]?.matches(value) == true { respByDay[row.metric.day] = value }
             }
             // Confounder tags from the recent journal (within the last ~2 days). Read once, off the
             // engine's hot path , the engine only needs presence flags, not the rows.
@@ -1983,7 +1985,7 @@ final class AppModel: ObservableObject {
                 if q.contains("sick") || q.contains("ill") || q.contains("unwell") { ctxAlreadyUnwell = true }
             }
             guard sourceIds == self.repo.computedReadIds else { return }
-            self.applyIllnessSignal(days, hrvByDay: hrvByDay, generation: generation, alcohol: ctxAlcohol,
+            self.applyIllnessSignal(days, hrvByDay: hrvByDay, respByDay: respByDay, generation: generation, alcohol: ctxAlcohol,
                                     hardOrLateWorkout: ctxHardWorkout, alreadyUnwell: ctxAlreadyUnwell)
         }
     }
@@ -2001,7 +2003,7 @@ final class AppModel: ObservableObject {
 
     /// Run the `IllnessSignalEngine` from the day history + the journal-derived confounder context, then
     /// publish the result + the semantic `healthAlert` banner payload.
-    private func applyIllnessSignal(_ days: [DailyMetric], hrvByDay: [String: Double], generation: Int, alcohol: Bool,
+    private func applyIllnessSignal(_ days: [DailyMetric], hrvByDay: [String: Double], respByDay: [String: Double], generation: Int, alcohol: Bool,
                                     hardOrLateWorkout: Bool, alreadyUnwell: Bool) {
         // A newer day can arrive while the journal read is in flight. Never publish the older
         // task's alert over that day's result.
@@ -2040,7 +2042,7 @@ final class AppModel: ObservableObject {
 
         let rhr = signal({ $0.restingHr.map(Double.init) }, cfgKey: "resting_hr", illnessUp: true)
         let hrv = signal({ hrvByDay[$0.day] }, cfgKey: "hrv", illnessUp: false)
-        let resp = signal({ $0.respRateBpm }, cfgKey: "resp", illnessUp: true)
+        let resp = signal({ respByDay[$0.day] }, cfgKey: "resp", illnessUp: true)
         let skinCfg = VitalBands.skinTempDeviationCfg
         let skinValue: (DailyMetric) -> Double? = { row in
             row.skinTempDevC.flatMap {
@@ -2108,7 +2110,7 @@ final class AppModel: ObservableObject {
                 locale: AppLanguage.activeLocale)
             labels["skinTemp"] = String(localized: "Skin temperature \(temperature)")
         }
-        if let r = latest.respRateBpm, let b = signalBaselines["resp"], r > b {
+        if let r = respByDay[latest.day], let b = signalBaselines["resp"], r > b {
             labels["respiration"] = String(localized: "Respiration up")
         }
 

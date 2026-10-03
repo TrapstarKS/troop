@@ -9,13 +9,14 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 
-/** Keeps HRV field provenance attached until alert eligibility is decided. */
+/** Keeps HRV and respiratory field provenance attached until alert eligibility is decided. */
 object IllnessHistory {
     data class Snapshot(
         val days: List<DailyMetric>,
         val alertDays: List<DailyMetric>,
         val hrvReliabilityByDay: Map<String, HealthSignalReliability.Record>,
         val activeId: String = "",
+        val respReliabilityByDay: Map<String, HealthSignalReliability.Record> = emptyMap(),
     ) {
         fun isCurrent(currentDays: List<DailyMetric>, currentActiveId: String): Boolean =
             days == currentDays && activeId == currentActiveId
@@ -40,21 +41,31 @@ object IllnessHistory {
 
     internal fun resolve(days: List<DailyMetric>, rows: List<HrvProvenanceRow>,
                          sourceIds: List<String>, computedIds: List<String>, activeId: String = ""): Snapshot {
-        val records = rows.groupBy { it.day }.mapValues { (_, dayRows) ->
-            HealthSignalReliability.firstRecord(sourceIds, dayRows.associate { row ->
-                row.deviceId to HealthSignalReliability.Record(row.value,
-                    HealthSignalReliability.hrv(row.value, row.deviceId in computedIds,
-                        row.freshScoringValid, row.overcount) != null)
-            })
-        }
-        val reliability = LinkedHashMap<String, HealthSignalReliability.Record>()
+        fun records(respiration: Boolean): Map<String, HealthSignalReliability.Record?> =
+            rows.groupBy { it.day }.mapValues { (_, dayRows) ->
+                HealthSignalReliability.firstRecord(sourceIds, dayRows.mapNotNull { row ->
+                    val value = (if (respiration) row.respValue else row.value) ?: return@mapNotNull null
+                    val computed = row.deviceId in computedIds
+                    val eligible = if (respiration) HealthSignalReliability.respiration(value, computed, row.respFreshScoringValid) != null
+                        else HealthSignalReliability.hrv(value, computed, row.freshScoringValid, row.overcount) != null
+                    row.deviceId to HealthSignalReliability.Record(value, eligible)
+                }.toMap())
+            }
+        val hrvRecords = records(false)
+        val respRecords = records(true)
+        val hrvReliability = LinkedHashMap<String, HealthSignalReliability.Record>()
+        val respReliability = LinkedHashMap<String, HealthSignalReliability.Record>()
         val eligibleDays = days.map { row ->
-            val record = records[row.day]
-            val hrv = row.avgHrv?.takeIf { record?.matches(it) == true }
-            if (row.avgHrv != null) reliability[row.day] = record
+            val hrvRecord = hrvRecords[row.day]
+            val respRecord = respRecords[row.day]
+            val hrv = row.avgHrv?.takeIf { hrvRecord?.matches(it) == true }
+            val resp = row.respRateBpm?.takeIf { respRecord?.matches(it) == true }
+            if (row.avgHrv != null) hrvReliability[row.day] = hrvRecord
                 ?: HealthSignalReliability.Record(row.avgHrv, false)
-            row.copy(avgHrv = hrv)
+            if (row.respRateBpm != null) respReliability[row.day] = respRecord
+                ?: HealthSignalReliability.Record(row.respRateBpm, false)
+            row.copy(avgHrv = hrv, respRateBpm = resp)
         }
-        return Snapshot(days, eligibleDays, reliability, activeId)
+        return Snapshot(days, eligibleDays, hrvReliability, activeId, respReliability)
     }
 }

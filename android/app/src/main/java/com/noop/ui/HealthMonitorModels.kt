@@ -66,6 +66,7 @@ internal fun healthMonitorReadings(
     hrvBaselineEpoch: Long = 0L,
     recoveryBaselineEpoch: Long = 0L,
     hrvReliabilityByDay: Map<String, HealthSignalReliability.Record>? = null,
+    respReliabilityByDay: Map<String, HealthSignalReliability.Record>? = null,
 ): List<HealthMonitorReading> {
     val original = healthMonitorCurrentDay(days, day)
     val current = healthMonitorCurrentDayMetric(days, day)
@@ -91,14 +92,18 @@ internal fun healthMonitorReadings(
             row.day to when (key) {
                 "hrv" -> row.avgHrv?.takeIf { hrvReliabilityByDay?.get(row.day)?.matches(row.avgHrv) == true }
                 "rhr" -> row.restingHr?.toDouble()
-                "resp" -> row.respRateBpm
+                "resp" -> row.respRateBpm?.takeIf { respReliabilityByDay?.get(row.day)?.matches(row.respRateBpm) == true }
                 "spo2" -> row.spo2Pct
                 else -> if (skinAbsolute) row.skinTempC ?: row.skinTempDevC?.takeIf(VitalBands::isAbsoluteSkinTemp)
                     else row.skinTempDevC?.takeUnless(VitalBands::isAbsoluteSkinTemp)
             }
         }, day, if (key == "hrv") hrvBaselineEpoch else if (key == "spo2") 0L else recoveryBaselineEpoch)
         HealthMonitorReading(vital, HealthMonitorAssessment.assess(vital.value, history, cfg,
-            verified = if (key == "hrv") hrvVerified else !vital.isEstimate && vital.caveat == null))
+            verified = when (key) {
+                "hrv" -> hrvVerified
+                "resp" -> respReliabilityByDay?.get(day)?.matches(value) == true
+                else -> !vital.isEstimate && vital.caveat == null
+            }))
     }
 }
 
@@ -122,6 +127,7 @@ internal fun healthMonitorReport(
     windowDays: Int,
     skinKind: SkinTempDisplay.Kind,
     hrvReliabilityByDay: Map<String, HealthSignalReliability.Record>? = null,
+    respReliabilityByDay: Map<String, HealthSignalReliability.Record>? = null,
 ): HealthMonitorReport {
     val start = end.minusDays(windowDays.toLong() - 1)
     val window = days.filter { row ->
@@ -133,7 +139,7 @@ internal fun healthMonitorReport(
             when (key) {
                 "hrv" -> row.avgHrv?.takeIf { hrvReliabilityByDay?.get(row.day)?.matches(row.avgHrv) == true }
                 "rhr" -> row.restingHr?.toDouble()
-                "resp" -> row.respRateBpm
+                "resp" -> row.respRateBpm?.takeIf { respReliabilityByDay?.get(row.day)?.matches(row.respRateBpm) == true }
                 "spo2" -> row.spo2Pct
                 else -> when (skinKind) {
                     SkinTempDisplay.Kind.ABSOLUTE -> row.skinTempC ?: row.skinTempDevC?.takeIf(VitalBands::isAbsoluteSkinTemp)

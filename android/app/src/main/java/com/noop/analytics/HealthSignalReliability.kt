@@ -9,6 +9,12 @@ object HealthSignalReliability {
     fun firstRecord(sourceIds: List<String>, bySource: Map<String, Record>): Record? =
         sourceIds.firstNotNullOfOrNull { bySource[it] }
 
+    fun respiration(value: Double?, computed: Boolean, freshScoringValid: Double? = null): Double? {
+        if (value == null || !value.isFinite() || value < Baselines.respCfg.minVal || value > Baselines.respCfg.maxVal) return null
+        if (computed && (freshScoringValid == null || !freshScoringValid.isFinite() || freshScoringValid < 0.5)) return null
+        return value
+    }
+
     fun hrv(value: Double?, computed: Boolean,
             freshScoringValid: Double? = null, overcount: Double? = null): Double? {
         if (value == null || !value.isFinite() || value < Baselines.hrvCfg.minVal ||

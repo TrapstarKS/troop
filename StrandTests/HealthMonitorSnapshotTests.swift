@@ -106,6 +106,41 @@ final class HealthMonitorSnapshotTests: XCTestCase {
         XCTAssertEqual(result.first { $0.id == "hrv" }!.assessment.status, .withinRange)
     }
 
+    func testFreshRespirationRemainsTrustedWhenHrvIsRejected() {
+        let values = rows(source: .noopComputed)
+        let respiration = Dictionary(uniqueKeysWithValues: values.map {
+            ($0.metric.day, HealthSignalReliability.Record(value: 14.5, eligible: true))
+        })
+        let hrv = Dictionary(uniqueKeysWithValues: values.map {
+            ($0.metric.day, HealthSignalReliability.Record(value: 80, eligible: false))
+        })
+        let result = HealthMonitorSnapshot.rows(sourceRows: values, now: now,
+                                                hrvReliabilityByDay: hrv, respReliabilityByDay: respiration,
+                                                hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+        XCTAssertEqual(result.first { $0.id == "hrv" }!.assessment.status, .unverified)
+        XCTAssertEqual(result.first { $0.id == "resp" }!.assessment.status, .withinRange)
+    }
+
+    func testRetainedRespirationCannotClaimNormalOrEnterReports() {
+        let values = rows(source: .noopComputed)
+        for evidence: [String: HealthSignalReliability.Record]? in [nil, ["2026-06-20": .init(value: 14.5, eligible: false)],
+                                                                   ["2026-06-20": .init(value: 15, eligible: true)]] {
+            let result = HealthMonitorSnapshot.rows(sourceRows: values, now: now,
+                                                    respReliabilityByDay: evidence,
+                                                    hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+            XCTAssertEqual(result.first { $0.id == "resp" }!.assessment.status, .unverified)
+            XCTAssertTrue(HealthMonitorSnapshot.resolvedValues(key: "resp", sourceRows: values,
+                                                               absoluteSkin: false, respReliabilityByDay: evidence).isEmpty)
+        }
+    }
+
+    func testImportedRespirationDoesNotNeedComputedFreshnessMarkers() {
+        let result = HealthMonitorSnapshot.rows(sourceRows: rows(), now: now,
+                                                respReliabilityByDay: ["2026-06-20": .init(value: 14.5, eligible: false)],
+                                                hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+        XCTAssertEqual(result.first { $0.id == "resp" }!.assessment.status, .withinRange)
+    }
+
     func testUnverifiedWinnerDoesNotFallThroughToAnotherSourceInReports() {
         let day = "2026-06-20"
         let values = [SourcedDailyMetric(metric: metric(day: day, avgHrv: 500), source: .whoopImport),

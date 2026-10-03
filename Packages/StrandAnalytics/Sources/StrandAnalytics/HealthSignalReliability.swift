@@ -13,6 +13,12 @@ public enum HealthSignalReliability {
         sourceIds.lazy.compactMap { bySource[$0] }.first
     }
 
+    public static func respiration(_ value: Double?, computed: Bool, freshScoringValid: Double? = nil) -> Double? {
+        guard let value, value.isFinite, value >= Baselines.respCfg.minVal, value <= Baselines.respCfg.maxVal else { return nil }
+        guard !computed || (freshScoringValid.map { $0.isFinite && $0 >= 0.5 } ?? false) else { return nil }
+        return value
+    }
+
     public static func hrv(_ value: Double?, computed: Bool,
                            freshScoringValid: Double? = nil, overcount: Double? = nil) -> Double? {
         guard let value, value.isFinite, value >= Baselines.hrvCfg.minVal,

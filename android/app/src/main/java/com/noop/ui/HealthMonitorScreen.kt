@@ -39,6 +39,7 @@ import com.noop.analytics.Baselines
 import com.noop.analytics.SkinTempDisplay
 import com.noop.analytics.VitalBands
 import com.noop.data.DailyMetric
+import com.noop.data.IllnessHistory
 import java.time.LocalDate
 import java.time.ZonedDateTime
 
@@ -50,18 +51,20 @@ fun HealthMonitorScreen(
 ) {
     val days by vm.recentDays.collectAsStateWithLifecycle()
     val day = rememberHealthMonitorDay(days)
-    val readings = rememberHealthMonitorReadings(vm, days, day)
+    val evidence = rememberHealthMonitorEvidence(vm, days)
+    val readings = rememberHealthMonitorReadings(vm, days, day, evidence)
     val context = androidx.compose.ui.platform.LocalContext.current
     val skinPreference = UnitPrefs.skinTempPreferred(context)
     val skinKind = readings.last().vital.value?.let {
         if (VitalBands.isAbsoluteSkinTemp(it)) SkinTempDisplay.Kind.ABSOLUTE else SkinTempDisplay.Kind.DEVIATION
     } ?: skinPreference
-    val reliability by vm.hrvReliabilityByDay.collectAsStateWithLifecycle()
+    val reliability = evidence?.hrvReliabilityByDay
+    val respReliability = evidence?.respReliabilityByDay
     val scope = rememberCoroutineScope()
     var sharing by remember { mutableStateOf(false) }
     var reportDays by remember { mutableStateOf(30) }
-    val report = remember(days, day, reportDays, skinKind, reliability) {
-        healthMonitorReport(days, LocalDate.parse(day), reportDays, skinKind, reliability)
+    val report = remember(days, day, reportDays, skinKind, reliability, respReliability) {
+        healthMonitorReport(days, LocalDate.parse(day), reportDays, skinKind, reliability, respReliability)
     }
     LazyScreenScaffold(
         title = stringResource(R.string.health_monitor_title),
@@ -106,22 +109,32 @@ private fun rememberHealthMonitorDay(days: List<DailyMetric>): String {
 }
 
 @Composable
-private fun rememberHealthMonitorReadings(vm: AppViewModel, days: List<DailyMetric>, day: String): List<HealthMonitorReading> {
+private fun rememberHealthMonitorEvidence(vm: AppViewModel, days: List<DailyMetric>): IllnessHistory.Snapshot? {
+    val evidence by vm.healthSignalEvidence.collectAsStateWithLifecycle()
+    val activeId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    return evidence?.takeIf { it.isCurrent(days, effectiveActiveStrapId(activeId, vm.deviceId)) }
+}
+
+@Composable
+private fun rememberHealthMonitorReadings(vm: AppViewModel, days: List<DailyMetric>, day: String,
+                                         evidence: IllnessHistory.Snapshot?): List<HealthMonitorReading> {
     val context = androidx.compose.ui.platform.LocalContext.current
     val tempUnit = UnitPrefs.temperature(context)
     val skinPreference = UnitPrefs.skinTempPreferred(context)
-    val reliability by vm.hrvReliabilityByDay.collectAsStateWithLifecycle()
+    val reliability = evidence?.hrvReliabilityByDay
+    val respReliability = evidence?.respReliabilityByDay
     val hrvEpoch = NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L)
     val recoveryEpoch = NoopPrefs.of(context).getLong(Baselines.recoveryBaselineEpochKey, 0L)
-    return remember(day, days, tempUnit, skinPreference, hrvEpoch, recoveryEpoch, reliability) {
-        healthMonitorReadings(day, days, tempUnit, skinPreference, hrvEpoch, recoveryEpoch, reliability)
+    return remember(day, days, tempUnit, skinPreference, hrvEpoch, recoveryEpoch, reliability, respReliability) {
+        healthMonitorReadings(day, days, tempUnit, skinPreference, hrvEpoch, recoveryEpoch, reliability, respReliability)
     }
 }
 
 @Composable
 internal fun HealthMonitorPreview(vm: AppViewModel, days: List<DailyMetric>, onClick: () -> Unit) {
     val day = rememberHealthMonitorDay(days)
-    val readings = rememberHealthMonitorReadings(vm, days, day)
+    val evidence = rememberHealthMonitorEvidence(vm, days)
+    val readings = rememberHealthMonitorReadings(vm, days, day, evidence)
     NoopCard(Modifier.clickable(role = Role.Button, onClick = onClick)) {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
             HealthFeatureHeader(stringResource(R.string.health_monitor_title))

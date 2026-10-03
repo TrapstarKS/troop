@@ -777,9 +777,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         })
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    val healthSignalEvidence: StateFlow<IllnessHistory.Snapshot?> get() = illnessHistory
+
     /** Null while provenance loads; computed HRV needs a fresh valid scan before it can corroborate. */
     val hrvReliabilityByDay: StateFlow<Map<String, HealthSignalReliability.Record>?> =
         illnessHistory.map { it?.hrvReliabilityByDay }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val respReliabilityByDay: StateFlow<Map<String, HealthSignalReliability.Record>?> =
+        illnessHistory.map { it?.respReliabilityByDay }
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /**
