@@ -2379,6 +2379,99 @@ struct SleepView: View {
 
 }
 
+/// The "going to sleep / I'm awake" sleep-mark card (#461, Phase 1). Tapping logs a timestamped mark —
+/// persisted to the `sleep_mark` metric series AND appended to the shareable strap log — then confirms
+/// with a haptic and a transient line. LOGGING ONLY: a mark never touches the sleep detector or the
+/// night boundaries. Owns `live` (it appends to the strap log) + `repo` (the metric-series write) and
+/// the `lastMark` confirmation state, so its strap-log write keeps working without SleepView observing.
+/// The "Sleep marks" tap-to-log card. Lives in the Sleep tab but is also hostable in Today
+/// (#today-hosted-cards), so it is `internal` (not `private`) and self-contained — it reads only the
+/// shared `repo`/`live` environment objects, both present on Today too.
+struct SleepMarkCard: View {
+    @EnvironmentObject private var repo: Repository
+    @EnvironmentObject private var live: LiveState
+
+    /// The most recent sleep-mark the user tapped, shown as a transient confirmation line under the
+    /// two buttons. Drives the SwiftUI haptic landing too. LOGGING-ONLY: a mark never feeds the sleep
+    /// detector — it's persisted to the metric series + strap log. (#461)
+    @State private var lastMark: SleepMark?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+            SectionHeader("Sleep marks", overline: "Tap to log")
+            NoopCard(tint: StrandPalette.restColor) {
+                VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
+                    Text("Tap when you're heading to bed or when you wake. Each tap is logged with the time. It doesn't change tonight's detected sleep.")
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: NoopMetrics.gap) {
+                        // Routed through the unified NoopButton system so the two marks sit identically
+                        // (sentence-case label, leading icon at 8pt, controlHeight=48, no glow).
+                        NoopButton("Going to sleep", systemImage: "moon.zzz.fill",
+                                   kind: .secondary, fullWidth: true) { logMark(.bedtime) }
+                            .accessibilityLabel("Log going to sleep")
+
+                        NoopButton("I'm awake", systemImage: "sun.max.fill",
+                                   kind: .secondary, fullWidth: true) { logMark(.wake) }
+                            .accessibilityLabel("Log waking up")
+                    }
+                    if let lastMark {
+                        Text(lastMark.confirmation)
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.restColor)
+                            .transition(.opacity)
+                            .accessibilityLabel(lastMark.confirmation)
+                    }
+                }
+            }
+        }
+        // A success haptic lands when a new mark is captured (value-driven, not per-tap), matching the
+        // app's sparse tactile vocabulary. No-op on macOS.
+        .strandHaptic(.success, trigger: lastMark?.tsMs ?? 0)
+    }
+
+    /// Persist + log a tapped mark. Optimistically shows the confirmation immediately, fires the
+    /// haptic via `lastMark`, appends the human-readable strap-log line, then writes the metric-series
+    /// row through the repo's live store handle (no new Repository API, no schema change). The write is
+    /// idempotent by (deviceId, day, key). (#461)
+    private func logMark(_ type: SleepMarkType) {
+        let mark = SleepMark(type: type)
+        withAnimation(.easeOut(duration: 0.2)) { lastMark = mark }
+        // The shareable strap log is the human-readable surface that lands in a debug export.
+        live.append(log: mark.logLine)
+        Task {
+            guard let store = await repo.storeHandle() else { return }
+            try? await store.upsertMetricSeries([mark.metricPoint], deviceId: repo.deviceId)
+        }
+    }
+}
+
+/// The "Syncing strap history…" note, shown only while a historical offload is running (#77). Owns the
+/// `LiveState` observation so the chunk count ticks without re-rendering the rest of the Sleep screen.
+enum SleepFreshnessStatus: Equatable {
+    case syncing, calculating, syncFailed, awaitingSync, notDetected
+}
+
+/// Pure priority ladder behind the Sleep status banner. "Missing" is deliberately held until morning so
+/// opening Sleep during the night does not claim a still-in-progress night was missed.
+func resolveSleepFreshness(hasCurrentNight: Bool, morningReady: Bool, syncing: Bool,
+                           calculating: Bool, syncedSinceDayStart: Bool,
+                           syncFailed: Bool) -> SleepFreshnessStatus? {
+    if syncing { return .syncing }
+    // #2108: a night already in hand outranks .calculating. It used to sit below, so `hasCurrentNight`
+    // could only silence the missing-night states and a finished night was structurally unable to
+    // silence this one: the banner said "detecting and staging the night now" directly above that same
+    // night scored, timed and staged on screen. A note that contradicts the content beside it is worse
+    // than no note, and one that is always on is read by nobody the day it matters. .syncing stays
+    // above, because data still arriving can genuinely change what is shown.
+    if hasCurrentNight { return nil }
+    if calculating { return .calculating }
+    if !morningReady { return nil }
+    if syncFailed { return .syncFailed }
+    return syncedSinceDayStart ? .notDetected : .awaitingSync
+}
+
 private struct SleepFreshnessNote: View {
     @EnvironmentObject private var live: LiveState
     @EnvironmentObject private var intelligence: IntelligenceEngine
