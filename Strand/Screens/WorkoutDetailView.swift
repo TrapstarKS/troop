@@ -11,9 +11,7 @@ import MapKit
 // MARK: - Workout detail (#410)
 //
 // The default host presents ActivityDetailView. This extended drill-down remains reachable from its
-// More activity details action, built from the existing Noop component system
-// (NoopCard / ChartCard / SectionHeader / StatTile / SegmentBar idiom) so it sits in the same
-// instrument-grade, Effort-amber colour world as the Workouts list it opens from.
+// More activity details action, using the shared design tokens and components.
 //
 //   • a header (sport displayName · date · duration) with the source badge,
 //   • a 3-up StatTile strip (avg HR · max HR · calories / distance),
@@ -114,12 +112,21 @@ struct WorkoutDetailView: View {
                 Button("Done") { dismiss() }
             }
         }
-        .task { await load() }
+        .task(id: "\(row.startTs)|\(row.endTs)|\(row.source)|\(repo.deviceId)|\(repo.refreshSeq)") { await load() }
     }
 
     // MARK: - Load
 
     private func load() async {
+        let deviceId = repo.deviceId
+        await MainActor.run {
+            hrPoints = []
+            zoneMinutes = nil
+            zonesFromImport = false
+            heartRateRecovery = nil
+            steps = nil
+            loaded = false
+        }
         // #524: the GPS route, if this session recorded one on-device. A cheap UserDefaults read keyed
         // by the row's natural key (startTs + sport); decoded to points only when ≥2 were captured so the
         // map only ever draws a real route.
@@ -173,6 +180,7 @@ struct WorkoutDetailView: View {
         }
 
         await MainActor.run {
+            guard repo.deviceId == deviceId, !Task.isCancelled else { return }
             self.route = routePoints
             self.hrPoints = points
             self.zoneMinutes = minutes

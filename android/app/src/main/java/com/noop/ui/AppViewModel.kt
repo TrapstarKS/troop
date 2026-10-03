@@ -2025,15 +2025,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }.onFailure { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
         IntelligenceEngine.stepsHasMotionSink = null
     }
-    fun loadWorkouts() {
-        viewModelScope.launch {
+    fun loadWorkouts(): kotlinx.coroutines.Job {
+        val readActiveId = activeStrapId
+        return viewModelScope.launch {
             val now = System.currentTimeMillis() / 1000
             // #28: read across the strap-id + "my-whoop" union (like HR/sleep), so a re-added/newly-paired
             // strap whose workouts live under "my-whoop" isn't shown an empty Workouts screen.
-            val whoop = repository.workoutsUnion(deviceId, 0L, now)
+            val whoop = repository.workoutsUnion(readActiveId, 0L, now)
             val apple = repository.workouts("apple-health", 0L, now) +
                 repository.workouts("health-connect", 0L, now)
-            val detected = repository.detectedWorkoutsUnion(deviceId, 0L, now)
+            val detected = repository.detectedWorkoutsUnion(readActiveId, 0L, now)
             // Imported lifting sessions (Hevy / Liftosaur) carry a volume-load note but no HR — they're
             // a strength-volume estimate, not cardio. Kept OUT of the strap HR-fill below so we never
             // fabricate a heart rate the lift never measured.
@@ -2044,7 +2045,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // HR-fill below like the imported Apple sessions — a GPX with no HR borrows the strap's, while a
             // FIT that already carries HR is untouched (fill only fills nulls).
             val activityFiles = repository.workouts(ActivityFileImporter.SOURCE_ID, 0L, now)
-            val markers = repository.dismissedDetectedUnion(deviceId)
+            val markers = repository.dismissedDetectedUnion(readActiveId)
             // Fill imported sessions' missing HR from strap samples (#77), same as before; detected /
             // manual rows already carry their own HR so they pass through unchanged. #961: also backfill a
             // strap-native row's Effort (strain) from the strap trace when it's null, so a live/manual
@@ -2059,7 +2060,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // this is the line that has to pass the same id for that to hold.
             val filled = repository.fillWorkoutHrFromStrap(
                 (whoop + apple + detected + activityFiles),
-                strapDeviceId = deviceId,
+                strapDeviceId = readActiveId,
                 strainMaxHR = profileStore.hrMax.toDouble(),
                 strainSex = profileStore.sex,
                 effortMethod = NoopPrefs.effortMethod(appContext),
@@ -2082,6 +2083,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 WorkoutEditing.dedupCrossSource(filteredRows)
             }
             val sorted = deduped.sortedByDescending { it.startTs }
+            if (activeStrapId != readActiveId) return@launch
             _workouts.value = sorted
             // Post-workout summary (#517) — opt-in, default OFF. The newest session (by start) drives a
             // one-shot Effort + duration + avg-HR notification when it's strictly newer than the last one
@@ -2136,7 +2138,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         from: Long,
         to: Long,
         source: String = "",
-        rowDeviceId: String = deviceId,
+        rowDeviceId: String = activeStrapId,
+        activeDeviceId: String = activeStrapId,
     ): List<com.noop.data.HrBucket> {
         if (to <= from) return emptyList()
         val span = to - from
@@ -2146,7 +2149,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // has no strap of its own and the worn strap may bank under either after a re-add. Previously
         // this read the single active id, so both cases could chart the wrong data — and disagree with
         // the Avg HR on the same card. Defaults keep any caller without a row on today's behaviour.
-        val ids = WhoopRepository.workoutHrDeviceIds(source, rowDeviceId, deviceId)
+        val ids = WhoopRepository.workoutHrDeviceIds(source, rowDeviceId, activeDeviceId)
         return runCatching { repository.hrBucketsFor(ids, from, to, bucket) }.getOrDefault(emptyList())
     }
 
@@ -2159,12 +2162,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         from: Long,
         to: Long,
         source: String = "",
-        rowDeviceId: String = deviceId,
+        rowDeviceId: String = activeStrapId,
+        activeDeviceId: String = activeStrapId,
     ): List<Double>? {
         if (to <= from) return null
         // #856: the same resolved ids the chart and Avg HR use. Binning a different strap's samples
         // than the curve plots would put three different answers on one card.
-        val ids = WhoopRepository.workoutHrDeviceIds(source, rowDeviceId, deviceId)
+        val ids = WhoopRepository.workoutHrDeviceIds(source, rowDeviceId, activeDeviceId)
         val samples = runCatching { repository.hrSamplesFor(ids, from, to) }.getOrDefault(emptyList())
         if (samples.isEmpty()) return null
         val zoneSet = profileStore.hrZoneSet
@@ -2180,7 +2184,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         from: Long,
         to: Long,
         source: String = "",
-        rowDeviceId: String = deviceId,
+        rowDeviceId: String = activeStrapId,
+        activeDeviceId: String = activeStrapId,
     ): com.noop.analytics.HeartRateRecovery.Result? {
         if (to <= from) return null
         val readFrom = maxOf(from, to - com.noop.analytics.HeartRateRecovery.eligibilityLookbackSeconds)
@@ -2188,7 +2193,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // #856: the same resolved ids as the chart, zones and Avg HR — the fourth surface on this card.
         // The recovery window extends PAST the bout, but the strap that recorded it is still the one on
         // the wrist a few minutes later, so a detected bout reads its own strap here too.
-        val ids = WhoopRepository.workoutHrDeviceIds(source, rowDeviceId, deviceId)
+        val ids = WhoopRepository.workoutHrDeviceIds(source, rowDeviceId, activeDeviceId)
         val samples = runCatching {
             repository.hrSamplesFor(ids, readFrom, readTo, limit = 2_000)
         }.getOrDefault(emptyList())
@@ -2206,9 +2211,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      *  — a WHOOP 4.0 (no @57 counter) or an MG/5.0 that hasn't offloaded the window yet. Mirrors Swift
      *  `Repository.strapStepTicks` + the WorkoutDetailView scaling; the phone-pedometer fallback iOS adds is
      *  not available on Android (no cheap windowed step source), so a 4.0 window simply shows no steps. */
-    suspend fun workoutSteps(from: Long, to: Long): Int? {
+    suspend fun workoutSteps(from: Long, to: Long, activeDeviceId: String = activeStrapId): Int? {
         if (to <= from) return null
-        val samples = runCatching { repository.stepSamples(deviceId, from, to) }.getOrDefault(emptyList())
+        val samples = runCatching { repository.stepSamples(activeDeviceId, from, to) }.getOrDefault(emptyList())
         val ticks = com.noop.analytics.StepsCounter.stepsInWindow(samples) ?: return null
         val scaled = (ticks.toDouble() / maxOf(profileStore.stepTicksPerStep, 0.5)).roundToInt()
         return if (scaled > 0) scaled else null

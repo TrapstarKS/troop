@@ -1471,21 +1471,23 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
     }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val registryId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeId = registryId ?: vm.activeStrapId
 
     // Per-window reads (#410): the HR curve (downsampled bucket means) and the HR-zone split. Zones
     // prefer the imported per-workout percentages (a WHOOP-computed split); only when the row carries
     // none do we derive zone-minutes from the strap's own raw HR — so we never overwrite a real
     // imported split with an on-device approximation.
-    var hrCurve by remember(row.startTs) { mutableStateOf<List<Double>>(emptyList()) }
-    var zoneMinutes by remember(row.startTs) { mutableStateOf<List<Double>?>(null) }
-    var zonesFromImport by remember(row.startTs) { mutableStateOf(false) }
-    var heartRateRecovery by remember(row.startTs) { mutableStateOf<HeartRateRecovery.Result?>(null) }
+    var hrCurve by remember(row, activeId) { mutableStateOf<List<Double>>(emptyList()) }
+    var zoneMinutes by remember(row, activeId) { mutableStateOf<List<Double>?>(null) }
+    var zonesFromImport by remember(row, activeId) { mutableStateOf(false) }
+    var heartRateRecovery by remember(row, activeId) { mutableStateOf<HeartRateRecovery.Result?>(null) }
     // Steps for an on-foot sport (#398): the strap's own counter over the window, computed at display time
     // so it "fills in after sync". null for non-foot sports or when no strap counter covers the window.
-    var steps by remember(row.startTs) { mutableStateOf<Int?>(null) }
-    LaunchedEffect(row.startTs, row.endTs) {
-        hrCurve = vm.workoutHrBuckets(row.startTs, row.endTs, row.source, row.deviceId).map { it.avgBpm }
-        steps = if (WorkoutSport.isOnFoot(row.sport)) vm.workoutSteps(row.startTs, row.endTs) else null
+    var steps by remember(row, activeId) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(row, activeId) {
+        hrCurve = vm.workoutHrBuckets(row.startTs, row.endTs, row.source, row.deviceId, activeId).map { it.avgBpm }
+        steps = if (WorkoutSport.isOnFoot(row.sport)) vm.workoutSteps(row.startTs, row.endTs, activeId) else null
         val imported = parseZonePercents(row.zonesJSON)
         if (imported != null) {
             val durMin = (row.durationS ?: (row.endTs - row.startTs).toDouble()) / 60.0
@@ -1495,10 +1497,10 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
             }
         }
         if (zoneMinutes == null) {
-            zoneMinutes = vm.workoutZoneMinutes(row.startTs, row.endTs, row.source, row.deviceId)
+            zoneMinutes = vm.workoutZoneMinutes(row.startTs, row.endTs, row.source, row.deviceId, activeId)
             zonesFromImport = false
         }
-        heartRateRecovery = vm.workoutHeartRateRecovery(row.startTs, row.endTs, row.source, row.deviceId)
+        heartRateRecovery = vm.workoutHeartRateRecovery(row.startTs, row.endTs, row.source, row.deviceId, activeId)
     }
 
     ModalBottomSheet(

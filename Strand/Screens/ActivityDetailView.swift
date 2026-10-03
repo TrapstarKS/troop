@@ -83,7 +83,7 @@ struct ActivityDetailView: View {
                 Button(canEdit ? String(localized: "Edit") : String(localized: "Edit a copy")) { showEdit = true }
             }
         }
-        .task(id: "\(row.startTs)|\(row.endTs)|\(row.source)|\(repo.refreshSeq)") { await load() }
+        .task(id: "\(row.startTs)|\(row.endTs)|\(row.source)|\(repo.deviceId)|\(repo.refreshSeq)") { await load() }
         .sheet(isPresented: $showEdit) {
             ManualWorkoutSheet(editing: editRow) { saved, replacing in
                 let replacingOriginal = canEdit
@@ -99,7 +99,11 @@ struct ActivityDetailView: View {
 
     private func load() async {
         loaded = false
+        points = []
+        minutes = nil
+        importedZones = false
         let selected = row
+        let deviceId = repo.deviceId
         let buckets = await repo.workoutHrBuckets(from: selected.startTs, to: selected.endTs, source: selected.source)
         var zones: [Double]? = nil
         let percents = WorkoutZones.percents(selected.zonesJSON)
@@ -110,7 +114,8 @@ struct ActivityDetailView: View {
         if zones == nil {
             zones = await repo.workoutZoneMinutes(from: selected.startTs, to: selected.endTs, zoneSet: profile.hrZoneSet, source: selected.source)
         }
-        guard row.startTs == selected.startTs, row.endTs == selected.endTs, row.source == selected.source, !Task.isCancelled else { return }
+        guard row.startTs == selected.startTs, row.endTs == selected.endTs, row.source == selected.source,
+              repo.deviceId == deviceId, !Task.isCancelled else { return }
         let bucketSeconds = max(15, min(300, (selected.endTs - selected.startTs) / 120))
         let segmentIds = hrGapSegments(bucketTs: buckets.map(\.ts), bucketSeconds: bucketSeconds)
         points = buckets.enumerated().map { index, bucket in

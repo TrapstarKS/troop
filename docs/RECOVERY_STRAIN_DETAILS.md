@@ -10,6 +10,8 @@ Day HR, zones and activity membership use Home's configured calendar or sleep-on
 
 Activity HR and derived zones use existing source-aware workout reads. Imported zone distributions take precedence. Imported rows are edited through the existing manual-copy flow; local rows use the existing editor. Further details keep the existing GPS, steps and post-exercise HR recovery surfaces reachable.
 
+Android detail reads collect the registry's active strap and reset the day/HR read state when it changes. Workout curves, zones and HR recovery accept that snapshot instead of the startup-only device ID; workout-list loads discard results after a source switch. Swift's repository already updates its read device ID from the registry.
+
 `WorkoutRow.energyKcal` does not persist an active/total discriminator. Its display is therefore “Recorded energy”, with an explicit explanation. No resting energy is added and no stored row is reinterpreted.
 
 Debug demo seeding adds a separate recent-HR function and a completed activity. In the first 45 minutes of a day, the activity belongs to the previous day. It runs only within the original empty-store demo seed, preserving the protection for real stores. The iOS direct demo names are `recovery`, `strain` and `activity`. A fresh demo fixture is required to acquire the added samples.

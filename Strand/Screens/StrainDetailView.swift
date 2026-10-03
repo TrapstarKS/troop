@@ -51,7 +51,7 @@ struct StrainDetailView: View {
             }
         }
         .navigationTitle(String(localized: "Strain"))
-        .task(id: "\(key)|\(repo.refreshSeq)|\(cycleMode)") { await load() }
+        .task(id: "\(key)|\(repo.deviceId)|\(repo.refreshSeq)|\(cycleMode)") { await load() }
     }
 
     private var target: some View {
@@ -86,8 +86,14 @@ struct StrainDetailView: View {
 
     private func load() async {
         loaded = false
+        points = []
+        zoneMinutes = nil
+        belowZoneMinutes = nil
+        workouts = []
         guard let day = RecoveryStrainDetailLogic.date(key), let next = Calendar.current.date(byAdding: .day, value: 1, to: day) else { return }
         let requestedKey = key
+        let deviceId = repo.deviceId
+        let requestedMode = cycleMode
         let calendarStart = Int(day.timeIntervalSince1970)
         let calendarEnd = min(Int(next.timeIntervalSince1970), Int(Date().timeIntervalSince1970) + 1)
         let markers = DayCycleMode.persisted(cycleMode) == .sleepOnset
@@ -99,7 +105,7 @@ struct StrainDetailView: View {
         let samples = await repo.hrSamples(from: start, to: max(start, end), limit: 200_000)
         let rows = await repo.workoutRows()
         let segments = hrGapSegments(bucketTs: buckets.map(\.ts), bucketSeconds: 300)
-        guard key == requestedKey, !Task.isCancelled else { return }
+        guard key == requestedKey, repo.deviceId == deviceId, cycleMode == requestedMode, !Task.isCancelled else { return }
         points = buckets.enumerated().map { index, bucket in
             TrendPoint(date: Date(timeIntervalSince1970: Double(bucket.ts)), value: bucket.bpm, segment: segments[index])
         }

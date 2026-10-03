@@ -19,6 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,22 +54,24 @@ fun RecoveryDetailScreen(
     onBack: () -> Unit,
 ) {
     val today by vm.today.collectAsStateWithLifecycle()
-    val days = detailDays(vm)
+    val registryId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeId = registryId ?: vm.activeStrapId
+    val days = detailDays(vm, activeId)
     val selectedKey = dayKey ?: today?.day ?: logicalDayNow().toString()
     val date = detailDate(selectedKey)
-    val selected = days.firstOrNull { it.day == selectedKey } ?: today?.takeIf { it.day == selectedKey }
+    val selected = days.firstOrNull { it.day == selectedKey }
     val score = selected?.recovery?.takeIf { it.isFinite() }
     val context = LocalContext.current
     val epoch = NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble()
     val calibration = if (selectedKey == (today?.day ?: logicalDayNow().toString())) recoveryCalibrationNights(
         days.filter { it.day <= selectedKey }, score != null, epoch,
     ) else null
-    var sleepPerformance by remember(selectedKey) { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
+    var sleepPerformance by remember(selectedKey, activeId) { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
     var showInsights by remember { mutableStateOf(false) }
-    LaunchedEffect(selectedKey, days, vm.activeStrapId) {
+    LaunchedEffect(selectedKey, days, activeId) {
         sleepPerformance = runCatching {
             vm.repo.resolvedSeries("sleep_performance", "my-whoop", date.minusDays(30).toString(), selectedKey,
-                strapDeviceId = vm.activeStrapId).values
+                strapDeviceId = activeId).values
         }.getOrDefault(emptyList())
     }
     if (showInsights) {
@@ -149,10 +152,13 @@ fun StrainDetailScreen(
     onBack: () -> Unit,
 ) {
     val today by vm.today.collectAsStateWithLifecycle()
-    val days = detailDays(vm)
+    val registryId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeId = registryId ?: vm.activeStrapId
+    val days = detailDays(vm, activeId)
     val selectedKey = dayKey ?: today?.day ?: logicalDayNow().toString()
-    val selected = days.firstOrNull { it.day == selectedKey } ?: today?.takeIf { it.day == selectedKey }
-    val effort = (effortOverride ?: selected?.strain)?.takeIf { it.isFinite() }
+    val selected = days.firstOrNull { it.day == selectedKey }
+    val openedActiveId = remember { activeId }
+    val effort = (effortOverride.takeIf { openedActiveId == activeId } ?: selected?.strain)?.takeIf { it.isFinite() }
     val strain = effort?.let { UnitFormatter.effortValue(it, EffortScale.WHOOP) }
     val recovery = selected?.recovery?.takeIf { it.isFinite() }
     val band = optimalStrainRange(recovery)
@@ -162,26 +168,30 @@ fun StrainDetailScreen(
     val context = LocalContext.current
     val profile = remember(context) { ProfileStore.from(context) }
     val mode = NoopPrefs.dayCycleMode(context)
-    var hr by remember(selectedKey) { mutableStateOf<List<HrBucket>>(emptyList()) }
-    var zones by remember(selectedKey) { mutableStateOf<List<Double>?>(null) }
-    var belowZone1 by remember(selectedKey) { mutableStateOf<Double?>(null) }
-    var window by remember(selectedKey) { mutableStateOf<LongRange?>(null) }
+    var hr by remember(selectedKey, activeId, mode) { mutableStateOf<List<HrBucket>>(emptyList()) }
+    var zones by remember(selectedKey, activeId, mode) { mutableStateOf<List<Double>?>(null) }
+    var belowZone1 by remember(selectedKey, activeId, mode) { mutableStateOf<Double?>(null) }
+    var window by remember(selectedKey, activeId, mode) { mutableStateOf<LongRange?>(null) }
     var activity by remember { mutableStateOf<WorkoutRow?>(null) }
-    LaunchedEffect(Unit) { vm.loadWorkouts() }
-    LaunchedEffect(selectedKey, days, vm.activeStrapId, mode, live.lastSyncAt, live.syncChunksThisSession) {
+    var workoutsLoaded by remember(activeId) { mutableStateOf(false) }
+    LaunchedEffect(activeId) {
+        vm.loadWorkouts().join()
+        workoutsLoaded = true
+    }
+    LaunchedEffect(selectedKey, days, activeId, mode, live.lastSyncAt, live.syncChunksThisSession) {
         val date = detailDate(selectedKey)
         val zone = ZoneId.systemDefault()
         val now = System.currentTimeMillis() / 1000
         val markers = if (mode == DayCycleMode.SLEEP_ONSET) runCatching {
-            vm.repo.metricSeriesComputedUnion(vm.activeStrapId, DayCycleIntelligenceIntegration.ONSET_KEY,
+            vm.repo.metricSeriesComputedUnion(activeId, DayCycleIntelligenceIntegration.ONSET_KEY,
                 selectedKey, date.plusDays(1).toString())
         }.getOrDefault(emptyList()) else emptyList()
         val start = markers.firstOrNull { it.day == selectedKey }?.value?.toLong() ?: date.atStartOfDay(zone).toEpochSecond()
         val calendarEnd = date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1
         val end = minOf(now, markers.firstOrNull { it.day == date.plusDays(1).toString() }?.value?.toLong()?.minus(1) ?: calendarEnd)
         window = start..end
-        hr = runCatching { vm.repo.hrBucketsUnion(vm.activeStrapId, start, end, 300) }.getOrDefault(emptyList())
-        val samples = runCatching { vm.repo.hrSamplesUnion(vm.activeStrapId, start, end, limit = 200_000) }.getOrDefault(emptyList())
+        hr = runCatching { vm.repo.hrBucketsUnion(activeId, start, end, 300) }.getOrDefault(emptyList())
+        val samples = runCatching { vm.repo.hrSamplesUnion(activeId, start, end, limit = 200_000) }.getOrDefault(emptyList())
         val split = samples.takeIf { it.isNotEmpty() }?.let { HrZones.timeInZone(it, profile.hrZoneSet) }
         zones = split?.seconds?.map { it / 60 }
         belowZone1 = split?.belowZone1?.div(60)
@@ -191,7 +201,7 @@ fun StrainDetailScreen(
         return
     }
     BackHandler(onBack = onBack)
-    val workouts = allWorkouts.filter { row -> window?.let { row.startTs in it } == true }
+    val workouts = if (workoutsLoaded) allWorkouts.filter { row -> window?.let { row.startTs in it } == true } else emptyList()
     LazyScreenScaffold(title = null, topPadding = Metrics.space8) {
         item { DetailHeader(uiString(R.string.d2b_strain), detailDateLabel(detailDate(selectedKey)), onBack) }
         item {
@@ -237,22 +247,24 @@ fun StrainDetailScreen(
 
 @Composable
 fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) {
+    val registryId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeId = registryId ?: vm.activeStrapId
     val workouts by vm.workouts.collectAsStateWithLifecycle()
     val current = workouts.firstOrNull { it.deviceId == row.deviceId && it.startTs == row.startTs && it.sport == row.sport } ?: row
-    var hr by remember(current) { mutableStateOf<List<HrBucket>>(emptyList()) }
-    var zones by remember(current) { mutableStateOf<List<Double>?>(null) }
-    var importedZones by remember(current) { mutableStateOf(false) }
+    var hr by remember(current, activeId) { mutableStateOf<List<HrBucket>>(emptyList()) }
+    var zones by remember(current, activeId) { mutableStateOf<List<Double>?>(null) }
+    var importedZones by remember(current, activeId) { mutableStateOf(false) }
     var edit by remember { mutableStateOf(false) }
     var moreDetails by remember { mutableStateOf(false) }
     val source = WorkoutEditing.classify(current.source)
     val editable = source == WorkoutSource.MANUAL || source == WorkoutSource.DETECTED
-    LaunchedEffect(current, vm.activeStrapId) {
-        hr = vm.workoutHrBuckets(current.startTs, current.endTs, current.source, current.deviceId)
+    LaunchedEffect(current, activeId) {
+        hr = vm.workoutHrBuckets(current.startTs, current.endTs, current.source, current.deviceId, activeId)
         val imported = parseZonePercents(current.zonesJSON)
         val minutes = (current.durationS ?: (current.endTs - current.startTs).toDouble()) / 60
         importedZones = imported != null && minutes > 0
         zones = if (importedZones) imported?.map { it * minutes / 100 }
-            else vm.workoutZoneMinutes(current.startTs, current.endTs, current.source, current.deviceId)
+            else vm.workoutZoneMinutes(current.startTs, current.endTs, current.source, current.deviceId, activeId)
     }
     BackHandler(onBack = onBack)
     LazyScreenScaffold(title = null, topPadding = Metrics.space8) {
@@ -314,13 +326,10 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
 }
 
 @Composable
-private fun detailDays(vm: AppViewModel): List<DailyMetric> {
-    val recent by vm.recentDays.collectAsStateWithLifecycle()
-    var loaded by remember(vm.activeStrapId) { mutableStateOf<List<DailyMetric>>(emptyList()) }
-    LaunchedEffect(recent, vm.activeStrapId) {
-        loaded = runCatching { vm.repo.daysMerged(vm.activeStrapId) }.getOrDefault(recent)
-    }
-    return loaded.ifEmpty { recent }
+private fun detailDays(vm: AppViewModel, activeId: String): List<DailyMetric> = key(activeId) {
+    val flow = remember(vm, activeId) { vm.repo.daysMergedFlow(activeId) }
+    val days by flow.collectAsStateWithLifecycle(initialValue = emptyList())
+    days
 }
 
 @Composable
