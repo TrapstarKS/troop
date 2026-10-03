@@ -226,7 +226,7 @@ public enum ThemePreset: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// The user's appearance preference for the whole app. Persisted via
-/// `@AppStorage(AppearanceMode.storageKey)`. `.system` follows the OS (the default);
+/// `@AppStorage(AppearanceMode.storageKey)`. `.dark` is the fresh-install default; `.system` follows the OS;
 /// `.light` / `.dark` force a scheme regardless of the system setting.
 ///
 /// Applied once at each app root via `.preferredColorScheme(mode.colorScheme)`. Because every
@@ -238,6 +238,8 @@ public enum AppearanceMode: String, CaseIterable, Identifiable, Sendable {
     case dark
 
     public var id: String { rawValue }
+
+    public static let defaultMode: AppearanceMode = .dark
 
     /// The @AppStorage key shared by the app roots and the Settings picker.
     public static let storageKey = "theme.appearance"

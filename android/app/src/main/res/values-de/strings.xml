@@ -2980,4 +2980,10 @@
     <string name="plan_journal_instructions">Erfasse deine Gewohnheiten von gestern und aus der letzten Nacht.</string>
     <string name="plan_journal_ahead">Erfasse die Gewohnheiten für den morgigen Eintrag.</string>
     <string name="plan_journal_edit_hint">Wähle die Fragen aus, die du verfolgen möchtest.</string>
+    <string name="whoop_nav_home">Start</string>
+    <string name="whoop_nav_plan">Plan</string>
+    <string name="whoop_nav_healthspan">Gesundheitsspanne</string>
+    <string name="whoop_nav_weekly_plan">Wochenplan</string>
+    <string name="whoop_plan_local_title">Die Wochenplanung ist noch nicht verfügbar</string>
+    <string name="whoop_plan_local_detail">Tagebuch und Trends bleiben verfügbar, um lokale Gewohnheiten und Fortschritte zu prüfen.</string>
 </resources>

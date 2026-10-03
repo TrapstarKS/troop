@@ -445,6 +445,7 @@ struct TodayView: View {
     /// #1862: the optional Coach launcher sheet, opened from the default-OFF Coach dashboard card.
     /// Presentation state only — nothing is requested from a provider by opening it.
     @State private var showCoachLauncher = false
+    @State private var routeCoachAfterLauncherDismiss = false
     @State private var showUpdatesInbox = false
 
     /// The NEWEST day-key (max yyyy-MM-dd in `repo.days`) announced to the inbox. Persisted (not @State)
@@ -1555,8 +1556,13 @@ struct TodayView: View {
             ScoringGuideView(onClose: { showGuideTop = false })
         }
         // The Updates inbox (the header bell). Both platforms.
-        .sheet(isPresented: $showCoachLauncher) {
-            CoachLauncherSheet()
+        .sheet(isPresented: $showCoachLauncher, onDismiss: {
+            if routeCoachAfterLauncherDismiss {
+                routeCoachAfterLauncherDismiss = false
+                router.openCoach()
+            }
+        }) {
+            CoachLauncherSheet { routeCoachAfterLauncherDismiss = true }
         }
         .sheet(isPresented: $showUpdatesInbox) {
             UpdatesInboxView(onClose: { showUpdatesInbox = false })

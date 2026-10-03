@@ -2860,4 +2860,10 @@
     <string name="plan_journal_instructions">Запишите привычки за вчерашний день и прошедшую ночь.</string>
     <string name="plan_journal_ahead">Запишите привычки для завтрашней записи.</string>
     <string name="plan_journal_edit_hint">Выберите вопросы, которые хотите отслеживать.</string>
+    <string name="whoop_nav_home">Главная</string>
+    <string name="whoop_nav_plan">План</string>
+    <string name="whoop_nav_healthspan">Долголетие</string>
+    <string name="whoop_nav_weekly_plan">План на неделю</string>
+    <string name="whoop_plan_local_title">Планирование недели пока недоступно</string>
+    <string name="whoop_plan_local_detail">Дневник и тренды доступны для просмотра ваших локальных привычек и прогресса.</string>
 </resources>

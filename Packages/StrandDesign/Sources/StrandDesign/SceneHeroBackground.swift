@@ -61,6 +61,7 @@ public enum DayCycleScene {
 /// over a faint bottom-up dark scrim that protects the ring content's contrast. Clipped to the hero's
 /// rounded-rect bounds. Drop it behind the hero via `.sceneHeroBackground()`.
 public struct SceneHeroBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
 
     /// The local hour driving which scene shows (0...23). Defaults to the current clock hour.
     private let hour: Int
@@ -75,6 +76,13 @@ public struct SceneHeroBackground: View {
     private let corner: CGFloat = NoopMetrics.cardRadius
 
     public var body: some View {
+        Group {
+            if colorScheme == .dark {
+                LinearGradient(gradient: StrandPalette.canvasGradient, startPoint: .top, endPoint: .bottom)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            } else {
+
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
@@ -115,6 +123,9 @@ public struct SceneHeroBackground: View {
         .ignoresSafeArea(edges: [])      // confined to the hero region, not full-bleed
         .allowsHitTesting(false)          // pure backdrop — never steals touches
         .accessibilityHidden(true)        // decorative; invisible to VoiceOver
+
+            }
+        }
     }
 }
 
@@ -126,6 +137,7 @@ public struct SceneHeroBackground: View {
 /// dashboard cards. A faint dark scrim under the very top keeps white header text legible on a bright sky.
 /// Place it edge-to-edge as a top-anchored screen background (the caller ignores safe area). No glow.
 public struct SceneScreenBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
     private let hour: Int
     /// How far down the screen the scene reaches before it has fully faded into the canvas.
     public var height: CGFloat
@@ -140,6 +152,13 @@ public struct SceneScreenBackground: View {
     private let imageOpacityCap: Double = 0.95
 
     public var body: some View {
+        Group {
+            if colorScheme == .dark {
+                LinearGradient(gradient: StrandPalette.canvasGradient, startPoint: .top, endPoint: .bottom)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            } else {
+
         Image(DayCycleScene.assetName(hour: hour))
             .resizable()
             .aspectRatio(contentMode: .fill)
@@ -170,6 +189,9 @@ public struct SceneScreenBackground: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+
+            }
+        }
     }
 }
 

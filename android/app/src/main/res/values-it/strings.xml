@@ -2933,4 +2933,10 @@
     <string name="plan_journal_instructions">Registra le abitudini di ieri e della notte scorsa.</string>
     <string name="plan_journal_ahead">Registra le abitudini per la voce di domani.</string>
     <string name="plan_journal_edit_hint">Scegli le domande che vuoi monitorare.</string>
+    <string name="whoop_nav_home">Home</string>
+    <string name="whoop_nav_plan">Piano</string>
+    <string name="whoop_nav_healthspan">Longevità</string>
+    <string name="whoop_nav_weekly_plan">Piano settimanale</string>
+    <string name="whoop_plan_local_title">La pianificazione settimanale non è ancora disponibile</string>
+    <string name="whoop_plan_local_detail">Diario e tendenze restano disponibili per esaminare abitudini e progressi locali.</string>
 </resources>

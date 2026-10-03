@@ -2935,4 +2935,10 @@
     <string name="plan_journal_instructions">记录昨天和昨晚的习惯。</string>
     <string name="plan_journal_ahead">记录要填写在明天日志中的习惯。</string>
     <string name="plan_journal_edit_hint">选择你要跟踪的问题。</string>
+    <string name="whoop_nav_home">首页</string>
+    <string name="whoop_nav_plan">计划</string>
+    <string name="whoop_nav_healthspan">健康寿命</string>
+    <string name="whoop_nav_weekly_plan">每周计划</string>
+    <string name="whoop_plan_local_title">每周计划尚不可用</string>
+    <string name="whoop_plan_local_detail">日记和趋势仍可用于查看本地习惯和进度。</string>
 </resources>
