@@ -26,6 +26,7 @@ public enum NoopMetrics {
     public static let coachStroke: CGFloat = 2
     public static let scoreTargetWidth: CGFloat = 2
     public static let tabIconSize: CGFloat = 22
+    public static let tabLabelSize: CGFloat = 10
     public static let chartLineWidth: CGFloat = 2
     public static let chartBarRadius: CGFloat = 3
     public static let tileHeight: CGFloat = 96   // Design Reset: tighter metric tile
