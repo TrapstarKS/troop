@@ -2,6 +2,7 @@
 <resources>
     <string name="d2b_recovery">Erholung</string>
     <string name="d2b_strain">Belastung</string>
+    <string name="d2b_strain_unavailable">Belastung nicht verfügbar</string>
     <string name="d2b_back">Zurück</string>
     <string name="d2b_no_value">—</string>
     <string name="d2b_not_available">Nicht verfügbar</string>

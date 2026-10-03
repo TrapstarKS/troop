@@ -29,10 +29,18 @@ final class RecoveryStrainDetailLogicTests: XCTestCase {
     }
 
     func testInclusiveTargetBoundariesAndUnavailableValues() {
-        let values: [Double?] = [nil, .nan, 0, 3.99, 4, 10, 10.01, 21]
+        let values: [String?] = [nil, "nan", "0.0", "3.99", "4.0", "10.0", "10.01", "21.0"]
         let expected: [RecoveryStrainDetailLogic.TargetStatus] = [.unavailable, .unavailable, .under, .under, .optimal, .optimal, .over, .over]
-        XCTAssertEqual(values.map { RecoveryStrainDetailLogic.targetStatus(strain21: $0, lower: 4, upper: 10) }, expected)
-        XCTAssertEqual(RecoveryStrainDetailLogic.targetStatus(strain21: 12, lower: nil, upper: nil), .unavailable)
+        XCTAssertEqual(values.map { RecoveryStrainDetailLogic.targetStatus(displayedStrain: $0, lower: 4, upper: 10) }, expected)
+        XCTAssertEqual(RecoveryStrainDetailLogic.targetStatus(displayedStrain: "12.0", lower: nil, upper: nil), .unavailable)
+    }
+
+    func testTargetStatusMatchesTheVisibleOneDecimalScore() {
+        let axisValues = [3.94, 3.99, 4.0, 10.0, 10.01, 10.06]
+        let shown = axisValues.map { UnitFormatter.effortDisplay($0 / UnitFormatter.effortScaleFactor, scale: .whoop) }
+        XCTAssertEqual(shown, ["3.9", "4.0", "4.0", "10.0", "10.0", "10.1"])
+        XCTAssertEqual(shown.map { RecoveryStrainDetailLogic.targetStatus(displayedStrain: $0, lower: 4, upper: 10) },
+                       [.under, .optimal, .optimal, .optimal, .optimal, .over])
     }
 
     func testPresentationMappingPreservesOriginalEffort() {

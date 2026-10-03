@@ -2,6 +2,7 @@
 <resources>
     <string name="d2b_recovery">Recuperação</string>
     <string name="d2b_strain">Esforço</string>
+    <string name="d2b_strain_unavailable">Esforço indisponível</string>
     <string name="d2b_back">Voltar</string>
     <string name="d2b_no_value">—</string>
     <string name="d2b_not_available">Não disponível</string>

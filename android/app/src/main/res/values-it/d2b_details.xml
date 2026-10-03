@@ -2,6 +2,7 @@
 <resources>
     <string name="d2b_recovery">Recupero</string>
     <string name="d2b_strain">Carico</string>
+    <string name="d2b_strain_unavailable">Carico non disponibile</string>
     <string name="d2b_back">Indietro</string>
     <string name="d2b_no_value">—</string>
     <string name="d2b_not_available">Non disponibile</string>

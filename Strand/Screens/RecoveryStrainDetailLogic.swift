@@ -19,8 +19,9 @@ enum RecoveryStrainDetailLogic {
         return readings.reduce(0, +) / Double(readings.count)
     }
 
-    static func targetStatus(strain21: Double?, lower: Int?, upper: Int?) -> TargetStatus {
-        guard let strain21, strain21.isFinite, let lower, let upper, lower <= upper else { return .unavailable }
+    static func targetStatus(displayedStrain: String?, lower: Int?, upper: Int?) -> TargetStatus {
+        guard let displayedStrain, let strain21 = Double(displayedStrain), strain21.isFinite,
+              let lower, let upper, lower <= upper else { return .unavailable }
         if strain21 < Double(lower) { return .under }
         if strain21 > Double(upper) { return .over }
         return .optimal

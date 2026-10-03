@@ -2,6 +2,7 @@
 <resources>
     <string name="d2b_recovery">Recovery</string>
     <string name="d2b_strain">Strain</string>
+    <string name="d2b_strain_unavailable">Strain unavailable</string>
     <string name="d2b_back">Back</string>
     <string name="d2b_no_value">—</string>
     <string name="d2b_not_available">Not available</string>

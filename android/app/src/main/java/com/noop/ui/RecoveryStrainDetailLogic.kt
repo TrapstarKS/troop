@@ -20,7 +20,8 @@ internal object RecoveryStrainDetailLogic {
         return prior.takeIf { it.isNotEmpty() }?.average()
     }
 
-    fun targetStatus(strain21: Double?, lower: Int?, upper: Int?): TargetStatus {
+    fun targetStatus(displayedStrain: String?, lower: Int?, upper: Int?): TargetStatus {
+        val strain21 = displayedStrain?.toDoubleOrNull()
         if (strain21 == null || !strain21.isFinite() || lower == null || upper == null || lower > upper) {
             return TargetStatus.Unavailable
         }

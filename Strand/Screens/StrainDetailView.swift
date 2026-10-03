@@ -23,15 +23,16 @@ struct StrainDetailView: View {
         return (displayedOverride ?? row?.strain).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }
     }
     private var strain: Double? { rawEffort.map { UnitFormatter.effortValue($0, scale: .whoop) } }
+    private var strainDisplay: String? { rawEffort.map { UnitFormatter.effortDisplay($0, scale: .whoop) } }
     private var band: ClosedRange<Int>? { CoupledView.optimalStrainRange(recovery: row?.recovery.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }) }
     private var targetStatus: RecoveryStrainDetailLogic.TargetStatus {
-        RecoveryStrainDetailLogic.targetStatus(strain21: strain, lower: band?.lowerBound, upper: band?.upperBound)
+        RecoveryStrainDetailLogic.targetStatus(displayedStrain: strainDisplay, lower: band?.lowerBound, upper: band?.upperBound)
     }
 
     var body: some View {
         ScreenScaffold(title: nil, lazy: true, topBackground: recoveryStrainBackdrop()) {
             Text(RecoveryStrainDetailLogic.dateLabel(key, locale: AppLanguage.activeLocale)).strandOverline().frame(maxWidth: .infinity)
-            ScoreDial(label: String(localized: "Day strain"), value: rawEffort.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—",
+            ScoreDial(label: String(localized: "Day strain"), value: strainDisplay ?? "—",
                       progress: strain.map { $0 / 21 }, color: StrandPalette.strainPrimary,
                       target: band.map { Double($0.lowerBound) / 21 },
                       targetRange: band.map { Double($0.lowerBound) / 21...Double($0.upperBound) / 21 })
@@ -85,7 +86,7 @@ struct StrainDetailView: View {
 
     private var statusLabel: String {
         switch targetStatus {
-        case .unavailable: return String(localized: "Target unavailable")
+        case .unavailable: return band == nil ? String(localized: "Target unavailable") : String(localized: "Strain unavailable")
         case .under: return String(localized: "Below suggested range")
         case .optimal: return String(localized: "Within suggested range")
         case .over: return String(localized: "Above suggested range")

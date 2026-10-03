@@ -163,9 +163,10 @@ fun StrainDetailScreen(
     val openedActiveId = remember { activeId }
     val effort = (effortOverride.takeIf { openedActiveId == activeId } ?: selected?.strain)?.takeIf { it.isFinite() && it in 0.0..100.0 }
     val strain = effort?.let { UnitFormatter.effortValue(it, EffortScale.WHOOP) }
+    val strainDisplay = effort?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) }
     val recovery = selected?.recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }
     val band = optimalStrainRange(recovery)
-    val target = RecoveryStrainDetailLogic.targetStatus(strain, band?.low, band?.high)
+    val target = RecoveryStrainDetailLogic.targetStatus(strainDisplay, band?.low, band?.high)
     val allWorkouts by vm.workouts.collectAsStateWithLifecycle()
     val live by vm.live.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -210,10 +211,10 @@ fun StrainDetailScreen(
         item {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
-                ScoreDial(uiString(R.string.d2b_strain), detailNumber(strain), progress = strain?.div(21)?.toFloat(),
+                ScoreDial(uiString(R.string.d2b_strain), strainDisplay ?: uiString(R.string.home_no_value), progress = strain?.div(21)?.toFloat(),
                     color = Palette.strainPrimary, targetRange = band?.let { it.low / 21f..it.high / 21f })
                 StatusPill(uiString(when (target) {
-                    RecoveryStrainDetailLogic.TargetStatus.Unavailable -> R.string.d2b_target_unavailable
+                    RecoveryStrainDetailLogic.TargetStatus.Unavailable -> if (band == null) R.string.d2b_target_unavailable else R.string.d2b_strain_unavailable
                     RecoveryStrainDetailLogic.TargetStatus.Under -> R.string.d2b_target_under
                     RecoveryStrainDetailLogic.TargetStatus.Optimal -> R.string.d2b_target_optimal
                     RecoveryStrainDetailLogic.TargetStatus.Over -> R.string.d2b_target_over

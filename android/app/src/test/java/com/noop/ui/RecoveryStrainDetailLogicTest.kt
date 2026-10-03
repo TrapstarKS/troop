@@ -34,11 +34,20 @@ class RecoveryStrainDetailLogicTest {
 
     @Test
     fun targetIncludesBothBoundariesAndRejectsMissingOrNonfiniteValues() {
-        val input = listOf(null, Double.NaN, Double.NEGATIVE_INFINITY, 9.9, 10.0, 12.0, 14.0, 14.1)
+        val input = listOf(null, "NaN", "-Infinity", "9.9", "10.0", "12.0", "14.0", "14.1")
         assertEquals(listOf("unavailable", "unavailable", "unavailable", "under", "optimal", "optimal", "optimal", "over"),
             input.map { RecoveryStrainDetailLogic.targetStatus(it, 10, 14).name.lowercase() })
-        assertEquals(RecoveryStrainDetailLogic.TargetStatus.Unavailable, RecoveryStrainDetailLogic.targetStatus(12.0, null, 14))
-        assertEquals(RecoveryStrainDetailLogic.TargetStatus.Unavailable, RecoveryStrainDetailLogic.targetStatus(12.0, 14, 10))
+        assertEquals(RecoveryStrainDetailLogic.TargetStatus.Unavailable, RecoveryStrainDetailLogic.targetStatus("12.0", null, 14))
+        assertEquals(RecoveryStrainDetailLogic.TargetStatus.Unavailable, RecoveryStrainDetailLogic.targetStatus("12.0", 14, 10))
+    }
+
+    @Test
+    fun targetStatusMatchesTheVisibleOneDecimalScore() {
+        val axisValues = listOf(3.94, 3.99, 4.0, 10.0, 10.01, 10.06)
+        val shown = axisValues.map { UnitFormatter.effortDisplay(it / UnitFormatter.EFFORT_SCALE_FACTOR, EffortScale.WHOOP) }
+        assertEquals(listOf("3.9", "4.0", "4.0", "10.0", "10.0", "10.1"), shown)
+        assertEquals(listOf("under", "optimal", "optimal", "optimal", "optimal", "over"),
+            shown.map { RecoveryStrainDetailLogic.targetStatus(it, 4, 10).name.lowercase() })
     }
 
     @Test
