@@ -21,6 +21,12 @@ final class SleepStageInspectionTests: XCTestCase {
         XCTAssertEqual(SleepModel.requestedNightOffset(navDays: days, dayKey: "2026-10-01"), 1)
         XCTAssertNil(SleepModel.requestedNightOffset(navDays: days, dayKey: "2026-10-02"))
         XCTAssertNil(SleepModel.requestedNightOffset(navDays: days, dayKey: "2026-10-04"))
+        let newer = CachedSleepSession(startTs: timestamp("2026-10-04 00:00"),
+            endTs: timestamp("2026-10-04 07:00"), efficiency: nil, restingHr: nil,
+            avgHrv: nil, stagesJSON: nil)
+        let reloaded = SleepModel.navDays(navSessions: sessions + [newer])
+        XCTAssertEqual(SleepModel.requestedNightOffset(navDays: reloaded, dayKey: "2026-10-01"), 2)
+        XCTAssertNil(SleepModel.requestedNightOffset(navDays: Array(reloaded.dropLast()), dayKey: "2026-10-01"))
     }
 
     func testConsistencyUsesOneMainNightPerDayAndExcludesNaps() {

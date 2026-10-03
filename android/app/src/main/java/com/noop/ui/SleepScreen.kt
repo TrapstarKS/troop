@@ -224,11 +224,8 @@ fun SleepScreen(
     // `sleeps` in place WITHOUT touching `days`, so it must not reset the browse — keeping the
     // user on the night they just edited. (#160)
     var nightOffset by remember(initialDayKey, vm.activeStrapId) { mutableIntStateOf(0) }
-    var initialSelectionApplied by remember(initialDayKey, vm.activeStrapId) {
-        mutableStateOf(initialDayKey == null)
-    }
-    var unavailableRequestedDay by remember(initialDayKey, vm.activeStrapId) {
-        mutableStateOf<String?>(null)
+    var pendingInitialDayKey by remember(initialDayKey, vm.activeStrapId) {
+        mutableStateOf(initialDayKey)
     }
     LaunchedEffect(days, vm.activeStrapId) {
         loadedSleepDays = null
@@ -495,23 +492,15 @@ fun SleepScreen(
             .map { (_, blocks) -> blocks.sortedBy { it.effectiveStartTs } }
     }
 
-    val requestedOffset = if (!initialSelectionApplied && sleepRowsReady)
-        requestedSleepNightOffset(navDays, initialDayKey) else null
-    val visibleNightOffset = when {
-        !initialSelectionApplied -> requestedOffset
-        unavailableRequestedDay != null -> null
-        else -> nightOffset
-    }
-    LaunchedEffect(initialDayKey, sleepRowsReady, navDays) {
-        if (initialSelectionApplied || !sleepRowsReady) return@LaunchedEffect
-        val offset = requestedSleepNightOffset(navDays, initialDayKey)
-        if (offset != null) nightOffset = offset else unavailableRequestedDay = initialDayKey
-        initialSelectionApplied = true
-    }
+    val requestedOffset = if (sleepRowsReady)
+        requestedSleepNightOffset(navDays, pendingInitialDayKey) else null
+    val visibleNightOffset = if (pendingInitialDayKey != null) requestedOffset else nightOffset
+    val unavailableRequestedDay = pendingInitialDayKey?.takeIf { sleepRowsReady && requestedOffset == null }
     val onNavigateNight: (Int) -> Unit = { offset ->
-        initialSelectionApplied = true
-        unavailableRequestedDay = null
-        nightOffset = offset.coerceIn(0, max(navDays.lastIndex, 0))
+        if (sleepRowsReady) {
+            pendingInitialDayKey = null
+            nightOffset = offset.coerceIn(0, max(navDays.lastIndex, 0))
+        }
     }
 
     // The navigated night, decoded once per (offset, data) change — chevron taps re-pick
@@ -530,9 +519,9 @@ fun SleepScreen(
     // data (strap off-body) is skipped by the carousel, so labelling by index makes two nights either
     // side of it read as consecutive and desyncs the "N nights ago" labels. Shared by the Rest hero
     // overline and the nav header so both name the SAME calendar night.
-    val nightLabel = if (visibleNightOffset == null && initialDayKey != null) initialDayKey else nightRelativeLabel(
-        calendarNightsAgo(navDays, visibleNightOffset ?: nightOffset, java.util.TimeZone.getDefault())
-    )
+    val nightLabel = pendingInitialDayKey?.takeIf { visibleNightOffset == null }
+        ?: nightRelativeLabel(calendarNightsAgo(navDays, visibleNightOffset ?: nightOffset,
+            java.util.TimeZone.getDefault()))
 
     // The HERO follows the selected night (its stage breakdown comes from that day's row); the
     // at-a-glance TILES, the debt ledger, the personal need and the trend stay full-history /
@@ -813,11 +802,12 @@ fun SleepScreen(
             item { SleepAlarmsEntry(onOpenAlarms) }
         } else {
             item {
-                NightNavHeader(visibleNightOffset ?: -1, nightLabel, max(navDays.lastIndex, 0),
+                NightNavHeader(if (sleepRowsReady) visibleNightOffset ?: -1 else -1, nightLabel,
+                    if (sleepRowsReady) max(navDays.lastIndex, 0) else -1,
                     navHeaderClockLabel(night?.clockLabel, navDays, visibleNightOffset ?: -1, is24h),
                     onNavigateNight, night?.session, heroGroup = night?.heroGroup.orEmpty(),
                     onUpdateTimes = onUpdateSleepTimes, onDeleteSession = onDeleteSleepSession,
-                    onAddNap = onAddSleepNap, onPickNightDate = onPickNightDate)
+                    onAddNap = onAddSleepNap, onPickNightDate = onPickNightDate.takeIf { sleepRowsReady })
             }
             item {
                 SleepPerformanceSummary(
@@ -1286,7 +1276,9 @@ private fun Hero(
             // An Oura night's stages are the ring's RAW on-device SleepNet classification (decoded off the
             // 0x49 phase stream), NOT a NOOP approximation — so it gets its own honest caption instead of the
             // "approx. stages (on-device)" one that describes NOOP's own sparse-motion staging.
-            val efficiencyText = efficiencyPct?.let { "${it.roundToInt()}%" } ?: "—"
+            val efficiencyText = efficiencyPct?.let {
+                uiString(R.string.l10n_sleep_screen_percent_2281d326, it.roundToInt())
+            } ?: "—"
             val subtitle = stringResource(R.string.whoop_sleep_stage_subtitle, durationText(inBedMin), efficiencyText)
             val stageCaption = if (activeIsOura) stringResource(R.string.whoop_sleep_raw_stages)
                 else stringResource(R.string.whoop_sleep_estimated_stages)

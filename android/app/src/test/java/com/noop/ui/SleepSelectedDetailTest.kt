@@ -21,6 +21,11 @@ class SleepSelectedDetailTest {
             assertEquals(1, requestedSleepNightOffset(navDays, "2026-10-01"))
             assertNull(requestedSleepNightOffset(navDays, "2026-10-02"))
             assertNull(requestedSleepNightOffset(navDays, "2026-10-04"))
+            val addedWake = Instant.parse("2026-10-04T10:00:00Z").epochSecond
+            val refreshedDays = listOf(listOf(SleepSession(deviceId = "test",
+                startTs = addedWake - 6 * 3600, endTs = addedWake))) + navDays
+            assertEquals(2, requestedSleepNightOffset(refreshedDays, "2026-10-01"))
+            assertNull(requestedSleepNightOffset(refreshedDays.dropLast(1), "2026-10-01"))
         } finally {
             TimeZone.setDefault(defaultZone)
         }

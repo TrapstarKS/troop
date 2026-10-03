@@ -45,7 +45,7 @@ struct SleepView: View {
     @State private var resultNoticeScope: String?
 
     /// Which night the hero hypnogram shows: 0 = last night, N = N sleep-sessions back.
-    /// Snaps back to 0 whenever the data key changes — a stale offset would silently point
+    /// Resolves an active requested day after reload; otherwise resets to 0. A stale offset would point
     /// at a different session after a sync. The memoized trend `model` stays cached since
     /// the trends are night-independent. (#160)
     @State private var nightOffset = 0
@@ -137,6 +137,7 @@ struct SleepView: View {
 
     private var requestedSelectionReady: Bool {
         initialSelectionApplied && consumedInitialDayKey == initialDayKey
+            && (pendingInitialDayKey == nil || loadedSleepRefresh == repo.refreshSeq)
     }
 
     var body: some View {
@@ -232,8 +233,8 @@ struct SleepView: View {
             // Load EVERY sleep block across BOTH sources (un-deduplicated) so the hero's ◀/▶ can
             // browse split-sleep days the dashboard collapses — including Bluetooth-only nights,
             // whose blocks live under the computed source. Re-runs whenever a sync/import bumps
-            // refreshSeq; snaps back to the newest day and rebuilds the model so offset 0 reflects
-            // the freshly-loaded blocks. (#170)
+            // refreshSeq; rebuilds the model and re-resolves an active requested day against the new blocks.
+            // No-argument browsing retains its reset to the newest day. (#170)
             .task(id: repo.refreshSeq) {
                 let refresh = repo.refreshSeq
                 let sessions = await repo.allSleepSessions()
@@ -2138,7 +2139,7 @@ struct SleepView: View {
     }
 
     private func applyRequestedDaySelection() {
-        guard !initialSelectionApplied, loadedSleepRefresh == repo.refreshSeq,
+        guard loadedSleepRefresh == repo.refreshSeq,
               let pendingInitialDayKey else { return }
         let offset = SleepModel.requestedNightOffset(navDays: navDays, dayKey: pendingInitialDayKey)
         unavailableRequestedDay = offset == nil ? pendingInitialDayKey : nil
@@ -2179,7 +2180,11 @@ struct SleepView: View {
         let lastIndex = max(navDays.count - 1, 0)
         return VStack(spacing: NoopMetrics.space2) {
             HStack(spacing: NoopMetrics.space3) {
-                Button { if nightOffset < lastIndex { nightOffset += 1 } } label: {
+                Button {
+                    guard nightOffset < lastIndex else { return }
+                    pendingInitialDayKey = nil
+                    nightOffset += 1
+                } label: {
                     Image(systemName: "chevron.left").font(StrandFont.headline)
                         .frame(minWidth: NoopMetrics.touchTarget, minHeight: NoopMetrics.touchTarget)
                 }
@@ -2195,7 +2200,11 @@ struct SleepView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
-                Button { if nightOffset > 0 { nightOffset -= 1 } } label: {
+                Button {
+                    guard nightOffset > 0 else { return }
+                    pendingInitialDayKey = nil
+                    nightOffset -= 1
+                } label: {
                     Image(systemName: "chevron.right").font(StrandFont.headline)
                         .frame(minWidth: NoopMetrics.touchTarget, minHeight: NoopMetrics.touchTarget)
                 }
