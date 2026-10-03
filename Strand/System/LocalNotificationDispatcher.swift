@@ -140,7 +140,7 @@ final class LocalNotificationDispatcher {
                 sessions.map { SleepStageTotals.NightBlock(start: $0.effectiveStartTs, end: $0.endTs) },
                 offsetSec: offset, habitualMidsleepSec: habitual) ?? []
             if let wake = group.map({ sessions[$0].endTs }).max(), wake <= nowSec, nowSec - wake <= 86_400 {
-                let report = LocalRecordedReport(day: row.day, recovery: row.recovery.map { Int($0.rounded()) },
+                let report = LocalRecordedReport(day: row.day, recovery: RecoveryStrainDetailLogic.recoveryPercent(row.recovery),
                     sleepMinutes: row.totalSleepMin.map { Int($0.rounded()) }, strainTenths: nil, streak: streak,
                     sleepNeedMinutes: model.repo.importedSleep[row.day]?.needMin.map { Int($0.rounded()) },
                     sleepDebtMinutes: model.repo.importedSleep[row.day]?.debtMin.map { Int($0.rounded()) })
@@ -156,7 +156,7 @@ final class LocalNotificationDispatcher {
 
         if minute >= 20 * 60, let row = model.repo.days.last(where: { $0.day == today }) {
             let occurrence = Int((Calendar.current.date(bySettingHour: 20, minute: 0, second: 0, of: now) ?? now).timeIntervalSince1970)
-            let report = LocalRecordedReport(day: row.day, recovery: row.recovery.map { Int($0.rounded()) },
+            let report = LocalRecordedReport(day: row.day, recovery: RecoveryStrainDetailLogic.recoveryPercent(row.recovery),
                 sleepMinutes: row.totalSleepMin.map { Int($0.rounded()) },
                 strainTenths: row.strain.map { Int(($0 * 2.1).rounded()) }, streak: streak,
                 sleepNeedMinutes: model.repo.importedSleep[row.day]?.needMin.map { Int($0.rounded()) },

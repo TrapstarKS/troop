@@ -132,6 +132,7 @@ object WhoopRoute {
     const val recoveryDetail = "recovery_detail"
     const val strainDetail = "strain_detail"
     const val sleepDetail = "sleep"
+    const val sleepDetailForDay = "sleep/{dayKey}"
     const val sleepPlanner = "smart_alarm"
     const val healthMonitor = "vital_signs"
     const val healthspan = "healthspan"
@@ -140,6 +141,9 @@ object WhoopRoute {
     const val journal = "insights"
     const val localBriefing = "local_briefing"
     const val localNotifications = "local_notifications"
+
+    /** Selected ISO wake day belongs to this entry; the bare Sleep route still opens the latest night. */
+    fun sleepForDay(dayKey: String): String = "$sleepDetail/$dayKey"
 }
 
 /** A single drawer destination: stable route, display title (localized via [titleRes]), sidebar icon. */
@@ -708,6 +712,7 @@ fun AppRoot(
                         // Settings. A normal push returns Back to Today (#1515).
                         onOpenStepsCalibration = { nav.navigate(Destination.StepsCalibration.route) },
                         onOpenSleep = { nav.navigateTopLevel(Destination.Sleep.route) },
+                        onOpenSleepForDay = { dayKey -> nav.navigate(WhoopRoute.sleepForDay(dayKey)) },
                         // Optional Coupled view card (task #43): a normal push so back returns to Today.
                         onOpenCoupled = { nav.navigate(Destination.CoupledView.route) },
                         // #1862: the Coach launcher hands off here. Without this the sheet's buttons
@@ -745,6 +750,14 @@ fun AppRoot(
                 composable(Destination.Sleep.route) {
                     SleepScreen(
                         vm = viewModel,
+                        onOpenJournal = { nav.navigateTopLevel(Destination.Insights.route) },
+                        onOpenAlarms = { nav.navigate(Destination.SmartAlarm.route) },
+                    )
+                }
+                composable(WhoopRoute.sleepDetailForDay) { entry ->
+                    SleepScreen(
+                        vm = viewModel,
+                        initialDayKey = entry.arguments?.getString("dayKey"),
                         onOpenJournal = { nav.navigateTopLevel(Destination.Insights.route) },
                         onOpenAlarms = { nav.navigate(Destination.SmartAlarm.route) },
                     )
