@@ -141,6 +141,7 @@ internal object DayCycleIntelligenceIntegration {
             steps = integratedStepValue(daily.steps, established, result.cycleStepsByWakeDay[daily.day]),
             strain = if (established) result.cycleStrainByWakeDay[daily.day] else daily.strain,
             activeKcalEst = if (established) result.cycleCaloriesByWakeDay[daily.day] else daily.activeKcalEst,
+            activeEnergyKcalEst = if (established) result.cycleActiveCaloriesByWakeDay[daily.day] else daily.activeEnergyKcalEst,
             exerciseCount = if (established) result.cycleWorkoutCountByWakeDay[daily.day] else daily.exerciseCount,
         )
     }

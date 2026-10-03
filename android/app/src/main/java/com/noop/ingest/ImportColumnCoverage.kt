@@ -30,7 +30,7 @@ internal fun importColumnCoverage(rows: List<DailyMetric>): List<Pair<String, In
     "recovery" to rows.count { it.recovery != null },
     "rhr" to rows.count { it.restingHr != null },
     "hrv" to rows.count { it.avgHrv != null },
-    "skin_temp" to rows.count { it.skinTempDevC != null },
+    "skin_temp" to rows.count { it.skinTempC != null || it.skinTempDevC != null },
     "spo2" to rows.count { it.spo2Pct != null },
     "strain" to rows.count { it.strain != null },
     "resp" to rows.count { it.respRateBpm != null },

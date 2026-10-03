@@ -182,6 +182,20 @@ final class Repository: ObservableObject {
 
     /// Daily metrics (recovery/strain/sleep/HRV/RHR…) over the recent window, oldest→newest.
     @Published var days: [DailyMetric] = []
+    @Published private(set) var hrvRegimeEpoch: Double = 0
+    var effectiveHrvBaselineEpoch: Double { max(Baselines.hrvBaselineEpoch(), hrvRegimeEpoch) }
+    var hrvCalibrationDays: [DailyMetric] {
+        days.filter { Baselines.isInHrvEra(day: $0.day, epoch: effectiveHrvBaselineEpoch) }
+    }
+    /// Charge histories resolved from imported and computed buckets before dashboard merging.
+    @Published private(set) var chargeBaselines: ChargeBaselines.Resolved?
+    var hrvCalibrationHistory: [(day: String, value: Double?)] {
+        guard let history = chargeBaselines?.hrvHistory else { return [] }
+        return zip(history.dayKeys, history.values).compactMap { day, value in
+            Baselines.isInHrvEra(day: day, epoch: effectiveHrvBaselineEpoch) ? (day, value) : nil
+        }
+    }
+
     /// Cached sleep sessions over the recent window, oldest→newest.
     @Published var sleeps: [CachedSleepSession] = []
     /// Imported (export-verbatim) sleep figures by day. Empty until a WHOOP import lands.
@@ -341,7 +355,7 @@ final class Repository: ObservableObject {
     /// Daily-metric rows across the imported union for a day range, DEDUPED per day with the ACTIVE STRAP
     /// winning over the canonical import (a live/measured row beats an imported one for the same day). The
     /// single returned row per day feeds the existing imported-vs-computed `mergeDaily` unchanged.
-    private func unionDailyMetrics(store: WhoopStore, from: String, to: String) async -> [DailyMetric] {
+    func unionDailyMetrics(store: WhoopStore, from: String, to: String) async -> [DailyMetric] {
         var byDay: [String: DailyMetric] = [:]
         for id in importedReadIds {   // active strap FIRST → it claims each column, canonical fills its gaps
             for m in (try? await store.dailyMetrics(deviceId: id, from: from, to: to)) ?? [] {
@@ -444,6 +458,7 @@ final class Repository: ObservableObject {
             respRateBpm: winner.respRateBpm ?? filler.respRateBpm,
             steps: winner.steps ?? filler.steps,
             activeKcalEst: winner.activeKcalEst ?? filler.activeKcalEst,
+            activeEnergyKcalEst: winner.activeEnergyKcalEst ?? filler.activeEnergyKcalEst,
             spo2Red: rawSpo2FromFiller ? filler.spo2Red : winner.spo2Red,
             spo2Ir: rawSpo2FromFiller ? filler.spo2Ir : winner.spo2Ir,
             // Strap-only, like raw SpO2: an imported winner carries no absolute skin temp, so take the
@@ -477,7 +492,7 @@ final class Repository: ObservableObject {
 
     /// Computed ("-noop") daily-metric rows across the computed union, DEDUPED per day (active strap's
     /// computed sibling wins over the canonical computed sibling).
-    private func unionComputedDailyMetrics(store: WhoopStore, from: String, to: String) async -> [DailyMetric] {
+    func unionComputedDailyMetrics(store: WhoopStore, from: String, to: String) async -> [DailyMetric] {
         var byDay: [String: DailyMetric] = [:]
         for id in computedReadIds {
             for m in (try? await store.dailyMetrics(deviceId: id, from: from, to: to)) ?? [] {
@@ -485,6 +500,33 @@ final class Repository: ObservableObject {
             }
         }
         return byDay.values.sorted { $0.day < $1.day }
+    }
+
+    /// Charge alone excludes display-only legacy HRV. The first raw non-nil source owns the marker,
+    /// so an invalid active reading cannot be refilled or validated by the canonical sibling.
+    /// Kotlin twin: `WhoopRepository.chargeComputedDailyUnion` and its reactive flow.
+    func unionChargeComputedDailyMetrics(store: WhoopStore, from: String, to: String,
+                                        requiredFreshDay: String? = nil) async -> [DailyMetric] {
+        var byDay: [String: DailyMetric] = [:]
+        var hrvByDay: [String: (value: Double, marker: Double?)] = [:]
+        for id in computedReadIds {
+            let inputs = try? await store.chargeHrvProof(deviceId: id, from: from, to: to)
+            let proofs = Dictionary((inputs ?? []).map { ($0.day, $0) },
+                uniquingKeysWith: { _, last in last })
+            for row in (try? await store.dailyMetrics(deviceId: id, from: from, to: to)) ?? [] {
+                if hrvByDay[row.day] == nil, let value = row.avgHrv {
+                    let proof = proofs[row.day]
+                    hrvByDay[row.day] = (value, proof?.value == value ? proof?.freshScoringValid : Double.nan)
+                }
+                byDay[row.day] = byDay[row.day].map { Self.coalesceDay($0, row) } ?? row
+            }
+        }
+        return byDay.values.sorted { $0.day < $1.day }.map { row in
+            guard let input = hrvByDay[row.day] else { return row }
+            return row.with(avgHrv: ChargeBaselines.ownHrvValue(input.value,
+                freshScoringValid: input.marker, requireFresh: row.day == requiredFreshDay),
+                recovery: row.recovery, respRateBpm: row.respRateBpm, avgSdnn: row.avgSdnn)
+        }
     }
 
     /// Computed ("-noop") sleep sessions across every registered WHOOP source, keeping ALL sessions per day
@@ -702,6 +744,36 @@ final class Repository: ObservableObject {
         return days.filter { $0.day >= cutoff }
     }
 
+    /// Value-bound eligibility before source coalescing; both signals share one committed read snapshot.
+    func signalReliabilityByDay(from: String, to: String) async throws ->
+        (hrv: [String: HealthSignalReliability.Record], resp: [String: HealthSignalReliability.Record]) {
+        let importedIds = importedReadIds
+        let computedIds = computedReadIds
+        let sourceIds = importedIds + computedIds + [Self.appleHealthSource]
+        guard let store = await ensureStore() else { throw CancellationError() }
+        let rows = try await store.hrvProvenance(deviceIds: sourceIds, from: from, to: to)
+        guard !Task.isCancelled, importedIds == importedReadIds, computedIds == computedReadIds else {
+            throw CancellationError()
+        }
+        var hrv: [String: [String: HealthSignalReliability.Record]] = [:]
+        var resp: [String: [String: HealthSignalReliability.Record]] = [:]
+        for row in rows {
+            let computed = computedIds.contains(row.deviceId)
+            if let value = row.value {
+                let eligible = HealthSignalReliability.hrv(value, computed: computed,
+                    freshScoringValid: row.freshScoringValid, overcount: row.overcount) != nil
+                hrv[row.day, default: [:]][row.deviceId] = HealthSignalReliability.Record(value: value, eligible: eligible)
+            }
+            if let value = row.respValue {
+                let eligible = HealthSignalReliability.respiration(value, computed: computed,
+                    freshScoringValid: row.respFreshScoringValid) != nil
+                resp[row.day, default: [:]][row.deviceId] = HealthSignalReliability.Record(value: value, eligible: eligible)
+            }
+        }
+        return (hrv.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) },
+                resp.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) })
+    }
+
     /// Source-aware rows for vital-sign cards. During previews/tests that set `days` directly,
     /// fall back to the merged local cache so the component still renders.
     var vitalMetricRows: [SourcedDailyMetric] {
@@ -849,6 +921,7 @@ final class Repository: ObservableObject {
     private struct MergedCaches {
         let importedSleep: [String: ImportedSleepFigures]
         let days: [DailyMetric]
+        let chargeBaselines: ChargeBaselines.Resolved
         let sleeps: [CachedSleepSession]
         let vitalRows: [SourcedDailyMetric]
         let freshness: RepositoryFreshness
@@ -942,7 +1015,7 @@ final class Repository: ObservableObject {
         refreshGen &+= 1
         let myGen = refreshGen
         let now = Date()
-        let fromDay = Self.dayString(now.addingTimeInterval(-Double(nDays) * 86_400))
+        let fromDay = Self.dayString(now.addingTimeInterval(-Double(max(nDays, ChargeBaselines.windowDays)) * 86_400))
         let toDay = Self.dayString(now.addingTimeInterval(86_400))
         let nowTs = Int(now.timeIntervalSince1970)
         let lo = nowTs - nDays * 86_400, hi = nowTs + 86_400
@@ -952,10 +1025,25 @@ final class Repository: ObservableObject {
         // a single id on a single-device install (byte-identical to before).
         let imported = await unionDailyMetrics(store: store, from: fromDay, to: toDay)
         let computed = await unionComputedDailyMetrics(store: store, from: fromDay, to: toDay)
+        let registry = DeviceRegistryStore(dbQueue: store.registryWriter)
+        let activeOwner = (try? registry.activeDeviceId()) ?? deviceId
+        let regimeEpoch = await effectiveHrvEpoch(store: store, activeOwner: activeOwner,
+            importedAlias: "my-whoop", manualEpoch: 0, offsetSec: TimeZone.current.secondsFromGMT(for: now))
         let apple = (try? await store.dailyMetrics(deviceId: Self.appleHealthSource, from: fromDay, to: toDay)) ?? []
         let activityFile = (try? await store.dailyMetrics(deviceId: Self.activityFileSource, from: fromDay, to: toDay)) ?? []
         let impSleep = await unionSleepSessions(store: store, from: lo, to: hi)
         let compSleep = await unionComputedSleepSessions(store: store, from: lo, to: hi)
+
+        // #2525: the Charge baselines' inputs, read on the main actor before detaching: today's local day
+        // (the same local-calendar key the engine anchors its fold on) and the two recalibration epochs the
+        // engine reads from the same UserDefaults keys.
+        let chargeAnchorDay = AnalyticsEngine.dayString(nowTs, offsetSec: TimeZone.current.secondsFromGMT(for: now))
+        let hrvEpoch = max(Baselines.hrvBaselineEpoch(), regimeEpoch)
+        let recoveryEpoch = Baselines.recoveryBaselineEpoch()
+        let requiredFreshDay = regimeEpoch > 0 ? AnalyticsEngine.dayString(Int(regimeEpoch), offsetSec: 0) : nil
+        let chargeComputed = await unionChargeComputedDailyMetrics(store: store,
+            from: Baselines.cutoffKey(todayKey: chargeAnchorDay, carryDays: ChargeBaselines.windowDays - 1),
+            to: chargeAnchorDay, requiredFreshDay: requiredFreshDay)
 
         // Export-verbatim sleep figures (long-format metricSeries rows from WhoopImporter).
         // SleepView prefers these per day over its APPROXIMATE recomputations.
@@ -984,6 +1072,11 @@ final class Repository: ObservableObject {
                     into: Self.mergeDaily(imported: imported, computed: computed, userEditedDays: editedDays),
                     activityFile
                 ),
+                // From the two buckets BEFORE `mergeDaily` blends them: the rule needs to know which nights
+                // are imported and which are the wearer's own.
+                chargeBaselines: ChargeBaselines.resolve(imported: imported, own: chargeComputed,
+                                                         anchorDay: chargeAnchorDay,
+                                                         hrvEpoch: hrvEpoch, recoveryEpoch: recoveryEpoch),
                 sleeps: Self.mergeSleep(imported: impSleep, computed: compSleep),
                 vitalRows: Self.sourceRows(imported: imported, computed: computed, apple: apple),
                 freshness: Self.computeFreshness(imported: imported, computed: computed, apple: apple,
@@ -1000,6 +1093,8 @@ final class Repository: ObservableObject {
         // is what stops the analyze-tail's burst of refresh() calls each re-firing TodayView.loadAll().
         let unchanged = loaded
             && merged.days == days
+            && merged.chargeBaselines == chargeBaselines
+            && regimeEpoch == hrvRegimeEpoch
             && merged.sleeps == sleeps
             && merged.importedSleep == importedSleep
             && merged.vitalRows == vitalRows
@@ -1010,6 +1105,8 @@ final class Repository: ObservableObject {
         // the intraday-updating views reload exactly once for this real change.
         self.importedSleep = merged.importedSleep
         self.days = merged.days
+        self.chargeBaselines = merged.chargeBaselines
+        self.hrvRegimeEpoch = regimeEpoch
         self.sleeps = merged.sleeps
         self.vitalRows = merged.vitalRows
         self.freshness = merged.freshness
@@ -1100,6 +1197,7 @@ final class Repository: ObservableObject {
                         respRateBpm: existing.respRateBpm,
                         steps: steps,
                         activeKcalEst: existing.activeKcalEst,
+                        activeEnergyKcalEst: existing.activeEnergyKcalEst,
                         spo2Red: existing.spo2Red,
                         spo2Ir: existing.spo2Ir,
                         skinTempC: existing.skinTempC
@@ -1528,9 +1626,8 @@ final class Repository: ObservableObject {
 
     /// Hand-correct a night's bed (onset) and/or wake (end) time. `detectedStartTs` is the immutable
     /// detected key; the corrected onset is stored in `startTsAdjusted` so the key never moves (the
-    /// recompute guard + daily override keep matching on it). The merged session list carries no source
-    /// deviceId (same reason as the journal reads below), so this applies under BOTH the imported and
-    /// computed sources , only the namespace that holds the night updates; the other is a no-op.
+    /// recompute guard + daily override keep matching on it). A supplied visible owner selects exactly
+    /// that namespace; older id-free callers retain computed-first owner resolution.
     ///
     /// Stages are **re-derived from the raw streams** for the corrected `[newStartTs, newEndTs]` window
     /// via `SleepStager.stageSession` , exactly what WHOOP does, so extending a boundary recovers real
@@ -1538,7 +1635,7 @@ final class Repository: ObservableObject {
     /// night) does it fall back to reshaping the stored summary (`SleepWindowReclip`). Refreshes so the
     /// hero re-reads the corrected night immediately.
     func editSleepTimes(detectedStartTs: Int, oldEndTs: Int, storedStagesJSON: String?,
-                        newStartTs: Int, newEndTs: Int) async {
+                        newStartTs: Int, newEndTs: Int, visibleOwnerDeviceId: String? = nil) async {
         guard let store = await ensureStore() else { return }
         // #940 belt-and-braces: never persist a future-ending or inverted corrected window, whatever
         // the UI sent. The editor's own guards (past-bounded bed picker + cross-midnight auto-correct
@@ -1559,7 +1656,7 @@ final class Repository: ObservableObject {
         // tab can display (computed precedence preserved by ordering). Stop at the first source that
         // matched, so a coincidental same-startTs row in another namespace never takes a second edit —
         // and, unlike the old computed-then-active pair, a night under the canonical source is reached.
-        for ownerDeviceId in sleepOwnerIds {
+        for ownerDeviceId in visibleOwnerDeviceId.map({ [$0] }) ?? sleepOwnerIds {
             let changed = (try? await store.applySleepEdit(
                 deviceId: ownerDeviceId, detectedStartTs: detectedStartTs,
                 newStartTs: safeStartTs, newEndTs: safeEndTs, stagesJSON: stagesJSON)) ?? 0
@@ -1577,8 +1674,7 @@ final class Repository: ObservableObject {
     /// Two durable effects, mirroring the workout-dismiss path:
     ///  1. delete the row from whichever namespace OWNS it: try the computed source first, fall back to
     ///     the imported `deviceId` only when no computed row matched, exactly as `editSleepTimes` applies
-    ///     its edit (the merged session list carries no source deviceId, so we resolve the owner here and
-    ///     never delete a coincidental same-startTs row in the other namespace);
+    ///     its edit. A supplied visible owner routes both deletion and undo snapshot to that namespace;
     ///  2. persist a `dismissedSleep` span in UserDefaults so the next `analyzeRecent` re-detection doesn't
     ///     simply regenerate the night: the engine's sleep guard now skips any re-detected session
     ///     overlapping a dismissed span (just as the dismissed-WORKOUT spans hide a re-derived bout).
@@ -1589,12 +1685,15 @@ final class Repository: ObservableObject {
     /// (it is never re-detected, so it needs no suppression). The undo re-inserts the snapshot into its
     /// ORIGINAL namespace and lifts the tombstone.
     @discardableResult
-    func deleteSleepSession(detectedStartTs: Int, endTs: Int) async -> SleepDeletionSnapshot? {
+    func deleteSleepSession(detectedStartTs: Int, endTs: Int,
+                            visibleOwnerDeviceId: String? = nil) async -> SleepDeletionSnapshot? {
         guard let store = await ensureStore() else { return nil }
         // Snapshot the owning row BEFORE deleting, resolving the owner exactly as the delete does below:
         // computed source first, imported deviceId as the fallback. A one-second-wide window around the
         // immutable detected key uniquely identifies the row (the key never moves).
-        let snapshot = await ownedSleepRowSnapshot(store: store, detectedStartTs: detectedStartTs)
+        let owners = visibleOwnerDeviceId.map { [$0] } ?? sleepOwnerIds
+        let snapshot = await ownedSleepRowSnapshot(store: store, detectedStartTs: detectedStartTs, owners: owners)
+        guard visibleOwnerDeviceId == nil || snapshot != nil else { return nil }
         // Record the durable tombstone ONLY for a DETECTED night. A `userEdited` row (a hand-corrected
         // night or a manually-added nap) is never re-detected, so suppressing its window would needlessly
         // block a real future night that happens to overlap it.
@@ -1604,7 +1703,7 @@ final class Repository: ObservableObject {
         }
         // Delete from the same union of possible owners the Sleep tab reads from, first match wins —
         // so a night under the canonical source (post strap re-add) is actually removed, not no-op'd.
-        for ownerDeviceId in sleepOwnerIds {
+        for ownerDeviceId in owners {
             let deleted = (try? await store.deleteSleepSession(
                 deviceId: ownerDeviceId, startTs: detectedStartTs)) ?? 0
             if deleted > 0 { break }
@@ -1641,7 +1740,8 @@ final class Repository: ObservableObject {
     /// Read the single owned sleep row for `detectedStartTs`, resolving the namespace exactly as
     /// `deleteSleepSession` does (computed first, imported fallback). Returns the row plus the owning
     /// deviceId so undo can restore it into that same namespace.
-    private func ownedSleepRowSnapshot(store: WhoopStore, detectedStartTs: Int) async -> SleepDeletionSnapshot? {
+    private func ownedSleepRowSnapshot(store: WhoopStore, detectedStartTs: Int,
+                                       owners: [String]) async -> SleepDeletionSnapshot? {
         func row(_ deviceId: String) async -> CachedSleepSession? {
             let rows = (try? await store.sleepSessions(deviceId: deviceId,
                                                        from: detectedStartTs, to: detectedStartTs,
@@ -1660,7 +1760,7 @@ final class Repository: ObservableObject {
         }
         // Same owner union as the edit/delete paths, so the undo snapshot records the row's REAL owner
         // (including the canonical source) instead of guessing computed-or-active.
-        for ownerDeviceId in sleepOwnerIds {
+        for ownerDeviceId in owners {
             if let session = await row(ownerDeviceId) {
                 return await snapshot(session, owner: ownerDeviceId)
             }
@@ -2569,7 +2669,8 @@ final class Repository: ObservableObject {
         case "sleep_light_min", "core_min": return d.lightMin
         case "sleep_performance": return AnalyticsEngine.Rest.composite(daily: d)
         case "steps":            return d.steps.map(Double.init)
-        case "active_kcal", "energy_kcal": return d.activeKcalEst
+        case "active_kcal": return d.activeEnergyKcalEst
+        case "energy_kcal": return d.activeKcalEst
         default:                 return nil
         }
     }
@@ -3499,6 +3600,7 @@ extension DailyMetric {
             respRateBpm: respRateBpm ?? fallback.respRateBpm,
             steps: steps ?? fallback.steps,
             activeKcalEst: activeKcalEst ?? fallback.activeKcalEst,
+            activeEnergyKcalEst: activeEnergyKcalEst ?? fallback.activeEnergyKcalEst,
             // Raw SpO2 is on-device only (imports never carry it), so the imported row's nil is
             // backfilled from the computed fallback — otherwise the nightly means would be lost. (#93)
             spo2Red: spo2Red ?? fallback.spo2Red,
@@ -3536,6 +3638,7 @@ extension DailyMetric {
             respRateBpm: respRateBpm,
             steps: steps,
             activeKcalEst: activeKcalEst,
+            activeEnergyKcalEst: activeEnergyKcalEst,
             spo2Red: spo2Red,   // non-sleep field: preserved as-is (#93)
             spo2Ir: spo2Ir,
             avgSdnn: avgSdnn,   // non-sleep (HRV) field: preserved as-is
@@ -3545,5 +3648,22 @@ extension DailyMetric {
             // hypnogram with the import's staging — and an import's is always nil. (#1801)
             sleepHrOnly: source.sleepHrOnly
         )
+    }
+}
+
+extension Repository {
+    func effectiveHrvEpoch(store: WhoopStore, activeOwner: String, importedAlias: String,
+                           manualEpoch: Double, offsetSec: Int) async -> Double {
+        let isFive = (try? await store.isWhoop5RRSource(deviceId: activeOwner)) == true
+        var first: Int?
+        if isFive {
+            for source in Set([activeOwner, importedAlias, "my-whoop"]) {
+                if let ts = try? await store.firstScorableWhoop5RRTimestamp(deviceId: source) {
+                    first = min(first ?? ts, ts)
+                }
+            }
+        }
+        return Baselines.effectiveHrvEpoch(manualEpoch: manualEpoch, firstScorableTimestamp: first,
+            isWhoop5: isFive, offsetSec: offsetSec)
     }
 }

@@ -87,13 +87,15 @@ import kotlin.math.roundToInt
 @Composable
 fun InsightsHubScreen(vm: AppViewModel) {
     val days by vm.recentDays.collectAsState()
+    val registryActiveId by vm.activeStrapIdFlow.collectAsState()
+    val activeStrapId = registryActiveId ?: vm.activeStrapId
     val journalSeq by vm.repo.journalRevision.collectAsState()
     val publishedStrapId by vm.activeStrapIdFlow.collectAsState()
     val hub = remember(publishedStrapId) { InsightsHubViewModel() }
     val state by hub.state.collectAsState()
 
     // Re-derive whenever the cached days change underneath (journal + dose are read via repo).
-    androidx.compose.runtime.LaunchedEffect(days, journalSeq, publishedStrapId) { hub.load(vm, days) }
+    androidx.compose.runtime.LaunchedEffect(days, journalSeq, activeStrapId) { hub.load(vm, days, activeStrapId) }
 
     var outcome by remember { mutableStateOf(InsightsOutcome.Recovery) }
     val ranked = remember(state, outcome) { hub.rankFor(state, outcome) }
@@ -579,11 +581,10 @@ internal class InsightsHubViewModel {
         }
     }
 
-    suspend fun load(vm: AppViewModel, days: List<DailyMetric>) {
-        val strapDeviceId = vm.activeStrapId
+    suspend fun load(vm: AppViewModel, days: List<DailyMetric>, activeStrapId: String) {
         // Journal → behaviour → days (imported ∪ native, native wins). BOTH answers count now, kept in
         // separate maps; the merge is what guarantees a day cannot be Yes and No for one question.
-        val imported = vm.repo.journal("my-whoop", "0000-01-01", "9999-12-31")
+        val imported = vm.repo.importedSourceIds(activeStrapId).flatMap { vm.repo.journal(it, "0000-01-01", "9999-12-31") }
         val native = vm.repo.journal(JOURNAL_DEVICE_ID, "0000-01-01", "9999-12-31")
         val entries = mergeJournalEntries(imported, native)
         val byBehaviour = HashMap<String, MutableSet<String>>()
@@ -608,7 +609,7 @@ internal class InsightsHubViewModel {
         // Dose rows per dosed behaviour, under the dedicated dose source; logged "yes" days
         // back-fill dose = 1, explicit dose rows override (matches the Swift contract).
         val doseCards = ArrayList<DoseCardData>()
-        val performance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", strapDeviceId = strapDeviceId)
+        val performance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", strapDeviceId = activeStrapId)
         outcomeByKey["sleep_performance"] = performance.points.associate { it.day to it.value }
         for (behavior in DosedBehavior.entries) {
             val doses = HashMap<String, Int>()
@@ -626,7 +627,7 @@ internal class InsightsHubViewModel {
             doseCards.add(DoseCardData(behavior, response, latest))
         }
 
-        if (strapDeviceId != vm.activeStrapId) return
+        if (activeStrapId != vm.activeStrapId) return
         _state.value = Snapshot(
             loaded = true,
             behaviours = behaviours,

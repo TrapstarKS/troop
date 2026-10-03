@@ -360,6 +360,8 @@ data class DailyMetric(
     // misreading. Appended LAST so the column order matches the Room CREATE TABLE and the Swift row.
     // Null on every row scored before v36 and on any day with no sleep at all.
     val sleepHrOnly: Boolean? = null,
+    // Active share of the HR energy estimate; legacy rows remain unknown until rescored.
+    val activeEnergyKcalEst: Double? = null,
 )
 
 /**
@@ -431,6 +433,9 @@ data class MetricSeriesRow(
     @ColumnInfo(name = "key") val key: String,
     val value: Double,
 )
+
+/** Joined Charge witness: the marker and HRV value are read from the same database snapshot. */
+data class ChargeHrvProof(val day: String, val value: Double, val freshScoringValid: Double?)
 
 /**
  * Provenance for one NOOP-computed score. [sourceId] normally records the provider actually used, while

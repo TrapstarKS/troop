@@ -12,8 +12,8 @@ import WhoopStore
 //     Late meal, Meditation…) into the days each behaviour WAS logged vs NOT, then
 //     compare a chosen outcome metric (Recovery / HRV / Sleep performance / RHR)
 //     between the two groups. Ranked by effect size (Cohen's d) with significant
-//     effects first; each card carries the plain-English sentence, the with/without
-//     means, group counts, a significance pill, and the effect-size magnitude.
+//     effects first; compact summaries open the with/without means, group counts,
+//     association note, significance, and effect-size magnitude.
 //     Tint is sign-aware: a behaviour that moves the outcome the "good" way
 //     (respecting higherIsBetter) is positive/green, the "bad" way is critical/red.
 //
@@ -139,6 +139,17 @@ struct InsightsView: View {
 
     @State private var outcome: Outcome = .recovery
     @State private var showingWeeklyPlan = false
+    private struct RankingSnapshot {
+        let effects: [BehaviorEffect]
+        let outcome: Outcome
+    }
+    private struct EffectSelection: Identifiable {
+        let effect: BehaviorEffect
+        let outcome: Outcome
+        let displayName: String
+        var id: String { effect.behavior }
+    }
+    @State private var selectedEffect: EffectSelection?
 
     // MARK: Personal-experiment state (LOCAL ONLY, UserDefaults-backed, single user)
     //
@@ -180,7 +191,8 @@ struct InsightsView: View {
 
     /// Ranked behaviour effects for the current outcome, recomputed via
     /// recomputeRanked() only when behaviours / outcomeByKey / outcome change.
-    @State private var ranked: [BehaviorEffect] = []
+    @State private var rankingSnapshot = RankingSnapshot(effects: [], outcome: .recovery)
+    private var ranked: [BehaviorEffect] { rankingSnapshot.effects }
     /// Curated metric relationships, recomputed via recomputeRelationships()
     /// only when the loaded series change.
     @State private var relationships: [Relationship] = []
@@ -202,6 +214,7 @@ struct InsightsView: View {
     @State private var dayNumeric: [String: Double] = [:]
     /// -1 = tomorrow (log ahead), 0 = today, 1 = yesterday (late logging).
     @State private var journalDayOffset = 0
+    @State private var journalDraftDirty = false
     /// #860 item 4: today's local calendar-day key, captured on appear and refreshed on foreground. The
     /// journal day chips ("Today"/"Yesterday"/"Tomorrow") are relative to the CURRENT date, but the
     /// answers (`dayAnswers`) and the resolved day key are derived from `Date()` only inside `load()`,
@@ -226,6 +239,15 @@ struct InsightsView: View {
                 ComingSoon(what: "Reading your journal and outcomes…")
             } else {
                 VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
+                    // Native logging, always reachable: the account-free way into Insights.
+                    JournalLogCard(catalog: catalog, importedQuestions: importedQuestions,
+                                   answers: dayAnswers,
+                                   numericAnswers: dayNumeric,
+                                   dayOffset: $journalDayOffset,
+                                   answersDayKey: answersDayKey,
+                                   anchorDay: currentDayKey,
+                                   onDirtyChanged: { journalDraftDirty = $0 },
+                                   onChanged: { Task { await load() } })
                     // v5: a single row into the "What moves you" hub, the lag-aware ranked-effect feed
                     // + alcohol/caffeine dose-response. Reachable as its own destination too; this is the
                     // honest in-Insights entry point.
@@ -239,14 +261,6 @@ struct InsightsView: View {
                             }
                         }
                     }.buttonStyle(.plain)
-                    // Native logging, always reachable: the account-free way into Insights.
-                    JournalLogCard(importedQuestions: importedQuestions,
-                                   answers: dayAnswers,
-                                   numericAnswers: dayNumeric,
-                                   dayOffset: $journalDayOffset,
-                                   answersDayKey: answersDayKey,
-                                   anchorDay: currentDayKey,
-                                   onChanged: { Task { await load() } })
                     // Mind, daily mood check-in + mood↔body correlations.
                     // Self-contained (owns its own load/state); sits with the
                     // journal card so the two daily-logging surfaces read as one
@@ -282,6 +296,25 @@ struct InsightsView: View {
             .frame(minWidth: NoopMetrics.detailSheetMinWidth, minHeight: NoopMetrics.detailSheetMinHeight)
             #endif
         }
+        .sheet(item: $selectedEffect) { selection in
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: NoopMetrics.space4) {
+                        Text(selection.outcome.label).strandOverline()
+                        effectCard(selection.effect, outcome: selection.outcome,
+                                   displayName: selection.displayName, compact: false)
+                    }.padding(NoopMetrics.screenPadding)
+                }
+                .background(StrandPalette.surfaceBase)
+                .navigationTitle("Behavior Insights")
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { selectedEffect = nil } } }
+            }
+            #if os(macOS)
+            .frame(minWidth: NoopMetrics.detailSheetMinWidth, minHeight: NoopMetrics.detailSheetMinHeight)
+            #else
+            .noopSheetPresentation(largeFirst: true)
+            #endif
+        }
         // #860 item 4: key on the data-refresh seq AND today's day-key, so the journal re-loads both on a
         // data change and the moment the calendar day rolls over (driven by the foreground/appear refresh
         // of `currentDayKey` below), so yesterday's answers leave "Today" and the new day starts fresh.
@@ -314,9 +347,8 @@ struct InsightsView: View {
     private func refreshCurrentDayKey() {
         let key = Repository.localDayKey(Date())
         if key != currentDayKey {
-            if journalDayOffset != 0, let old = JournalCalendar.date(currentDayKey), let new = JournalCalendar.date(key) {
-                journalDayOffset += Calendar.current.dateComponents([.day], from: old, to: new).day ?? 0
-            }
+            journalDayOffset = JournalCalendar.rolloverOffset(offset: journalDayOffset, from: currentDayKey,
+                                                             to: key, preserveDraft: journalDraftDirty)
             currentDayKey = key
         }
     }
@@ -562,14 +594,16 @@ struct InsightsView: View {
     /// Rebuild the cached behaviour ranking for the current inputs.
     /// Called at load and whenever `outcome` changes, NOT in `body`.
     private func recomputeRanked() {
+        let selectedOutcome = outcome
         let firstDay = WeeklyPlanCalendar.adding(days: -89, to: currentDayKey) ?? currentDayKey
-        let outcomeDays = (outcomeByKey[outcome.key] ?? [:]).filter { $0.key >= firstDay && $0.key <= currentDayKey }
-        ranked = BehaviorInsights.rank(
+        let outcomeDays = (outcomeByKey[selectedOutcome.key] ?? [:]).filter { $0.key >= firstDay && $0.key <= currentDayKey }
+        let effects = BehaviorInsights.rank(
             behaviors: behaviours,
             controls: controls,
             outcomeByDay: outcomeDays,
-            outcome: outcome.outcomeName
+            outcome: selectedOutcome.outcomeName
         ).filter { $0.nWith >= 5 && $0.nWithout >= 5 }
+        rankingSnapshot = RankingSnapshot(effects: effects, outcome: selectedOutcome)
     }
 
     /// Rebuild the cached metric relationships from the loaded series.
@@ -808,10 +842,9 @@ struct InsightsView: View {
     }
 
     private var resolvedExperimentBehaviour: String? {
-        let candidates = experimentCandidates
-        let saved = experimentBehaviour.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !saved.isEmpty, candidates.contains(saved) { return saved }
-        return candidates.first
+        resolveExperimentBehaviour(candidates: experimentCandidates,
+                                   saved: experimentBehaviour,
+                                   startedDay: experimentStartedDay)
     }
 
     private var experimentBehaviourBinding: Binding<String> {
@@ -1060,11 +1093,13 @@ struct InsightsView: View {
 
             Text("Comparisons use the last 90 days and need at least five Yes and five No answers. Unanswered days are excluded.")
                 .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
-            if ranked.isEmpty {
+            if rankingSnapshot.outcome != outcome {
+                ProgressView()
+            } else if ranked.isEmpty {
                 noEffects
             } else {
                 ForEach(ranked.indices, id: \.self) { i in
-                    effectCard(ranked[i])
+                    effectRow(ranked[i], outcome: rankingSnapshot.outcome)
                         .staggeredAppear(index: i)
                 }
             }
@@ -1087,8 +1122,24 @@ struct InsightsView: View {
         }
     }
 
-    /// One behaviour-effect card: sentence + with/without StatTiles + significance pill.
-    private func effectCard(_ e: BehaviorEffect) -> some View {
+    private func effectRow(_ e: BehaviorEffect, outcome: Outcome) -> some View {
+        let displayName = catalog.localizedDisplayName(for: e.behavior)
+        let deltaText = e.pctChange.map { percent in
+            "\(percent > 0 ? "+" : percent < 0 ? "−" : "")\(Int(abs(percent).rounded()))%"
+        } ?? formatOutcome(e.delta, as: outcome)
+        return Button {
+            selectedEffect = EffectSelection(effect: e, outcome: outcome, displayName: displayName)
+        } label: {
+            effectCard(e, outcome: outcome, displayName: displayName, compact: true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(displayName), \(deltaText), \(outcome.label)"))
+        .accessibilityHint(Text("Details"))
+    }
+
+    /// Compact impact summary, or its captured comparison detail.
+    private func effectCard(_ e: BehaviorEffect, outcome: Outcome, displayName: String, compact: Bool) -> some View {
         // Sign-aware tint: did this behaviour move the outcome the GOOD way?
         // good move = (delta > 0 when higherIsBetter) OR (delta < 0 when lower is better).
         let movedGood: Bool? = {
@@ -1105,80 +1156,75 @@ struct InsightsView: View {
         let tintColor = movedGood == nil ? StrandPalette.textSecondary : movedGood == true ? StrandPalette.statusPositive : StrandPalette.statusWarning
         let deltaText = e.pctChange.map { percent in
             "\(percent > 0 ? "+" : percent < 0 ? "−" : "")\(Int(abs(percent).rounded()))%"
-        } ?? formatOutcome(e.delta)
-        // Build the plain-English sentence ONCE and reuse it for both the visible
-        // copy and the accessibility label (was computed twice per card).
+        } ?? formatOutcome(e.delta, as: outcome)
+        // The detail explains the limits of this observed comparison.
         let sentence = String(localized: "Recorded days with and without this habit are compared below. An association does not establish cause.")
 
         // The card wash reads as the OUTCOME's colour world (so the whole Behaviour
-        // Effects section sits in one world), while the dot / StatTile accents stay
+        // Effects section sits in one world), while the summary / StatTile accents stay
         // sign-aware to flag the good/bad direction.
         return NoopCard(tint: outcome.domain.color) {
-            VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+            VStack(alignment: .leading, spacing: compact ? NoopMetrics.space2 : NoopMetrics.space4) {
 
-                // Header: behaviour name + significance pill. The old direction dot becomes a small liquid
-                // vessel filled to the effect magnitude (|Cohen's d|, capped where large is about 0.8+) in
-                // the sign-aware tint, the leading-gauge idiom Today uses, so the strength reads at a glance.
+                // Summary: wrapping behaviour name, change, and detail disclosure.
                 HStack(alignment: .center) {
-                    HStack(spacing: 10) {
-                        Text(verbatim: catalog.localizedDisplayName(for: e.behavior).uppercased())
+                    HStack(spacing: NoopMetrics.space2) {
+                        Text(verbatim: displayName.uppercased())
                             .font(StrandFont.overline)
                             .foregroundStyle(StrandPalette.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
                     Text(deltaText).font(StrandFont.bodyNumber).foregroundStyle(tintColor)
+                    if compact {
+                        Image(systemName: "chevron.right").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                    }
                 }
 
                 if let percent = e.pctChange {
-                    RBar(r: percent / 50, color: tintColor, label: catalog.localizedDisplayName(for: e.behavior))
+                    RBar(r: percent / 50, color: tintColor, label: displayName, showsTooltip: false, journalImpact: true)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
-                Text(sentence)
-                    .font(StrandFont.body)
-                    .foregroundStyle(StrandPalette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !compact {
+                    Text(sentence)
+                        .font(StrandFont.body)
+                        .foregroundStyle(StrandPalette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                // With / without means as uniform StatTiles.
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 168), spacing: NoopMetrics.gap)],
-                    alignment: .leading,
-                    spacing: NoopMetrics.gap
-                ) {
-                    StatTile(label: "With",
-                             value: formatOutcome(e.meanWith),
-                             caption: "n = \(e.nWith)",
-                             accent: tintColor,
-                             delta: nil,
-                             deltaColor: tintColor)
-                    StatTile(label: "Without",
-                             value: formatOutcome(e.meanWithout),
-                             caption: "n = \(e.nWithout)",
-                             accent: StrandPalette.textPrimary)
-                }
+                    // With / without means as uniform StatTiles.
+                    VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+                        StatTile(label: "With",
+                                 value: formatOutcome(e.meanWith, as: outcome),
+                                 caption: "n = \(e.nWith)",
+                                 accent: tintColor,
+                                 delta: nil,
+                                 deltaColor: tintColor)
+                        StatTile(label: "Without",
+                                 value: formatOutcome(e.meanWithout, as: outcome),
+                                 caption: "n = \(e.nWithout)",
+                                 accent: StrandPalette.textPrimary)
+                    }
 
-                Divider().overlay(StrandPalette.hairline)
+                    Divider().overlay(StrandPalette.hairline)
+                    StatePill(e.significant ? "p < 0.05" : "n.s.", tone: tint, showsDot: false)
 
-                // Effect-size footer: Cohen's d + interpretation.
-                HStack {
-                    Text("Effect size").strandOverline()
-                    Spacer()
-                    HStack(spacing: 6) {
-                        Text(String(format: "d = %.2f", e.cohensD))
-                            .font(StrandFont.captionNumber)
-                            .foregroundStyle(tintColor)
-                        Text(effectMagnitudeWord(e.cohensD))
-                            .font(StrandFont.caption)
-                            .foregroundStyle(StrandPalette.textTertiary)
+                    // Effect-size footer: Cohen's d + interpretation.
+                    HStack {
+                        Text("Effect size").strandOverline()
+                        Spacer()
+                        HStack(spacing: NoopMetrics.space2) {
+                            Text(String(format: "d = %.2f", e.cohensD))
+                                .font(StrandFont.captionNumber)
+                                .foregroundStyle(tintColor)
+                            Text(effectMagnitudeWord(e.cohensD))
+                                .font(StrandFont.caption)
+                                .foregroundStyle(StrandPalette.textTertiary)
+                        }
                     }
                 }
             }
         }
-        .accessibilityElement(children: .combine)
-        // Whole-string key per variant (never a concatenated localized tail on an a11y label).
-        .accessibilityLabel(e.significant
-            ? String(localized: "\(sentence) Cohen's d \(String(format: "%.2f", e.cohensD)). Statistically significant.")
-            : String(localized: "\(sentence) Cohen's d \(String(format: "%.2f", e.cohensD)). Exploratory, not yet significant."))
     }
 
     // MARK: - Metric relationships section
@@ -1465,6 +1511,8 @@ private struct RBar: View {
     let r: Double
     let color: Color
     let label: String
+    var showsTooltip = true
+    var journalImpact = false
 
     @State private var hovering = false
 
@@ -1474,11 +1522,15 @@ private struct RBar: View {
             let mag = CGFloat(min(abs(r), 1.0)) * half
             ZStack(alignment: .leading) {
                 Capsule().fill(StrandPalette.surfaceInset)
-                // centre tick
-                Rectangle()
-                    .fill(StrandPalette.hairlineStrong)
-                    .frame(width: 1)
-                    .position(x: half, y: geo.size.height / 2)
+                if journalImpact {
+                    DiagonalHatch(spacing: NoopMetrics.space2)
+                        .stroke(StrandPalette.hairlineStrong, lineWidth: NoopMetrics.space1 / 2)
+                } else {
+                    Rectangle()
+                        .fill(StrandPalette.hairlineStrong)
+                        .frame(width: 1)
+                        .position(x: half, y: geo.size.height / 2)
+                }
                 // value fill
                 Capsule()
                     .fill(color)
@@ -1488,10 +1540,22 @@ private struct RBar: View {
             .clipShape(Capsule())
         }
         .frame(height: NoopMetrics.space2)
+        .overlay {
+            if journalImpact {
+                Circle()
+                    .fill(StrandPalette.surfaceInset)
+                    .frame(width: NoopMetrics.space3, height: NoopMetrics.space3)
+                    .overlay {
+                        Circle()
+                            .fill(StrandPalette.textPrimary)
+                            .frame(width: NoopMetrics.space1, height: NoopMetrics.space1)
+                    }
+            }
+        }
         // Tooltip floats above the bar without affecting layout (overlays aren't
         // clipped), so the exact r value reads on hover, same affordance as charts.
         .overlay(alignment: .center) {
-            if hovering {
+            if hovering && showsTooltip {
                 ChartTooltip(
                     value: String(format: "r = %+.2f", r),
                     label: label,
@@ -1541,3 +1605,12 @@ private func insightsPreviewRepo() -> Repository {
         .preferredColorScheme(.dark)
 }
 #endif
+
+func resolveExperimentBehaviour(candidates: [String], saved: String, startedDay: String) -> String? {
+    let savedBehaviour = saved.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !startedDay.isEmpty {
+        return savedBehaviour.isEmpty ? nil : savedBehaviour
+    }
+    if !savedBehaviour.isEmpty, candidates.contains(savedBehaviour) { return savedBehaviour }
+    return candidates.first
+}

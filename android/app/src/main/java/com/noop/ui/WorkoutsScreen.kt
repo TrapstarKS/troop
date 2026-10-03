@@ -801,7 +801,7 @@ private fun HeroStat(title: String, value: String, tint: Color, modifier: Modifi
 @Composable
 private fun CalorieHeatmapSection(recentDays: List<com.noop.data.DailyMetric>) {
     val values = remember(recentDays) {
-        recentDays.mapNotNull { d -> d.activeKcalEst?.let { d.day to it } }
+        recentDays.mapNotNull { d -> d.activeEnergyKcalEst?.let { d.day to it } }
             .groupBy({ it.first }, { it.second })
             .mapValues { (_, v) -> v.max() }
     }

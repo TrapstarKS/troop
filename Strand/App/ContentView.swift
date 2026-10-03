@@ -13,7 +13,7 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            RootView()
+            RootView(externalNavigationEnabled: onboarded && acceptedTerms == Terms.currentVersion)
             if !onboarded {
                 OnboardingWizard(onFinished: {
                     onboarded = true
@@ -63,6 +63,7 @@ struct ContentView: View {
                 UpdateWatch.runIfDue(currentVersion: UpdateWatch.installedVersion, sideloadHint: false)
             }
         }
+        .modifier(DebugExportReviewHost())
         .onChangeCompat(of: acceptedTerms) { _ in showWhatsNewIfDue() }
     }
 

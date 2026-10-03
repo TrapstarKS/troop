@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whoop_sleep_detail_subtitle">Die ausgewählte Nacht und ihre Schlaffaktoren.</string>
+    <string name="whoop_sleep_performance">Schlafleistung</string>
+    <string name="whoop_sleep_hours_slept">Geschlafene Stunden</string>
+    <string name="whoop_sleep_need">Schlafbedarf</string>
+    <string name="whoop_sleep_high_stress">Hoher Schlafstress</string>
+    <string name="whoop_sleep_poor">Schlecht</string>
+    <string name="whoop_sleep_sufficient">Ausreichend</string>
+    <string name="whoop_sleep_optimal">Optimal</string>
+    <string name="whoop_sleep_unavailable">Nicht verfügbar</string>
+    <string name="whoop_sleep_imported_insight">Der importierte Schlafwert bleibt aus deinem Datensatz erhalten. Hoher Schlafstress ist hier nicht verfügbar. Schlafphasen werden nur bei aufgezeichneten Zeiten angezeigt.</string>
+    <string name="whoop_sleep_local_insight">Dieser Wert wird auf dem Gerät aus deinen Schlafdaten geschätzt. Hoher Schlafstress ist nicht verfügbar und wird nicht zum Wert hinzugefügt.</string>
+    <string name="whoop_sleep_planner">Schlafplaner</string>
+    <string name="whoop_sleep_restorative">Erholsamer Schlaf</string>
+    <string name="whoop_sleep_breaths_minute">Atemzüge/min</string>
+    <string name="whoop_sleep_duration_only">Die Dauer der Schlafphasen ist verfügbar; ihre Zeitpunkte wurden nicht aufgezeichnet.</string>
+    <string name="whoop_sleep_fragmented">Unterbrochener Schlaf</string>
+    <string name="whoop_sleep_scrub_hint">Ziehe über die Zeitleiste, um die genaue Uhrzeit und aufgezeichnete Schlafphase zu sehen.</string>
+    <string name="whoop_sleep_stage_unrecorded">Keine Schlafphase aufgezeichnet</string>
+    <string name="whoop_sleep_awake">Wach</string>
+    <string name="whoop_sleep_rem">REM</string>
+    <string name="whoop_sleep_light">Leicht</string>
+    <string name="whoop_sleep_deep">Tief</string>
+    <string name="whoop_sleep_stage_timeline">Zeitleiste der Schlafphasen</string>
+    <string name="whoop_sleep_stage_subtitle">%1$s im Bett · %2$s Effizienz</string>
+    <string name="whoop_sleep_raw_stages">Unverarbeitete Schlafphasen des Geräts</string>
+    <string name="whoop_sleep_estimated_stages">Geschätzte Schlafphasen auf dem Gerät</string>
+    <string name="whoop_sleep_requested_missing">Keine Schlafdaten für diesen Tag.</string>
+    <string name="whoop_sleep_recorded_subtitle">%1$s aufgezeichnet · %2$s Effizienz</string>
+    <string name="whoop_sleep_in_bed_duration">%1$s im Bett</string>
+</resources>

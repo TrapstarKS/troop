@@ -1016,7 +1016,7 @@ public enum AnalyticsEngine {
         // night-window hr for pure-function callers that don't supply dayHr. Strain keeps the full
         // window (bounded log).
         let dayHrFiltered = (dayHr ?? hr).filter { tsInDay($0.ts) }
-        let activeKcalEst: Double? = dayHrFiltered.isEmpty ? nil : Calories.estimateDayCalories(
+        let dayEnergy = dayHrFiltered.isEmpty ? nil : Calories.estimateDayEnergy(
             dayHrFiltered, profile: profile, hrmax: effMaxHR,
             restingHR: restingHRDaily.map(Double.init))
 
@@ -1038,7 +1038,8 @@ public enum AnalyticsEngine {
             skinTempDevC: skinTempDevC,
             respRateBpm: respRateDaily,
             steps: stepsTotal,
-            activeKcalEst: activeKcalEst,
+            activeKcalEst: dayEnergy?.totalKcal,
+            activeEnergyKcalEst: dayEnergy?.activeKcal,
             spo2Red: nightlySpo2Raw?.red,
             spo2Ir: nightlySpo2Raw?.ir,
             avgSdnn: avgSDNNDaily,

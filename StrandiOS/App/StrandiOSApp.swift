@@ -84,6 +84,12 @@ struct StrandiOSApp: App {
         let router = NavRouter()
         _router = StateObject(wrappedValue: router)
         NotificationPresenter.shared.onCoachBriefTapped = { [weak router] in router?.openCoach() }
+        NotificationPresenter.shared.onLocalNotificationContextTapped = { [weak router] context in
+            router?.openLocalNotification(context: context)
+        }
+        NotificationPresenter.shared.onLocalNotificationTapped = { [weak router] route in
+            router?.openLocalNotification(route: route)
+        }
         let model = AppModel()
         _model = StateObject(wrappedValue: model)
         CoachBriefScheduler.register(generateBrief: { [weak coach = model.coach] in
@@ -586,10 +592,18 @@ enum DemoScreens {
         case "stress":   return AnyView(StressView())
         case "workouts": return AnyView(WorkoutsView())
         case "health":   return AnyView(HealthView())
+        case "healthmonitor": return AnyView(HealthMonitorView())
+        case "healthspan": return AnyView(HealthspanView())
+        case "stressmonitor": return AnyView(StressMonitorView())
+        case "weeklyplan": return AnyView(WeeklyPlanView())
         case "insights": return AnyView(InsightsView())
         case "explore":  return AnyView(MetricExplorerView())
         case "compare":  return AnyView(CompareView())
         case "settings": return AnyView(SettingsView())
+        case "more": return AnyView(MoreHubView())
+        case "local_notifications": return AnyView(LocalNotificationsView())
+        case "local_briefing": return AnyView(LocalBriefingView())
+        case "alarms", "planner": return AnyView(SmartAlarmView())
         case "chargebreakdown": return AnyView(ChargeBreakdownDemoHost())
         case "devices":  return AnyView(DevicesView())
         case "devicescatalog": return AnyView(DeviceCardCatalog())

@@ -1,5 +1,12 @@
 import SwiftUI
 import StrandDesign
+import StrandAnalytics
+
+struct LocalNotificationRoutePayload: Hashable {
+    let context: LocalNotificationContext
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.context == rhs.context }
+    func hash(into hasher: inout Hasher) { hasher.combine(context.identity) }
+}
 
 // MARK: - TabRoute
 //
@@ -40,6 +47,9 @@ enum TabRoute: Hashable {
     case strainDetail
     case recoveryDetailForDay(dayKey: String?)
     case strainDetailForDay(dayKey: String?, effortOverride: Double?, windowDayKey: String? = nil)
+    case sleepDetailForDay(dayKey: String?)
+    case localBriefing
+    case localNotice(LocalNotificationRoutePayload)
     case sleepDetail
     case sleepPlanner
     case healthMonitor
@@ -88,11 +98,20 @@ extension View {
                 case .strainDetail: StrainDetailView()
                 case .recoveryDetailForDay(let dayKey): RecoveryDetailView(dayKey: dayKey)
                 case .strainDetailForDay(let dayKey, let effortOverride, let windowDayKey): StrainDetailView(dayKey: dayKey, effortOverride: effortOverride, windowDayKey: windowDayKey)
+                case .sleepDetailForDay(let dayKey): SleepView(initialDayKey: dayKey)
+                case .localBriefing: LocalBriefingView()
+                case .localNotice(let payload):
+                    if payload.context.route == "local_briefing" {
+                        LocalBriefingView(notificationContext: payload.context)
+                    } else {
+                        LocalRecordedNoticeView(notificationContext: payload.context)
+                    }
                 case .sleepDetail: SleepView()
                 case .sleepPlanner: SmartAlarmView()
-                case .healthMonitor, .healthspan: HealthView()
-                case .stressMonitor: StressView()
-                case .weeklyPlan: TabRoutePlaceholder(title: "Weekly Plan")
+                case .healthMonitor: HealthMonitorView()
+                case .healthspan: HealthspanView()
+                case .stressMonitor: StressMonitorView()
+                case .weeklyPlan: WeeklyPlanView()
                 case .journal: InsightsView()
                 }
             }

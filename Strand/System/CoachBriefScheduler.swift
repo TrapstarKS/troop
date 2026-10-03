@@ -262,6 +262,7 @@ enum CoachBriefScheduler {
     static func catchUpIfDue(generateBrief: () async -> String?) async -> Bool {
         guard isEnabled else { return true }
         let now = Date()
+        guard !LocalNotificationPreferences.isQuiet(now: now) else { return true }
         let cal = Calendar.current
         let comps = cal.dateComponents([.hour, .minute], from: now)
         let nowMinutes = (comps.hour ?? 0) * 60 + (comps.minute ?? 0)

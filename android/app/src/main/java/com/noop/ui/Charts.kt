@@ -126,9 +126,8 @@ internal fun hypnogramSummary(stages: List<Pair<String, Float>>): String {
 
 // MARK: - Shared geometry helpers
 
-/** Map a list of values into evenly-spaced points within [bounds], scaling y to the
- *  value range. A flat series (min == max) is centered vertically. Returns an empty
- *  list when there are fewer than two finite points. */
+/** Map values into plot points, scaling y to the value range. A flat series is centered vertically.
+ *  A single reading is drawable only with a valid timestamp domain; other callers retain the baseline. */
 internal fun pointsFor(
     values: List<Double>,
     width: Float,
@@ -137,11 +136,13 @@ internal fun pointsFor(
     bottomPad: Float,
     yDomain: ClosedFloatingPointRange<Double>? = null,
     timestamps: List<Long>? = null,
+    xDomain: LongRange? = null,
 ): List<Offset> {
     val clean = values.filter { it.isFinite() }
-    if (clean.size < 2 || width <= 0f || height <= 0f) return emptyList()
+    val cleanTimestamps = timestamps?.takeIf { it.size == values.size }
+        ?.let { ts -> values.indices.filter { values[it].isFinite() }.map { ts[it] } }
     val (lo, hi) = yBounds(clean, yDomain) ?: return emptyList()
-    return pointsFor(clean, width, height, topPad, bottomPad, timestamps, lo, hi)
+    return pointsFor(clean, width, height, topPad, bottomPad, cleanTimestamps, lo, hi, xDomain)
 }
 
 /**
@@ -207,12 +208,14 @@ private fun pointsFor(
     timestamps: List<Long>?,
     minV: Double,
     maxV: Double,
+    xDomain: LongRange? = null,
 ): List<Offset> {
-    if (values.size < 2 || width <= 0f || height <= 0f) return emptyList()
+    if (values.isEmpty() || width <= 0f || height <= 0f) return emptyList()
+    if (values.size == 1 && timestampXDomain(1, timestamps, xDomain) == null) return emptyList()
 
     val span = (maxV - minV)
     val usableH = (height - topPad - bottomPad).coerceAtLeast(1f)
-    val fractions = xFractions(values.size, timestamps)
+    val fractions = xFractions(values.size, timestamps, xDomain)
 
     return values.mapIndexed { i, v ->
         val x = fractions[i] * width
@@ -397,6 +400,9 @@ fun LineChart(
     // draws nothing, so every existing caller is byte-identical. A value outside the plotted range draws
     // nothing either: `yForValue` returns null rather than clamping a rule to an edge it does not sit on.
     baselineValue: Double? = null,
+    // Optional fixed unix-second bounds, retaining unmeasured time at either edge. A zero-span
+    // domain centers readings at that instant. Invalid bounds preserve the default observed span.
+    xDomain: LongRange? = null,
 ) {
     val cleanValues = remember(values) { values.filter { it.isFinite() } }
     // Timestamps filtered by the SAME finiteness cut as cleanValues so indices stay aligned;
@@ -418,13 +424,16 @@ fun LineChart(
     // list the length of the series. Keyed on both inputs so the gesture handlers can be keyed on IT:
     // keying them on `cleanValues` alone would let a timestamp change leave them hit-testing against
     // stale positions, highlighting one day while labelling another.
-    val xFracs = remember(cleanValues, cleanTimestamps) { xFractions(cleanValues.size, cleanTimestamps) }
+    val xFracs = remember(cleanValues, cleanTimestamps, xDomain) {
+        xFractions(cleanValues.size, cleanTimestamps, xDomain)
+    }
+    val canPlot = cleanValues.size >= 2 || timestampXDomain(cleanValues.size, cleanTimestamps, xDomain) != null
     val interactiveModifier = if (selectionEnabled) {
         Modifier
-            .pointerInput(cleanValues, xFracs) {
+            .pointerInput(cleanValues, xFracs, canPlot) {
                 detectTapGestures(
                     onTap = { offset ->
-                        if (cleanValues.size >= 2 && size.width > 0) {
+                        if (canPlot && size.width > 0) {
                             selectedIndex = nearestIndexForX(
                                 fractions = xFracs,
                                 width = size.width.toFloat(),
@@ -436,10 +445,10 @@ fun LineChart(
             }
             .then(
                 if (dragSelectionEnabled) {
-                    Modifier.pointerInput(cleanValues, xFracs) {
+                    Modifier.pointerInput(cleanValues, xFracs, canPlot) {
                         detectHorizontalDragGestures(
                             onDragStart = { start ->
-                                if (cleanValues.size < 2 || size.width <= 0f) return@detectHorizontalDragGestures
+                                if (!canPlot || size.width <= 0f) return@detectHorizontalDragGestures
                                 selectedIndex = nearestIndexForX(
                                     fractions = xFracs,
                                     width = size.width.toFloat(),
@@ -447,7 +456,7 @@ fun LineChart(
                                 )
                             },
                             onHorizontalDrag = { change, _ ->
-                                if (cleanValues.size < 2 || size.width <= 0f) return@detectHorizontalDragGestures
+                                if (!canPlot || size.width <= 0f) return@detectHorizontalDragGestures
                                 selectedIndex = nearestIndexForX(
                                     fractions = xFracs,
                                     width = size.width.toFloat(),
@@ -505,7 +514,7 @@ fun LineChart(
                     val strokePx = 2.5f
                     val topPad = strokePx + 4f
                     val bottomPad = strokePx + 4f
-                    val pts = pointsFor(cleanValues, size.width, size.height, topPad, bottomPad, yDomain, cleanTimestamps)
+                    val pts = pointsFor(cleanValues, size.width, size.height, topPad, bottomPad, yDomain, cleanTimestamps, xDomain)
                     // Same bounds as the series, through the same helper, so the rule cannot end up at a
                     // plausible-looking wrong height if either scale ever changes.
                     val baselineY = baselineValue?.let {
@@ -566,7 +575,7 @@ fun LineChart(
                             }
                             // A one-reading segment has no visible stroke. Method-segmented trends retain
                             // a small point so neither side of a method transition disappears.
-                            if (cleanSegmentIds != null) {
+                            if (cleanSegmentIds != null || pts.size == 1) {
                                 for (point in pts) drawCircle(color = color, radius = 2.5f, center = point)
                             }
                         }
@@ -580,7 +589,7 @@ fun LineChart(
                         val strokePx = 2.5f
                         val topPad = strokePx + 4f
                         val bottomPad = strokePx + 4f
-                        val pts = pointsFor(cleanValues, size.width, size.height, topPad, bottomPad, yDomain, cleanTimestamps)
+                        val pts = pointsFor(cleanValues, size.width, size.height, topPad, bottomPad, yDomain, cleanTimestamps, xDomain)
                         if (selectedIndex in pts.indices) {
                             val p = pts[selectedIndex]
                             drawLine(
@@ -671,25 +680,45 @@ fun MultiLineChart(
  * occupy the width it actually spans, and what makes breaking the stroke across one read as "nothing
  * measured here" rather than as a chopped line.
  *
- * Falls back to index spacing whenever time cannot order the points: no timestamps, a length mismatch, a
- * zero span (every reading at the same instant), or a non-ascending sequence. Refusing rather than
- * guessing, the same stance the rest of this file takes.
+ * A valid [xDomain] fixes both edges even when no readings exist there. Without it, observed timestamps
+ * span the width. Unusable timestamps preserve index spacing; an invalid override preserves the default.
  */
-internal fun xFractions(count: Int, timestamps: List<Long>?): List<Float> {
-    if (count <= 1) return List(count) { 0f }
-    val indexFractions = { List(count) { it.toFloat() / (count - 1) } }
-    if (timestamps == null || timestamps.size != count) return indexFractions()
-    if (timestamps.zipWithNext().any { (a, b) -> b < a }) return indexFractions()
-    val span = (timestamps.last() - timestamps.first()).toDouble()
-    if (span <= 0.0) return indexFractions()
-    return timestamps.map { ((it - timestamps.first()) / span).toFloat() }
+internal fun xFractions(count: Int, timestamps: List<Long>?, xDomain: LongRange? = null): List<Float> {
+    if (count <= 0) return emptyList()
+    val domain = timestampXDomain(count, timestamps, xDomain)
+        ?: return List(count) { if (count == 1) 0f else it.toFloat() / (count - 1) }
+    val span = domain.last.toDouble() - domain.first.toDouble()
+    if (span == 0.0) return List(count) { 0.5f }
+    return timestamps!!.map { ((it.toDouble() - domain.first.toDouble()) / span).toFloat() }
+}
+
+/** Resolve one shared timestamp domain for drawing, hit testing, and overlays. */
+internal fun timestampXDomain(count: Int, timestamps: List<Long>?, xDomain: LongRange? = null): LongRange? {
+    if (count <= 0 || timestamps == null || timestamps.size != count) return null
+    if (timestamps.zipWithNext().any { (a, b) -> b < a }) return null
+    if (xDomain != null && !xDomain.isEmpty() &&
+        timestamps.first() >= xDomain.first && timestamps.last() <= xDomain.last
+    ) return xDomain
+    return if (timestamps.last() > timestamps.first()) timestamps.first()..timestamps.last() else null
+}
+
+/** Calendar bars use the line's timestamp centers; existing bars retain their slot centers. */
+internal fun barXFractions(count: Int, timestamps: List<Long>?, xDomain: LongRange? = null): List<Float> =
+    if (timestampXDomain(count, timestamps, xDomain) != null) xFractions(count, timestamps, xDomain)
+    else List(count.coerceAtLeast(0)) { (it + 0.5f) / count }
+
+/** Daily timestamp bars occupy one measured day, leaving missing days empty. */
+internal fun barSlotFraction(count: Int, timestamps: List<Long>?, xDomain: LongRange? = null): Float {
+    val domain = timestampXDomain(count, timestamps, xDomain) ?: return if (count > 0) 1f / count else 0f
+    val span = domain.last.toDouble() - domain.first.toDouble()
+    return (86_400.0 / span.coerceAtLeast(86_400.0)).toFloat()
 }
 
 /**
  * The nearest point to a tapped x. Takes the SAME fractions the geometry used: deriving it from a uniform
  * step independently would select the wrong reading the moment spacing stopped being uniform.
  */
-private fun nearestIndexForX(fractions: List<Float>, width: Float, x: Float): Int {
+internal fun nearestIndexForX(fractions: List<Float>, width: Float, x: Float): Int {
     if (fractions.size <= 1 || width <= 0f) return 0
     val clampedX = x.coerceIn(0f, width)
     var best = 0
@@ -766,6 +795,10 @@ fun BarChart(
     axisStep: Double? = null,
     showValueLabels: Boolean = false,
     largeSelectionReadout: Boolean = false,
+    // Daily UTC civil-day timestamps, index-aligned with values. Opt-in: existing slot bars and
+    // downsampling stay unchanged. A fixed domain keeps leading/trailing unmeasured days empty.
+    timestamps: List<Long>? = null,
+    xDomain: LongRange? = null,
 ) {
     val cleanValues = remember(values) { values.map { if (it.isFinite() && it > 0.0) it else 0.0 } }
     // The cleaned list flattens a non-finite value to 0.0 so it draws nothing, which is right for the
@@ -781,6 +814,10 @@ fun BarChart(
     val cleanSelectionLabels = remember(values, selectionLabels) {
         if (selectionLabels == null || selectionLabels.size != values.size) null else selectionLabels
     }
+    val calendarDomain = remember(values, timestamps, xDomain) {
+        timestampXDomain(values.size, timestamps, xDomain)
+    }
+    val xFracs = remember(values, timestamps, xDomain) { barXFractions(values.size, timestamps, xDomain) }
     // Selection survives release, but belongs to this dataset (including its dates), not a slot.
     var selectedIndex by remember(values, cleanSelectionLabels) { mutableIntStateOf(-1) }
     var holding by remember(values, cleanSelectionLabels) { mutableStateOf(false) }
@@ -815,13 +852,16 @@ fun BarChart(
             .clearAndSetSemantics { contentDescription = axSummary }
             .then(
                 if (selectionEnabled) {
-                    Modifier.pointerInput(values, cleanSelectionLabels, axisWidth) {
+                    Modifier.pointerInput(values, cleanSelectionLabels, axisWidth, xFracs, calendarDomain) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             fun select(x: Float) {
-                                if (cleanValues.isNotEmpty() && size.width > axisWidth) selectedIndex = nearestBarIndexForX(
-                                    cleanValues.size, size.width.toFloat() - axisWidth, x - axisWidth,
-                                )
+                                if (cleanValues.isNotEmpty() && size.width > axisWidth) selectedIndex =
+                                    if (calendarDomain != null) nearestIndexForX(
+                                        xFracs, size.width.toFloat() - axisWidth, x - axisWidth,
+                                    ) else nearestBarIndexForX(
+                                        cleanValues.size, size.width.toFloat() - axisWidth, x - axisWidth,
+                                    )
                             }
                             select(down.position.x)
                             holding = true
@@ -857,7 +897,7 @@ fun BarChart(
                 // would desync the highlight + label. Interactive charts carry small bounded counts
                 // (days), so they never hit this path anyway; the downsample targets dense static bars.
                 val maxBars = w.toInt().coerceAtLeast(1)
-                val clean = if (!selectionEnabled && cleanValues.size > maxBars && maxBars >= 1) {
+                val clean = if (calendarDomain == null && !selectionEnabled && cleanValues.size > maxBars && maxBars >= 1) {
                     meanBucketDownsample(cleanValues, maxBars)
                 } else {
                     cleanValues
@@ -878,7 +918,8 @@ fun BarChart(
                     val baselineY = baselineValue
                         ?.takeIf { it.isFinite() && it >= 0.0 && it <= maxV }
                         ?.let { h - ((it / maxV).toFloat().coerceIn(0f, 1f) * usableH) }
-                    val slot = w / clean.size
+                    val slot = if (calendarDomain != null) w * barSlotFraction(clean.size, timestamps, xDomain)
+                        else w / clean.size
                     val barWidth = (slot * 0.64f).coerceAtLeast(1f)
                     val barCornerRadius = minOf(2.dp.toPx(), barWidth / 4f)
                     val gridDash = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))
@@ -888,7 +929,7 @@ fun BarChart(
                     clean.forEachIndexed { i, v ->
                         val norm = (v / maxV).toFloat().coerceIn(0f, 1f)
                         val barHeight = (norm * usableH).coerceAtLeast(if (v > 0.0) 1f else 0f)
-                        val cx = axisWidth + slot * i + slot / 2f
+                        val cx = axisWidth + if (calendarDomain != null) xFracs[i] * w else slot * i + slot / 2f
                         val top = h - barHeight
                         bars.add(BarSeg(i, cx, top))
                     }
@@ -908,14 +949,18 @@ fun BarChart(
                         }
                         bars.forEach { seg ->
                             val i = seg.index
+                            val left = if (calendarDomain != null) (seg.cx - barWidth / 2f).coerceAtLeast(axisWidth)
+                                else seg.cx - barWidth / 2f
+                            val right = if (calendarDomain != null) (seg.cx + barWidth / 2f).coerceAtMost(size.width)
+                                else seg.cx + barWidth / 2f
                             if (clean[i] > 0) drawRoundRect(
                                 color = when {
                                     holding && i != selectedIndex -> color.copy(alpha = 0.22f)
                                     selectionEnabled && (i == selectedIndex || largeSelectionReadout) -> color
                                     else -> unselectedColor
                                 },
-                                topLeft = Offset(seg.cx - barWidth / 2f, seg.top),
-                                size = androidx.compose.ui.geometry.Size(barWidth, h - seg.top),
+                                topLeft = Offset(left, seg.top),
+                                size = androidx.compose.ui.geometry.Size(right - left, h - seg.top),
                                 cornerRadius = minOf(barCornerRadius, (h - seg.top) / 4f).let {
                                     androidx.compose.ui.geometry.CornerRadius(it, it)
                                 },

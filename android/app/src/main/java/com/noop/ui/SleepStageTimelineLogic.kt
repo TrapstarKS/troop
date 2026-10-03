@@ -66,7 +66,7 @@ internal fun scrubHitAt(
     if (widthPx <= 0f || spanSec <= 0.0 || intervals.isEmpty()) return null
     val frac = (xPx / widthPx).coerceIn(0f, 1f).toDouble()
     val sec = frac * spanSec
-    val stage = intervals.firstOrNull { sec >= it.startSec && sec <= it.endSec }?.stage.orEmpty()
+    val stage = intervals.firstOrNull { sec >= it.startSec && sec < it.endSec }?.stage.orEmpty()
     return ScrubHit(stage = stage, timestamp = (originSec + sec).toLong())
 }
 

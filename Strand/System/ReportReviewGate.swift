@@ -37,7 +37,7 @@ struct ReportReviewGate {
     /// bundle order. Empty string if there is nothing text-decodable to show.
     var previewText: String {
         let textBlocks = entries.compactMap { entry -> String? in
-            guard !Self.notShownInline.contains(entry.name), entry.data.count <= Self.maxInlineBytes,
+            guard !Self.notShownInline.contains(entry.name), !entry.name.hasPrefix("imu/"), entry.data.count <= Self.maxInlineBytes,
                   let text = String(data: entry.data, encoding: .utf8) else { return nil }
             return "=== \(entry.name) ===\n\(text)"
         }.joined(separator: "\n\n")
@@ -45,7 +45,7 @@ struct ReportReviewGate {
         // oversized) are not shown inline. Name them so the review is honest about EVERYTHING in the bundle:
         // the user sees that a screenshot / raw capture / ring dump is attached and can cancel if unwanted.
         let binaryNames = entries.compactMap { entry -> String? in
-            if Self.notShownInline.contains(entry.name) || entry.data.count > Self.maxInlineBytes { return entry.name }
+            if Self.notShownInline.contains(entry.name) || entry.name.hasPrefix("imu/") || entry.data.count > Self.maxInlineBytes { return entry.name }
             return String(data: entry.data, encoding: .utf8) == nil ? entry.name : nil
         }
         guard !binaryNames.isEmpty else { return textBlocks }

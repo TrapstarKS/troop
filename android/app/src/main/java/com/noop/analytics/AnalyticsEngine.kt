@@ -941,10 +941,10 @@ object AnalyticsEngine {
         // night-window hr for pure-function callers that don't supply dayHr. Strain keeps the full
         // window (bounded log).
         val dayHrFiltered = (dayHr ?: hr).filter { tsInDay(it.ts) }
-        val activeKcalEst: Double? = if (dayHrFiltered.isEmpty()) {
+        val dayEnergy = if (dayHrFiltered.isEmpty()) {
             null
         } else {
-            Calories.estimateDayCalories(
+            Calories.estimateDayEnergy(
                 hrSamples = dayHrFiltered,
                 profile = profile,
                 hrmax = effMaxHR,
@@ -983,7 +983,8 @@ object AnalyticsEngine {
             skinTempDevC = skinTempDevC,
             respRateBpm = respRateDaily,
             steps = stepsTotal,
-            activeKcalEst = activeKcalEst,
+            activeKcalEst = dayEnergy?.totalKcal,
+            activeEnergyKcalEst = dayEnergy?.activeKcal,
             spo2Red = nightlySpo2Raw?.first,
             spo2Ir = nightlySpo2Raw?.second,
             avgSdnn = avgSDNNDaily,

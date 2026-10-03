@@ -110,6 +110,13 @@ struct TrendsView: View {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+    private static let chartDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
     private func date(_ day: String) -> Date? { Self.dayParser.date(from: day) }
 
     private struct ResolvedMetric {
@@ -118,11 +125,13 @@ struct TrendsView: View {
 
     private func resolve(_ value: (DailyMetric) -> Double?) -> ResolvedMetric {
         let window = selectedWindow
-        let points = repo.days.compactMap { day -> TrendPoint? in
+        var points = repo.days.compactMap { day -> TrendPoint? in
             guard window.contains(day.day), let number = value(day), number.isFinite,
                   let date = date(day.day) else { return nil }
             return TrendPoint(date: date, value: number)
-        }
+        }.sorted { $0.date < $1.date }
+        let segments = hrGapSegments(bucketTs: points.map { Int($0.date.timeIntervalSince1970) }, bucketSeconds: 86_400)
+        for index in points.indices { points[index].segment = segments[index] }
         return ResolvedMetric(points: points)
     }
 
@@ -564,7 +573,7 @@ struct TrendsView: View {
             height: NoopMetrics.chartHeight,
             tint: tint,
             chart: {
-                if pts.count >= 2 {
+                if !pts.isEmpty {
                     glowChart(points: pts, gradient: gradient, valueRange: range,
                               tip: tip, valueFormat: { "\(fmt($0)) \(unit)" },
                               accessibilityLabel: String(localized: "\(accessibilityTitle) trend"))
@@ -666,7 +675,9 @@ struct TrendsView: View {
                    showsArea: true,
                    showsBars: TrendChartStyle(rawValue: trendChartStyleRaw) == .bar,
                    height: NoopMetrics.chartHeight, valueFormat: valueFormat,
-                   accessibilityLabel: accessibilityLabel, nowCapColor: tip)
+                   dateFormat: { Self.chartDayFormatter.string(from: $0) },
+                   accessibilityLabel: accessibilityLabel, nowCapColor: tip,
+                   calendarTimeAxis: date(selectedWindow.start)!...date(selectedWindow.end)!)
     }
 
     private var sparsePlaceholder: some View {

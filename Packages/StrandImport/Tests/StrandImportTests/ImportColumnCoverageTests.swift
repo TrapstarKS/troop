@@ -58,4 +58,16 @@ final class ImportColumnCoverageTests: XCTestCase {
             "import columns stage=cycles rows=0"
         )
     }
+    func testSkinCoverageCountsAbsoluteBeforeBaselineWarmupWithoutDoubleCounting() {
+        func row(_ day: String, deviation: Double?, celsius: Double?) -> DailyMetric {
+            DailyMetric(day: day, totalSleepMin: nil, efficiency: nil, deepMin: nil, remMin: nil,
+                        lightMin: nil, disturbances: nil, restingHr: nil, avgHrv: nil, recovery: nil,
+                        strain: nil, exerciseCount: nil, skinTempDevC: deviation, skinTempC: celsius)
+        }
+        let rows = [row("2026-06-01", deviation: nil, celsius: 33.4),
+                    row("2026-06-02", deviation: 0.2, celsius: nil),
+                    row("2026-06-03", deviation: 0.2, celsius: 33.4),
+                    row("2026-06-04", deviation: nil, celsius: nil)]
+        XCTAssertEqual(importColumnCoverage(rows).first { $0.0 == "skin_temp" }?.1, 3)
+    }
 }

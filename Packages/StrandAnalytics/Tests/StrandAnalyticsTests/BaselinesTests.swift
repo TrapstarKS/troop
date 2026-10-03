@@ -350,4 +350,27 @@ final class BaselinesTests: XCTestCase {
         XCTAssertNotEqual(Baselines.daytimeHRCfg, Baselines.restingHRCfg)
         XCTAssertNotEqual(Baselines.daytimeRMSSDCfg, Baselines.hrvCfg)
     }
+    func testRoundedDelta2dpMatchesStandaloneSwiftOracle() throws {
+        let state = Baselines.foldHistory(Array(repeating: 34.0, count: 14), cfg: try XCTUnwrap(Baselines.metricCfg["skin_temp"]))
+        let offsets: [Double] = [-8, -1, -0.505, -0.5, -0.125, -0.005, 0, 0.005, 0.125, 0.5, 0.505, 1, 8]
+        let output = offsets.map { offset in
+            let value = 34.0 + offset
+            return String(format: "%016llx:%016llx", value.bitPattern, Baselines.roundedDelta2dp(value, state: state).bitPattern)
+        }.joined(separator: "\n")
+        XCTAssertEqual(output, """
+        403a000000000000:c020000000000000
+        4040800000000000:bff0000000000000
+        4040bf5c28f5c28f:bfe051eb851eb852
+        4040c00000000000:bfe0000000000000
+        4040f00000000000:bfc0a3d70a3d70a4
+        4040ff5c28f5c28f:bf847ae147ae147b
+        4041000000000000:0000000000000000
+        404100a3d70a3d71:3f847ae147ae147b
+        4041100000000000:3fc0a3d70a3d70a4
+        4041400000000000:3fe0000000000000
+        404140a3d70a3d71:3fe051eb851eb852
+        4041800000000000:3ff0000000000000
+        4045000000000000:4020000000000000
+        """)
+    }
 }

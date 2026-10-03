@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whoop_sleep_detail_subtitle">Your selected night and its sleep factors.</string>
+    <string name="whoop_sleep_performance">Sleep Performance</string>
+    <string name="whoop_sleep_hours_slept">Hours slept</string>
+    <string name="whoop_sleep_need">Sleep Need</string>
+    <string name="whoop_sleep_high_stress">High sleep stress</string>
+    <string name="whoop_sleep_poor">Poor</string>
+    <string name="whoop_sleep_sufficient">Sufficient</string>
+    <string name="whoop_sleep_optimal">Optimal</string>
+    <string name="whoop_sleep_unavailable">Unavailable</string>
+    <string name="whoop_sleep_imported_insight">The imported sleep score is preserved from your record. High sleep stress is unavailable here. Stage timing appears only when recorded.</string>
+    <string name="whoop_sleep_local_insight">This score is an on-device estimate from your sleep data. High sleep stress is unavailable and is not added to the score.</string>
+    <string name="whoop_sleep_planner">Sleep Planner</string>
+    <string name="whoop_sleep_restorative">Restorative sleep</string>
+    <string name="whoop_sleep_breaths_minute">breaths/min</string>
+    <string name="whoop_sleep_duration_only">Stage durations are available; their timing was not recorded.</string>
+    <string name="whoop_sleep_fragmented">Fragmented sleep</string>
+    <string name="whoop_sleep_scrub_hint">Drag across the timeline to inspect the exact time and recorded stage.</string>
+    <string name="whoop_sleep_stage_unrecorded">No stage recorded</string>
+    <string name="whoop_sleep_awake">Awake</string>
+    <string name="whoop_sleep_rem">REM</string>
+    <string name="whoop_sleep_light">Light</string>
+    <string name="whoop_sleep_deep">Deep</string>
+    <string name="whoop_sleep_stage_timeline">Sleep stage timeline</string>
+    <string name="whoop_sleep_stage_subtitle">%1$s in bed · %2$s efficiency</string>
+    <string name="whoop_sleep_raw_stages">Raw on-device stages</string>
+    <string name="whoop_sleep_estimated_stages">Approximate on-device stages</string>
+    <string name="whoop_sleep_requested_missing">No sleep data for this day.</string>
+    <string name="whoop_sleep_recorded_subtitle">%1$s recorded · %2$s efficiency</string>
+    <string name="whoop_sleep_in_bed_duration">%1$s in bed</string>
+</resources>

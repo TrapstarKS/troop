@@ -75,10 +75,12 @@ class AlarmCountdownTest {
         val start = src.indexOf("private fun alarmCountdown(")
         if (start < 0) throw AssertionError("alarmCountdown not found in SmartAlarmScreen.kt")
         val body = src.substring(start, src.indexOf("\n}", start))
-        assertTrue(
-            "the countdown must use the scheduler's own next-deadline resolver:\n$body",
-            body.contains("SmartAlarmScheduler.nextDeadline("),
-        )
+        assertEquals("the screen must resolve the deadline only once", 1,
+            Regex("SmartAlarmScheduler\\.nextDeadline\\(").findAll(src).count())
+        assertTrue("the countdown must use the already resolved deadline", body.contains("val next = deadline ?: return null"))
+        assertTrue("the same deadline must feed the figures", src.contains("phoneAlarmWindowMinutes(nextDeadline, windowMinutes, targetMinutes)"))
+        assertTrue("the card must display the resolved deadline field", src.contains("deadlineMinutes = window.second,"))
+        assertTrue("the same deadline must feed the countdown", src.contains("deadline = nextDeadline,"))
         assertTrue(
             "the per-day overrides must reach it, or override days count to the wrong time",
             src.contains("targetForDay = { phoneAlarmDayOverrides[it] ?: targetMinutes }"),
@@ -111,6 +113,24 @@ class AlarmCountdownTest {
             "and they must resolve FROM that tick, not from a fresh Calendar.getInstance()",
             src.contains("now = java.util.Calendar.getInstance().apply { timeInMillis = nowMs },"),
         )
+    }
+
+    @Test fun displayedWindowEdgesRemainTheResolvedClockTimesAcrossDst() {
+        for ((month, day, target, expectedEnd) in listOf(
+            listOf(Calendar.MARCH, 8, 2 * 60 + 40, 3 * 60 + 10),
+            listOf(Calendar.NOVEMBER, 1, 40, 70),
+        )) {
+            val now = Calendar.getInstance(TimeZone.getTimeZone("America/New_York")).apply {
+                clear()
+                set(2026, month, day, 0, 0, 0)
+            }
+            val deadline = SmartAlarmScheduler.nextDeadline(now, setOf(Calendar.SUNDAY), 30) { target }!!
+            val fields = phoneAlarmWindowMinutes(deadline, 30, target)
+            assertEquals(100, fields.first)
+            assertEquals(expectedEnd, fields.second)
+            assertEquals(deadline.get(Calendar.HOUR_OF_DAY) * 60 + deadline.get(Calendar.MINUTE), fields.second)
+            assertEquals(target to ((target + 30) % 1440), phoneAlarmWindowMinutes(null, 30, target))
+        }
     }
 
     /**

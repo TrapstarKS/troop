@@ -1103,6 +1103,9 @@ extension WhoopStore {
         migrator.registerMigration("v47-rr-whoop5-fill") { db in
             try db.execute(sql: WhoopStore.whoop5RrFillMigrationSQL)
         }
+        migrator.registerMigration("v48-daily-active-energy") { db in
+            try db.execute(sql: "ALTER TABLE dailyMetric ADD COLUMN activeEnergyKcalEst REAL")
+        }
         return migrator
     }
 }

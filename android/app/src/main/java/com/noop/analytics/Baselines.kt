@@ -239,6 +239,18 @@ object Baselines {
      *  reader and invisible to a compiler. Mirrors the Swift twin's `(observed:missing:)` labels. */
     data class HrvCoverage(val observed: Int, val missing: Int)
 
+    /** Local labelled R-R day encoded as UTC midnight, with the later manual cut retained. */
+    fun effectiveHrvEpoch(manualEpoch: Double, firstScorableTimestamp: Long?,
+                          isWhoop5: Boolean, offsetSec: Long): Double {
+        if (!isWhoop5 || firstScorableTimestamp == null) return manualEpoch
+        val regime = kotlin.math.floor((firstScorableTimestamp + offsetSec).toDouble() / 86_400.0) * 86_400.0
+        return maxOf(manualEpoch, regime)
+    }
+
+    /** Calendar keys use the same UTC-midnight convention as the baseline fold. */
+    fun isInHrvEra(day: String, epoch: Double): Boolean =
+        isoEpochDay(day)?.let { it.toDouble() * 86_400 >= epoch } ?: false
+
     /**
      * Nights the app OBSERVED in the recent window, and how many carried no usable HRV. Swift twin:
      * `Baselines.recentHrvCoverage`.
@@ -572,6 +584,12 @@ object Baselines {
         val delta = value - state.baseline
         val ratio = if (state.baseline != 0.0) (value / state.baseline - 1.0) else 0.0
         return Deviation(z = z, delta = delta, ratio = ratio, inNormalRange = abs(z) <= 1.0)
+    }
+
+    /** Stored skin-temperature delta, rounded to two decimals with ties away from zero. */
+    fun roundedDelta2dp(value: Double, state: BaselineState): Double {
+        val scaled = deviation(value, state).delta * 100.0
+        return (if (scaled >= 0) Math.floor(scaled + 0.5) else Math.ceil(scaled - 0.5)) / 100.0
     }
 
     // ─────────────────────────────────────────────────────────────────────────

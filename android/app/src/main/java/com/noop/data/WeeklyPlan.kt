@@ -65,6 +65,7 @@ object WeeklyPlanCalendar {
         clear()
     }
 
+    // Swift twin: `WeeklyPlanCalendar.date`.
     fun date(day: String): Date? {
         if (!dayPattern.matches(day)) return null
         val parts = day.split('-').map { it.toInt() }
@@ -74,6 +75,7 @@ object WeeklyPlanCalendar {
         return runCatching { calendar.time }.getOrNull()?.takeIf { key(calendar) == day }
     }
 
+    // Swift twin: `WeeklyPlanCalendar.adding`.
     fun adding(days: Int, to: String): String? {
         val calendar = calendar().apply { time = date(to) ?: return null }
         calendar.add(Calendar.DAY_OF_MONTH, days)
@@ -81,17 +83,21 @@ object WeeklyPlanCalendar {
         return key(calendar)
     }
 
+    // Swift twin: `WeeklyPlanCalendar.weekStart`.
     fun weekStart(day: String): String? = weekday(day)?.let { adding(-(it - 1), day) }
+    // Swift twin: `WeeklyPlanCalendar.weekday`.
     fun weekday(day: String): Int? = date(day)?.let { date ->
         val calendar = calendar().apply { time = date }
         (calendar.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
     }
 
+    // Swift twin: `WeeklyPlanCalendar.key`.
     private fun key(calendar: Calendar): String = String.format(Locale.US, "%04d-%02d-%02d",
         calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH))
 }
 
 object WeeklyPlanEngine {
+    // Swift twin: `WeeklyPlanEngine.suggestedGoals`.
     fun suggestedGoals(days: List<WeeklyPlanDay>, today: String): WeeklyPlanGoals {
         val from = WeeklyPlanCalendar.adding(-30, today) ?: return WeeklyPlanGoals()
         val window = uniqueDays(days.filter { it.day >= from && it.day < today })
@@ -103,6 +109,7 @@ object WeeklyPlanEngine {
         ).normalized
     }
 
+    // Swift twin: `WeeklyPlanEngine.snapshot`.
     fun snapshot(
         goals: WeeklyPlanGoals,
         weekStart: String,
@@ -131,6 +138,7 @@ object WeeklyPlanEngine {
         )
     }
 
+    // Swift twin: `WeeklyPlanEngine.uniqueDays`.
     private fun uniqueDays(days: List<WeeklyPlanDay>): List<WeeklyPlanDay> =
         days.filter { WeeklyPlanCalendar.date(it.day) != null }.associateBy { it.day }.toSortedMap().values.toList()
 }
@@ -141,6 +149,7 @@ data class WeeklyPlanNotice(val kind: Kind, val weekStart: String) {
 }
 
 object WeeklyPlanNoticeResolver {
+    // Swift twin: `WeeklyPlanNoticeResolver.resolve`.
     fun resolve(today: String, availableWeeks: Set<String>, dismissedIDs: Set<String> = emptySet()): WeeklyPlanNotice? {
         val week = WeeklyPlanCalendar.weekStart(today) ?: return null
         val notice = when (WeeklyPlanCalendar.weekday(today)) {

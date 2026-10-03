@@ -62,11 +62,12 @@ class WhoopCsvExporterTest {
         assertEquals("92.3", row["sleep_efficiency_pct"])
         // Source column is present but ignored on import.
         assertEquals("import", row["source"])
-        // The four sleep figures re-parse as metricSeries rows under their original keys.
+        // Sleep figures and the imported skin-temperature marker re-parse under their original keys.
         val s = WhoopCsvImporter.parseCycleSeries(table, "my-whoop").associate { it.key to it.value }
         assertEquals(mapOf(
             "sleep_performance" to 85.0, "sleep_consistency" to 88.0,
             "sleep_need_min" to 480.0, "sleep_debt_min" to 60.0,
+            "skin_temp" to 33.1,
         ), s)
     }
 
@@ -227,5 +228,16 @@ class WhoopCsvExporterTest {
             while (e != null) { names.add(e.name); e = zis.nextEntry }
         }
         assertEquals(listOf("a.csv", "noop_metric_series.json"), names)
+    }
+    @Test
+    fun skinColumnExportsAbsoluteAndLeavesDeviationOnlyBlank() {
+        fun row(day: String, deviation: Double?, celsius: Double?) = DailyMetric(deviceId = "my-whoop",
+            day = day, totalSleepMin = null, efficiency = null, deepMin = null, remMin = null,
+            lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null,
+            strain = null, exerciseCount = null, skinTempDevC = deviation, skinTempC = celsius)
+        val rows = listOf(row("2026-06-01", 0.2, 33.4), row("2026-06-02", 0.2, null), row("2026-06-03", 33.1, null))
+        val csv = WhoopCsvExporter.cyclesCsv(rows, emptyMap(), emptyMap())
+        val parsed = WhoopCsvImporter.parseCycles(CsvTable.fromData(csv.toByteArray()), "my-whoop")
+        assertEquals(listOf(33.4, null, 33.1), parsed.map { it.skinTempC })
     }
 }

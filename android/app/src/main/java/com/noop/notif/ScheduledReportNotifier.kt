@@ -10,7 +10,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.noop.R
 import com.noop.ui.NoopPrefs
-import com.noop.ui.appLaunchIntent
 import kotlin.math.roundToInt
 
 // MARK: - Scheduled report notifications (#517)
@@ -25,7 +24,7 @@ import kotlin.math.roundToInt
 //
 // The pure [ScheduledReportPolicy] + the copy builders are JVM-testable (the CallAlertPolicy idiom); the
 // notifier wires them to a real channel + the persisted dedupe markers in NoopPrefs. Call sites:
-//   - morning recap: the AppViewModel days collector, when a new local-day row with a banked night appears.
+//   - wake recap: LocalNotificationDispatcher owns the single wake-based morning producer.
 //   - post-workout: after loadWorkouts(), when the newest workout start-ts is newer than the last fired.
 // Both gates survive process death, so the app-open and (future) background call sites can't double-post.
 
@@ -133,39 +132,7 @@ object ScheduledReportNotifier {
     private const val CHANNEL_ID = "noop_scheduled_reports"
     // #297: distinct ids so a report never silently replaces another notifier's (tagless notify()).
     // Map: 4201 connection, 4202 illness, 4203 inactivity, 4204 smart alarm, 4205/4206/4207 battery.
-    private const val MORNING_NOTIF_ID = 4208
     private const val WORKOUT_NOTIF_ID = 4209
-
-    /**
-     * Post the morning recap if enabled and not already posted today. [chargePct]/[restPct] are the
-     * just-computed Charge/Rest for the night (either may be null). No-op on every path that fails the
-     * policy, so the caller can fire it freely each time the days collector republishes.
-     */
-    @SuppressLint("MissingPermission") // guarded by areNotificationsEnabled() + runCatching
-    fun onMorning(context: Context, reportDay: String, chargePct: Int?, restPct: Int?) {
-        // reportDay is the banked night's day (the resolved today-row's `day`), NOT LocalDate.now() — the
-        // calendar day rolls at midnight while the row still resolves to last night's until a new night is
-        // banked, which re-fired the recap at the start of a new day for late-nighters (#567).
-        if (!ScheduledReportPolicy.shouldNotifyMorning(
-                enabled = NoopPrefs.morningReportEnabled(context),
-                chargeOrRestPresent = chargePct != null || restPct != null,
-                lastNotifiedDay = NoopPrefs.reportMorningDay(context),
-                reportDay = reportDay,
-                // The clock the floor compares against. Read here rather than inside the policy, so the policy
-                // stays pure and the test can pin 00:40 and 07:00 without a fake clock.
-                nowMinuteOfDay = java.time.LocalTime.now().let { it.hour * 60 + it.minute },
-            )
-        ) return
-        val copy = ScheduledReportPolicy.morningCopy(chargePct, restPct) ?: return
-        runCatching {
-            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
-            ensureChannel(context)
-            post(context, MORNING_NOTIF_ID, copy.first, copy.second)
-            // Mark fired only after a successful post, so a notifications-disabled night still notifies
-            // once they're re-enabled while the same night's row is showing.
-            NoopPrefs.setReportMorningDay(context, reportDay)
-        }
-    }
 
     /**
      * Post the post-workout summary for [newestWorkoutTs] if it's strictly newer than the last summarised.
@@ -185,11 +152,14 @@ object ScheduledReportNotifier {
                 lastWorkoutTs = NoopPrefs.reportLastWorkoutTs(context),
             )
         ) return
+        val workoutStart = newestWorkoutTs ?: return
         runCatching {
             if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+            val time = java.time.LocalTime.now()
+            if (LocalNotificationPrefs.quiet(context, time.hour * 60 + time.minute)) return
             ensureChannel(context)
-            post(context, WORKOUT_NOTIF_ID, title, body)
-            newestWorkoutTs?.let { NoopPrefs.setReportLastWorkoutTs(context, it) }
+            post(context, WORKOUT_NOTIF_ID, title, body, workoutStart)
+            NoopPrefs.setReportLastWorkoutTs(context, workoutStart)
         }
     }
 
@@ -205,10 +175,11 @@ object ScheduledReportNotifier {
     }
 
     @SuppressLint("MissingPermission")
-    private fun post(context: Context, id: Int, title: String, body: String) {
+    private fun post(context: Context, id: Int, title: String, body: String, workoutStart: Long) {
         val openApp = PendingIntent.getActivity(
-            context, 3,
-            appLaunchIntent(context),
+            context, id,
+            localNotificationLaunchIntent(context, LocalNotificationContext("workouts", "workoutReady:$workoutStart",
+                workoutStartSec = workoutStart, message = body)),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -221,7 +192,7 @@ object ScheduledReportNotifier {
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-        NotificationManagerCompat.from(context).notify(id, n)
+        NotificationManagerCompat.from(context).notify("workoutReady:$workoutStart", id, n)
     }
 
     private fun ensureChannel(context: Context) {

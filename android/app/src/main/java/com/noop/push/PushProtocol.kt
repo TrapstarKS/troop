@@ -434,7 +434,7 @@ object PushProtocol {
         "dailyMetric" to (listOf("day") to listOf(
             "totalSleepMin", "efficiency", "deepMin", "remMin", "lightMin", "disturbances",
             "restingHr", "avgHrv", "recovery", "strain", "exerciseCount", "spo2Pct",
-            "skinTempDevC", "respRateBpm", "steps", "activeKcalEst", "spo2Red", "spo2Ir",
+            "skinTempDevC", "respRateBpm", "steps", "activeKcalEst", "activeEnergyKcalEst", "spo2Red", "spo2Ir",
         )),
         "sleepSession" to (listOf("startTs") to listOf(
             "endTs", "efficiency", "restingHr", "avgHrv", "stagesJSON", "userEdited",
