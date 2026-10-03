@@ -33,6 +33,12 @@ struct HealthspanView: View {
     private var window: [DailyMetric] {
         (sourceLoaded ? days : []).filter { healthspanDaysAgo($0.day, reference: reference).map { (0..<7).contains($0) } ?? false }
     }
+    private var trendPoints: [HealthspanTrendPoint] {
+        (sourceLoaded ? series : []).filter {
+            $0.value.isFinite && (20...90).contains($0.value)
+                && (healthspanDaysAgo($0.day, reference: reference).map { (0..<180).contains($0) } ?? false)
+        }.map { HealthspanTrendPoint(day: $0.day, value: $0.value) }
+    }
 
     var body: some View {
         ScrollView {
@@ -59,7 +65,7 @@ struct HealthspanView: View {
                         Button("How this estimate works") { showMethod = true }.font(StrandFont.headline).frame(minHeight: NoopMetrics.touchTarget)
                     }
                 }
-                if sourceLoaded && !series.isEmpty { ageTrend }
+                if !trendPoints.isEmpty { ageTrend }
                 VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                     TrackedSectionHeader(title: String(localized: "Contributors"))
                     contributor(String(localized: "Sleep"), symbol: "moon.fill", value: average(window.compactMap(\.totalSleepMin).filter { $0.isFinite && $0 > 0 }).map { healthspanDuration(Int($0.rounded())) })
@@ -109,7 +115,7 @@ struct HealthspanView: View {
             VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                 TrackedSectionHeader(title: String(localized: "NOOP Age trend"))
                 Chart {
-                    ForEach(series.filter { $0.value.isFinite && (20...90).contains($0.value) && (healthspanDaysAgo($0.day, reference: reference).map { (0..<180).contains($0) } ?? false) }.map { HealthspanTrendPoint(day: $0.day, value: $0.value) }) { point in
+                    ForEach(trendPoints) { point in
                         if let date = healthspanDate(point.day) {
                             LineMark(x: .value("Date", date), y: .value("Age", point.value))
                                 .foregroundStyle(StrandPalette.positive)

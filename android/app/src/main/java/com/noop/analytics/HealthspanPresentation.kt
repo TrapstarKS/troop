@@ -50,6 +50,7 @@ object HealthspanPresentation {
      * Swift twin: `HealthspanPresentation.latestSteps`. */
     fun latestSteps(measured: List<StepSample>, imported: List<StepSample>,
                     fromDay: String, throughDay: String): StepSample? {
+        // Swift twin: HealthspanPresentation.valid
         fun valid(sample: StepSample): Boolean =
             sample.count.isFinite() && sample.count >= 0 && sample.day >= fromDay && sample.day <= throughDay
         val byDay = mutableMapOf<String, StepSample>()

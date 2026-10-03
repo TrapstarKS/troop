@@ -72,6 +72,7 @@ public enum HealthspanPresentation {
     /// Kotlin twin: `HealthspanPresentation.latestSteps`.
     public static func latestSteps(measured: [StepSample], imported: [StepSample],
                                    fromDay: String, throughDay: String) -> StepSample? {
+        // Kotlin twin: HealthspanPresentation.valid
         func valid(_ sample: StepSample) -> Bool {
             sample.count.isFinite && sample.count >= 0 && sample.day >= fromDay && sample.day <= throughDay
         }
