@@ -526,6 +526,7 @@ fun AppRoot(
     onLocalNotificationRouteConsumed: (String) -> Unit = {},
 ) {
     val nav = rememberNavController()
+    val coachOwner = requireNotNull(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current)
 
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
@@ -741,15 +742,12 @@ fun AppRoot(
                 composable(Destination.Breathe.route) { BreatheScreen(viewModel) }
                 composable(Destination.Coach.route) {
                     // A normal push, so Back returns to the conversation (#2243).
-                    CoachScreen(onOpenSettings = { nav.navigate(Destination.CoachSettings.route) })
+                    CoachScreen(vm = viewModel(viewModelStoreOwner = coachOwner),
+                        onOpenSettings = { nav.navigate(Destination.CoachSettings.route) })
                 }
                 composable(Destination.CoachSettings.route) {
-                    // Share consent with an existing conversation; More can also open settings directly.
-                    val coachEntry = remember(it) {
-                        try { nav.getBackStackEntry(Destination.Coach.route) }
-                        catch (_: IllegalArgumentException) { it }
-                    }
-                    CoachSettingsScreen(vm = viewModel(coachEntry))
+                    // Settings and restored conversations observe the same consent and configuration.
+                    CoachSettingsScreen(vm = viewModel(viewModelStoreOwner = coachOwner))
                 }
                 composable(Destination.Explore.route) { TrendsExploreScreen(viewModel) }
                 composable(Destination.Automations.route) { AutomationsScreen(viewModel) }
