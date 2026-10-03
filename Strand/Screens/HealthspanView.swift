@@ -140,7 +140,7 @@ struct HealthspanPreviewCard: View {
     private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     var body: some View {
         let snapshot = healthspanSnapshot(series: loadedSource == sourceID ? series : [], days: loadedSource == sourceID ? days : [], age: profile.age, reference: Date())
-        NavigationLink { HealthspanView() } label: {
+        NavigationLink(value: TabRoute.healthspan) {
             NoopCard(tint: StrandPalette.positive) {
                 HStack(spacing: NoopMetrics.space4) {
                     HealthspanOrb(age: snapshot.age, chronologicalAge: profile.age, compact: true)

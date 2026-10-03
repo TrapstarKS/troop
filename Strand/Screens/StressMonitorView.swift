@@ -260,7 +260,7 @@ struct StressMonitorPreviewCard: View {
     private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     var body: some View {
         let daily = loadedSource == sourceID ? daily : nil
-        NavigationLink { StressMonitorView() } label: {
+        NavigationLink(value: TabRoute.stressMonitor) {
             NoopCard {
                 HStack {
                     VStack(alignment: .leading, spacing: NoopMetrics.space2) {
