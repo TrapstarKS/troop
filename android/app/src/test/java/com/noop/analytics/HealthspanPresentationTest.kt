@@ -33,7 +33,7 @@ class HealthspanPresentationTest {
     }
 
     @Test fun duplicateDaysAndSparseHistoryDoNotInventPace() {
-        val result = HealthspanPresentation.snapshot(listOf(HealthspanPresentation.AgeSample(0, 40.0), HealthspanPresentation.AgeSample(0, 39.0)), 21, 40.0)
+        val result = HealthspanPresentation.snapshot(listOf(HealthspanPresentation.AgeSample(0, 40.0), HealthspanPresentation.AgeSample(0, 39.0)), (0 until 21).toList() + 119, 40.0)
         assertEquals(39.0, result.age!!, 0.0)
         assertEquals(1, result.historySamples)
         assertNull(result.pace)
@@ -42,8 +42,8 @@ class HealthspanPresentationTest {
     @Test fun paceClampsAndNeedsAdultProfile() {
         for ((slope, expected) in listOf(-0.04 to 30, 0.04 to -10)) {
             val samples = (0..119 step 7).map { HealthspanPresentation.AgeSample(it, 40 + it * slope) }
-            assertEquals(expected, HealthspanPresentation.snapshot(samples, 21, 40.0).paceTenths)
-            assertNull(HealthspanPresentation.snapshot(samples, 21, Double.NaN).age)
+            assertEquals(expected, HealthspanPresentation.snapshot(samples, (0 until 21).toList() + 119, 40.0).paceTenths)
+            assertNull(HealthspanPresentation.snapshot(samples, (0 until 21).toList() + 119, Double.NaN).age)
         }
     }
 
@@ -112,7 +112,7 @@ class HealthspanPresentationTest {
     }
 
     private fun row(samples: List<HealthspanPresentation.AgeSample>, count: Int = 21, age: Double = 40.0): String {
-        val s = HealthspanPresentation.snapshot(samples, count, age)
+        val s = HealthspanPresentation.snapshot(samples, (0 until count).toList() + 119, age)
         return "${s.age?.let { String.format(Locale.ROOT, "%.1f", it) } ?: "nil"}|${s.paceTenths ?: "nil"}|${s.recoveryDays}|${s.recentSamples}|${s.historySamples}"
     }
 }

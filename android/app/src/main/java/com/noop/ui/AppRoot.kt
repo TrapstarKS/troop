@@ -701,7 +701,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     CoupledScreen(vm = viewModel, onOpenSleep = { nav.navigate(WhoopRoute.sleepDetail) })
                 }
                 composable(Destination.StrainDetail.route) { WorkoutsScreen(viewModel) }
-                composable(Destination.Healthspan.route) { HealthspanScreen(viewModel) }
+                composable(Destination.Healthspan.route) { HealthspanScreen(viewModel, onCoach = { nav.navigate(Destination.Coach.route) }) }
                 composable(Destination.Live.route) {
                     LiveScreen(
                         viewModel = viewModel,
