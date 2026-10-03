@@ -539,6 +539,15 @@
       "platform": "kotlin",
       "rationale": "Swift IntelligenceEngine.analyzeRecent retains the same Charge history selection and folding block inline in the excluded app layer. Kotlin moves that block verbatim into a private helper to preserve the existing JaCoCo method-size ratchet; no formula, inputs, configuration, trace order or persistence changes. Pure Charge/Baselines twins remain oracle-guarded. Refs ryanbr/noop#1524 and ryanbr/noop#2525.",
       "twin_path": "Strand/Data/IntelligenceEngine.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/IntelligenceEngine.kt::foldImportedDailyMetrics/9#1",
+      "identity_sha256": "3f224ec731976e48342f742a7b606ab568c867519b1d4a81f659bbbe49bb2863",
+      "platform": "kotlin",
+      "rationale": "Swift IntelligenceEngine.analyzeRecent retains the same imported-only daily fold inline in the excluded app layer. Kotlin extracts the unchanged block into a private suspend helper to preserve the existing JaCoCo method-size limit. Read order, imported recovery precedence, raw freshness replacement, source ownership, list append order and persistence are unchanged. Pure scoring and provenance twins remain oracle-guarded. Refs ryanbr/noop#1524 and ryanbr/noop#823 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/IntelligenceEngine.swift"
     }
   ]
 }

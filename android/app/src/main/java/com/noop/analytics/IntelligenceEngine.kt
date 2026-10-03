@@ -1868,56 +1868,10 @@ object IntelligenceEngine {
         // already scored this pass. Health Connect writes its DailyMetric rows under the strap source
         // ("my-whoop"), so importedDeviceId is included; a row already carrying its OWN recovery is left
         // alone. Mirrors the Swift fold.
-        val importScoredDays = HashSet<String>().apply { addAll(dailies.map { it.day }) }
-        val healthConnectDays = repo.appleDaily(
-            WhoopRepository.HEALTH_CONNECT_SOURCE,
-            oldestDay,
-            newestDay,
-        ).mapTo(HashSet()) { it.day }
-        val importSourceIds = buildList {
-            add(importedDeviceId) // Health Connect imports its DailyMetric rows under the strap source.
-            add(WhoopRepository.APPLE_HEALTH_SOURCE)
-            add(WhoopRepository.HEALTH_CONNECT_SOURCE)
-            addAll(WEARABLE_IMPORT_SOURCES)
-        }.distinct()
-        for (source in importSourceIds) {
-            val rows = repo.dailyMetrics(source, oldestDay, newestDay)
-            // A real export that already carries its OWN recovery WINS , never overwrite a verbatim imported
-            // score; those days also pre-claim the slot so the fold doesn't re-score them.
-            val byDay = rows.associateBy { it.day }
-            for (r in rows) if (r.recovery != null) importScoredDays.add(r.day)
-            for (w in watchRecoveries(rows, importScoredDays)) {
-                val recovery = w.recovery ?: continue
-                val row = byDay[w.day] ?: continue
-                val scored = row.copy(deviceId = computedId, recovery = recovery)
-                dailies.add(scored)
-                restRows.add(MetricSeriesRow(computedId, w.day, "hrv_fresh_scoring_valid", 0.0))
-                restRows.add(MetricSeriesRow(computedId, w.day, "resp_fresh_scoring_valid", 0.0))
-                importScoredDays.add(w.day)
-                // Health Connect's compatibility DailyMetric row lives under `my-whoop`, while its
-                // AppleDaily row retains the real source. Preserve that provider fact without changing
-                // ingestion or score precedence.
-                resolvedScoreOwnerByDay[w.day] =
-                    if (source == importedDeviceId && w.day in healthConnectDays) {
-                        WhoopRepository.HEALTH_CONNECT_SOURCE
-                    } else {
-                        source
-                    }
-                RestScorer.restFromDaily(scored)?.let { rest ->
-                    restRows.add(MetricSeriesRow(deviceId = computedId, day = w.day, key = "sleep_performance", value = rest))
-                }
-                out.add(
-                    Computed(
-                        day = w.day,
-                        recovery = recovery,
-                        strain = scored.strain,
-                        sleepMin = scored.totalSleepMin,
-                        hrv = scored.avgHrv,
-                        rhr = scored.restingHr,
-                    ),
-                )
-            }
-        }
+        foldImportedDailyMetrics(
+            repo, importedDeviceId, computedId, oldestDay, newestDay, dailies, restRows,
+            resolvedScoreOwnerByDay, out,
+        )
         // Snapshot the persisted/merged daily history BEFORE the delete+re-upsert below rewrites the
         // computed window. This is the accumulated view the readiness card + dashboard read ("N of 7
         // nights"); captured here so the Fitness Age gate (further down) can't be undercut by this pass's
@@ -2071,6 +2025,69 @@ object IntelligenceEngine {
             measuredResting, effortMethod)
 
         return out to healDropped.size
+    }
+
+    private suspend fun foldImportedDailyMetrics(
+        repo: WhoopRepository,
+        importedDeviceId: String,
+        computedId: String,
+        oldestDay: String,
+        newestDay: String,
+        dailies: MutableList<DailyMetric>,
+        restRows: MutableList<MetricSeriesRow>,
+        resolvedScoreOwnerByDay: MutableMap<String, String>,
+        out: MutableList<Computed>,
+    ) {
+        val importScoredDays = HashSet<String>().apply { addAll(dailies.map { it.day }) }
+        val healthConnectDays = repo.appleDaily(
+            WhoopRepository.HEALTH_CONNECT_SOURCE,
+            oldestDay,
+            newestDay,
+        ).mapTo(HashSet()) { it.day }
+        val importSourceIds = buildList {
+            add(importedDeviceId) // Health Connect imports its DailyMetric rows under the strap source.
+            add(WhoopRepository.APPLE_HEALTH_SOURCE)
+            add(WhoopRepository.HEALTH_CONNECT_SOURCE)
+            addAll(WEARABLE_IMPORT_SOURCES)
+        }.distinct()
+        for (source in importSourceIds) {
+            val rows = repo.dailyMetrics(source, oldestDay, newestDay)
+            // A real export that already carries its OWN recovery WINS , never overwrite a verbatim imported
+            // score; those days also pre-claim the slot so the fold doesn't re-score them.
+            val byDay = rows.associateBy { it.day }
+            for (r in rows) if (r.recovery != null) importScoredDays.add(r.day)
+            for (w in watchRecoveries(rows, importScoredDays)) {
+                val recovery = w.recovery ?: continue
+                val row = byDay[w.day] ?: continue
+                val scored = row.copy(deviceId = computedId, recovery = recovery)
+                dailies.add(scored)
+                restRows.add(MetricSeriesRow(computedId, w.day, "hrv_fresh_scoring_valid", 0.0))
+                restRows.add(MetricSeriesRow(computedId, w.day, "resp_fresh_scoring_valid", 0.0))
+                importScoredDays.add(w.day)
+                // Health Connect's compatibility DailyMetric row lives under `my-whoop`, while its
+                // AppleDaily row retains the real source. Preserve that provider fact without changing
+                // ingestion or score precedence.
+                resolvedScoreOwnerByDay[w.day] =
+                    if (source == importedDeviceId && w.day in healthConnectDays) {
+                        WhoopRepository.HEALTH_CONNECT_SOURCE
+                    } else {
+                        source
+                    }
+                RestScorer.restFromDaily(scored)?.let { rest ->
+                    restRows.add(MetricSeriesRow(deviceId = computedId, day = w.day, key = "sleep_performance", value = rest))
+                }
+                out.add(
+                    Computed(
+                        day = w.day,
+                        recovery = recovery,
+                        strain = scored.strain,
+                        sleepMin = scored.totalSleepMin,
+                        hrv = scored.avgHrv,
+                        rhr = scored.restingHr,
+                    ),
+                )
+            }
+        }
     }
 
     private fun foldChargeBaselines(

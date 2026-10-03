@@ -447,8 +447,9 @@ class Whoop5RRSqliteTest {
         val scoredEnd = if (quiet) end - 2 * 86_400L else end
         val start = scoredEnd - 4 * 3_600L
         val anchor = AnalyticsEngine.dayString(end, offset)
+        val baselineAnchor = AnalyticsEngine.dayString(scoredEnd, offset)
         for (back in 2L..15L) {
-            val day = java.time.LocalDate.parse(anchor).minusDays(back).toString()
+            val day = java.time.LocalDate.parse(baselineAnchor).minusDays(back).toString()
             days["$id-noop" to day] = DailyMetric(deviceId = "$id-noop", day = day,
                 totalSleepMin = 480.0, efficiency = 0.9, restingHr = 60, avgHrv = 32.0, recovery = 60.0)
         }
