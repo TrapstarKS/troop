@@ -442,7 +442,8 @@ class Whoop5RRSqliteTest {
         val now = 1_780_272_000L
         val offset = java.util.TimeZone.getDefault().getOffset(now * 1000L) / 1000L
         val end = now - Math.floorMod(now + offset, 86_400L)
-        val scoredEnd = if (quiet) end - 86_400L else end
+        // A quiet day must not include the scored night through the 30-hour lookback.
+        val scoredEnd = if (quiet) end - 2 * 86_400L else end
         val start = scoredEnd - 4 * 3_600L
         val anchor = AnalyticsEngine.dayString(end, offset)
         for (back in 2L..15L) {
@@ -462,7 +463,7 @@ class Whoop5RRSqliteTest {
                 totalSleepMin = 480.0, efficiency = 0.9, restingHr = 45, avgHrv = 100.0, recovery = 80.0)
         }
         val trace = mutableListOf<String>()
-        IntelligenceEngine.analyzeRecent(repo, maxDays = if (quiet) 2 else 1, importedDeviceId = id,
+        IntelligenceEngine.analyzeRecent(repo, maxDays = if (quiet) 3 else 1, importedDeviceId = id,
             nowSeconds = now + if (quiet) 7_200L else 0L, preserveUnscoredHistory = preserve,
             recoveryTraceSink = { trace += it }, dayCycleMode = DayCycleMode.MIDNIGHT)
         val resolved = com.noop.analytics.ChargeBaselines.resolve(
