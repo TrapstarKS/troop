@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import com.noop.alarm.WindDownScheduler
@@ -295,7 +296,29 @@ fun SmartAlarmScreen(vm: AppViewModel) {
 private fun GoalChoices(selectedPercent: Int, onSelect: (Int) -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Metrics.space8)) {
         for ((percent, label) in listOf(100 to R.string.sleep_planner_peak, 85 to R.string.sleep_planner_perform, 70 to R.string.sleep_planner_get_by)) {
-            NoopButton(text = stringResource(label), kind = if (selectedPercent == percent) NoopButtonKind.Primary else NoopButtonKind.Secondary, modifier = Modifier.weight(1f).semantics { this.selected = selectedPercent == percent }, onClick = { onSelect(percent) })
+            val goalLabel = stringResource(label)
+            val selected = selectedPercent == percent
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Metrics.space4),
+            ) {
+                NoopButton(
+                    text = goalLabel.substringBefore('\n'),
+                    kind = if (selected) NoopButtonKind.Primary else NoopButtonKind.Secondary,
+                    fullWidth = true,
+                    modifier = Modifier.semantics {
+                        this.selected = selected
+                        contentDescription = goalLabel
+                    },
+                    onClick = { onSelect(percent) },
+                )
+                Text(
+                    text = goalLabel.substringAfter('\n'),
+                    style = NoopType.footnote,
+                    color = if (selected) Palette.accent else Palette.textSecondary,
+                )
+            }
         }
     }
 }
