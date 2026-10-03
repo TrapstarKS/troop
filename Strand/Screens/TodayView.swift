@@ -1485,12 +1485,6 @@ struct TodayView: View {
         }
         // Reload when the data refreshes OR the selected day changes, the HR trend and Rest score are
         // day-scoped, so navigating must re-fetch them for the newly selected window.
-        .onChangeCompat(of: selectedDayOffset) { _ in
-            liveEffortRequest = UUID()
-            liveTodayStrain = nil
-            restScore = nil
-            sleepToday = nil
-        }
         .task(id: TodayLoadKey(seq: repo.refreshSeq, offset: selectedDayOffset,
                               dayCycleMode: dayCycleModeRaw)) { await loadAll() }
         // #989: hydration writes don't bump refreshSeq, so the card needs its own triggers, a logged /
@@ -4878,6 +4872,11 @@ struct TodayView: View {
     private func loadDayScoped() async {
         let effortRequest = UUID()
         liveEffortRequest = effortRequest
+        // Keep resets and request ownership together so a day-change callback cannot cancel
+        // the newly started load after it has captured its token.
+        liveTodayStrain = nil
+        restScore = nil
+        sleepToday = nil
         // #932: same-state re-mount → restore the prior day-scoped snapshot (no store queries). The exact
         // twin of the #849 history-wide short-circuit in loadAll, for the reads that follow the SELECTED
         // day: on a big library the day's hrBuckets + hrSamples reads cover 170k+ HR rows, and macOS
