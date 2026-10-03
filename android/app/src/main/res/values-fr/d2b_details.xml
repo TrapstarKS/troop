@@ -70,4 +70,5 @@
     <string name="d2b_days">%1$d jours</string>
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">Aucun score enregistré disponible pour cette plage.</string>
+    <string name="d2b_labeled_percent">%1$s %2$s%%</string>
 </resources>

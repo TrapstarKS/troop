@@ -70,4 +70,5 @@
     <string name="d2b_days">%1$d Tage</string>
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">Für diesen Bereich sind keine gespeicherten Werte verfügbar.</string>
+    <string name="d2b_labeled_percent">%1$s %2$s%%</string>
 </resources>

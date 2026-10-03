@@ -397,9 +397,9 @@ private fun DetailTrend(days: List<DailyMetric>, selectedKey: String, strain: Bo
                 val timestamps = points.map { detailDate(it.first).atStartOfDay(ZoneId.systemDefault()).toEpochSecond() }
                 val chartSemantics = if (strain) Modifier else {
                     val summary = uiString(R.string.trends_trend_a11y, listOf(
-                        "${uiString(R.string.explore_latest)} ${detailRecoveryNumber(points.last().second)}%",
-                        "${uiString(R.string.trends_min)} ${detailRecoveryNumber(points.minOf { it.second })}%",
-                        "${uiString(R.string.trends_max)} ${detailRecoveryNumber(points.maxOf { it.second })}%",
+                        uiString(R.string.d2b_labeled_percent, uiString(R.string.explore_latest), detailRecoveryNumber(points.last().second)),
+                        uiString(R.string.d2b_labeled_percent, uiString(R.string.trends_min), detailRecoveryNumber(points.minOf { it.second })),
+                        uiString(R.string.d2b_labeled_percent, uiString(R.string.trends_max), detailRecoveryNumber(points.maxOf { it.second })),
                     ).joinToString(", "))
                     Modifier.clearAndSetSemantics { contentDescription = summary }
                 }
