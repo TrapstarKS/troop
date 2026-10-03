@@ -34,7 +34,7 @@ struct ActivityDetailView: View {
     private var strain: Double? { row.strain.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil } }
     private var energy: Int64? { RecoveryStrainDetailLogic.wholeNumber(row.energyKcal) }
     private var durationMinutes: Int64? {
-        RecoveryStrainDetailLogic.wholeNumber(floor((row.durationS ?? Double(row.endTs - row.startTs)) / 60))
+        RecoveryStrainDetailLogic.durationMinutes(seconds: row.durationS, fallbackSeconds: Double(row.endTs - row.startTs))
     }
 
     var body: some View {

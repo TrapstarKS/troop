@@ -260,8 +260,7 @@ struct WorkoutDetailView: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: NoopMetrics.gap)],
                   alignment: .leading, spacing: NoopMetrics.gap) {
             StatTile(label: "Duration",
-                     value: durationLabel(row.durationS),
-                     caption: String(localized: "active"),
+                     value: durationLabel(row.durationS, fallbackSeconds: Double(row.endTs - row.startTs)),
                      accent: StrandPalette.effortColor)
             StatTile(label: "Avg HR",
                      value: row.avgHr.map { "\($0)" } ?? "–",
@@ -591,9 +590,8 @@ struct WorkoutDetailView: View {
     private func timeRangeLabel(_ start: Int, _ end: Int) -> String {
         end > start ? "\(timeLabel(start))-\(timeLabel(end))" : timeLabel(start)
     }
-    private func durationLabel(_ s: Double?) -> String {
-        guard let s, s > 0,
-              let total = RecoveryStrainDetailLogic.wholeNumber(floor(s / 60)) else { return "–" }
+    private func durationLabel(_ s: Double?, fallbackSeconds: Double? = nil) -> String {
+        guard let total = RecoveryStrainDetailLogic.durationMinutes(seconds: s, fallbackSeconds: fallbackSeconds) else { return "–" }
         let h = total / 60, m = total % 60
         if h > 0 { return String(localized: "\(h)h \(m)m") }
         return String(localized: "\(m)m")

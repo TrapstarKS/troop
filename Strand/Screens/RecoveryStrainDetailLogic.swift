@@ -10,6 +10,10 @@ enum RecoveryStrainDetailLogic {
         return Int64(exactly: value.rounded())
     }
 
+    static func durationMinutes(seconds: Double?, fallbackSeconds: Double? = nil) -> Int64? {
+        (seconds ?? fallbackSeconds).flatMap { wholeNumber(floor($0 / 60)) }
+    }
+
     static func recoveryPercent(_ score: Double?) -> Int? {
         guard let score, score.isFinite, (0...100).contains(score) else { return nil }
         return Int(floor(score))

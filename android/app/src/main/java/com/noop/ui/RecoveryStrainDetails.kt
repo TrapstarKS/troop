@@ -48,7 +48,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
-import kotlin.math.floor
 
 @Composable
 fun RecoveryDetailScreen(
@@ -281,7 +280,7 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
                 verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
                 val strain = effort?.let { UnitFormatter.effortValue(it, EffortScale.WHOOP) }
                 ScoreDial(uiString(R.string.d2b_activity_strain), detailNumber(strain), progress = strain?.div(21)?.toFloat(), color = Palette.strainPrimary)
-                Text(uiString(R.string.d2b_duration, detailDuration(current.durationS ?: (current.endTs - current.startTs).toDouble())),
+                Text(uiString(R.string.d2b_duration, detailDuration(current.durationS, (current.endTs - current.startTs).toDouble())),
                     style = NoopType.body, color = Palette.textSecondary)
             }
         }
@@ -484,7 +483,7 @@ private fun detailRecoveryNumber(score: Double?): String =
     detailNumber(RecoveryStrainDetailLogic.recoveryPercent(score)?.toDouble(), 0)
 private fun detailWholeNumber(value: Double?): String = RecoveryStrainDetailLogic.wholeNumber(value)
     ?.let { String.format(Locale.getDefault(), "%d", it) } ?: uiString(R.string.d2b_no_value)
-private fun detailDuration(seconds: Double): String {
-    val minutes = RecoveryStrainDetailLogic.wholeNumber(floor(seconds / 60)) ?: return uiString(R.string.d2b_no_value)
+private fun detailDuration(seconds: Double?, fallbackSeconds: Double? = null): String {
+    val minutes = RecoveryStrainDetailLogic.durationMinutes(seconds, fallbackSeconds) ?: return uiString(R.string.d2b_no_value)
     return if (minutes >= 60) uiString(R.string.d2b_hours_minutes, minutes / 60, minutes % 60) else uiString(R.string.d2b_duration_minutes, minutes)
 }

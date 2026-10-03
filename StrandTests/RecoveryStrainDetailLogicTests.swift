@@ -64,13 +64,16 @@ final class RecoveryStrainDetailLogicTests: XCTestCase {
         let wholeValues: [Double?] = [nil, .nan, .infinity, -.infinity, -1, -0.0, 0, 0.49, 0.5, 1.49, 1.5, 1e300, 9223372036854775808.0, 9223372036854775808.0.nextDown]
         lines.append(wholeValues.map { RecoveryStrainDetailLogic.wholeNumber($0).map(String.init) ?? "unavailable" }.joined(separator: ","))
         let durations = [-1.0, Double.nan, 1e300, 59, 60, 89, 90, 119.9, 120]
-        lines.append(durations.map { RecoveryStrainDetailLogic.wholeNumber(floor($0 / 60)).map(String.init) ?? "unavailable" }.joined(separator: ","))
+        lines.append(durations.map { RecoveryStrainDetailLogic.durationMinutes(seconds: $0).map(String.init) ?? "unavailable" }.joined(separator: ","))
+        let durationFallbacks: [(Double?, Double?)] = [(nil, nil), (nil, 3661), (0, 3661), (59, 3661), (60, 3661), (nil, -1), (nil, .nan), (nil, .infinity), (nil, 1e300), (-1, 3600), (.nan, 3600), (.infinity, 3600), (1e300, 3600)]
+        lines.append(durationFallbacks.map { RecoveryStrainDetailLogic.durationMinutes(seconds: $0.0, fallbackSeconds: $0.1).map(String.init) ?? "unavailable" }.joined(separator: ","))
         let expected = """
         15.0
         unavailable,unavailable,under,under,optimal,optimal,over,over
         unavailable,unavailable,unavailable,unavailable,0,33,33,34,66,66,67,99,100,unavailable
         unavailable,unavailable,unavailable,unavailable,unavailable,0,0,0,1,1,2,unavailable,unavailable,9223372036854774784
         unavailable,unavailable,unavailable,0,1,1,1,1,2
+        unavailable,61,0,0,1,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable
         """
         XCTAssertEqual(lines.joined(separator: "\n"), expected)
     }

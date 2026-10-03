@@ -136,7 +136,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
-import kotlin.math.floor
 
 /**
  * Workouts — the activity log, instrument-grade and uniform. Ports the macOS
@@ -1436,7 +1435,7 @@ private fun SessionRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Cell(durationLabel(row.durationS), Modifier.weight(1f))
+        Cell(durationLabel(row.durationS, (row.endTs - row.startTs).toDouble()), Modifier.weight(1f))
         Cell(
             row.avgHr?.toString() ?: "–",
             Modifier.weight(1.1f),
@@ -1534,7 +1533,7 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
             }
             CardDivider()
             DetailRow("Time", timeRangeLabel(row.startTs, row.endTs))
-            DetailRow("Duration", durationLabel(row.durationS))
+            DetailRow("Duration", durationLabel(row.durationS, (row.endTs - row.startTs).toDouble()))
             if (row.avgHr != null) DetailRow("Avg HR", "${row.avgHr} bpm")
             if (row.maxHr != null) DetailRow("Max HR", "${row.maxHr} bpm")
             if (row.energyKcal != null) DetailRow("Calories", "${grouped(row.energyKcal)} kcal")
@@ -2498,9 +2497,8 @@ private fun timeLabel(ts: Long): String = timeFmt.format(Instant.ofEpochSecond(t
 private fun timeRangeLabel(startTs: Long, endTs: Long): String =
     if (endTs > startTs) "${timeLabel(startTs)} - ${timeLabel(endTs)}" else timeLabel(startTs)
 
-private fun durationLabel(s: Double?): String {
-    if (s == null || s <= 0.0) return "–"
-    val total = RecoveryStrainDetailLogic.wholeNumber(floor(s / 60)) ?: return "–"
+private fun durationLabel(s: Double?, fallbackSeconds: Double? = null): String {
+    val total = RecoveryStrainDetailLogic.durationMinutes(s, fallbackSeconds) ?: return "–"
     val h = total / 60
     val m = total % 60
     return if (h > 0) "${h}h ${m}m" else "${m}m"
