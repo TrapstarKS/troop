@@ -84,4 +84,5 @@
     <string name="healthspan_uncertainty">±5 лет</string>
     <string name="healthspan_trend">Динамика возраста NOOP</string>
     <string name="healthspan_trend_reading">%1$s · %2$s лет</string>
+    <string name="stress_monitor_history">История стресса и расширенная ВСР</string>
 </resources>

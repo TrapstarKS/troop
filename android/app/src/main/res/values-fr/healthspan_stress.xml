@@ -84,4 +84,5 @@
     <string name="healthspan_uncertainty">±5 ans</string>
     <string name="healthspan_trend">Tendance de l’âge NOOP</string>
     <string name="healthspan_trend_reading">%1$s · %2$s ans</string>
+    <string name="stress_monitor_history">Historique du stress et VFC avancée</string>
 </resources>

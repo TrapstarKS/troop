@@ -1,5 +1,6 @@
 package com.noop.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.MonitorHeart
@@ -78,6 +80,7 @@ private data class StressMonitorData(
 
 @Composable
 fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
+    var showHistory by remember { mutableStateOf(false) }
     val days by vm.recentDays.collectAsStateWithLifecycle()
     val workouts by vm.workouts.collectAsStateWithLifecycle()
     val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
@@ -89,6 +92,20 @@ fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
     var data by remember(selectedDay, strapId) { mutableStateOf<StressMonitorData?>(null) }
     var nowSeconds by remember { mutableLongStateOf(System.currentTimeMillis() / 1000L) }
     var selectedTimestamp by remember(selectedDay, strapId) { mutableStateOf<Long?>(null) }
+
+    BackHandler(enabled = showHistory) { showHistory = false }
+    if (showHistory) {
+        Column(Modifier.fillMaxSize()) {
+            TextButton(onClick = { showHistory = false }, modifier = Modifier.padding(horizontal = Metrics.screenPadding, vertical = Metrics.space8)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = Palette.textPrimary, modifier = Modifier.size(Metrics.space24))
+                    Text(stringResource(R.string.l10n_onboarding_screen_back_b52b36b7), style = NoopType.headline, color = Palette.textPrimary)
+                }
+            }
+            Box(Modifier.weight(1f)) { StressScreen(vm, onBreathe) }
+        }
+        return
+    }
 
     LaunchedEffect(vm) { vm.loadWorkouts() }
     LaunchedEffect(lifecycleOwner) {
@@ -135,6 +152,11 @@ fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
         }
         item {
             Text(stringResource(R.string.stress_monitor_method), style = NoopType.caption, color = Palette.textSecondary)
+        }
+        item {
+            TextButton(onClick = { showHistory = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.stress_monitor_history), style = NoopType.headline, color = Palette.textPrimary)
+            }
         }
     }
 }

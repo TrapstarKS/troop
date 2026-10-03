@@ -84,4 +84,5 @@
     <string name="healthspan_uncertainty">±5 lat</string>
     <string name="healthspan_trend">Trend wieku NOOP</string>
     <string name="healthspan_trend_reading">%1$s · %2$s lat</string>
+    <string name="stress_monitor_history">Historia stresu i zaawansowane HRV</string>
 </resources>
