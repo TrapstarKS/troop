@@ -796,17 +796,17 @@ struct SleepView: View {
     @ViewBuilder
     private func napRow(_ nap: CachedSleepSession) -> some View {
         let isEdited = nap.userEdited
-        HStack(spacing: 10) {
+        HStack(spacing: NoopMetrics.space2 + NoopMetrics.spaceHalf) {
             Image(systemName: "powersleep")
                 .font(StrandFont.headline)
                 .foregroundStyle(StrandPalette.restColor)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: NoopMetrics.spaceHalf) {
                 Text(napWindowText(nap)).font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
                 Text(durationText(Double(nap.endTs - nap.effectiveStartTs) / 60.0))
                     .strandOverline()
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: NoopMetrics.space2)
             // C1 — "why this is a nap" explainer: the nap-row nudge that everything other than the chosen
             // main block is logged as a nap, with the Edit next-step. Keyed by the nap's stable startTs so
             // one popover shows at a time across several nap rows. (spec 2026-06-20)
@@ -814,7 +814,7 @@ struct SleepView: View {
                 Image(systemName: "info.circle")
                     .font(StrandFont.headline)
                     .foregroundStyle(StrandPalette.restColor)
-                    .frame(minWidth: 44, minHeight: 44)
+                    .frame(minWidth: NoopMetrics.touchTarget, minHeight: NoopMetrics.touchTarget)
                     .contentShape(Rectangle())
             }
             .buttonStyle(LiquidPressStyle())
@@ -826,11 +826,7 @@ struct SleepView: View {
                 whyPopover(text: "", napSuffix: true)
             }
             Button {
-                wakeEdit = WakeEdit(detectedStartTs: nap.startTs,
-                                    bedTs: nap.effectiveStartTs,
-                                    wakeTs: nap.endTs,
-                                    stagesJSON: nap.stagesJSON,
-                                    userEdited: true)   // a nap row is always manually added → no tombstone on delete
+                openEditor(nap)
             } label: {
                 Image(systemName: isEdited ? "pencil.circle.fill" : "pencil.circle")
                     .font(StrandFont.headline)
@@ -1221,11 +1217,12 @@ struct SleepView: View {
                 }
                 HStack(spacing: 0) {
                     sleepTime(icon: "moon.zzz.fill", label: "Asleep", value: night.onsetText)
-                    Spacer(minLength: 12)
-                    Rectangle().fill(StrandPalette.hairline).frame(width: 1, height: 30)
-                    Spacer(minLength: 12)
+                    Spacer(minLength: NoopMetrics.space3)
+                    Rectangle().fill(StrandPalette.hairline)
+                        .frame(width: NoopMetrics.chartLineWidth / 2, height: NoopMetrics.space8)
+                    Spacer(minLength: NoopMetrics.space3)
                     sleepTime(icon: "sun.max.fill", label: "Woke", value: night.wakeText)
-                    Spacer(minLength: 8)
+                    Spacer(minLength: NoopMetrics.space2)
                     wakeEditButton(night)
                 }
                 .frame(maxWidth: .infinity)
@@ -1437,32 +1434,32 @@ struct SleepView: View {
         let fraction = total > 0 ? min(1, max(0, minutes / total)) : 0
         let isSelected = selectedStage == stage
         let othersSelected = selectedStage != nil && !isSelected
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
+        HStack(spacing: NoopMetrics.space2 + NoopMetrics.spaceHalf) {
+            RoundedRectangle(cornerRadius: NoopMetrics.chartBarRadius, style: .continuous)
                 .fill(color)
-                .frame(width: 12, height: 12)
+                .frame(width: NoopMetrics.space3, height: NoopMetrics.space3)
                 .accessibilityHidden(true)
             Text(stage.label.uppercased())
                 .font(StrandFont.overline)
                 .tracking(StrandFont.overlineTracking)
                 .foregroundStyle(StrandPalette.textPrimary)
-                .frame(width: 56, alignment: .leading)
+                .frame(width: NoopMetrics.space10 + NoopMetrics.space4, alignment: .leading)
             Text("\(percent)%")
                 .font(StrandFont.captionNumber)
                 .foregroundStyle(color)
-                .frame(width: 38, alignment: .leading)
+                .frame(width: NoopMetrics.space8 + NoopMetrics.space1 + NoopMetrics.spaceHalf, alignment: .leading)
             // The NOOP signature: a segmented PipBar that counts up to the share-of-night fraction,
             // tinted in the stage colour over the canonical inset track. Flat, crisp, no glow.
-            PipBar(value: fraction * 100, segments: 20, tint: color, height: 8)
+            PipBar(value: fraction * 100, segments: 20, tint: color, height: NoopMetrics.space2)
             Text(durationText(minutes))
                 .font(StrandFont.captionNumber)
                 .foregroundStyle(StrandPalette.textPrimary)
-                .frame(width: 60, alignment: .trailing)
+                .frame(width: NoopMetrics.space10 + NoopMetrics.space5, alignment: .trailing)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 6)
+        .padding(.vertical, NoopMetrics.space1)
+        .padding(.horizontal, NoopMetrics.space1 + NoopMetrics.spaceHalf)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: NoopMetrics.space2, style: .continuous)
                 .fill(color.opacity(isSelected ? 0.14 : 0))
         )
         .opacity(othersSelected ? 0.55 : 1.0)

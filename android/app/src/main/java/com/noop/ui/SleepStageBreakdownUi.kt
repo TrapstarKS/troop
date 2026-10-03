@@ -116,8 +116,8 @@ private fun StageBreakdownRow(stage: String, minutes: Double, total: Double, col
     ) {
         Box(
             modifier = Modifier
-                .size(12.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .size(Metrics.space12)
+                .clip(RoundedCornerShape(Metrics.cornerXs))
                 .background(color),
         )
         Text(
@@ -125,25 +125,20 @@ private fun StageBreakdownRow(stage: String, minutes: Double, total: Double, col
             style = NoopType.overline,
             color = Palette.textPrimary,
             maxLines = 1,
-            modifier = Modifier.width(56.dp),
+            modifier = Modifier.width(Metrics.space24 + Metrics.space24 + Metrics.space8),
         )
         Text(
             uiString(R.string.l10n_sleep_screen_percent_2281d326, percent),
             style = NoopType.captionNumber,
             color = color,
             maxLines = 1,
-            modifier = Modifier.width(38.dp),
+            modifier = Modifier.width(Metrics.space24 + Metrics.space14),
         )
-        // The stage's share-of-night as a liquid TUBE tinted in the stage colour — a genuine single-value
-        // progress bar (minutes / total), so it liquid-ifies cleanly. Posed static (animated = false): a
-        // hero card carries many stage rows, so a per-frame slosh per row isn't worth the cost — the tube
-        // reads as a filled liquid level, matching the pilot's non-hero tubes. Same fraction the % + the
-        // duration carry, so all three agree.
-        LiquidTube(
-            frac = fraction,
+        PipBar(
+            value = (fraction * 100).toFloat(),
+            segments = 20,
             tint = color,
-            animated = false,
-            height = 8.dp,
+            height = Metrics.space8,
             modifier = Modifier.weight(1f),
         )
         Text(
@@ -152,7 +147,7 @@ private fun StageBreakdownRow(stage: String, minutes: Double, total: Double, col
             color = Palette.textPrimary,
             textAlign = TextAlign.End,
             maxLines = 1,
-            modifier = Modifier.width(60.dp),
+            modifier = Modifier.width(Metrics.space24 + Metrics.space24 + Metrics.space12),
         )
     }
 }
