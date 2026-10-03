@@ -1,4 +1,5 @@
 import SwiftUI
+import StrandDesign
 
 // MARK: - TabRoute
 //
@@ -35,6 +36,15 @@ enum TabRoute: Hashable {
     case health
     case hydration
     case coupled
+    case recoveryDetail
+    case strainDetail
+    case sleepDetail
+    case sleepPlanner
+    case healthMonitor
+    case healthspan
+    case stressMonitor
+    case weeklyPlan
+    case journal
 }
 
 extension View {
@@ -71,6 +81,37 @@ extension View {
             case .health: HealthView()
             case .hydration: HydrationView()
             case .coupled: CoupledView()
+            case .recoveryDetail: heroMetricDestination(HeroRingMetric.charge)
+            case .strainDetail: heroMetricDestination(HeroRingMetric.effort)
+            case .sleepDetail: SleepView()
+            case .sleepPlanner: SmartAlarmView()
+            case .healthMonitor, .healthspan: HealthView()
+            case .stressMonitor: StressView()
+            case .weeklyPlan: TabRoutePlaceholder(title: "Weekly Plan")
+            case .journal: InsightsView()
+            }
+        }
+    }
+}
+
+@ViewBuilder
+private func heroMetricDestination(_ key: String) -> some View {
+    if let metric = MetricCatalog.all.first(where: { $0.key == key }) {
+        MetricDetailView(metric: metric)
+    } else {
+        HealthView()
+    }
+}
+
+struct TabRoutePlaceholder: View {
+    let title: LocalizedStringKey
+
+    var body: some View {
+        ScreenScaffold(title: title) {
+            NoopCard {
+                Text("Weekly planning will appear here. Journal, insights and trends are available in Plan.")
+                    .font(StrandFont.body)
+                    .foregroundStyle(StrandPalette.textSecondary)
             }
         }
     }

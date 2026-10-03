@@ -95,6 +95,7 @@ struct LiquidTodayView: View {
     @State private var customizationDestination: TodayCustomizationDestination?
     /// #1862: the optional Coach launcher sheet. Presentation state only — opening it requests nothing.
     @State private var showCoachLauncher = false
+    @State private var routeCoachAfterLauncherDismiss = false
     @State private var showSettings = false
     @State private var synthesisExpanded = false
     @State private var showLiveSession = false
@@ -483,8 +484,13 @@ struct LiquidTodayView: View {
                 hostedCardsRaw: $hostedCardsRaw
             )
         }
-        .sheet(isPresented: $showCoachLauncher) {
-            CoachLauncherSheet()
+        .sheet(isPresented: $showCoachLauncher, onDismiss: {
+            if routeCoachAfterLauncherDismiss {
+                routeCoachAfterLauncherDismiss = false
+                router.openCoach()
+            }
+        }) {
+            CoachLauncherSheet { routeCoachAfterLauncherDismiss = true }
         }
         .sheet(isPresented: $showSettings) {
             NavigationStack {
