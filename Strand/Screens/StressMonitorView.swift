@@ -291,7 +291,7 @@ struct StressMonitorPreviewCard: View {
 
 private enum StressMonitorRamp {
     static let calm = StrandPalette.stressLow
-    static let steady = StrandPalette.stressMedium
+    static let steady = StrandPalette.stressColor
     static let tense = StrandPalette.stressHigh
     static func color(_ value: Double) -> Color {
         StrandPalette.sample(stops: [.init(color: calm, location: 0), .init(color: steady, location: 0.5), .init(color: tense, location: 1)], at: min(1, max(0, value / 3)))
