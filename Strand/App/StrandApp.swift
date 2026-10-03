@@ -2,6 +2,7 @@ import SwiftUI
 import StrandDesign
 import UserNotifications
 
+#if !(DEBUG && NOOP_PURE_TEST_HOST)
 @main
 struct StrandApp: App {
     init() {
@@ -100,3 +101,4 @@ struct StrandApp: App {
         .menuBarExtraStyle(.window)
     }
 }
+#endif
