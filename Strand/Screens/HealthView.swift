@@ -57,6 +57,7 @@ private struct HealthLandingContent: View {
             HealthSupportingMetricCards()
             FitnessAgeSection()
             VitalitySection()
+            SyncStatusSection()
             SkinTempSection()
             HealthHubLinksSection()
             NavigationLink(value: TabRoute.dataSources) {
