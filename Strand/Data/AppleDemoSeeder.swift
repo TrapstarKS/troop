@@ -236,6 +236,7 @@ enum AppleDemoSeeder {
         _ = try await store.upsertAppleDaily(appleRows, deviceId: apple)
         if !workouts.isEmpty { _ = try await store.upsertWorkouts(workouts, deviceId: whoop) }
         if !journal.isEmpty { _ = try await store.upsertJournal(journal, deviceId: whoop) }
+        try await RecoveryStrainDemoSeed.seed(into: store, deviceId: whoop)
         try await seedPlanJournal(into: store)
         seedWeeklyPlanDemo(today: Repository.localDayKey(Date()))
         NSLog("AppleDemoSeeder: seeded \(daily.count) days, \(workouts.count) workouts.")

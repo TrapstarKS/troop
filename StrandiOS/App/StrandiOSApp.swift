@@ -611,7 +611,7 @@ enum DemoScreens {
         // + self-service pairing guidance, screenshot-able WITHOUT reproducing the bond refusal on real
         // hardware.
         case "bondrefused": return AnyView(BondRefusedDemoScreen())
-        default:         return nil
+        default:         return RecoveryStrainDemoScreens.screen(named: args[i + 1].lowercased())
         }
     }
 }

@@ -691,9 +691,11 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.Plan.route) { PlanLanding(onNavigate = { nav.navigate(it) }) }
                 composable(Destination.WeeklyPlan.route) { WeeklyPlanScreen(viewModel) }
                 composable(Destination.RecoveryDetail.route) {
-                    CoupledScreen(vm = viewModel, onOpenSleep = { nav.navigate(WhoopRoute.sleepDetail) })
+                    RecoveryDetailScreen(vm = viewModel, onBack = { nav.popBackStack() })
                 }
-                composable(Destination.StrainDetail.route) { WorkoutsScreen(viewModel) }
+                composable(Destination.StrainDetail.route) {
+                    StrainDetailScreen(vm = viewModel, onBack = { nav.popBackStack() })
+                }
                 composable(Destination.Healthspan.route) { HealthspanScreen(viewModel) }
                 composable(Destination.Live.route) {
                     LiveScreen(
