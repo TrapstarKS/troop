@@ -1,5 +1,7 @@
 package com.noop.ble
 
+import com.noop.DemoRuntimePolicy
+
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -104,6 +106,7 @@ class StandardHrSource(
      * summary instead. Twin of Swift `Collector.hostReceivedDetail`.
      */
     private val hostReceivedDetail: () -> Boolean = { false },
+    private val runtimePolicy: DemoRuntimePolicy = DemoRuntimePolicy.current,
 ) : LiveHrSource {
 
     /** Live instantaneous fitness-sensor metrics surfaced via [sensorSink]. Any field is null when it
@@ -137,8 +140,9 @@ class StandardHrSource(
     // MARK: - Android Bluetooth handles (OWN scanner + GATT, separate from WHOOP)
 
     private val appContext = context.applicationContext
-    private val bluetoothManager: BluetoothManager? =
+    private val bluetoothManager: BluetoothManager? = runtimePolicy.createBluetooth {
         appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    }
     private val adapter: BluetoothAdapter? = bluetoothManager?.adapter
     private val scanner: BluetoothLeScanner? get() = adapter?.bluetoothLeScanner
 
@@ -200,6 +204,7 @@ class StandardHrSource(
 
     /** Begin scanning for generic HR straps advertising the 0x180D service. */
     override fun scan() {
+        if (!runtimePolicy.allowsBluetooth) return
         synchronized(bufferLock) { /* keep buffer across a rescan */ }
         seen.clear()
         _discovered.value = emptyList()
@@ -234,6 +239,7 @@ class StandardHrSource(
 
     /** Connect to the chosen discovered strap (by address) and start streaming its HR. */
     override fun connect(address: String) {
+        if (!runtimePolicy.allowsBluetooth) return
         stopScan()
         val device = seen[address] ?: runCatching { adapter?.getRemoteDevice(address) }.getOrNull()
         if (device == null) { pendingConnectAddress = address; return }
