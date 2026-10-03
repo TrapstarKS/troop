@@ -21,8 +21,7 @@ private func hx(_ hex: UInt32) -> Color {
           blue: Double(hex & 0xff) / 255, opacity: 1)
 }
 
-/// The ten keyframes mirror the real app's day-cycle scenes (SceneHeroBackground),
-/// as pure gradients rather than painted art.
+/// Dark appearance uses the shared charcoal gradient throughout the day.
 let liquidSkyKeys: [LiquidSkyStop] = [0.0, 24.0].map { hour in
     LiquidSkyStop(h: hour, top: StrandPalette.canvasTop, mid: StrandPalette.surfaceBase,
                   hor: StrandPalette.canvasBottom, stars: 0, warm: 0)

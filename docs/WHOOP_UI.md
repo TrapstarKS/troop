@@ -9,8 +9,8 @@ Apple tokens live in `StrandDesign`; Android tokens live in `com.noop.ui`. Exist
 | Role | Apple / Android token | Dark reconstruction |
 |---|---|---|
 | Canvas gradient | `StrandPalette.canvasTop` / `Palette.canvasTop`; `canvasBottom` | `#283339` → `#101518` |
-| Card | existing `surfaceCard` / `card` | `#202528` |
-| Elevated card | existing elevated surface tokens | `#2C2F34` |
+| Card | `surfaceRaised` / `card` | `#202528` |
+| Elevated card | `surfaceElevated` | `#2C2F34` |
 | Inset | existing `surfaceInset` / `surfaceInset` | `#080C0D` |
 | Divider | existing `hairline` / divider tokens | `#393D41` |
 | Main text | `textPrimary` / `text` | White |
@@ -41,7 +41,7 @@ Apple implementations are in `Packages/StrandDesign/Sources/StrandDesign/WhoopCo
 | `TopChrome` | Date label, previous/next/profile/strap accessibility labels, initials, nullable battery percentage, connection state, next-date gate and five callbacks. Use the screen's existing date resolver. Never create a second date state in the shell. |
 | `TabCapsule` | Items with stable `id`, localized `label`, platform icon; `selectedID`, selection callback. |
 | `CoachOrb` | Localized accessibility label and tap callback; opens the existing Coach surface. Respects the existing master switch and consent. |
-| Chart styling | Shared domain/stage tokens plus existing `TrendChart`, `Hypnogram`, sparklines and bar components. Preserve real timestamps, gaps and discrete sleep stages. |
+| Chart styling | `ChartTokens` plus shared domain/stage tokens and existing `TrendChart`, `Hypnogram`, sparklines and bar components. Preserve real timestamps, gaps and discrete sleep stages. |
 
 Apple capsule item initializer: `TabCapsuleItem(id:label:systemImage:)`. Android uses `TabCapsuleItem(id,label,icon)`. Apple uses `ScoreDialSize.full` / `.compact`; Android uses `ScoreDialSize.Full` / `.Compact`. Percent progress is displayed score / 100. Any Strain normalization belongs to the caller's presentation layer, never storage or scoring.
 
@@ -63,8 +63,8 @@ Apple screens push `NavigationLink(value: TabRoute.<case>)` and rely on **one** 
 
 | Purpose | Apple `TabRoute` | Android `WhoopRoute` | Initial content |
 |---|---|---|---|
-| Recovery detail | `.recoveryDetail` | `recoveryDetail` (`recovery_detail`) | Existing recovery metric detail |
-| Strain detail | `.strainDetail` | `strainDetail` (`strain_detail`) | Existing strain metric detail |
+| Recovery detail | `.recoveryDetail` | `recoveryDetail` (`recovery_detail`) | Apple metric detail; Android coupled recovery/effort view |
+| Strain detail | `.strainDetail` | `strainDetail` (`strain_detail`) | Apple metric detail; Android workouts |
 | Sleep detail | `.sleepDetail` | `sleepDetail` (`sleep`) | Existing Sleep |
 | Sleep Planner | `.sleepPlanner` | `sleepPlanner` (`smart_alarm`) | Existing alarm settings; not a claim of WHOOP planner parity |
 | Health Monitor | `.healthMonitor` | `healthMonitor` (`vital_signs`) | Existing local health/vitals |
