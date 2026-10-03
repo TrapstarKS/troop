@@ -10,6 +10,9 @@ internal fun requestedSleepNightOffset(navDays: List<List<SleepSession>>, dayKey
         .takeIf { it >= 0 }
 }
 
+internal fun selectedSleepDayKey(navDays: List<List<SleepSession>>, offset: Int): String? =
+    if (offset <= 0) null else navDays.getOrNull(offset)?.firstOrNull()?.let { localDayString(it.endTs) }
+
 internal fun sleepEditGroupFor(session: SleepSession, heroGroup: List<SleepSession>): List<SleepSession> =
     if (heroGroup.any { it.deviceId == session.deviceId && it.startTs == session.startTs }) heroGroup
     else listOf(session)

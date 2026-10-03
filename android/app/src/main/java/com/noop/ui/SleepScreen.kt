@@ -219,12 +219,9 @@ fun SleepScreen(
     // session row is gone, giving each suppressed window a "Recompute this night" escape hatch (#515).
     var dismissedSleeps by remember { mutableStateOf<List<DismissedSleep>>(emptyList()) }
     var recomputingSleep by remember { mutableStateOf<Pair<String, Long>?>(null) }
-    // 0 = latest night, N = N sleep-sessions back. Reset to the newest night only on a REAL data
-    // reload (new sync / re-import via `days` changing). The optimistic bed/wake edit rewrites
-    // `sleeps` in place WITHOUT touching `days`, so it must not reset the browse — keeping the
-    // user on the night they just edited. (#160)
+    // A historical wake-day survives edits and reloads; latest follows newly arriving nights. (#160)
     var nightOffset by remember(initialDayKey, vm.activeStrapId) { mutableIntStateOf(0) }
-    var pendingInitialDayKey by remember(initialDayKey, vm.activeStrapId) {
+    var selectedDayKey by remember(initialDayKey, vm.activeStrapId) {
         mutableStateOf(initialDayKey)
     }
     LaunchedEffect(days, vm.activeStrapId) {
@@ -493,13 +490,13 @@ fun SleepScreen(
     }
 
     val requestedOffset = if (sleepRowsReady)
-        requestedSleepNightOffset(navDays, pendingInitialDayKey) else null
-    val visibleNightOffset = if (pendingInitialDayKey != null) requestedOffset else nightOffset
-    val unavailableRequestedDay = pendingInitialDayKey?.takeIf { sleepRowsReady && requestedOffset == null }
+        requestedSleepNightOffset(navDays, selectedDayKey) else null
+    val visibleNightOffset = if (selectedDayKey != null) requestedOffset else nightOffset
+    val unavailableRequestedDay = selectedDayKey?.takeIf { sleepRowsReady && requestedOffset == null }
     val onNavigateNight: (Int) -> Unit = { offset ->
         if (sleepRowsReady) {
-            pendingInitialDayKey = null
             nightOffset = offset.coerceIn(0, max(navDays.lastIndex, 0))
+            selectedDayKey = selectedSleepDayKey(navDays, nightOffset)
         }
     }
 
@@ -519,7 +516,7 @@ fun SleepScreen(
     // data (strap off-body) is skipped by the carousel, so labelling by index makes two nights either
     // side of it read as consecutive and desyncs the "N nights ago" labels. Shared by the Rest hero
     // overline and the nav header so both name the SAME calendar night.
-    val nightLabel = pendingInitialDayKey?.takeIf { visibleNightOffset == null }
+    val nightLabel = selectedDayKey?.takeIf { visibleNightOffset == null }
         ?: nightRelativeLabel(calendarNightsAgo(navDays, visibleNightOffset ?: nightOffset,
             java.util.TimeZone.getDefault()))
 

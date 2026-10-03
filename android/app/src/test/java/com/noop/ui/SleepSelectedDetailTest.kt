@@ -9,6 +9,31 @@ import java.time.Instant
 import java.util.TimeZone
 
 class SleepSelectedDetailTest {
+    @Test fun historicalSelectionSurvivesNapEditAndNewNightWithoutChangingMainBounds() {
+        val zone = java.time.ZoneId.systemDefault()
+        fun session(date: String, onset: String, wake: String) = SleepSession(deviceId = "test",
+            startTs = java.time.LocalDateTime.parse("${date}T$onset").atZone(zone).toEpochSecond(),
+            endTs = java.time.LocalDateTime.parse("${date}T$wake").atZone(zone).toEpochSecond(),
+            stagesJSON = """{"awake":10,"light":300,"deep":60,"rem":40}""")
+        val main = session("2026-10-02", "00:00", "07:00")
+        val nap = session("2026-10-02", "14:15", "14:45").copy(
+            stagesJSON = """{"awake":0,"light":30,"deep":0,"rem":0}""")
+        val newest = session("2026-10-03", "00:00", "07:00")
+        val original = listOf(listOf(newest), listOf(main, nap))
+        val selectedDay = selectedSleepDayKey(original, 1)
+        assertEquals("2026-10-02", selectedDay)
+        val refreshed = listOf(listOf(session("2026-10-04", "00:00", "07:00"))) +
+            listOf(listOf(newest), listOf(main, nap.copy(endTs = nap.endTs - 60)))
+        val selectedOffset = requestedSleepNightOffset(refreshed, selectedDay)!!
+        assertEquals(2, selectedOffset)
+        val selected = selectNight(refreshed, emptyList(), selectedOffset)!!
+        assertEquals(main.effectiveStartTs, selected.heroOnsetTs)
+        assertEquals(main.endTs, selected.heroWakeTs)
+        assertEquals(nap.endTs - 60, selected.napBlocks.single().endTs)
+        assertNull(requestedSleepNightOffset(refreshed.take(2), selectedDay))
+        assertNull(selectedSleepDayKey(refreshed, 0))
+    }
+
     @Test fun requestedDaySelectsTheExactLocalWakeDayWithoutCarryingANearbyNight() {
         val defaultZone = TimeZone.getDefault()
         try {
