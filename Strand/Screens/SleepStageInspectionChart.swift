@@ -18,6 +18,8 @@ struct SleepStageInspectionChart: View {
     let nightStart: Date
     let span: TimeInterval
     let highlightedStage: SleepStage?
+    var filled = false
+    var stagePalette: SleepStagePalette = .noop
     @State private var selection: SleepStageInspection?
     private let stages: [SleepStage] = [.awake, .rem, .light, .deep]
 
@@ -49,17 +51,18 @@ struct SleepStageInspectionChart: View {
                                 let left = CGFloat(max(0, min(interval.start, span)) / span) * size.width
                                 let right = CGFloat(max(0, min(interval.end, span)) / span) * size.width
                                 let y = laneHeight * (CGFloat(index) + 0.5)
-                                let rect = CGRect(x: left, y: y - NoopMetrics.hypnogramBandMinThickness / 2,
-                                                  width: max(0, right - left), height: NoopMetrics.hypnogramBandMinThickness)
+                                let top = y - NoopMetrics.hypnogramBandMinThickness / 2
+                                let rect = CGRect(x: left, y: top, width: max(0, right - left),
+                                                  height: filled ? size.height - top : NoopMetrics.hypnogramBandMinThickness)
                                 let opacity = highlightedStage == nil || highlightedStage == interval.stage ? 1.0 : 0.2
-                                context.fill(Path(rect), with: .color(StrandPalette.sleepStageColor(interval.stage).opacity(opacity)))
+                                context.fill(Path(rect), with: .color(StrandPalette.sleepStageColor(interval.stage, palette: stagePalette).opacity(opacity)))
                                 if position > 0 {
                                     let previous = intervals[position - 1]
                                     if previous.end == interval.start, let previousIndex = stages.firstIndex(of: previous.stage) {
                                         var transition = Path()
                                         transition.move(to: CGPoint(x: left, y: laneHeight * (CGFloat(previousIndex) + 0.5)))
                                         transition.addLine(to: CGPoint(x: left, y: y))
-                                        context.stroke(transition, with: .color(StrandPalette.sleepStageColor(interval.stage).opacity(opacity)))
+                                        context.stroke(transition, with: .color(StrandPalette.sleepStageColor(interval.stage, palette: stagePalette).opacity(opacity)))
                                     }
                                 }
                             }

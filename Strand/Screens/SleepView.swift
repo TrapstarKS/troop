@@ -849,6 +849,7 @@ struct SleepView: View {
         let s = night.stages
         let recorded = recordedIntervals(intervals, night: night)
         let isPersisted = night.realSegments != nil && !recorded.isEmpty
+        let chartStyle = SleepChartStyle.resolve(sleepChartStyleRaw)
         // An Oura night's stages are the ring's RAW on-device SleepNet classification (decoded off the 0x49
         // phase stream), NOT a NOOP approximation — so it gets its own honest caption instead of the
         // "stages approximate (on-device)" one that describes NOOP's own sparse-motion staging.
@@ -866,8 +867,9 @@ struct SleepView: View {
                         Text(subtitle).font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
                         SleepStageInspectionChart(intervals: recorded, nightStart: night.onsetDate,
                                                   span: TimeInterval(night.session.endTs - night.session.effectiveStartTs),
-                                                  highlightedStage: selectedStage)
-                        stageBreakdownRows(s)
+                                                  highlightedStage: selectedStage, filled: chartStyle.isFilled,
+                                                  stagePalette: chartStyle.stagePalette)
+                        stageBreakdownRows(s, palette: chartStyle.stagePalette)
                     }
                 }
             } else {
