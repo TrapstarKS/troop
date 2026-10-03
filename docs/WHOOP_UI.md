@@ -9,13 +9,13 @@ Apple tokens live in `StrandDesign`; Android tokens live in `com.noop.ui`. Exist
 | Role | Apple / Android token | Dark reconstruction |
 |---|---|---|
 | Canvas gradient | `StrandPalette.canvasTop` / `Palette.canvasTop`; `canvasBottom` | `#283339` → `#101518` |
-| Card | `surfaceRaised` / `card` | `#202528` |
-| Elevated card | `surfaceElevated` | `#2C2F34` |
+| Card | `surfaceRaised` on both platforms | `#202528` |
+| Elevated card | `surfaceElevated` / `surfaceOverlay` | `#2C2F34` |
 | Inset | existing `surfaceInset` / `surfaceInset` | `#080C0D` |
 | Divider | existing `hairline` / divider tokens | `#393D41` |
-| Main text | `textPrimary` / `text` | White |
-| Supporting text | `textSecondary` / `textMuted` | `#BABEC0` |
-| Quiet text | `textTertiary` / muted tokens | Contrast-adjusted gray |
+| Main text | `textPrimary` on both platforms | White |
+| Supporting text | `textSecondary` on both platforms | `#BABEC0` |
+| Quiet text | `textTertiary` on both platforms | Contrast-adjusted gray |
 | Recovery bands | `recoveryHigh`, `recoveryMedium`, `recoveryLow` | `#16EC06`, `#FFDE00`, `#FF0026` |
 | Strain | `strainPrimary` | `#0093E7` |
 | Sleep score | `sleepPrimary` | `#7BA1BB` |
@@ -28,7 +28,7 @@ Use `StrandFont` / Android theme typography for text, and `NoopMetrics` / `Metri
 
 ## Reusable components
 
-Apple implementations are in `Packages/StrandDesign/Sources/StrandDesign/WhoopComponents.swift`; Android implementations are in `ui/WhoopComponents.kt`. All text arguments are localized by the host. Components own drawing and styling; screens own date selection, resolved values, availability, comparisons, device state and navigation.
+Apple implementations are in `Packages/StrandDesign/Sources/StrandDesign/WhoopComponents.swift`; Android implementations are in `android/app/src/main/java/com/noop/ui/WhoopComponents.kt`. All text arguments are localized by the host. Components own drawing and styling; screens own date selection, resolved values, availability, comparisons, device state and navigation.
 
 | Component | Inputs / behavior |
 |---|---|
