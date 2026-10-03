@@ -38,6 +38,8 @@ enum TabRoute: Hashable {
     case coupled
     case recoveryDetail
     case strainDetail
+    case recoveryDetailForDay(dayKey: String?)
+    case strainDetailForDay(dayKey: String?, effortOverride: Double?, windowDayKey: String? = nil)
     case sleepDetail
     case sleepPlanner
     case healthMonitor
@@ -84,6 +86,8 @@ extension View {
                 case .coupled: CoupledView()
                 case .recoveryDetail: RecoveryDetailView()
                 case .strainDetail: StrainDetailView()
+                case .recoveryDetailForDay(let dayKey): RecoveryDetailView(dayKey: dayKey)
+                case .strainDetailForDay(let dayKey, let effortOverride, let windowDayKey): StrainDetailView(dayKey: dayKey, effortOverride: effortOverride, windowDayKey: windowDayKey)
                 case .sleepDetail: SleepView()
                 case .sleepPlanner: SmartAlarmView()
                 case .healthMonitor, .healthspan: HealthView()

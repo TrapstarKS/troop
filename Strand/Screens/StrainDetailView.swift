@@ -6,6 +6,7 @@ import WhoopStore
 struct StrainDetailView: View {
     var dayKey: String? = nil
     var effortOverride: Double? = nil
+    var windowDayKey: String? = nil
     @EnvironmentObject private var repo: Repository
     @StateObject private var profile = ProfileStore()
     @AppStorage(DayCycleMode.storageKey) private var cycleMode = DayCycleMode.sleepOnset.rawValue
@@ -61,7 +62,7 @@ struct StrainDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .task(id: "\(key)|\(repo.deviceId)|\(repo.refreshSeq)|\(cycleMode)") { await load() }
+        .task(id: "\(key)|\(windowDayKey ?? "")|\(repo.deviceId)|\(repo.refreshSeq)|\(cycleMode)") { await load() }
     }
 
     private var target: some View {
@@ -101,29 +102,43 @@ struct StrainDetailView: View {
         zoneMinutes = nil
         belowZoneMinutes = nil
         workouts = []
-        guard let day = RecoveryStrainDetailLogic.date(key), let next = Calendar.current.date(byAdding: .day, value: 1, to: day) else { return }
-        let requestedKey = key
+        let now = Date()
+        let requestedKey = dayKey ?? repo.today?.day ?? Repository.logicalDayKey(now)
+        let requestedWindowKey = windowDayKey
         let deviceId = repo.deviceId
         let requestedMode = cycleMode
-        let calendarStart = Int(day.timeIntervalSince1970)
-        let calendarEnd = min(Int(next.timeIntervalSince1970), Int(Date().timeIntervalSince1970) + 1)
-        let markers = DayCycleMode.persisted(cycleMode) == .sleepOnset
+        let calendar = Calendar.current
+        let anchorKey = requestedWindowKey ?? (dayKey == nil ? Repository.logicalDayKey(now) : requestedKey)
+        guard let day = RecoveryStrainDetailLogic.date(anchorKey),
+              let next = calendar.date(byAdding: .day, value: 1, to: day),
+              let markerDay = RecoveryStrainDetailLogic.date(requestedKey),
+              let nextMarkerDay = calendar.date(byAdding: .day, value: 1, to: markerDay) else { return }
+        let sleepOnsetMode = DayCycleMode.persisted(requestedMode) == .sleepOnset
+        let markers = sleepOnsetMode
             ? await repo.exploreSeries(key: DayCycleIntelligenceIntegration.onsetKey, source: "my-whoop") : []
-        let start = markers.last { $0.day == requestedKey }.map { Int($0.value) } ?? calendarStart
-        let nextKey = Repository.localDayKey(next)
-        let end = min(markers.last { $0.day == nextKey }.map { Int($0.value) } ?? calendarEnd, calendarEnd) - 1
-        let buckets = await repo.hrBuckets(from: start, to: max(start, end), bucketSeconds: 300)
-        let samples = await repo.hrSamples(from: start, to: max(start, end), limit: 200_000)
+        let nextMarkerKey = Repository.localDayKey(nextMarkerDay)
+        let window = RecoveryStrainDetailLogic.strainWindow(
+            calendarStart: Int(day.timeIntervalSince1970), nextCalendarStart: Int(next.timeIntervalSince1970),
+            isCurrentDay: anchorKey == Repository.logicalDayKey(now), sleepOnsetMode: sleepOnsetMode,
+            onset: RecoveryStrainDetailLogic.timestampSeconds(markers.last { $0.day == requestedKey }?.value),
+            nextOnset: RecoveryStrainDetailLogic.timestampSeconds(markers.last { $0.day == nextMarkerKey }?.value),
+            now: Int(now.timeIntervalSince1970))
+        guard key == requestedKey, windowDayKey == requestedWindowKey, repo.deviceId == deviceId,
+              cycleMode == requestedMode, !Task.isCancelled else { return }
+        guard let window else { loaded = true; return }
+        let buckets = await repo.hrBuckets(from: window.lowerBound, to: window.upperBound, bucketSeconds: 300)
+        let samples = await repo.hrSamples(from: window.lowerBound, to: window.upperBound, limit: 200_000)
         let rows = await repo.workoutRows()
         let segments = hrGapSegments(bucketTs: buckets.map(\.ts), bucketSeconds: 300)
-        guard key == requestedKey, repo.deviceId == deviceId, cycleMode == requestedMode, !Task.isCancelled else { return }
+        guard key == requestedKey, windowDayKey == requestedWindowKey, repo.deviceId == deviceId,
+              cycleMode == requestedMode, !Task.isCancelled else { return }
         points = buckets.enumerated().map { index, bucket in
             TrendPoint(date: Date(timeIntervalSince1970: Double(bucket.ts)), value: bucket.bpm, segment: segments[index])
         }
         let split = samples.isEmpty ? nil : HRZones.timeInZone(samples, zoneSet: profile.hrZoneSet)
         zoneMinutes = split?.seconds.map { $0 / 60 }
         belowZoneMinutes = split.map { $0.belowZone1 / 60 }
-        workouts = rows.filter { $0.startTs >= start && $0.startTs <= end }
+        workouts = rows.filter { window.contains($0.startTs) }
         loaded = true
     }
 }

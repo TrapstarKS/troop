@@ -1071,7 +1071,7 @@ fun TodayScreen(
         }
     }
     var recoveryDetailDayKey by remember { mutableStateOf<String?>(null) }
-    var strainDetailRequest by remember { mutableStateOf<Pair<String, Double?>?>(null) }
+    var strainDetailRequest by remember { mutableStateOf<Triple<String, Double?, String>?>(null) }
     var showWeeklyPlan by remember { mutableStateOf(false) }
     val openWeeklyPlan: () -> Unit = {
         if (onOpenPlan != null) onOpenPlan()
@@ -1086,7 +1086,7 @@ fun TodayScreen(
     }
     val openStrainForDisplayedDay: () -> Unit = {
         if (onOpenStrainForDay != null) onOpenStrainForDay(selectedDayKey, effortForDay)
-        else strainDetailRequest = selectedDayKey to effortForDay
+        else strainDetailRequest = Triple(selectedDayKey, effortForDay, selectedDay.toString())
     }
     val openDashboardMetric: (String) -> Unit = { key ->
         when (key) {
@@ -1521,6 +1521,7 @@ fun TodayScreen(
         ) {
             Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
                 StrainDetailScreen(vm = viewModel, dayKey = request.first, effortOverride = request.second,
+                    windowDayKey = request.third,
                     onBack = { strainDetailRequest = null })
             }
         }

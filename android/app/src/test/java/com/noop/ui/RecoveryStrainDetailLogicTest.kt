@@ -6,6 +6,92 @@ import org.junit.Test
 
 class RecoveryStrainDetailLogicTest {
     @Test
+    fun windowsTimestampsAndZoneProvenanceMatchStandaloneSwiftOracle() {
+        data class WindowCase(val start: Long, val next: Long, val current: Boolean,
+            val sleep: Boolean, val onset: Long?, val nextOnset: Long?, val now: Long)
+        val windows = listOf(
+            WindowCase(0, 86400, true, false, null, null, 97200),
+            WindowCase(0, 86400, false, false, null, null, 172800),
+            WindowCase(0, 86400, true, true, null, null, 97200),
+            WindowCase(0, 86400, false, true, null, null, 172800),
+            WindowCase(0, 86400, true, true, 72000, null, 97200),
+            WindowCase(0, 86400, false, true, 72000, 88200, 172800),
+            WindowCase(0, 86400, true, true, 72000, 88200, 97200),
+            WindowCase(0, 86400, true, true, 72000, 108000, 97200),
+            WindowCase(0, 86400, true, false, 72000, 88200, 97200),
+            WindowCase(86400, 169200, false, false, null, null, 250000),
+            WindowCase(86400, 176400, false, false, null, null, 250000),
+            WindowCase(172800, 259200, false, false, null, null, 97200),
+            WindowCase(0, 86400, true, true, 72000, 72000, 97200),
+            WindowCase(0, 86400, true, true, 72000, 71000, 97200),
+            WindowCase(0, 86400, true, true, 100000, null, 97200),
+            WindowCase(86400, 0, false, false, null, null, 172800),
+            WindowCase(0, 86400, false, true, 72000, Long.MIN_VALUE, 172800),
+            WindowCase(0, 86400, true, true, 72000, Long.MAX_VALUE, 97200),
+        )
+        val timestamps = listOf(null, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
+            -0.1, 0.0, 0.9, 1.9, Long.MIN_VALUE.toDouble(), Math.nextDown(Long.MIN_VALUE.toDouble()),
+            Long.MAX_VALUE.toDouble(), Math.nextDown(Long.MAX_VALUE.toDouble()))
+        val percentages = listOf(10.0, 20.0, 20.0, 20.0, 30.0)
+        val recorded = listOf(1.0, 2.0, 3.0, 4.0, 5.0)
+        val durations = listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY,
+            Double.NEGATIVE_INFINITY, 600.0, 90.0, 1e300)
+        val distributions = durations.map {
+            RecoveryStrainDetailLogic.zoneDistribution(percentages, it, recorded)
+        } + listOf(
+            RecoveryStrainDetailLogic.zoneDistribution(null, 600.0, recorded),
+            RecoveryStrainDetailLogic.zoneDistribution(percentages, 0.0),
+            RecoveryStrainDetailLogic.zoneDistribution(percentages, 600.0),
+        )
+        val actual = listOf(
+            windows.joinToString(",") { c ->
+                RecoveryStrainDetailLogic.strainWindow(c.start, c.next, c.current, c.sleep,
+                    c.onset, c.nextOnset, c.now)?.let { "${it.first}:${it.last}" } ?: "unavailable"
+            },
+            timestamps.joinToString(",") { RecoveryStrainDetailLogic.timestampSeconds(it)?.toString() ?: "unavailable" },
+            distributions.joinToString(",") { d ->
+                d?.let { (if (it.imported) "imported" else "recorded") + "|" +
+                    it.minutes.joinToString(":") { value -> value.toRawBits().toULong().toString() } } ?: "unavailable"
+            },
+        ).joinToString("\n")
+        val expected = """
+        0:97200,0:86399,0:97200,0:86399,72000:97200,72000:88199,72000:88199,72000:97200,0:97200,86400:169199,86400:176399,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,72000:97200
+        unavailable,unavailable,unavailable,unavailable,-1,0,0,1,-9223372036854775808,unavailable,unavailable,9223372036854774784
+        recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,imported|4607182418800017408:4611686018427387904:4611686018427387904:4611686018427387904:4613937818241073152,imported|4594572339843380019:4599075939470750515:4599075939470750515:4599075939470750515:4601778099247172813,imported|9053470209761937459:9057973809389307955:9057973809389307955:9057973809389307955:9060843088576613453,recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,unavailable,imported|4607182418800017408:4611686018427387904:4611686018427387904:4611686018427387904:4613937818241073152
+        """.trimIndent()
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun strainWindowIncludesPostMidnightCurrentDataAndAfterMidnightOnsets() {
+        assertEquals(0L..97_200L, RecoveryStrainDetailLogic.strainWindow(0, 86_400, true, false, null, null, 97_200))
+        assertEquals(0L..86_399L, RecoveryStrainDetailLogic.strainWindow(0, 86_400, false, false, null, null, 172_800))
+        assertEquals(72_000L..97_200L, RecoveryStrainDetailLogic.strainWindow(0, 86_400, true, true, 72_000, null, 97_200))
+        assertEquals(72_000L..88_199L, RecoveryStrainDetailLogic.strainWindow(0, 86_400, false, true, 72_000, 88_200, 172_800))
+        assertEquals(0L..97_200L, RecoveryStrainDetailLogic.strainWindow(0, 86_400, true, false, 72_000, 88_200, 97_200))
+        assertNull(RecoveryStrainDetailLogic.strainWindow(172_800, 259_200, false, false, null, null, 97_200))
+        assertNull(RecoveryStrainDetailLogic.strainWindow(0, 86_400, true, true, 72_000, 72_000, 97_200))
+    }
+
+    @Test
+    fun invalidActivityDurationKeepsRecordedZoneValuesAndProvenanceTogether() {
+        val percentages = listOf(10.0, 20.0, 20.0, 20.0, 30.0)
+        val recorded = listOf(1.0, 2.0, 3.0, 4.0, 5.0)
+        listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY).forEach { duration ->
+            val result = RecoveryStrainDetailLogic.zoneDistribution(percentages, duration, recorded)
+            assertEquals(recorded, result?.minutes)
+            assertEquals(false, result?.imported)
+            assertNull(RecoveryStrainDetailLogic.zoneDistribution(percentages, duration))
+        }
+        val imported = RecoveryStrainDetailLogic.zoneDistribution(percentages, 600.0, recorded)
+        assertEquals(listOf(1.0, 2.0, 2.0, 2.0, 3.0), imported?.minutes)
+        assertEquals(true, imported?.imported)
+        val withoutSplit = RecoveryStrainDetailLogic.zoneDistribution(null, 600.0, recorded)
+        assertEquals(recorded, withoutSplit?.minutes)
+        assertEquals(false, withoutSplit?.imported)
+    }
+
+    @Test
     fun comparisonTargetsAndNumericPresentationMatchSwiftOracle() {
         val keys = listOf("2026-08-31", "2026-09-01", "2026-09-15", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03")
         val values = listOf(999.0, 10.0, null, 20.0, Double.NaN, 100.0, 1000.0)
