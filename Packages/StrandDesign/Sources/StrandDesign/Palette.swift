@@ -93,6 +93,7 @@ public enum StrandPalette {
     public static let ringTrack = Color(light: "#CDD5DA", dark: "#353D40")
     public static let targetBand = Color(light: "#89949B", dark: "#788187")
     public static let canvasTop = NoopVisualStyle.canvasTop
+    public static let canvasBottom = NoopVisualStyle.canvas
     public static let surfaceElevated = NoopVisualStyle.surfaceElevated
     public static let canvasGradient = Gradient(colors: [canvasTop, NoopVisualStyle.canvas])
 
