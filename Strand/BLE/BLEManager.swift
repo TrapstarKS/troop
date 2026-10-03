@@ -1455,6 +1455,7 @@ public final class BLEManager: NSObject, ObservableObject {
                 log("Active device \(activeId) replaces WHOOP BLE — leaving sample attribution on \(deviceId) (#1881)")
             } else if activeRow.map(SourceIdentity.isWhoop) ?? true {
                 self.deviceId = activeId
+                if let activeRow { setPreferredPeripheral(activeRow.peripheralId) }
             }
         }
         // Restore the ECG latch for THIS device now that `deviceId` has settled for the launch. Done
@@ -1773,6 +1774,7 @@ public final class BLEManager: NSObject, ObservableObject {
 
     public func disconnect() {
         intentionalDisconnect = true
+        invalidateRestoration()
         cancelScanFallback()
         // A user-initiated teardown is a clean slate: clear any #80 marginal-radio fallback so the next
         // (manual) reconnect attempts the full R10/R11 stream again rather than inheriting old suspicion.
@@ -1811,7 +1813,7 @@ public final class BLEManager: NSObject, ObservableObject {
         // Clear the targeted-connect pin + the iOS state-restoration peripheral if they point at this strap,
         // so connect()/restoration can't re-target it.
         if target == nil || preferredPeripheralUUID == target { setPreferredPeripheral(nil) }
-        if target == nil || restoredPeripheral?.identifier == target { restoredPeripheral = nil }
+        if target == nil || restoredPeripheral?.identifier == target { invalidateRestoration() }
         // The background targeted-connect must not re-grab a strap the user has released either.
         if target == nil || Self.lastConnectedPeripheralUUID == target {
             UserDefaults.standard.removeObject(forKey: Self.lastConnectedPeripheralKey)
@@ -2008,8 +2010,8 @@ public final class BLEManager: NSObject, ObservableObject {
     /// Pin connections to ONE specific strap by its CBPeripheral.identifier.uuidString. The app sets
     /// this to the active device's persisted `peripheralId` when it has one; pass nil to clear it
     /// (back to "connect to the first WHOOP discovered" — the single-WHOOP default). An unparseable
-    /// string clears the pin rather than wedging the scan. Only `didDiscover` reads it; setting it
-    /// does NOT start/stop/redirect an in-flight connection on its own.
+    /// string clears the pin rather than wedging the scan. A different pin releases obsolete restored
+    /// work; ordinary connections are redirected by the coordinator's stop/start sequence.
     public func setPreferredPeripheral(_ uuidString: String?) {
         let resolved = uuidString.flatMap { UUID(uuidString: $0) }   // nil for unparseable → clears the pin
         // A genuinely NEW pin starts the #52 refusal streak clean — the old streak belonged to the strap we
@@ -2021,6 +2023,19 @@ public final class BLEManager: NSObject, ObservableObject {
             if resolved != readoptingTo { readoptingTo = nil }
         }
         preferredPeripheralUUID = resolved
+        if let resolved, let restored = restoredPeripheral, restored.identifier != resolved {
+            invalidateRestoration()
+            central?.cancelPeripheralConnection(restored)
+            if peripheral?.identifier == restored.identifier {
+                peripheral = nil
+                resetCharacteristics()
+                connectedPeripheralUUID = nil
+                state.connected = false
+                state.bonded = false
+                state.encryptedBond = false
+                didBond = false
+            }
+        }
     }
 
     /// True when `p` is the strap we're pinned to — or when no pin is set (the single-WHOOP default, so
@@ -5111,15 +5126,19 @@ public final class BLEManager: NSObject, ObservableObject {
         await startupGate.resume(
             prepare: { await self.prepareStoreForStartup() },
             isAllowed: {
-                token == self.restoredStartupToken && self.central?.state == .poweredOn
+                token == self.restoredStartupToken
+                    && (self.restoredPeripheral.map(self.isPreferredPeripheral) ?? true)
+                    && self.central?.state == .poweredOn
                     && !self.intentionalDisconnect && self.whoopConnectAllowed("startup/\(reason)")
             },
             onDenied: { self.releaseInactiveRestoration(token: token) },
             action: {
                 if let p = self.restoredPeripheral, let token {
+                    guard self.peripheral?.identifier == p.identifier else { return }
                     switch p.state {
                     case .connected:
-                        guard self.startupGate.claimRestoration(.discover, token: token) else { return }
+                        guard self.startupGate.claimRestoration(.discover, token: token,
+                            preferredIdentifier: self.preferredPeripheralUUID?.uuidString) else { return }
                         p.delegate = self
                         self.adoptSourceIdentity(for: p)
                         self.state.connected = true
@@ -5136,7 +5155,8 @@ public final class BLEManager: NSObject, ObservableObject {
                         self.log("Restored CONNECTED peripheral \(p.identifier) — re-discovering services (\(reason))")
                         self.discoverPrimaryServices(on: p)
                     case .disconnected:
-                        guard self.startupGate.claimRestoration(.connect, token: token) else { return }
+                        guard self.startupGate.claimRestoration(.connect, token: token,
+                            preferredIdentifier: self.preferredPeripheralUUID?.uuidString) else { return }
                         p.delegate = self
                         self.adoptSourceIdentity(for: p)
                         self.state.connected = false
@@ -5151,6 +5171,19 @@ public final class BLEManager: NSObject, ObservableObject {
                 }
             }
         )
+        // Store bootstrap may replace restored A with the persisted preferred B. If no other
+        // startup callback has begun B's connection, resume the normal selected-device path.
+        if token != nil, restoredStartupToken == nil, restoredPeripheral == nil,
+           peripheral == nil, central?.state == .poweredOn, !intentionalDisconnect {
+            connectFromSystem()
+        }
+    }
+
+    private func invalidateRestoration() {
+        startupGate.invalidateRestoration(token: restoredStartupToken)
+        restoredPeripheral?.delegate = nil
+        restoredPeripheral = nil
+        restoredStartupToken = nil
     }
 
     private func releaseInactiveRestoration(token: BLEStartupGate.RestorationToken?) {
@@ -5159,8 +5192,7 @@ public final class BLEManager: NSObject, ObservableObject {
               let p = restoredPeripheral else { return }
         p.delegate = nil
         central?.cancelPeripheralConnection(p)
-        restoredPeripheral = nil
-        restoredStartupToken = nil
+        invalidateRestoration()
         if peripheral?.identifier == p.identifier { peripheral = nil }
         resetCharacteristics()
         connectedPeripheralUUID = nil
@@ -5172,7 +5204,8 @@ public final class BLEManager: NSObject, ObservableObject {
 
     /// Issue a direct connect to a restored peripheral and arm the pending-connect probe (#730).
     private func connectRestored(_ p: CBPeripheral, reason: String) {
-        guard let central else { return }
+        guard let central, !intentionalDisconnect, isPreferredPeripheral(p),
+              restoredPeripheral?.identifier == p.identifier else { return }
         guard whoopConnectAllowed("restored/\(reason)") else { return }
         log("Connecting to restored peripheral (\(reason)) — peripheral state=\(peripheralStateName(p.state))")
         central.connect(p, options: nil)
@@ -5982,12 +6015,14 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
                         self.central?.state == .poweredOn && !self.intentionalDisconnect
                             && token == self.restoredStartupToken
                             && self.restoredPeripheral?.identifier == peripheral.identifier
+                            && self.isPreferredPeripheral(peripheral)
                             && peripheral.state == .connected
                             && self.whoopConnectAllowed("startup/restored-didConnect")
                     },
                     onDenied: { self.releaseInactiveRestoration(token: token) },
                     action: {
-                        guard self.startupGate.claimRestoration(.discover, token: token) else { return }
+                        guard self.startupGate.claimRestoration(.discover, token: token,
+                            preferredIdentifier: self.preferredPeripheralUUID?.uuidString) else { return }
                         self.completeConnect(peripheral)
                     }
                 )
@@ -5998,6 +6033,13 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
     }
 
     private func completeConnect(_ peripheral: CBPeripheral) {
+        guard BLEStartupGate.allowsConnectionCallback(identifier: peripheral.identifier.uuidString,
+            currentIdentifier: self.peripheral?.identifier.uuidString,
+            preferredIdentifier: preferredPeripheralUUID?.uuidString,
+            intentionalDisconnect: intentionalDisconnect, isConnected: peripheral.state == .connected) else {
+            central?.cancelPeripheralConnection(peripheral)
+            return
+        }
         cancelScanFallback()
         cancelPendingConnectProbe()   // #730: the connect resolved; no pending-connect log needed
         failedConnectAttempts = 0   // a successful connect clears the reconnect backoff (#414)
@@ -6013,7 +6055,7 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
         offloadGravity = 0; offloadResp = 0; offloadSkinTemp = 0; offloadSpo2 = 0; offloadChunks = 0
         linkUpSince = DispatchTime.now()
         standingConnectAt = nil     // #1413: a live link means no standing connect is outstanding
-        restoredPeripheral = nil
+        invalidateRestoration()
         preparePeripheral(peripheral)
         // #1881: BEFORE anything persists. The Collector and Backfiller read `deviceId` at flush and at
         // finishChunk, so re-pointing here is what keeps this link's rows off another device's id.
@@ -6156,7 +6198,7 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
                                didDisconnectPeripheral peripheral: CBPeripheral,
                                error: Error?) {
         guard self.peripheral?.identifier == peripheral.identifier else { return }
-        restoredStartupToken = nil
+        invalidateRestoration()
 
         Task { @MainActor in await collector?.flush() }
         // Reboot trail: if a user reboot is in flight, this drop is the strap acting on it. Log how long
@@ -6467,7 +6509,7 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
                                didFailToConnect peripheral: CBPeripheral,
                                error: Error?) {
         guard self.peripheral?.identifier == peripheral.identifier else { return }
-        restoredStartupToken = nil
+        invalidateRestoration()
 
         cancelPendingConnectProbe()   // #730: it FAILED rather than pending — this log is the answer
         log("Failed to connect\(error.map { " — \($0.localizedDescription)" } ?? "")\(BLEManager.bleErrorSuffix(error))")
@@ -7287,6 +7329,11 @@ extension BLEManager: @preconcurrency CBPeripheralDelegate {
     public func peripheral(_ peripheral: CBPeripheral,
                            didUpdateValueFor characteristic: CBCharacteristic,
                            error: Error?) {
+        guard BLEStartupGate.allowsConnectionCallback(identifier: peripheral.identifier.uuidString,
+            currentIdentifier: self.peripheral?.identifier.uuidString,
+            preferredIdentifier: preferredPeripheralUUID?.uuidString,
+            intentionalDisconnect: intentionalDisconnect,
+            isConnected: state.connected && peripheral.state == .connected) else { return }
         if let error {
             // A DIS refusal is a FINDING, not noise — report it specifically and latch it, or a capture
             // cannot tell a refusal from a read that was never issued (#490, #1635).
