@@ -1,6 +1,7 @@
 package com.noop.ingest
 
 import android.database.sqlite.SQLiteDatabase
+import android.provider.OpenableColumns
 import android.net.Uri
 import androidx.test.platform.app.InstrumentationRegistry
 import com.noop.data.DailyMetric
@@ -14,6 +15,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
+import org.robolectric.fakes.RoboCursor
 import org.robolectric.annotation.Config
 import java.io.File
 import java.lang.reflect.Proxy
@@ -42,8 +45,13 @@ class ImportedEnergyMappingTest {
         val file = File(context.cacheDir, "oura-energy.json")
         try {
             file.writeText("""{"daily_activity":[{"day":"2026-06-01","active_calories":520,"total_calories":2450},{"day":"2026-06-02","active_calories":312}]}""")
+            val uri = Uri.fromFile(file)
+            Shadows.shadowOf(context.contentResolver).setCursor(uri, RoboCursor().apply {
+                setColumnNames(listOf(OpenableColumns.DISPLAY_NAME))
+                setResults(arrayOf(arrayOf<Any>(file.name)))
+            })
             val writes = Writes()
-            val summary = WearableExportImporter.importExport(context, Uri.fromFile(file), writes.repo)
+            val summary = WearableExportImporter.importExport(context, uri, writes.repo)
             assertTrue(summary.message, writes.days.isNotEmpty())
             assertEquals(listOf(520.0, 312.0), writes.days.map { it.activeEnergyKcalEst })
             assertEquals(listOf(2450.0, null), writes.days.map { it.activeKcalEst })

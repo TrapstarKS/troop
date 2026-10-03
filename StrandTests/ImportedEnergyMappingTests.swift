@@ -24,7 +24,7 @@ final class ImportedEnergyMappingTests: XCTestCase {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("xiaomi-energy-\(UUID().uuidString).db")
         defer { try? FileManager.default.removeItem(at: url) }
         let database = try DatabaseQueue(path: url.path)
-        try database.write { db in
+        try await database.write { db in
             try db.execute(sql: "CREATE TABLE steps (sid TEXT, key TEXT, time INTEGER, value TEXT, zone_offset INTEGER, time_zero INTEGER, deleted INTEGER DEFAULT 0)")
             try db.execute(sql: "CREATE TABLE calories_day (sid TEXT, key TEXT, time INTEGER, value TEXT, zone_offset INTEGER, time_zero INTEGER, deleted INTEGER DEFAULT 0)")
             try db.execute(sql: #"INSERT INTO calories_day VALUES ('default','calories_day',1742601600,'{"calories":312}',0,1742601600,0)"#)
