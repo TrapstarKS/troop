@@ -49,6 +49,7 @@ public enum HealthspanHistory {
     public static func comparison(samples: [Sample], weekly: Bool = false) -> Comparison {
         let recent = values(samples: samples, days: 30, weekly: weekly)
         let longTerm = values(samples: samples, days: 180, weekly: weekly)
+        // Kotlin twin: HealthspanHistory.tenths
         func tenths(_ values: [Double]) -> Int? {
             guard !values.isEmpty else { return nil }
             return Int(floor(values.reduce(0, +) / Double(values.count) * 10 + 0.5))
@@ -105,6 +106,7 @@ public enum HealthspanHistory {
         return source == "lifting" || ["strength", "strengthtraining", "traditionalstrengthtraining", "functionalstrengthtraining", "weightlifting", "weighttraining"].contains(label)
     }
 
+    // Kotlin twin: HealthspanHistory.values
     private static func values(samples: [Sample], days: Int, weekly: Bool) -> [Double] {
         var bins: [Int: Double] = [:]
         for sample in points(samples: samples, windowDays: days) {

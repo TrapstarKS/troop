@@ -33,6 +33,7 @@ object HealthspanHistory {
     fun comparison(samples: List<Sample>, weekly: Boolean = false): Comparison {
         val recent = values(samples, 30, weekly)
         val longTerm = values(samples, 180, weekly)
+        // Swift twin: HealthspanHistory.tenths
         fun tenths(values: List<Double>): Int? = if (values.isEmpty()) null else floor(values.sum() / values.size * 10 + 0.5).toInt()
         return Comparison(tenths(recent), tenths(longTerm), recent.size, longTerm.size)
     }
@@ -75,6 +76,7 @@ object HealthspanHistory {
         return source == "lifting" || label in listOf("strength", "strengthtraining", "traditionalstrengthtraining", "functionalstrengthtraining", "weightlifting", "weighttraining")
     }
 
+    // Swift twin: HealthspanHistory.values
     private fun values(samples: List<Sample>, days: Int, weekly: Boolean): List<Double> {
         val bins = mutableMapOf<Int, Double>()
         for (sample in points(samples, days)) {
