@@ -89,6 +89,20 @@ final class SleepPlannerAlarmTests: XCTestCase {
         }
     }
 
+    func testNotificationComponentsPreserveBothRepeatedHourInstants() throws {
+        let formatter = ISO8601DateFormatter()
+        for (instant, hour) in [("2026-11-01T05:30:00Z", 5), ("2026-11-01T06:30:00Z", 6)] {
+            let date = try XCTUnwrap(formatter.date(from: instant))
+            let parts = AppModel.sleepPlannerNotificationComponents(date)
+            let calendar = try XCTUnwrap(parts.calendar)
+            XCTAssertEqual(calendar.identifier, .gregorian)
+            XCTAssertEqual(parts.timeZone?.secondsFromGMT(for: date), 0)
+            XCTAssertEqual(parts.hour, hour)
+            XCTAssertEqual(parts.minute, 30)
+            XCTAssertEqual(calendar.date(from: parts), date)
+        }
+    }
+
     func testWakeInFallFoldUsesLaterOccurrence() throws {
         var local = calendar
         local.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))

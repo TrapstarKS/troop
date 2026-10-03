@@ -25,6 +25,12 @@ normalizing them through today's daylight saving gap. This reference does not sc
 the actual occurrence still uses the local calendar resolver. Android's time controls edit minutes
 directly.
 
+Apple one-shot notifications encode the resolved instant as UTC calendar components. A local
+hour-and-minute trigger cannot distinguish two occurrences of a repeated hour. Both wake backup
+and bedtime advice use the same serializer, while Android's alarm schedules already use epoch
+milliseconds. Timezone changes refresh the local plan when the app runs; queued Apple requests
+retain their resolved instant until that refresh, matching the strap's existing epoch alarm.
+
 One resolved date and one clock feed each alarm summary. The selected weekdays describe the local
 wake day. A skip is persisted as `yyyy-MM-dd|minute` for the resolved wake occurrence. It survives
 relaunch and follows the same civil wake date after a timezone change. It does not disable future

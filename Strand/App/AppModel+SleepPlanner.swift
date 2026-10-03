@@ -76,6 +76,15 @@ extension AppModel {
         return true
     }
 
+    nonisolated static func sleepPlannerNotificationComponents(_ date: Date) -> DateComponents {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        var parts = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        parts.calendar = calendar
+        parts.timeZone = calendar.timeZone
+        return parts
+    }
+
     nonisolated static func smartAlarmOccurrenceKey(_ date: Date, calendar: Calendar = .current) -> String {
         let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
         return PlannerAlarmPolicy.occurrenceKey(year: parts.year ?? 0, month: parts.month ?? 0,

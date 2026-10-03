@@ -197,7 +197,7 @@ enum WindDownNudge {
                 ? String(localized: "Make room for sleep tonight. Your local plan suggests bed at \(bedtimeLabel), with recent sleep debt included in your need.")
                 : String(localized: "Your sleep plan suggests bed at \(bedtimeLabel). Take a little time to wind down.")
             content.sound = .default
-            let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: reminder)
+            let parts = AppModel.sleepPlannerNotificationComponents(reminder)
             let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
             center.add(UNNotificationRequest(identifier: "\(requestId)-wd\(count + 1)", content: content, trigger: trigger))
             count += 1

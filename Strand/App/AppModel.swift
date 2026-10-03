@@ -1576,7 +1576,7 @@ final class AppModel: ObservableObject {
             content.body = String(localized: "Your planned wake time is here. Use your Clock alarm as a backup.")
             content.sound = .default
             for (index, date) in scheduledDates.enumerated() {
-                let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+                let parts = Self.sleepPlannerNotificationComponents(date)
                 let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
                 center.add(UNNotificationRequest(identifier: "\(smartAlarmBackupId)-occurrence\(index)",
                                                  content: content, trigger: trigger))
