@@ -27,6 +27,7 @@ public enum SleepPlanner {
     /// bounded to 300...660 minutes; the added debt estimate is capped at 120 minutes.
     /// These are local planning bounds, not a physiological claim. The target is rounded
     /// up to the next whole minute and unsupported goals fall back to 100 percent.
+    /// Kotlin twin: `SleepPlanner.plan`.
     public static func plan(
         baseNeedMinutes: Int,
         debtMinutes: Int,
@@ -62,6 +63,7 @@ public enum SleepPlanner {
 
     /// Resolves a weekday override (1 = Sunday, 7 = Saturday). Invalid weekdays use
     /// the default; unsupported percentages fall back to the full local need.
+    /// Kotlin twin: `SleepPlanner.weekdayGoal`.
     public static func weekdayGoal(
         _ weekday: Int,
         overrides: [Int: Int],
@@ -73,6 +75,7 @@ public enum SleepPlanner {
 
     /// Resolves a local wake time using native calendar rules: nonexistent times retain
     /// smaller components while advancing through a gap; repeated times use the later match.
+    /// Kotlin twin: `SleepPlanner.wakeDate`.
     public static func wakeDate(minutes: Int, on date: Date, calendar: Calendar) -> Date? {
         let minute = min(max(minutes, 0), 1439)
         return calendar.nextDate(
@@ -85,10 +88,12 @@ public enum SleepPlanner {
     }
 
     /// Subtracts elapsed sleep duration rather than civil clock minutes across a DST change.
+    /// Kotlin twin: `SleepPlanner.bedtime`.
     public static func bedtime(wake: Date, targetSleepMinutes: Int) -> Date {
         wake.addingTimeInterval(-Double(min(max(targetSleepMinutes, 0), 780)) * 60)
     }
 
+    // Kotlin twin: `SleepPlanner.normalizedGoal`.
     private static func normalizedGoal(_ percent: Int) -> Int {
         SleepPlannerGoal(rawValue: percent)?.rawValue ?? SleepPlannerGoal.peak.rawValue
     }

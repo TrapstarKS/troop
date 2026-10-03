@@ -3,32 +3,12 @@ package com.noop.analytics
 import java.util.Calendar
 import java.util.GregorianCalendar
 
-/**
- * Pure policy for advancing an alarm within its final hour. The caller supplies only
- * a recovery value from the current night; this helper cannot establish freshness.
- * Only recovery percentages in 67..100 can advance the alarm.
- */
+/** Shared occurrence identities and quiet/deduplication policy for planner reminders and alarm skips. */
 object PlannerAlarmPolicy {
-    fun shouldWakeEarly(
-        mode: String,
-        targetSleepMinutes: Int,
-        observedSleepMinutes: Int?,
-        currentNightRecoveryPercent: Int?,
-        minutesUntilDeadline: Int,
-    ): Boolean {
-        if (minutesUntilDeadline !in 1..60) return false
-
-        return when (mode) {
-            "sleepGoal" -> targetSleepMinutes > 0 &&
-                observedSleepMinutes != null && observedSleepMinutes >= targetSleepMinutes
-            "recovery" -> currentNightRecoveryPercent != null && currentNightRecoveryPercent in 67..100
-            else -> false
-        }
-    }
-
     /**
      * Stable identity for supplied Gregorian date components and a minute. Supplied
      * components are preserved rather than normalized.
+     * Swift twin: `PlannerAlarmPolicy.occurrenceKey(year:month:day:minutes:)`.
      */
     fun occurrenceKey(year: Int, month: Int, day: Int, minutes: Int): String =
         "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-" +
@@ -37,6 +17,7 @@ object PlannerAlarmPolicy {
     /**
      * Gregorian identity for a resolved alarm instant in the caller's timezone,
      * independent of the caller's preferred calendar.
+     * Swift twin: `PlannerAlarmPolicy.occurrenceKey(for:calendar:)`.
      */
     fun occurrenceKey(date: Calendar): String {
         val gregorian = GregorianCalendar(date.timeZone).apply { timeInMillis = date.timeInMillis }

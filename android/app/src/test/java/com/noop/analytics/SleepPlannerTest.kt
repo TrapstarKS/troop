@@ -64,49 +64,6 @@ class SleepPlannerTest {
         }
         lines.add("goals:${SleepPlannerGoal.entries.joinToString(",") { it.percent.toString() }}")
 
-        data class AlarmCase(
-            val mode: String,
-            val target: Int,
-            val observed: Int?,
-            val recovery: Int?,
-            val minutesUntilDeadline: Int,
-        )
-        val alarmCases = listOf(
-            AlarmCase("exact", 480, 480, 100, 30),
-            AlarmCase("sleepGoal", 480, 480, null, 60),
-            AlarmCase("sleepGoal", 480, 479, 100, 60),
-            AlarmCase("sleepGoal", 480, null, 100, 30),
-            AlarmCase("sleepGoal", 0, 480, null, 30),
-            AlarmCase("sleepGoal", -1, 480, null, 30),
-            AlarmCase("sleepGoal", 480, 481, null, 1),
-            AlarmCase("sleepGoal", 480, 480, null, 0),
-            AlarmCase("sleepGoal", 480, 480, null, 61),
-            AlarmCase("sleepGoal", 480, 480, null, -1),
-            AlarmCase("recovery", 480, null, 67, 60),
-            AlarmCase("recovery", 480, 480, 66, 30),
-            AlarmCase("recovery", 480, 480, null, 30),
-            AlarmCase("recovery", 0, null, 100, 1),
-            AlarmCase("recovery", 480, null, 67, 0),
-            AlarmCase("recovery", 480, null, 67, 61),
-            AlarmCase("unknown", 480, 480, 100, 30),
-            AlarmCase("SleepGoal", 480, 480, 100, 30),
-            AlarmCase("sleepGoal", Int.MAX_VALUE, Int.MAX_VALUE, null, 1),
-            AlarmCase("sleepGoal", Int.MAX_VALUE, Int.MIN_VALUE, null, 1),
-            AlarmCase("sleepGoal", Int.MIN_VALUE, Int.MAX_VALUE, null, 1),
-            AlarmCase("recovery", Int.MIN_VALUE, null, Int.MAX_VALUE, 60),
-            AlarmCase("recovery", Int.MAX_VALUE, Int.MAX_VALUE, Int.MIN_VALUE, 60),
-            AlarmCase("recovery", 480, null, 100, Int.MIN_VALUE),
-            AlarmCase("recovery", 480, null, 100, Int.MAX_VALUE),
-            AlarmCase("recovery", 480, null, 101, 30),
-        )
-        alarmCases.forEachIndexed { index, input ->
-            val early = PlannerAlarmPolicy.shouldWakeEarly(
-                mode = input.mode, targetSleepMinutes = input.target, observedSleepMinutes = input.observed,
-                currentNightRecoveryPercent = input.recovery, minutesUntilDeadline = input.minutesUntilDeadline,
-            )
-            lines.add("alarm$index:$early")
-        }
-
         data class QuietCase(val minute: Int, val enabled: Boolean, val start: Int, val end: Int)
         val quietCases = listOf(
             QuietCase(539, true, 540, 1020),
@@ -279,32 +236,6 @@ class SleepPlannerTest {
             weekday7:100
             weekday8:100
             goals:100,85,70
-            alarm0:false
-            alarm1:true
-            alarm2:false
-            alarm3:false
-            alarm4:false
-            alarm5:false
-            alarm6:true
-            alarm7:false
-            alarm8:false
-            alarm9:false
-            alarm10:true
-            alarm11:false
-            alarm12:false
-            alarm13:true
-            alarm14:false
-            alarm15:false
-            alarm16:false
-            alarm17:false
-            alarm18:true
-            alarm19:false
-            alarm20:false
-            alarm21:false
-            alarm22:false
-            alarm23:false
-            alarm24:false
-            alarm25:false
             quiet0:false
             quiet1:true
             quiet2:true

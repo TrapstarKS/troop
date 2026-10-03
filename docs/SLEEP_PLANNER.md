@@ -59,12 +59,11 @@ The 5/MG command has no dependable alarm-time readback and is not
 presented as confirmed. Hardware wake reliability still requires a real strap test.
 
 Exact time uses the selected deadline. Sleep-goal and Recovery modes describe the final hour before
-that deadline. The pure policy allows early waking only after current-night sleep reaches its target
-or valid current-night Recovery reaches 67%, respectively. This hardware build has no safely fresh
-current-night sleep/recovery feed for those decisions, so the modes explicitly retain the exact
-deadline and show that adaptive waking is unavailable. Yesterday's Recovery is never used to wake
-someone early. The legacy Android phone light-sleep alarm remains reachable separately; its heuristic
-is not relabelled as Recovery or wired into these modes.
+that deadline. This hardware build has no safely fresh current-night sleep/recovery feed for adaptive
+decisions, so those modes retain the exact deadline and show that adaptive waking is unavailable.
+Yesterday's Recovery is never used to wake someone early. No unused early-wake calculation is shipped.
+The legacy Android phone light-sleep alarm remains reachable separately; its heuristic is not
+relabelled as Recovery or wired into these modes.
 
 The early-wake card asks whether the user is awake; it does not claim that the strap detected wake.
 Its action skips this occurrence using the same save/reconnect safeguards. Strap battery below 20%

@@ -27,6 +27,7 @@ import kotlin.random.Random
  */
 object DemoSeeder {
 
+    // Swift twin: `AppleDemoSeeder.seedSleepPlannerPreferencesIfNeeded`.
     fun seedSleepPlannerPreferences(context: android.content.Context) {
         val prefs = com.noop.ui.NoopPrefs.of(context)
         if (prefs.contains("sleepPlanner.goalPercent")) return

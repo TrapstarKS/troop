@@ -1,30 +1,7 @@
 import Foundation
 
-/// Pure policy for advancing an alarm within its final hour. The caller supplies only
-/// a recovery value from the current night; this helper cannot establish freshness.
-/// Only recovery percentages in 67...100 can advance the alarm.
+/// Shared occurrence identities and quiet/deduplication policy for planner reminders and alarm skips.
 public enum PlannerAlarmPolicy {
-    public static func shouldWakeEarly(
-        mode: String,
-        targetSleepMinutes: Int,
-        observedSleepMinutes: Int?,
-        currentNightRecoveryPercent: Int?,
-        minutesUntilDeadline: Int
-    ) -> Bool {
-        guard (1...60).contains(minutesUntilDeadline) else { return false }
-
-        switch mode {
-        case "sleepGoal":
-            guard targetSleepMinutes > 0, let observedSleepMinutes else { return false }
-            return observedSleepMinutes >= targetSleepMinutes
-        case "recovery":
-            guard let currentNightRecoveryPercent else { return false }
-            return (67...100).contains(currentNightRecoveryPercent)
-        default:
-            return false
-        }
-    }
-
     /// Stable identity for supplied Gregorian date components and a minute. Supplied
     /// components are preserved rather than normalized.
     public static func occurrenceKey(year: Int, month: Int, day: Int, minutes: Int) -> String {
@@ -43,6 +20,7 @@ public enum PlannerAlarmPolicy {
 
     /// Advice quiet hours with an inclusive start and exclusive end. Equal bounds
     /// disable the quiet window; wake-alarm deadlines are exempt at the caller.
+    /// Kotlin twin: `PlannerAlarmPolicy.isQuietMinute`.
     public static func isQuietMinute(minute: Int, enabled: Bool, startMinutes: Int, endMinutes: Int) -> Bool {
         guard enabled else { return false }
         let currentMinute = min(max(minute, 0), 1439)
@@ -53,6 +31,7 @@ public enum PlannerAlarmPolicy {
     }
 
     /// Canonical local advice queue. Epochs are whole UTC seconds on both platforms.
+    /// Kotlin twin: `PlannerAlarmPolicy.adviceQueue`.
     public static func adviceQueue(_ occurrences: [String: Int64]) -> String {
         occurrences.keys.sorted().compactMap { key in
             guard occurrenceParts(key) != nil, let epoch = occurrences[key], epoch > 0 else { return nil }
@@ -62,6 +41,7 @@ public enum PlannerAlarmPolicy {
 
     /// Retains handled wakes from today onward. An elapsed queued reminder is consumed
     /// conservatively, without claiming that the operating system actually delivered it.
+    /// Kotlin twin: `PlannerAlarmPolicy.handledAdvice`.
     public static func handledAdvice(queued: String, previous: String, nowEpoch: Int64, localDay: String) -> String {
         var keys = Set(previous.split(separator: "\n").map(String.init).filter { occurrenceParts($0) != nil })
         for line in queued.split(separator: "\n") {
@@ -75,6 +55,7 @@ public enum PlannerAlarmPolicy {
 
     /// Pending until the saved wake instant. Scheduling still matches the exact
     /// occurrence key; this comparison only gates the pending status and duplicate skip.
+    /// Kotlin twin: `PlannerAlarmPolicy.isSkipPending`.
     public static func isSkipPending(skippedOccurrence: String, from now: Date, calendar: Calendar) -> Bool {
         guard let saved = occurrenceParts(skippedOccurrence) else { return false }
         var gregorian = Calendar(identifier: .gregorian)
@@ -88,6 +69,7 @@ public enum PlannerAlarmPolicy {
         return wake >= now
     }
 
+    // Kotlin twin: `PlannerAlarmPolicy.occurrenceParts`.
     private static func occurrenceParts(_ key: String) -> (day: String, minutes: Int)? {
         let parts = key.split(separator: "|", omittingEmptySubsequences: false)
         guard parts.count == 2 else { return nil }

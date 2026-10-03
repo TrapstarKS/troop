@@ -58,42 +58,6 @@ final class SleepPlannerTests: XCTestCase {
         }
         lines.append("goals:\(SleepPlannerGoal.allCases.map { String($0.rawValue) }.joined(separator: ","))")
 
-        let alarmCases: [(String, Int, Int?, Int?, Int)] = [
-            ("exact", 480, 480, 100, 30),
-            ("sleepGoal", 480, 480, nil, 60),
-            ("sleepGoal", 480, 479, 100, 60),
-            ("sleepGoal", 480, nil, 100, 30),
-            ("sleepGoal", 0, 480, nil, 30),
-            ("sleepGoal", -1, 480, nil, 30),
-            ("sleepGoal", 480, 481, nil, 1),
-            ("sleepGoal", 480, 480, nil, 0),
-            ("sleepGoal", 480, 480, nil, 61),
-            ("sleepGoal", 480, 480, nil, -1),
-            ("recovery", 480, nil, 67, 60),
-            ("recovery", 480, 480, 66, 30),
-            ("recovery", 480, 480, nil, 30),
-            ("recovery", 0, nil, 100, 1),
-            ("recovery", 480, nil, 67, 0),
-            ("recovery", 480, nil, 67, 61),
-            ("unknown", 480, 480, 100, 30),
-            ("SleepGoal", 480, 480, 100, 30),
-            ("sleepGoal", Int.max, Int.max, nil, 1),
-            ("sleepGoal", Int.max, Int.min, nil, 1),
-            ("sleepGoal", Int.min, Int.max, nil, 1),
-            ("recovery", Int.min, nil, Int.max, 60),
-            ("recovery", Int.max, Int.max, Int.min, 60),
-            ("recovery", 480, nil, 100, Int.min),
-            ("recovery", 480, nil, 100, Int.max),
-            ("recovery", 480, nil, 101, 30),
-        ]
-        for (index, input) in alarmCases.enumerated() {
-            let early = PlannerAlarmPolicy.shouldWakeEarly(
-                mode: input.0, targetSleepMinutes: input.1, observedSleepMinutes: input.2,
-                currentNightRecoveryPercent: input.3, minutesUntilDeadline: input.4
-            )
-            lines.append("alarm\(index):\(early)")
-        }
-
         let quietCases: [(Int, Bool, Int, Int)] = [
             (539, true, 540, 1020),
             (540, true, 540, 1020),
@@ -260,32 +224,6 @@ final class SleepPlannerTests: XCTestCase {
         weekday7:100
         weekday8:100
         goals:100,85,70
-        alarm0:false
-        alarm1:true
-        alarm2:false
-        alarm3:false
-        alarm4:false
-        alarm5:false
-        alarm6:true
-        alarm7:false
-        alarm8:false
-        alarm9:false
-        alarm10:true
-        alarm11:false
-        alarm12:false
-        alarm13:true
-        alarm14:false
-        alarm15:false
-        alarm16:false
-        alarm17:false
-        alarm18:true
-        alarm19:false
-        alarm20:false
-        alarm21:false
-        alarm22:false
-        alarm23:false
-        alarm24:false
-        alarm25:false
         quiet0:false
         quiet1:true
         quiet2:true
