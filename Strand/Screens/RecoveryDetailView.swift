@@ -181,8 +181,8 @@ private struct RecoveryHistoryPlot: View {
                 }
             }
             .frame(height: NoopMetrics.chartHeight)
-            if let point = selected {
-                Text("\(point.date.formatted(date: .abbreviated, time: .omitted)) · \(RecoveryStrainDetailLogic.recoveryPercent(point.value).map(String.init) ?? "—")%")
+            if let point = selected, let percent = RecoveryStrainDetailLogic.recoveryPercent(point.value) {
+                Text("\(point.date.formatted(date: .abbreviated, time: .omitted)) · \(percent)%")
                     .font(StrandFont.captionNumber).foregroundStyle(StrandPalette.recoveryColor(point.value))
             }
         }
