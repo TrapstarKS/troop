@@ -63,15 +63,17 @@ fun ScoreDial(
     size: ScoreDialSize = ScoreDialSize.Full,
     target: Float? = null,
     targetRange: ClosedFloatingPointRange<Float>? = null,
+    accessibilityLabel: String? = null,
 ) {
     val compact = size == ScoreDialSize.Compact
     val diameter = if (compact) Metrics.compactDial else Metrics.detailDial
     val stroke = if (compact) Metrics.compactDialStroke else Metrics.detailDialStroke
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.clearAndSetSemantics {
+        contentDescription = accessibilityLabel ?: listOf(label, value + unit)
+            .filter { it.isNotBlank() }.joinToString(", ")
+    }, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(diameter).clearAndSetSemantics {
-                contentDescription = listOf(label, value + unit).filter { it.isNotBlank() }.joinToString(", ")
-            },
+            Modifier.size(diameter),
             contentAlignment = Alignment.Center,
         ) {
             Canvas(Modifier.fillMaxSize()) {
