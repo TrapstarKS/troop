@@ -398,6 +398,8 @@ struct TodayView: View {
     // 0.0 (#402). nil below StrainScorer.minReadings (we then fall back to the stored daily row) and on
     // any navigated past day (those use the stored value).
     @State private var liveTodayStrain: Double?
+    @State private var liveEffortRequest = UUID()
+    @State private var homeStressByDay: [String: Double] = [:]
 
     // The HR chart's x-axis window. Today → midnight…now; a navigated PAST day → the full calendar
     // day (midnight…next midnight) so a morning with no banked data reads as empty space rather than
@@ -1455,7 +1457,7 @@ struct TodayView: View {
     }
 
     var body: some View {
-        ScreenScaffold(title: scaffoldTitle, onRefresh: { await repo.refresh() },
+        ScreenScaffold(title: nil, onRefresh: { await repo.refresh() },
                        // PERF (scroll): lazy column so the scaffold materialises Today's content on demand.
                        // Today supplies its own inner eager VStack (below), so the staggered section reveal is
                        // unchanged, this only defers building the single inner stack until it scrolls in.
@@ -1469,67 +1471,16 @@ struct TodayView: View {
                        // lag regression; removing the flatten restores native layer caching.
                        topBackground: showDayCycleBackground
                            ? AnyView(SceneScreenBackground(hour: demoSceneHour)) : nil) {
-            VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
-                #if os(iOS)
-                // Compact top bar: profile/settings (left) · ‹ Today › day-nav (centre, bold) · strap
-                // battery (right). Replaces the big title + the full-width day-nav pill (WHOOP-style).
-                todayTopBar
-                if selectedDayOffset == 0, let currentDay = repo.today?.day,
-                   currentDay == repo.days.last?.day { HealthAlertBanner() }
-                #else
-                if selectedDayOffset == 0, let currentDay = repo.today?.day,
-                   currentDay == repo.days.last?.day { HealthAlertBanner() }
-                // Browse past days: chevrons + a date jump capped at today (no future days). Anchored to
-                // the LOGICAL day (the same anchor `selectedLogicalDay` uses) so the full-date label tracks
-                // the data shown in the 00:00-04:00 window instead of jumping a calendar day ahead (#14).
-                DayNavBar(selectedOffset: selectedDayOffset,
-                          today: Repository.logicalDay(Date())) { selectedDayOffset = $0 }
-                #endif
-                // A "workout in progress" indicator whenever a manual workout is active. A tap routes to Live
-                // and opens the in-exercise screen. Its own leaf owns the AppModel observation + per-second
-                // clock, so the live tick never re-renders TodayView.body.
-                ActiveWorkoutIndicatorSection()
-                // The "still building" and "new here?" prompts are about getting today's scores going,
-                // so they stay anchored to today rather than reappearing on every navigated past day.
-                if selectedDayOffset == 0 && repo.today?.recovery == nil {
-                    // While the strap is mid-offload, say so, empty tiles read as final otherwise (#77).
-                    // Its own subview observes LiveState (backfilling + chunk count tick during an offload)
-                    // so it refreshes without re-rendering the rest of Today (scroll-stutter fix).
-                    SyncingHistoryNoteIfBackfilling()
-                    if !scoresBuildingDismissed {
-                        DataPendingNote(
-                            title: "Live now. Your scores are building.",
-                            message: "Your live heart rate is working from the strap, and charge, effort and rest build from it over your next few nights of wear, sharpening as it learns your baseline. Want your full history instantly? Import your WHOOP export in Data Sources and it backfills in about a minute."
-                        )
-                        // A small × dismisses the card INTO the Updates inbox (restorable from there).
-                        .overlay(alignment: .topTrailing) {
-                            todayCardDismissButton {
-                                dismissTodayCard(
-                                    id: "scoresBuilding",
-                                    title: String(localized: "Live now. Your scores are building."),
-                                    message: String(localized: "Charge, Effort and Rest build over your next few nights of wear.")
-                                )
-                            }
-                        }
-                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                    }
-                }
-                // Design Reset: the "New here?" first-run card is off the dashboard for the clean WHOOP
-                // look. The scoring guide stays reachable from the i on each score and in Settings.
-                // The hero rings sit over a WHISPER of time-of-day atmosphere (dawn/day/dusk/night), the
-                // backdrop is confined to the ring region via `.background`, so it lifts the identity rings
-                // without tinting the rest of the dashboard. The day-cycle scene wash caps at ~0.42 opacity
-                // and fades top-down with a bottom dark scrim, no glow, so the white ring numbers + labels
-                // stay crisp and high-contrast.
-                // The same full order/visibility registry as Liquid Today and Android. Every editor row maps
-                // to one real section here, so a change saved from the shared sheet immediately affects this
-                // reference implementation too.
-                ForEach(sectionOrder) { section in
-                    todaySection(section)
-                }
-                // Opt-in "looks like a workout?" suggestion (default OFF). Renders only when the
-                // Settings toggle is on AND the detector finds a recent unsaved, un-dismissed window.
-                AutoWorkoutCard()
+            LazyVStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                HomeDateChrome(selectedOffset: $selectedDayOffset, selectedDate: Self.dayParser.date(from: selectedDayKey) ?? selectedLogicalDay,
+                    dateLabel: selectedDayOffset == 0 ? String(localized: "Today")
+                        : selectedDayOffset == 1 ? String(localized: "Yesterday")
+                        : selectedLogicalDay.formatted(.dateTime.day().month(.abbreviated).locale(AppLanguage.activeLocale)),
+                    maxOffset: earliestDayOffset, streak: homeStreak,
+                    onProfile: { showSettings = true })
+                if selectedDayOffset == 0 { HealthAlertBanner() }
+                homeDashboard
+                if selectedDayOffset == 0 { AutoWorkoutCard() }
                 sourcesSection
             }
             #if os(iOS)
@@ -1557,6 +1508,12 @@ struct TodayView: View {
         }
         // Reload when the data refreshes OR the selected day changes, the HR trend and Rest score are
         // day-scoped, so navigating must re-fetch them for the newly selected window.
+        .onChangeCompat(of: selectedDayOffset) { _ in
+            liveEffortRequest = UUID()
+            liveTodayStrain = nil
+            restScore = nil
+            sleepToday = nil
+        }
         .task(id: TodayLoadKey(seq: repo.refreshSeq, offset: selectedDayOffset,
                               dayCycleMode: dayCycleModeRaw)) { await loadAll() }
         // #989: hydration writes don't bump refreshSeq, so the card needs its own triggers, a logged /
@@ -1595,10 +1552,10 @@ struct TodayView: View {
                 updateBell.help("Updates")
             }
         }
-        #else
-        // Profile/settings from the top-bar button.
-        .sheet(isPresented: $showSettings) { settingsSheet }
         #endif
+        .sheet(isPresented: $showSettings) {
+            NavigationStack { SettingsView() }
+        }
         // The scoring guide, opened at a specific score from its ⓘ.
         .sheet(item: $guideSection) { section in
             ScoringGuideView(initialSection: section, onClose: { guideSection = nil })
@@ -1667,6 +1624,36 @@ struct TodayView: View {
             withAnimation(StrandMotion.interactive) { restoreTodayCard(payload) }
             updateStore.restoreRequest = nil
         }
+    }
+
+    private var homeStreak: Int {
+        StreakCalculator.streaks(dayKeys: repo.days.map(\.day),
+            qualified: repo.days.map { $0.recovery != nil }, today: Repository.logicalDayKey(Date())).current
+    }
+
+    private var homeDashboard: some View {
+        HomeDashboardContent(dayKey: selectedDayKey, dayOffset: selectedDayOffset,
+            day: displayDay, sleepScore: restScore,
+            recovery: displayDay?.recovery ?? lastScoredCharge?.value,
+            recoveryCaption: displayDay?.recovery == nil ? lastScoredCharge?.caption : nil,
+            strain: effortStrain(displayDay), stress: selectedDayOffset == 0 ? stressToday : homeStressByDay[selectedDayKey],
+            workouts: workouts, onEdit: { customizationDestination = .keyMetrics },
+            onWorkout: { workoutDetail = WorkoutDetailTarget(row: $0) },
+            onGuidance: coachEnabled ? { showCoachLauncher = true } : nil) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: NoopMetrics.gap),
+                                    GridItem(.flexible(), spacing: NoopMetrics.gap)], spacing: NoopMetrics.gap) {
+                    ForEach(enabledKeyMetrics) { metric in
+                        NavigationLink(value: HomeMetricRoute.route(metric)) {
+                            keyMetricTile(metric)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } extras: {
+                ForEach(sectionOrder.filter { ![.hero, .synthesis, .keyMetrics, .workouts].contains($0) }) { section in
+                    todaySection(section)
+                }
+            }
     }
 
     /// Flip a Today info-card's dismissed flag back to false so it reappears (driven by the inbox's
@@ -3905,7 +3892,7 @@ struct TodayView: View {
     @ViewBuilder
     private func keyMetricTile(_ metric: KeyMetric) -> some View {
         let d = displayDay
-        let aLatest = appleDays.last
+        let aLatest = appleDays.last(where: { $0.day == selectedDayKey })
         switch metric {
         case .charge:
             // Order of precedence: today's own scored recovery → mid-calibration "N of 4" → the last
@@ -3915,7 +3902,7 @@ struct TodayView: View {
             // value labelled as prior, it never fabricates a number for the new day.
             let carried = lastScoredCharge
             StatTile(
-                label: "Charge",
+                label: "Recovery",
                 value: d?.recovery.map { "\(Int($0.rounded()))%" }
                     ?? recoveryCalibration.map { "\($0)/\(Baselines.minNightsSeed)" }
                     ?? carried.map { "\(Int($0.value.rounded()))%" } ?? "—",
@@ -3937,10 +3924,10 @@ struct TodayView: View {
             // `d.strain` straight off the daily row left it behind by the whole morning on an active day.
             let effort = effortStrain(d)
             StatTile(
-                label: "Effort",
-                value: effort.map { UnitFormatter.effortDisplay($0, scale: effortScale) } ?? "—",
-                caption: effort != nil ? String(localized: "of \(UnitFormatter.effortScaleMax(effortScale))")
-                                       : (buildingHint(.effort) ?? String(localized: "of \(UnitFormatter.effortScaleMax(effortScale))")),
+                label: "Strain",
+                value: effort.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—",
+                caption: effort != nil ? String(localized: "of \(UnitFormatter.effortScaleMax(.whoop))")
+                                       : (buildingHint(.effort) ?? String(localized: "of \(UnitFormatter.effortScaleMax(.whoop))")),
                 accent: effort.map { StrandPalette.effortTint(fraction: $0 / StrainScorer.maxStrain) } ?? StrandPalette.textPrimary,
                 sparkline: sparks["strain"],
                 sparkColor: StrandPalette.strain066,
@@ -3956,7 +3943,7 @@ struct TodayView: View {
             // Unscored TODAY → "building, wear it tonight" instead of a lone caption (#527); a scored day
             // keeps its sleep-duration / efficiency caption.
             StatTile(
-                label: "Rest",
+                label: "Sleep",
                 value: restScore.map { "\(Int($0.rounded()))%" } ?? "—",
                 // Component 2: a scored day shows its duration/efficiency caption; an unscored TODAY shows
                 // the "building" hint; a past day with no Rest falls to the honest "Needs the strap" rather
@@ -4107,7 +4094,8 @@ struct TodayView: View {
         case .weight:
             StatTile(
                 label: "Weight",
-                value: weightTile(aLatest?.weightKg).value,
+                value: selectedDayOffset == 0 ? weightTile(aLatest?.weightKg).value
+                    : aLatest?.weightKg.map { UnitFormatter.massFromKilograms($0, system: unitSystem) } ?? "—",
                 caption: weightTile(aLatest?.weightKg).caption,
                 accent: StrandPalette.accent,
                 sparkline: sparks["weight"],
@@ -4116,7 +4104,7 @@ struct TodayView: View {
         case .calories:
             StatTile(
                 label: "Calories",
-                value: caloriesValue(aLatest),
+                value: (aLatest?.activeKcal ?? d?.activeKcalEst).map { intString($0) } ?? "—",
                 caption: String(localized: "active"),
                 accent: StrandPalette.metricAmber,
                 sparkline: sparks["active_kcal"],
@@ -4731,7 +4719,9 @@ struct TodayView: View {
         // preferred, else derived off the live RHR/HRV baseline), so the pinned card never lags the detail
         // page on a day with no banked stress row. nil (no usable signal) keeps the honest "Calibrating"
         // placeholder, matching StressView's empty state. Fitness age / Vitality keep their merged reads.
-        stressToday = StressModel(days: repo.days, stored: await stressStoredA)?.score
+        let homeStoredStress = await stressStoredA
+        homeStressByDay = Dictionary(homeStoredStress.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
+        stressToday = StressModel(days: repo.days, stored: homeStoredStress)?.score
         fitnessAgeToday = (await fitnessAgeSeriesA).last?.value
         vo2maxToday = (await vo2maxSeriesA).last?.value   // #1391: latest banked VO₂max estimate
         vitalityToday = (await vitalitySeriesA).last?.value
@@ -4864,6 +4854,8 @@ struct TodayView: View {
     private static let todayCacheMaxAge: TimeInterval = 120
 
     private func loadDayScoped() async {
+        let effortRequest = UUID()
+        liveEffortRequest = effortRequest
         // #932: same-state re-mount → restore the prior day-scoped snapshot (no store queries). The exact
         // twin of the #849 history-wide short-circuit in loadAll, for the reads that follow the SELECTED
         // day: on a big library the day's hrBuckets + hrSamples reads cover 170k+ HR rows, and macOS
@@ -5033,11 +5025,16 @@ struct TodayView: View {
             // maximum is above it. See `ProfileStore.effortHRmax`.
             let maxHR = profile.effortHRmax
             let restHR = displayDay?.restingHr.map(Double.init) ?? StrainScorer.defaultRestingHR
-            liveStrainLocal = StrainScorer.strain(todayHr, maxHR: maxHR, restingHR: restHR,
-                                        method: PuffinExperiment.effortMethod, sex: profile.sex)
+            let method = PuffinExperiment.effortMethod
+            let sex = profile.sex
+            liveStrainLocal = await Task.detached(priority: .userInitiated) {
+                StrainScorer.strain(todayHr, maxHR: maxHR, restingHR: restHR, method: method, sex: sex)
+            }.value
         } else {
             liveStrainLocal = nil
         }
+        guard !Task.isCancelled, liveEffortRequest == effortRequest,
+              selectedDayKey == loadDayKey, repo.refreshSeq == loadSeq else { return }
         liveTodayStrain = liveStrainLocal
         // Pin the chart axis to the loaded window, today midnight→now, a past day the full 24h, so
         // a gap (e.g. a morning the strap wasn't banking) shows as empty space, not a late start.
