@@ -1,6 +1,7 @@
 package com.noop.ble
 
 import com.noop.data.DailyMetric
+import com.noop.analytics.IllnessWatch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
@@ -23,7 +24,7 @@ class NotifyDayStateCacheTest {
         var illnessCalls = 0
         val cache = NotifyDayStateCache {
             illnessCalls += 1
-            "stale alert"
+            IllnessWatch.Evaluation("stale alert", true)
         }
 
         val state = cache.resolve(emptyList(), "2026-07-14", "2026-07-14", illnessEnabled = true)
@@ -36,7 +37,7 @@ class NotifyDayStateCacheTest {
         var illnessCalls = 0
         val cache = NotifyDayStateCache {
             illnessCalls += 1
-            "alert-$illnessCalls"
+            IllnessWatch.Evaluation("alert-$illnessCalls", true)
         }
         val days = days()
 
@@ -56,7 +57,7 @@ class NotifyDayStateCacheTest {
         var illnessCalls = 0
         val cache = NotifyDayStateCache {
             illnessCalls += 1
-            null
+            IllnessWatch.Evaluation(null, true)
         }
         val firstDays = days()
         val secondDays = ArrayList(firstDays)
@@ -74,7 +75,7 @@ class NotifyDayStateCacheTest {
         var illnessCalls = 0
         val cache = NotifyDayStateCache {
             illnessCalls += 1
-            "strained"
+            IllnessWatch.Evaluation("strained", true)
         }
         val days = days()
 
@@ -91,7 +92,7 @@ class NotifyDayStateCacheTest {
         var illnessCalls = 0
         val cache = NotifyDayStateCache {
             illnessCalls += 1
-            "alert-$illnessCalls"
+            IllnessWatch.Evaluation("alert-$illnessCalls", true)
         }
         val days = days()
 
@@ -104,5 +105,32 @@ class NotifyDayStateCacheTest {
         assertEquals("alert-1", before.illness)
         assertNull(after.illness)
         assertEquals(1, illnessCalls)
+    }
+    @Test
+    fun loadingStaleAndOptedOutRowsCannotRecordAClearEdge() {
+        val cache = NotifyDayStateCache { IllnessWatch.Evaluation(null, true) }
+        val days = days()
+        org.junit.Assert.assertFalse(cache.resolve(emptyList(), "2026-07-14", "2026-07-14", true).illnessEvaluated)
+        org.junit.Assert.assertFalse(cache.resolve(days, "2026-07-15", "2026-07-15", true).illnessEvaluated)
+        org.junit.Assert.assertFalse(cache.resolve(days, "2026-07-14", "2026-07-14", false).illnessEvaluated)
+        org.junit.Assert.assertTrue(cache.resolve(days, "2026-07-14", "2026-07-14", true).illnessEvaluated)
+    }
+
+    @Test
+    fun markerEligibilityChangesRefreshTheAlertWithoutDailyRowChanges() {
+        var calls = 0
+        val cache = NotifyDayStateCache { calls++; IllnessWatch.Evaluation(null, true) }
+        val days = days()
+        val valid = days.map { it.copy(avgHrv = 60.0) }
+        val withheld = days.map { it.copy(avgHrv = null) }
+        val first = cache.resolve(days, "2026-07-14", "2026-07-14", true, valid)
+        val second = cache.resolve(days, "2026-07-14", "2026-07-14", true, withheld)
+        assertNotSame(first, second)
+        assertEquals(2, calls)
+    }
+    @Test
+    fun fourteenEmptyDailyRowsAreNotAValidClearEvaluation() {
+        val state = NotifyDayStateCache().resolve(days(), "2026-07-14", "2026-07-14", true)
+        org.junit.Assert.assertFalse(state.illnessEvaluated)
     }
 }

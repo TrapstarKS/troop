@@ -15,6 +15,8 @@ import com.noop.ui.appLaunchIntent
 
 /** Small pure policy so the once-per-day gate is JVM-testable (CallAlertPolicy idiom). */
 internal object IllnessAlertPolicy {
+    fun shouldRecordEvaluation(enabled: Boolean, valid: Boolean): Boolean = enabled && valid
+
     /**
      * Notify only on a genuine clear-to-raised transition, at most once a day.
      *
@@ -50,7 +52,8 @@ object IllnessAlertNotifier {
     }
 
     @SuppressLint("MissingPermission") // guarded by areNotificationsEnabled() + runCatching
-    fun onEvaluated(context: Context, alert: String?) {
+    fun onEvaluated(context: Context, alert: String?, enabled: Boolean, valid: Boolean) {
+        if (!IllnessAlertPolicy.shouldRecordEvaluation(enabled, valid)) return
         val today = java.time.LocalDate.now().toString()
         val wasRaised = NoopPrefs.illnessWasRaised(context)
         val notify = IllnessAlertPolicy.shouldNotify(

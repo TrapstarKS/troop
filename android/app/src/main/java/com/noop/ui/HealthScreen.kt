@@ -117,131 +117,59 @@ fun HealthScreen(
     onOpenLabBook: () -> Unit = {},
     onOpenFusedRecord: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenHealthMonitor: () -> Unit = {},
+    onOpenHealthspan: () -> Unit = {},
+    onOpenStress: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val profile = remember { ProfileStore.from(context.applicationContext) }
     val today by vm.today.collectAsStateWithLifecycle()
-    // Full merged daily history — feeds the personal-baseline banding of the vitals grid.
     val days by vm.recentDays.collectAsStateWithLifecycle()
-    // v5 skin-temp suite engine results (Cycle / Body clock / Illness heads-up), recomputed each
-    // analytics pass and published by the ViewModel. Cycle awareness gates on its opt-in pref.
     val v5Signals by vm.v5Signals.collectAsStateWithLifecycle()
     val cycleEnabled by vm.cycleTrackingEnabled.collectAsStateWithLifecycle()
     val cycleHidden by vm.cycleAwarenessHidden.collectAsStateWithLifecycle()
     val periodStarts by vm.periodStarts.collectAsStateWithLifecycle()
     var showCycleTracker by remember { mutableStateOf(false) }
-    val hrMax = profile.hrMax
-
-    // Health Monitor shows live HR too, so it must keep the realtime stream on while it's visible —
-    // otherwise leaving the Live page stopped the stream and this page froze (issue #18). Ref-counted
-    // in the ViewModel, so handing off between Live and here never drops the stream.
-    DisposableEffect(Unit) {
-        vm.requestRealtimeHr()
-        onDispose { vm.releaseRealtimeHr() }
-    }
-
-    // PERF (#scroll-jank): the BLE live state + smoothed bpm tick ~1Hz. Reading them in this body to
-    // compute the empty-state gate recomposed the WHOLE Health screen on every HR tick. The body only
-    // needs "is a live HR present" (null↔non-null), never the bpm number — so collapse the ticking
-    // value to a stable boolean via derivedStateOf: a 72→73 bpm tick produces an EQUAL boolean and the
-    // body is NOT recomposed; it only recomposes when live-HR presence actually flips. The live bpm
-    // number is rendered in HeartRateSection / SyncStatusSection, which now scope their own collection.
-    // Mirrors the shipped Today liveSnap fix. Appearance-preserving.
-    val live by vm.live.collectAsStateWithLifecycle()
-    val bpm by vm.bpm.collectAsStateWithLifecycle()
-    // #103: collect reactively (not .value) so the Latest-readings card recomposes on its own when the
-    // SpO₂ candidate map updates, matching VitalSignsScreen — not only incidentally via `days`.
-    val spo2CandidateByDay by vm.spo2CandidateByDay.collectAsStateWithLifecycle()
-    val hrvOverCountByDay by vm.hrvOverCountByDay.collectAsStateWithLifecycle()   // #1118
-    val hasLiveHr by remember { derivedStateOf { displayHr(bpm, live) != null } }
-
-    // LIQUID SKY BACKDROP (the pilot pattern — LiquidScreenSky.kt): the time-of-day liquid sky settles into
-    // the theme canvas behind this screen's top region, full-bleed up behind the status bar via the
-    // scaffold's topBackground plumbing, replacing the classic scene backdrop. Static (LiquidSkyStatic,
-    // inside the helper) — never an animated sky behind a scrolling list. Gated on the shared "Day-cycle
-    // background" pref (default ON) exactly like Today; OFF passes null so the scaffold paints the flat
-    // surface canvas instead.
     val showDayCycleBackground = remember { NoopPrefs.showDayCycleBackground(context) }
     val skyBehindCards = remember { NoopPrefs.skyBehindCards(context) }
 
     LazyScreenScaffold(
-        title = uiString(R.string.l10n_health_screen_health_monitor_c4abc3fc),
-        subtitle = "Live vitals, streamed from the strap.",
+        title = stringResource(R.string.health_landing_title),
+        subtitle = stringResource(R.string.health_landing_subtitle),
         topBackground = screenBackdropSlot(showDayCycleBackground, skyBehindCards),
-        // Sky-behind-cards fills the viewport so the transparent cards reveal the sky the whole way
-        // down (Today / Trends / Sleep / metric-detail parity - same two prefs, same two behaviours).
         fullBleedBackground = screenBackdropFullBleed(showDayCycleBackground, skyBehindCards),
     ) {
-        if (today == null && !hasLiveHr) {
-            // Even with no history yet, a freshly-connected strap can be told to sync now (#364) — the
-            // manual "Sync now" + honest status sits above the empty state so it's always reachable.
-            item { SyncStatusSection(vm = vm, onSyncNow = { vm.syncNow() }) }
-            item { Spacer(Modifier.height(Metrics.selectorTopUp)) }
-            item { HealthEmptyState() }
-        } else {
-            // Manual "Sync now" + honest sync status (#364) — the first section so the strap-history
-            // control is reachable above the live hero. Mirrors HealthView.swift's top Sync section.
-            item { SyncStatusSection(vm = vm, onSyncNow = { vm.syncNow() }) }
-            item { Spacer(Modifier.height(Metrics.selectorTopUp)) }
-            // ScreenScaffold applies a 20dp arrangement gap between its direct children;
-            // a small top-up reaches the section gap (28dp) used between macOS sections.
-            item { HeartRateSection(vm = vm, hrMax = hrMax) }
-            item { Spacer(Modifier.height(Metrics.selectorTopUp)) }
-            item {
-                VitalsSection(
-                    title = uiString(R.string.l10n_health_screen_vital_signs_e7d9e1b1),
-                    overline = "Latest readings",
-                    trailing = null,
-                    vitals = latestVitals(
-                        days,
-                        UnitPrefs.temperature(LocalContext.current),
-                        spo2CandidateByDay,
-                        NoopPrefs.spo2CandidateDisplay(LocalContext.current),
-                        hrvOverCountByDay = hrvOverCountByDay,   // #1118
-                    ),
-                    onVitalClick = onVitalClick,
-                    captionMode = VitalCaptionMode.AS_OF,
-                )
-            }
-            // FITNESS AGE — the weekly Saturday number from the engine (resting HR + activity vs your
-            // age), with an honest readiness checklist behind a tap. Authoritative value comes from the
-            // metricSeries the IntelligenceEngine writes; readiness is derived from what this screen sees.
-            item { Spacer(Modifier.height(Metrics.selectorTopUp)) }
-            item { FitnessAgeSection(vm = vm, days = days, profile = profile, onOpenSettings = onOpenSettings) }
+        item { HealthspanLandingCard(onOpenHealthspan) }
+        item { HealthMonitorPreview(vm, days, onOpenHealthMonitor) }
+        item {
+            HealthFeatureCard(
+                title = stringResource(R.string.health_stress_title),
+                detail = stringResource(R.string.health_stress_preview),
+                color = Palette.metricCyan,
+                onClick = onOpenStress,
+            )
+        }
+        item { SyncStatusSection(vm = vm, onSyncNow = { vm.syncNow() }) }
+        if (days.isNotEmpty()) {
             item { VitalitySection(vm = vm, days = days, profile = profile) }
-            // SKIN TEMPERATURE (v5 pillar) — Cycle awareness (opt-in), Body clock + an illness heads-up,
-            // each from a pure engine RESULT the ViewModel publishes. A section of Health, never its own
-            // destination (umbrella §2.4). Non-clinical observations about your own numbers.
-            item { Spacer(Modifier.height(Metrics.selectorTopUp)) }
-            item {
-                SkinTempSuiteSection(
-                    signals = v5Signals,
-                    cycleEnabled = cycleEnabled,
-                    // #801: gate the cycle-awareness OPT-IN to profiles it can apply to (sex-gated, pure
-                    // helper). Cycle phase is read from the menstrual skin-temperature shift, so the
-                    // invitation is NOT offered for male profiles. Matches iOS SkinTempSection.cycleOptInApplies.
-                    cycleOptInApplies = cycleAwarenessVisible(profile.sex, cycleHidden),
-                    onEnableCycle = { vm.setCycleTrackingEnabled(true) },
-                    onLogPeriod = { vm.logPeriodStart() },
-                    onOpenCycleTracker = { showCycleTracker = true },
-                    // #801: symmetric off-control. Cycle awareness could be turned ON here but only OFF from
-                    // Automations; let the user turn it off in-place where they turned it on.
-                    onTurnOffCycle = { vm.setCycleTrackingEnabled(false) },
-                )
-            }
-            // CONTRIBUTORS (README screen #5, recovery detail) — the signals behind recovery as
-            // labelled progress bars in the shared stage/zone bar style, mirroring Today's section.
-            item { Spacer(Modifier.height(Metrics.selectorTopUp)) }
-            item { HealthContributorsSection(today) }
-            // RECORDS & SOURCES (Swift parity) — deep-link rows into the local Lab Book and the
-            // "Your Data, Fused" record, so both are discoverable from Health, not just the drawer.
-            item { Spacer(Modifier.height(Metrics.selectorTopUp)) }
-            item {
-                RecordsAndSourcesSection(
-                    onOpenLabBook = onOpenLabBook,
-                    onOpenFusedRecord = onOpenFusedRecord,
-                )
-            }
+        }
+        item {
+            SkinTempSuiteSection(
+                signals = v5Signals,
+                cycleEnabled = cycleEnabled,
+                cycleOptInApplies = cycleAwarenessVisible(profile.sex, cycleHidden),
+                onEnableCycle = { vm.setCycleTrackingEnabled(true) },
+                onLogPeriod = { vm.logPeriodStart() },
+                onOpenCycleTracker = { showCycleTracker = true },
+                onTurnOffCycle = { vm.setCycleTrackingEnabled(false) },
+            )
+        }
+        item { HealthContributorsSection(today) }
+        item {
+            RecordsAndSourcesSection(
+                onOpenLabBook = onOpenLabBook,
+                onOpenFusedRecord = onOpenFusedRecord,
+            )
         }
     }
 

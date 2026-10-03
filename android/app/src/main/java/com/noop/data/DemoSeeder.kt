@@ -290,12 +290,22 @@ object DemoSeeder {
             }
         }
 
+        seedHealthMonitor(series, daily)
+
         repo.upsertDailyMetrics(daily)
         repo.upsertSleepSessions(sleeps)
         repo.upsertMetricSeries(series)
         repo.upsertAppleDaily(apple)
         if (workouts.isNotEmpty()) repo.upsertWorkouts(workouts)
         if (journal.isNotEmpty()) repo.upsertJournal(journal)
+    }
+
+    internal fun seedHealthMonitor(into: MutableList<MetricSeriesRow>, days: List<DailyMetric>) {
+        for (day in days) {
+            into.add(MetricSeriesRow(WHOOP_NOOP, day.day, "hrv_fresh_scoring_valid",
+                if (day.avgHrv?.isFinite() == true) 1.0 else 0.0))
+            into.add(MetricSeriesRow(WHOOP_NOOP, day.day, "hrv_rr_overcount", 0.0))
+        }
     }
 
     // MARK: - helpers

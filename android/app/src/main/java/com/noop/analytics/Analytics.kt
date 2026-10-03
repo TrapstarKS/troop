@@ -82,98 +82,71 @@ object IllnessWatch {
      *
      * Requires at least 14 days of history (matching `days.count >= 14`).
      */
-    fun evaluate(days: List<DailyMetric>): String? {
-        if (days.size < 14) return null
+    data class Evaluation(val alert: String?, val valid: Boolean)
 
-        val recent = days.takeLast(2)
-        val latest = days.last()
-        // ~28 days ending 3 days ago: take the last 31, drop the most recent 3.
-        val base = days.takeLast(31).dropLast(3)
-        // Whether a signal's window is fit to accuse the recent one (#2130). The Swift twin folds this
-        // SAME window through `Baselines.foldHistory` and refuses the signal unless the state is usable;
-        // here it was a plain mean, which is happy with ONE value and gated nothing.
-        //
-        // Folding rather than counting is the point: it is the statistic Charge is scored against, so
-        // the banner and the score can no longer hold two different baselines for one metric.
-        //
-        // Values rather than a helper because a named local function is a declaration the parity ledger
-        // counts, and this file is inside its scan.
-        val rhrBaseUsable = Baselines.metricCfg["resting_hr"]?.let { cfg ->
-            Baselines.foldHistory(base.map { it.restingHr?.toDouble() }, cfg).usable
-        } == true
-        val hrvBaseUsable = Baselines.metricCfg["hrv"]?.let { cfg ->
-            Baselines.foldHistory(base.map { it.avgHrv }, cfg).usable
-        } == true
+    fun evaluate(days: List<DailyMetric>): String? = evaluateWindow(days).alert
 
-        fun mean(vals: List<Double>): Double? =
-            if (vals.isEmpty()) null else vals.sum() / vals.size.toDouble()
+    fun evaluate(days: List<DailyMetric>, hrvBaselineEpoch: Double, recoveryBaselineEpoch: Double): String? =
+        evaluateWindow(days, hrvBaselineEpoch, recoveryBaselineEpoch).alert
 
-        fun rm(selector: (DailyMetric) -> Double?): Double? =
-            mean(recent.mapNotNull(selector))
-
-        fun bm(selector: (DailyMetric) -> Double?): Double? =
-            mean(base.mapNotNull(selector))
-
+    fun evaluateWindow(days: List<DailyMetric>, hrvBaselineEpoch: Double = 0.0,
+                       recoveryBaselineEpoch: Double = 0.0): Evaluation {
+        if (days.size < 14) return Evaluation(null, false)
+        val byDay = days.associateBy { it.day }
+        val latest = days.maxByOrNull { it.day } ?: return Evaluation(null, false)
+        val recent = HealthSignalReliability.dayKeys(latest.day, 2).mapNotNull { byDay[it] }
+        fun mean(values: List<Double>): Double? = values.takeIf { it.isNotEmpty() }?.average()
+        fun values(selector: (DailyMetric) -> Double?, cfg: MetricCfg): (DailyMetric) -> Double? = { row ->
+            selector(row)?.takeIf { it.isFinite() && it >= cfg.minVal && it <= cfg.maxVal }
+        }
         val flags = mutableListOf<String>()
+        var presentSignals = 0
 
-        run {
-            val r = rm { it.restingHr?.toDouble() }
-            val b = bm { it.restingHr?.toDouble() }
-            val current = latest.restingHr?.toDouble()
-            if (r != null && b != null && current != null && rhrBaseUsable &&
-                r >= b + 5 && current >= b + 5
-            ) {
-                flags.add("resting HR +${(current - b).roundToInt()} bpm")
-            }
+        fun signal(key: String, selector: (DailyMetric) -> Double?, fires: (Double, Double, Double) -> Boolean,
+                   phrase: (Double, Double) -> String) {
+            val cfg = Baselines.metricCfg[key] ?: return
+            val eligible = values(selector, cfg)
+            val epoch = if (key == "hrv") hrvBaselineEpoch else recoveryBaselineEpoch
+            val keys = HealthSignalReliability.dayKeys(latest.day, 28, 3, epoch)
+            val history = keys.map { byDay[it]?.let(eligible) }
+            val state = Baselines.foldHistory(history, keys, cfg, epoch)
+            val recentMean = mean(recent.mapNotNull(eligible))
+            val baselineMean = mean(history.filterNotNull())
+            val current = eligible(latest)
+            if (!state.trusted || recentMean == null || baselineMean == null || current == null) return
+            presentSignals++
+            if (fires(recentMean, baselineMean, current)) flags.add(phrase(current, baselineMean))
         }
 
-        run {
-            // The sparsest of the four: the over-count gate withholds whole nights (#1118), so HRV is
-            // the likeliest to have been resting on a cold-start baseline.
-            val r = rm { it.avgHrv }
-            val b = bm { it.avgHrv }
-            val current = latest.avgHrv
-            if (r != null && b != null && current != null && b > 0 && hrvBaseUsable &&
-                r <= b * 0.80 && current <= b * 0.80
-            ) {
-                flags.add("HRV −${((1 - current / b) * 100).roundToInt()}%")
-            }
+        // These are established local wellness thresholds, not official WHOOP thresholds.
+        // Apple alerts use the separate IllnessSignalEngine z-score/confounder model; convergence is pending.
+        signal("resting_hr", { it.restingHr?.toDouble() },
+            { recentMean, baseline, current -> recentMean >= baseline + 5 && current >= baseline + 5 },
+            { current, baseline -> "resting HR +${(current - baseline).roundToInt()} bpm" })
+        signal("hrv", { it.avgHrv },
+            { recentMean, baseline, current -> baseline > 0 && recentMean <= baseline * 0.80 && current <= baseline * 0.80 },
+            { current, baseline -> "HRV −${((1 - current / baseline) * 100).roundToInt()}%" })
+
+        val skinCfg = VitalBands.skinTempDeviationCfg
+        val skinEligible = values({ it.skinTempDevC?.takeUnless(VitalBands::isAbsoluteSkinTemp) }, skinCfg)
+        val skinKeys = HealthSignalReliability.dayKeys(latest.day, 28, 3, recoveryBaselineEpoch)
+        val skinState = Baselines.foldHistory(skinKeys.map { byDay[it]?.let(skinEligible) }, skinKeys, skinCfg, recoveryBaselineEpoch)
+        val recentSkin = mean(recent.mapNotNull(skinEligible))
+        val currentSkin = skinEligible(latest)
+        if (skinState.trusted && recentSkin != null && currentSkin != null) {
+            presentSignals++
+            if (recentSkin >= 0.6 && currentSkin >= 0.6) flags.add("skin temp +${formatOneDp(currentSkin)}°C")
         }
 
-        run {
-            val r = rm { it.skinTempDevC }
-            val current = latest.skinTempDevC
-            if (r != null && current != null && r >= 0.6 && current >= 0.6) {
-                flags.add("skin temp +${formatOneDp(current)}°C")
-            }
-        }
+        // RSA respiration remains conservative: plausible sleeping values and a sustained +2.5 bpm.
+        signal("resp", { it.respRateBpm?.takeIf { value -> value in 8.0..25.0 } },
+            { recentMean, baseline, current -> recentMean >= baseline + 2.5 && current >= baseline + 2.5 },
+            { _, _ -> "respiration up" })
 
-        run {
-            // respRateBpm may be a clean cloud value OR a higher-variance on-device RSA estimate
-            // (WHOOP5 BLE-only). The field carries no source flag, so gate conservatively for BOTH:
-            //  - require enough valid baseline nights for a stable baseline mean (RSA history can be sparse),
-            //  - only compare physiologically plausible sleeping-RR values (~8-25 bpm), rejecting RSA outliers,
-            //  - use a wider +2.5 bpm margin so one noisy night (averaged over the 2 recent days) can't fire,
-            //    while a sustained genuine rise (both recent nights up) still does.
-            val respBase = base.mapNotNull { it.respRateBpm }
-            val r = rm { it.respRateBpm }
-            val b = bm { it.respRateBpm }
-            val current = latest.respRateBpm
-            val plausible = { v: Double -> v in 8.0..25.0 }
-            if (r != null && b != null && current != null && respBase.size >= 10 &&
-                plausible(r) && plausible(b) && plausible(current) &&
-                r >= b + 2.5 && current >= b + 2.5
-            ) {
-                flags.add("respiration up")
-            }
-        }
-
-        return if (flags.size >= 2) {
-            "Your body looks strained - " + flags.joinToString(", ") +
-                ". Consider taking it easy."
-        } else {
-            null
-        }
+        val alert = if (flags.size >= IllnessSignalEngine.minCorroboratingSignals) {
+            "Your body looks strained - " + flags.joinToString(", ") + ". Consider taking it easy."
+        } else null
+        return Evaluation(alert, presentSignals >= IllnessSignalEngine.minCorroboratingSignals)
     }
 
     /** Format a double to one decimal place (locale-independent), matching "%.1f". */

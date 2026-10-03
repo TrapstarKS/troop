@@ -804,6 +804,10 @@ class WhoopRepository(
     suspend fun computedDailyUnion(activeStrapId: String, from: String, to: String): List<DailyMetric> =
         unionByDay(computedSourceIds(activeStrapId).map { dao.dailyMetricsRange(it, from, to) })
 
+    /** Source rows for per-field wellness eligibility; a merged row's deviceId cannot identify HRV. */
+    fun importedDailyUnionFlow(activeStrapId: String, from: String, to: String): Flow<List<DailyMetric>> =
+        unionDaysFlow(importedSourceIds(activeStrapId).map { dao.dailyMetricsRangeFlow(it, from, to) })
+
     fun computedDailyUnionFlow(activeStrapId: String, from: String, to: String): Flow<List<DailyMetric>> =
         unionDaysFlow(computedSourceIds(activeStrapId).map { dao.dailyMetricsRangeFlow(it, from, to) })
 

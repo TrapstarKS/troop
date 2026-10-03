@@ -223,12 +223,21 @@ enum AppleDemoSeeder {
         }
 
         _ = try await store.upsertDailyMetrics(daily, deviceId: whoop)
+        try await seedHealthMonitor(into: store, days: daily)
         _ = try await store.upsertSleepSessions(sleeps, deviceId: whoop)
         _ = try await store.upsertMetricSeries(series, deviceId: whoop)
         _ = try await store.upsertAppleDaily(appleRows, deviceId: apple)
         if !workouts.isEmpty { _ = try await store.upsertWorkouts(workouts, deviceId: whoop) }
         if !journal.isEmpty { _ = try await store.upsertJournal(journal, deviceId: whoop) }
         NSLog("AppleDemoSeeder: seeded \(daily.count) days, \(workouts.count) workouts.")
+    }
+
+    private static func seedHealthMonitor(into store: WhoopStore, days: [DailyMetric]) async throws {
+        let points = days.flatMap { day in
+            [MetricPoint(day: day.day, key: "hrv_fresh_scoring_valid", value: day.avgHrv?.isFinite == true ? 1 : 0),
+             MetricPoint(day: day.day, key: "hrv_rr_overcount", value: 0)]
+        }
+        _ = try await store.upsertMetricSeries(points, deviceId: whoop + "-noop")
     }
 
     // MARK: - helpers

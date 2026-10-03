@@ -4,47 +4,109 @@ import StrandDesign
 import StrandAnalytics
 import WhoopStore
 
-/// NOOP — Health Monitor.
-/// Live heart rate hero (ChartCard with a streaming sparkline + HR-zone footer),
-/// then a uniform LazyVGrid of the body's vital signs (respiratory rate, blood
-/// oxygen, resting HR, HRV, skin temp) as fixed-height StatTiles, each tinted and
-/// captioned with its in-range state. Re-skinned to the locked NOOP component
-/// system: every surface is a NoopCard, every metric is a StatTile, every chart is
-/// a ChartCard — no ad-hoc card heights or paddings.
 struct HealthView: View {
     @EnvironmentObject var repo: Repository
-    @EnvironmentObject var profile: ProfileStore
-    // NOTE: HealthView itself deliberately does NOT observe `LiveState`/`AppModel` for live HR. A
-    // connected strap publishes at ~1 Hz; observing here would re-evaluate this body (and re-diff the
-    // heavy vitals/skin-temp/age sections) on every tick. The ONLY live-dependent decision the parent
-    // used to make — "empty state vs the live stack while there's no history yet" — now lives in the
-    // `HealthFirstRunContent` leaf, which owns `live`/`model` itself. The common path (history present)
-    // branches purely on `repo.days`, so a live tick re-renders only the `HeartRateSection` hero leaf.
-
-    // MARK: - Body
 
     var body: some View {
-        ScreenScaffold(title: "Health Monitor",
-                       subtitle: "Live vitals, streamed from the strap.",
-                       // PERF (scroll): lazy column — byte-identical layout (LazyVStack == eager VStack
-                       // alignment/spacing/header); builds the trailing vitals/skin-temp/age sections on
-                       // demand instead of all up-front.
-                       onRefresh: { await repo.refresh() },
-                       lazy: true,
-                       // The day-of-sky liquid backdrop, matching Today / Sleep / Trends: a fixed,
-                       // full-bleed time-of-day sky behind the scroll content (does not scroll).
-                       topBackground: liquidScaffoldSky()) {
-            if repo.days.isEmpty {
-                // First run / no history: whether to show the empty state or the full live stack depends
-                // on whether a strap is streaming live HR — a `live`-dependent choice. It's isolated to
-                // this leaf (which owns `live`/`model`) so a ~1 Hz HR tick re-renders only this branch,
-                // never the parent, and only while there's no history (a transient first-run state).
-                HealthFirstRunContent()
-            } else {
-                // History present: `live` is irrelevant to the layout choice, so the parent renders the
-                // full section stack directly without observing the HR stream.
-                HealthSectionsStack()
-            }
+        ScreenScaffold(title: "Health", onRefresh: { await repo.refresh() }, lazy: true) {
+            HealthLandingContent()
+        }
+    }
+}
+
+private struct HealthLandingContent: View {
+    @EnvironmentObject var repo: Repository
+    @EnvironmentObject var intelligence: IntelligenceEngine
+    @State private var overCounts: [String: Double] = [:]
+    @State private var freshScoring: [String: Double] = [:]
+    @State private var provenanceLoaded = false
+
+    var body: some View {
+        let rows = HealthMonitorSnapshot.rows(sourceRows: repo.vitalMetricRows,
+                                              hrvOverCountByDay: overCounts, freshScoringByDay: freshScoring, provenanceLoaded: provenanceLoaded)
+        VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+            NavigationLink(value: TabRoute.healthspan) {
+                NoopCard(tint: StrandPalette.positive) {
+                    VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
+                        HealthFeatureHeading(title: String(localized: "Healthspan"), symbol: "sparkles")
+                        HStack(spacing: NoopMetrics.space4) {
+                            Image(systemName: "circle.dotted.circle.fill")
+                                .font(StrandFont.display(NoopMetrics.compactScoreDisplaySize))
+                                .foregroundStyle(StrandPalette.positive)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: NoopMetrics.space1) {
+                                Text("Long-term health")
+                                    .font(StrandFont.title1).monospacedDigit()
+                                    .foregroundStyle(StrandPalette.textPrimary)
+                                Text("Local estimates")
+                                    .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
+                            }
+                        }
+                        Text("Explore long-term health estimates from your local history.")
+                            .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
+                    }
+                }
+            }.buttonStyle(.plain)
+
+            NavigationLink(value: TabRoute.healthMonitor) {
+                NoopCard {
+                    VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
+                        HealthFeatureHeading(title: String(localized: "Health Monitor"), symbol: "heart.text.square")
+                        HealthMonitorSummary(rows: rows)
+                        HStack(spacing: NoopMetrics.space4) {
+                            ForEach(rows.prefix(3)) { row in
+                                VStack(alignment: .leading, spacing: NoopMetrics.space1) {
+                                    Text(row.reading.label).font(StrandFont.footnote)
+                                    Text(row.formattedValue ?? "—").font(StrandFont.headline).monospacedDigit()
+                                }
+                            }
+                        }.foregroundStyle(StrandPalette.textSecondary)
+                    }
+                }
+            }.buttonStyle(.plain)
+
+            NavigationLink(value: TabRoute.stressMonitor) {
+                NoopCard(tint: StrandPalette.stressMedium) {
+                    VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
+                        HealthFeatureHeading(title: String(localized: "Stress Monitor"), symbol: "waveform.path")
+                        Text("See your local stress estimate and daily timeline.")
+                            .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
+                    }
+                }
+            }.buttonStyle(.plain)
+            SkinTempSection()
+            HealthHubLinksSection()
+            NavigationLink(value: TabRoute.dataSources) {
+                NoopCard {
+                    HealthFeatureHeading(title: String(localized: "Data Sources"), symbol: "square.and.arrow.down")
+                }
+            }.buttonStyle(.plain)
+        }
+        .task(id: "\(repo.refreshSeq):\(intelligence.computing)") {
+            provenanceLoaded = false
+            freshScoring = [:]
+            overCounts = [:]
+            guard !intelligence.computing else { return }
+            let points = await repo.exploreSeries(key: "hrv_rr_overcount", source: "my-whoop", days: 120)
+            let fresh = await repo.exploreSeries(key: "hrv_fresh_scoring_valid", source: "my-whoop", days: 180)
+            guard !Task.isCancelled else { return }
+            freshScoring = Dictionary(fresh.map { ($0.day, $0.value) }, uniquingKeysWith: { a, _ in a })
+            provenanceLoaded = true
+            overCounts = Dictionary(points.map { ($0.day, $0.value) }, uniquingKeysWith: { a, _ in a })
+        }
+    }
+}
+
+private struct HealthFeatureHeading: View {
+    let title: String
+    let symbol: String
+
+    var body: some View {
+        HStack(spacing: NoopMetrics.space3) {
+            Image(systemName: symbol).foregroundStyle(StrandPalette.textSecondary).accessibilityHidden(true)
+            Text(title).font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+            Spacer(minLength: NoopMetrics.space2)
+            Image(systemName: "chevron.right").foregroundStyle(StrandPalette.textTertiary).accessibilityHidden(true)
         }
     }
 }
@@ -101,6 +163,7 @@ private struct HealthFirstRunContent: View {
     /// HR to display: the spike-filtered median (model.bpm, #39) when available, else the reported
     /// value, else R-R-derived (the strap streams R-R even when its HR field reads 0).
     private var displayHR: Int? {
+        guard live.connected else { return nil }
         if let hr = model.bpm, hr > 0 { return hr }
         if let hr = live.heartRate, hr > 0 { return hr }
         if let last = live.rr.last, last > 0 { return Int((60_000.0 / Double(last)).rounded()) }
@@ -219,7 +282,7 @@ private struct SyncStatusSection: View {
 
 /// Live HR hero, split into its own view so the ~1Hz HR stream only re-renders this
 /// subtree — the static vitals grid does not. Depends on `live` and `profile` only.
-private struct HeartRateSection: View {
+struct HeartRateSection: View {
     @EnvironmentObject var live: LiveState
     @EnvironmentObject var profile: ProfileStore
     @EnvironmentObject var model: AppModel
@@ -246,6 +309,7 @@ private struct HeartRateSection: View {
     /// carries PPG harmonic spikes (real ~92 read as 170+); AppModel.bpm's doc mandates "every screen
     /// should show THIS". Falls back to the reported value, then R-R-derived, only until the median has a sample.
     private var displayHR: Int? {
+        guard live.connected else { return nil }
         if let hr = model.bpm, hr > 0 { return hr }
         if let hr = live.heartRate, hr > 0 { return hr }
         if let last = live.rr.last, last > 0 { return Int((60_000.0 / Double(last)).rounded()) }
@@ -277,23 +341,7 @@ private struct HeartRateSection: View {
     /// timestamps, so we synthesise a 1 Hz trailing window ending "now" — the x-axis still reads as
     /// clock time and scrolls, matching the live buffer's behaviour (#198).
     private func hrSeries(_ hr: Int?) -> [LiveHRSample] {
-        if hrHistory.count > 1 { return hrHistory }
-        let beats = live.rr.suffix(60).compactMap { rr -> Double? in
-            rr > 0 ? 60_000.0 / Double(rr) : nil
-        }
-        if beats.count > 1 { return Self.synthesiseSeries(beats) }
-        if let hr = hr { return Self.synthesiseSeries([Double(hr), Double(hr)]) }
-        return []
-    }
-
-    /// Wrap a bare value series in trailing 1 Hz timestamps ending at `Date()`, so the
-    /// fallbacks (R-R-derived beats, flat line) chart on the same time x-axis as the live buffer.
-    private static func synthesiseSeries(_ values: [Double]) -> [LiveHRSample] {
-        let now = Date()
-        let n = values.count
-        return values.enumerated().map { i, v in
-            LiveHRSample(date: now.addingTimeInterval(Double(i - (n - 1))), bpm: v)
-        }
+        hrHistory
     }
 
     var body: some View {
@@ -334,7 +382,10 @@ private struct HeartRateSection: View {
             // on-change sampling drew through steady stretches (#941). The 30...220 physiological guard
             // mirrors the Android chart's existing range check; nil banks nothing (disconnect clears the
             // median on both platforms), so a stale value never flat-lines a dead trace.
-            guard let v = displayHR, (30...220).contains(v) else { return }
+            guard let v = displayHR, (30...220).contains(v) else {
+                hrHistory.removeAll()
+                return
+            }
             hrHistory.append(LiveHRSample(date: now, bpm: Double(v)))
             if hrHistory.count > 180 { hrHistory.removeFirst(hrHistory.count - 180) }
         }

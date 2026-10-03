@@ -752,6 +752,7 @@ object IntelligenceEngine {
         // #1118: per-day HRV over-count flag, carried for metricSeries persistence. Absent for a night with
         // no in-sleep R-R (no HRV to caveat); otherwise true/false, so a re-score always overwrites the row.
         val hrvOverCountByDay = LinkedHashMap<String, Boolean>()
+        val hrvFreshScoringValidByDay = LinkedHashMap<String, Boolean>()
         // #1169: primary-session mean RHR shadow metric per day, carried from pass 1 for persistence.
         val primarySessionRHRByDay = LinkedHashMap<String, Double>()
         // #1169: its coverage inputs (valid-sample count + primary-session duration), same lifetime as the mean.
@@ -979,6 +980,7 @@ object IntelligenceEngine {
                     if (universalSink != null) readOwnerByDay[day] = OwnerRead(cached.owner, cached.hrRows)
                     cached.hrvOverCount?.let { hrvOverCountByDay[day] = it }
                     nightlyHrvByDay[day] = cached.res.daily.avgHrv
+                    hrvFreshScoringValidByDay[day] = HealthSignalReliability.hrv(cached.res.daily.avgHrv, computed = false) != null
                     nightlyRhrByDay[day] = cached.res.daily.restingHr?.toDouble()
                     nightlySkinByDay[day] = cached.res.nightlySkinTempC
                     nightlyRespByDay[day] = cached.res.daily.respRateBpm
@@ -1400,6 +1402,7 @@ object IntelligenceEngine {
             // sleep yields null → recorded as a missing night, i.e. skip-and-hold). The raw
             // streams (hr/rr/...) go out of scope here and are freed before the next night.
             nightlyHrvByDay[day] = res.daily.avgHrv
+            hrvFreshScoringValidByDay[day] = HealthSignalReliability.hrv(res.daily.avgHrv, computed = false) != null
             nightlyRhrByDay[day] = res.daily.restingHr?.toDouble()
             nightlySkinByDay[day] = res.nightlySkinTempC
             nightlyRespByDay[day] = res.daily.respRateBpm
@@ -1704,6 +1707,10 @@ object IntelligenceEngine {
             // (not just absent) so a night that flips clean on re-score clears its prior flag.
             hrvOverCountByDay[daily.day]?.let { oc ->
                 restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "hrv_rr_overcount", value = if (oc) 1.0 else 0.0))
+            }
+            // Capture the fresh scan before legacy score preservation can restore an older HRV value.
+            hrvFreshScoringValidByDay[daily.day]?.let { valid ->
+                restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "hrv_fresh_scoring_valid", value = if (valid) 1.0 else 0.0))
             }
             // #1169 shadow metric: the primary-session mean RHR, stored beside the shipped floor
             // (daily.restingHr) under the "-noop" computed ID. Instrumentation only — never shown, never

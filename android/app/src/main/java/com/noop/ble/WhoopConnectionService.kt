@@ -24,8 +24,10 @@ import com.noop.alarm.SmartAlarmScheduler
 import com.noop.alarm.SmartAlarmStore
 import com.noop.analytics.BatteryEstimator
 import com.noop.analytics.IllnessWatch
+import com.noop.analytics.Baselines
 import com.noop.analytics.RestScorer
 import com.noop.data.DailyMetric
+import com.noop.data.IllnessHistory
 import com.noop.location.GpsSession
 import com.noop.location.LocationTracker
 import com.noop.notif.BatteryAlertNotifier
@@ -46,6 +48,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -89,6 +92,7 @@ internal data class NotifyDayState(
     val widgetEffort: Int?,
     val illness: String?,
     val days: List<DailyMetric>,
+    val illnessEvaluated: Boolean = false,
 )
 
 /**
@@ -101,9 +105,12 @@ internal data class NotifyDayState(
  * 800 day rows or allocating Illness Watch slices for every heart-rate sample.
  */
 internal class NotifyDayStateCache(
-    private val illnessEvaluator: (List<DailyMetric>) -> String? = IllnessWatch::evaluate,
+    private val illnessEvaluator: (List<DailyMetric>) -> IllnessWatch.Evaluation = { IllnessWatch.evaluateWindow(it) },
 ) {
     private var cachedDays: List<DailyMetric>? = null
+    private var cachedIllnessDays: List<DailyMetric>? = null
+    private var cachedHrvEpoch: Double? = null
+    private var cachedRecoveryEpoch: Double? = null
     private var cachedLogicalKey: String? = null
     private var cachedLocalKey: String? = null
     private var cachedIllnessEnabled: Boolean? = null
@@ -114,10 +121,14 @@ internal class NotifyDayStateCache(
         logicalKey: String,
         localKey: String,
         illnessEnabled: Boolean,
+        illnessDays: List<DailyMetric> = days,
+        hrvBaselineEpoch: Double = 0.0,
+        recoveryBaselineEpoch: Double = 0.0,
     ): NotifyDayState {
         cachedState?.let { state ->
-            if (days === cachedDays && logicalKey == cachedLogicalKey && localKey == cachedLocalKey &&
-                illnessEnabled == cachedIllnessEnabled
+            if (days === cachedDays && illnessDays === cachedIllnessDays &&
+                hrvBaselineEpoch == cachedHrvEpoch && recoveryBaselineEpoch == cachedRecoveryEpoch &&
+                logicalKey == cachedLogicalKey && localKey == cachedLocalKey && illnessEnabled == cachedIllnessEnabled
             ) {
                 return state
             }
@@ -125,17 +136,22 @@ internal class NotifyDayStateCache(
 
         val todayRow = com.noop.ui.resolveTodayRow(days, logicalKey, localKey)
         val anchorRow = com.noop.ui.widgetAnchorRow(days, logicalKey, localKey)
+        val evaluation = if (illnessEnabled && days.size >= 14 && todayRow != null && days.lastOrNull()?.day == todayRow.day) {
+            illnessEvaluator(illnessDays)
+        } else null
         val state = NotifyDayState(
             todayRecovery = todayRow?.recovery,
             widgetRecovery = anchorRow?.recovery?.roundToInt(),
             widgetRest = anchorRow?.let { RestScorer.restFromDaily(it)?.roundToInt() },
             widgetEffort = anchorRow?.strain?.roundToInt(),
-            illness = if (illnessEnabled && todayRow != null && days.lastOrNull()?.day == todayRow.day) {
-                illnessEvaluator(days)
-            } else null,
+            illness = evaluation?.alert,
             days = days,
+            illnessEvaluated = evaluation?.valid == true,
         )
         cachedDays = days
+        cachedIllnessDays = illnessDays
+        cachedHrvEpoch = hrvBaselineEpoch
+        cachedRecoveryEpoch = recoveryBaselineEpoch
         cachedLogicalKey = logicalKey
         cachedLocalKey = localKey
         cachedIllnessEnabled = illnessEnabled
@@ -154,7 +170,12 @@ class WhoopConnectionService : Service() {
     private var notifyJob: Job? = null
 
     /** Daily analytics projection shared across the notification's ~1 Hz live-state ticks. */
-    private val notifyDayStateCache = NotifyDayStateCache()
+    private val notifyDayStateCache = NotifyDayStateCache { days ->
+        val prefs = getSharedPreferences(NoopPrefs.NAME, Context.MODE_PRIVATE)
+        IllnessWatch.evaluateWindow(days,
+            prefs.getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(),
+            prefs.getLong(Baselines.recoveryBaselineEpochKey, 0L).toDouble())
+    }
 
     /** Watches [GpsSession] and runs the platform location stream while a GPS workout is active. This
      *  is what makes route tracking survive the screen turning off (#215): the collection lives on the
@@ -287,6 +308,7 @@ class WhoopConnectionService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // The notification "Disconnect" action routes back here as a self-intent.
         if (intent?.action == ACTION_STOP) {
@@ -344,8 +366,13 @@ class WhoopConnectionService : Service() {
                 // today's row; this stops a years-deep import re-merging the whole history on every change.
                 // #1304/#512: the active strap's live day is under its own id ("whoop-<uuid>"); a raw
                 // "my-whoop" read (which the union method collapses to) misses it. Same accessor as :606.
-                repo.recentDaysMergedFlow((application as NoopApplication).activeDeviceId).catch { emit(emptyList()) },
-            ) { state, days ->
+                repo.recentDaysMergedFlow((application as NoopApplication).activeDeviceId)
+                    .flatMapLatest { days ->
+                        IllnessHistory.flow(repo, (application as NoopApplication).activeDeviceId, days)
+                    }.catch { emit(IllnessHistory.Snapshot(emptyList(), emptyList(), emptyMap())) },
+            ) { state, snapshot ->
+                val days = snapshot.days
+                val prefs = getSharedPreferences(NoopPrefs.NAME, Context.MODE_PRIVATE)
                 // #911: resolve the day the way the dashboard does, via the LOGICAL local day (rolls at
                 // 04:00, with the #304 pre-04:00 carve-out), NOT a naive LocalDate.now() that rolls at
                 // midnight and starts looking up a brand-new, not-yet-scored calendar day. Two DISTINCT
@@ -371,6 +398,9 @@ class WhoopConnectionService : Service() {
                         // still takes effect on the next live-state emission without re-running the
                         // evaluation while the value is unchanged.
                         illnessEnabled = NoopPrefs.illnessWatch(this@WhoopConnectionService),
+                        illnessDays = snapshot.alertDays,
+                        hrvBaselineEpoch = prefs.getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(),
+                        recoveryBaselineEpoch = prefs.getLong(Baselines.recoveryBaselineEpochKey, 0L).toDouble(),
                     ),
                 )
             }.catch { /* belt-and-braces: a frozen notification beats a dead process */ }
@@ -388,11 +418,11 @@ class WhoopConnectionService : Service() {
                 // service restart re-armed the edge and the day gate let a fresh notification through
                 // for an alert that never transitioned. Reporting the clear ones is what lets the next
                 // genuine transition be recognised.
-                if (dayState.days.size >= 14) {
+                if (dayState.illnessEvaluated) {
                     IllnessAlertNotifier.onEvaluated(this@WhoopConnectionService,
                         dayState.illness?.let {
                             IllnessAlertNotifier.withWindow(this@WhoopConnectionService, it, dayState.days)
-                        })
+                        }, enabled = NoopPrefs.illnessWatch(this@WhoopConnectionService), valid = dayState.illnessEvaluated)
                 }
                 // Evaluated only when (SoC, charging) actually MOVES — see [lastBatteryAlertKey]. Both policies
                 // are once-per-crossing and persisted, so re-running them on an unchanged pair can only repeat
