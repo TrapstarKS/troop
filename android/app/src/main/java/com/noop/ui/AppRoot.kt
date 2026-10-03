@@ -253,7 +253,7 @@ internal val drawerGroups: List<DrawerGroup> = listOf(
     ), defaultExpanded = true),
     DrawerGroup("Body", R.string.more_group_body, listOf(
         Destination.Sleep, Destination.Live, Destination.Workouts, Destination.VitalSigns,
-        Destination.LabBook, Destination.Stress, Destination.Breathe, Destination.Intervals,
+        Destination.LabBook, Destination.Healthspan, Destination.Stress, Destination.Breathe, Destination.Intervals,
         Destination.Rhythm,
     ), defaultExpanded = true),
     DrawerGroup("Data", R.string.more_group_data, listOf(
@@ -751,7 +751,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.Stress.route) {
                     StressMonitorScreen(
                         vm = viewModel,
-                        onBreathe = { nav.navigateTopLevel(Destination.Breathe.route) },
+                        onBreathe = { nav.navigate(Destination.Breathe.route) },
                     )
                 }
                 composable(Destination.Trends.route) { TrendsScreen(viewModel) }
