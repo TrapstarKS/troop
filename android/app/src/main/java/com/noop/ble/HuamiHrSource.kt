@@ -1,5 +1,7 @@
 package com.noop.ble
 
+import com.noop.DemoRuntimePolicy
+
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -64,6 +66,7 @@ class HuamiHrSource(
     private val log: (String) -> Unit = {},
     /** Fired with the band's battery percent (0–100) when read off 0x2A19. */
     private val onBattery: (Int) -> Unit = {},
+    private val runtimePolicy: DemoRuntimePolicy = DemoRuntimePolicy.current,
 ) : LiveHrSource {
 
     /** A Huami-family device seen during a scan (UI affordance). */
@@ -86,8 +89,9 @@ class HuamiHrSource(
     // MARK: - Android Bluetooth handles (OWN scanner + GATT, separate from WHOOP)
 
     private val appContext = context.applicationContext
-    private val bluetoothManager: BluetoothManager? =
+    private val bluetoothManager: BluetoothManager? = runtimePolicy.createBluetooth {
         appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    }
     private val adapter: BluetoothAdapter? = bluetoothManager?.adapter
     private val scanner: BluetoothLeScanner? get() = adapter?.bluetoothLeScanner
 
@@ -117,6 +121,7 @@ class HuamiHrSource(
      * Amazfit / Zepp / Mi Band ([ExperimentalBrand]).
      */
     override fun scan() {
+        if (!runtimePolicy.allowsBluetooth) return
         seen.clear()
         _discovered.value = emptyList()
         _scanning.value = true
@@ -145,6 +150,7 @@ class HuamiHrSource(
     // MARK: - Connecting
 
     override fun connect(address: String) {
+        if (!runtimePolicy.allowsBluetooth) return
         stopScan()
         _needsPairing.value = null
         val device = seen[address] ?: runCatching { adapter?.getRemoteDevice(address) }.getOrNull()

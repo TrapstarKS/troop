@@ -1,5 +1,7 @@
 package com.noop.ble
 
+import com.noop.DemoRuntimePolicy
+
 import android.content.Context
 import android.util.Log
 import com.noop.data.DeviceRegistry
@@ -106,6 +108,8 @@ class SourceCoordinator(
     /** Initial registry id for process composition. Nullable keeps plain JVM harnesses honest until their
      * first successful reconcile; production injects its already-resolved startup id. */
     initialActiveDeviceId: String? = null,
+    private val runtimePolicy: DemoRuntimePolicy = DemoRuntimePolicy.current,
+    private val sourceFactory: ((String, PairedDeviceRow?) -> LiveHrSource)? = null,
     /** Move Oura's install key alongside serial-identity adoption. Plain JVM tests inject a no-op;
      * production retains the encrypted-store behavior through this default. */
     private val migrateOuraInstallKey: (fromId: String, toId: String) -> Unit = { fromId, toId ->
@@ -300,6 +304,7 @@ class SourceCoordinator(
     }
 
     private suspend fun reconcile(id: String): Boolean {
+        if (!runtimePolicy.allowsBluetooth) return true
         if (id == lastSeenId) return true
         lastSeenId = id
         // CONTAIN every device-switch failure here. reconcile is the single entry point for both
@@ -420,12 +425,14 @@ class SourceCoordinator(
      * macOS `SourceCoordinator.makeSource(for:)`.
      */
     private fun makeSource(id: String, row: PairedDeviceRow?): LiveHrSource {
+        sourceFactory?.let { return it(id, row) }
         // Non-null in production (set at the composition root); only the JVM-test paths that never reach a
         // strap switch leave it null. Fail loudly rather than silently no-op if that invariant breaks.
         val ctx = requireNotNull(context) { "SourceCoordinator.context is required to run a strap source" }
         return when (row?.sourceKind) {
             SourceKind.ftms.name -> FtmsSource(
                 context = ctx,
+                runtimePolicy = runtimePolicy,
                 liveSink = { hr -> liveSink(hr, emptyList()) },  // machine HR → the existing live recorder
                 onBattery = batterySink,                          // machine battery → the same live state
                 log = straplog,
@@ -434,6 +441,7 @@ class SourceCoordinator(
                 val repo = requireNotNull(repository) { "SourceCoordinator.repository is required to persist Huami samples" }
                 HuamiHrSource(
                     context = ctx,
+                    runtimePolicy = runtimePolicy,
                     deviceId = id,
                     liveSink = { hr -> liveSink(hr, emptyList()) },   // Huami HR → the existing live recorder
                     persist = { batch: StreamBatch, deviceId: String ->
@@ -448,6 +456,7 @@ class SourceCoordinator(
                 val repo = requireNotNull(repository) { "SourceCoordinator.repository is required to persist strap samples" }
                 StandardHrSource(
                     context = ctx,
+                    runtimePolicy = runtimePolicy,
                     deviceId = id,
                     liveSink = liveSink,
                     // Hand the OUTCOME back. This was `runCatching { ... }` with no onFailure while the
@@ -512,6 +521,7 @@ class SourceCoordinator(
         val ringGen = OuraRingGen.from(row?.model ?: "")
         val source = OuraLiveSource(
             context = ctx,
+            runtimePolicy = runtimePolicy,
             deviceId = id,
             ringGen = ringGen,
             liveSink = { hr, rr -> liveSink(hr, rr) },   // ring HR + R-R → the existing live recorder
