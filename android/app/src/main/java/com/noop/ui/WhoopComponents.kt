@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -44,10 +43,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import java.util.Locale
+import java.text.NumberFormat
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -277,7 +276,7 @@ fun TopChrome(
             .semantics { contentDescription = strapLabel },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Metrics.space4)) {
-            if (batteryPercent != null) Text("${batteryPercent.coerceIn(0, 100)}%",
+            if (batteryPercent != null) Text(NumberFormat.getPercentInstance().format(batteryPercent.coerceIn(0, 100) / 100.0),
                 style = NoopType.captionNumber, color = Palette.textPrimary)
             Icon(Icons.Filled.BatteryStd, null, tint = Palette.textPrimary, modifier = Modifier.size(Metrics.iconSmall))
             Box(Modifier.size(Metrics.space6).background(
