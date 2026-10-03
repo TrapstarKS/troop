@@ -85,8 +85,9 @@ extension View {
             case .strainDetail: heroMetricDestination(HeroRingMetric.effort)
             case .sleepDetail: SleepView()
             case .sleepPlanner: SmartAlarmView()
-            case .healthMonitor, .healthspan: HealthView()
-            case .stressMonitor: StressView()
+            case .healthMonitor: HealthView()
+            case .healthspan: HealthspanView()
+            case .stressMonitor: StressMonitorView()
             case .weeklyPlan: TabRoutePlaceholder(title: "Weekly Plan")
             case .journal: InsightsView()
             }

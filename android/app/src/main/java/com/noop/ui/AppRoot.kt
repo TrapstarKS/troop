@@ -701,12 +701,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     CoupledScreen(vm = viewModel, onOpenSleep = { nav.navigate(WhoopRoute.sleepDetail) })
                 }
                 composable(Destination.StrainDetail.route) { WorkoutsScreen(viewModel) }
-                composable(Destination.Healthspan.route) {
-                    HealthScreen(vm = viewModel, onVitalClick = { nav.navigate("vital_detail/$it") },
-                        onOpenLabBook = { nav.navigate(Destination.LabBook.route) },
-                        onOpenFusedRecord = { nav.navigate(Destination.FusedRecord.route) },
-                        onOpenSettings = { nav.navigate(Destination.Settings.route) })
-                }
+                composable(Destination.Healthspan.route) { HealthspanScreen(viewModel) }
                 composable(Destination.Live.route) {
                     LiveScreen(
                         viewModel = viewModel,
@@ -754,7 +749,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
 
                 // Existing local feature destinations.
                 composable(Destination.Stress.route) {
-                    StressScreen(
+                    StressMonitorScreen(
                         vm = viewModel,
                         onBreathe = { nav.navigateTopLevel(Destination.Breathe.route) },
                     )

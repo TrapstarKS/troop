@@ -643,7 +643,7 @@ private enum MoreDestination: Hashable {
         case .liftLog:         LiftLogView()
         case .health:          HealthView()
         case .labBook:         LabBookView()
-        case .stress:          StressView()
+        case .stress:          StressMonitorView()
         case .breathe:         BreathingView()
         case .intervals:       IntervalTimerView()
         case .rhythm:          RhythmHost()
@@ -666,7 +666,7 @@ private enum MoreDestination: Hashable {
         case .sleep:           SleepView()
         case .sleepPlanner:    SmartAlarmView()
         case .healthMonitor:   HealthView()
-        case .healthspan:      HealthView()
+        case .healthspan:      HealthspanView()
         }
     }
 }
