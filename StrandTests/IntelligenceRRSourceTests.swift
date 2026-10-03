@@ -2,7 +2,7 @@ import XCTest
 import Foundation
 import WhoopProtocol
 import WhoopStore
-import StrandAnalytics
+@testable import StrandAnalytics
 @testable import Strand
 
 @MainActor
