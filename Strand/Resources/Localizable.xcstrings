@@ -14576,11 +14576,35 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld повторений"
+        "variations": {
+          "plural": {
+            "one": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld повторение"
+              }
+            },
+            "few": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld повторения"
+              }
+            },
+            "many": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld повторений"
+              }
+            },
+            "other": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld повторений"
+              }
+            }
           }
-        },
+        }
+      },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -15154,11 +15178,35 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld подходов"
+        "variations": {
+          "plural": {
+            "one": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld подход"
+              }
+            },
+            "few": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld подхода"
+              }
+            },
+            "many": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld подходов"
+              }
+            },
+            "other": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld подходов"
+              }
+            }
           }
-        },
+        }
+      },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -16036,11 +16084,35 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld рабочих подходов · сравнивай при повторе этой программы"
+        "variations": {
+          "plural": {
+            "one": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld рабочий подход · сравнивай при повторе этой программы"
+              }
+            },
+            "few": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld рабочих подхода · сравнивай при повторе этой программы"
+              }
+            },
+            "many": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld рабочих подходов · сравнивай при повторе этой программы"
+              }
+            },
+            "other": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld рабочих подходов · сравнивай при повторе этой программы"
+              }
+            }
           }
-        },
+        }
+      },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
