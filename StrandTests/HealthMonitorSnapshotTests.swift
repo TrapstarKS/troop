@@ -8,12 +8,13 @@ final class HealthMonitorSnapshotTests: XCTestCase {
 
     private func metric(day: String, totalSleepMin: Double? = nil, restingHr: Int? = nil,
                         avgHrv: Double? = nil, spo2Pct: Double? = nil, skinTempDevC: Double? = nil,
-                        respRateBpm: Double? = nil, spo2Red: Int? = nil, spo2Ir: Int? = nil) -> DailyMetric {
+                        respRateBpm: Double? = nil, spo2Red: Int? = nil, spo2Ir: Int? = nil,
+                        skinTempC: Double? = nil) -> DailyMetric {
         DailyMetric(day: day, totalSleepMin: totalSleepMin, efficiency: nil, deepMin: nil,
                     remMin: nil, lightMin: nil, disturbances: nil, restingHr: restingHr,
                     avgHrv: avgHrv, recovery: nil, strain: nil, exerciseCount: nil,
                     spo2Pct: spo2Pct, skinTempDevC: skinTempDevC, respRateBpm: respRateBpm,
-                    spo2Red: spo2Red, spo2Ir: spo2Ir)
+                    spo2Red: spo2Red, spo2Ir: spo2Ir, skinTempC: skinTempC)
     }
 
     func testBankedLocalNightBeforeRolloverMatchesHomeAndBecomesCurrent() {
@@ -79,6 +80,19 @@ final class HealthMonitorSnapshotTests: XCTestCase {
         XCTAssertEqual(result.map(\.id), ["hrv", "rhr", "resp", "spo2", "skin"])
         XCTAssertTrue(result.allSatisfy { $0.assessment.status == .withinRange })
         XCTAssertTrue(result.allSatisfy { $0.assessment.lower != nil && $0.assessment.upper != nil })
+    }
+
+    func testSkinPreferenceSelectsItsOwnRangeForTheSharedSummary() {
+        let values = (1...20).map { index in
+            SourcedDailyMetric(metric: metric(day: String(format: "2026-06-%02d", index),
+                                               skinTempDevC: index == 20 ? 2 : 0.1, skinTempC: 34), source: .whoopImport)
+        }
+        let absolute = HealthMonitorSnapshot.rows(sourceRows: values, now: now, skinTempPreferred: .absolute,
+                                                   hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+        let deviation = HealthMonitorSnapshot.rows(sourceRows: values, now: now, skinTempPreferred: .deviation,
+                                                    hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+        XCTAssertEqual(absolute.first { $0.id == "skin" }!.assessment.status, .withinRange)
+        XCTAssertEqual(deviation.first { $0.id == "skin" }!.assessment.status, .farOutsideRange)
     }
 
     func testMissingTodayIsNeverCountedWithinRange() {

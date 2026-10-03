@@ -20,6 +20,7 @@ private struct HealthLandingContent: View {
     let now: Date
     @EnvironmentObject var repo: Repository
     @EnvironmentObject var intelligence: IntelligenceEngine
+    @AppStorage(UnitPrefs.skinTempDisplayKey) private var skinTempDisplayRaw = ""
     @State private var hrvReliability: [String: HealthSignalReliability.Record]? = nil
     @State private var respReliability: [String: HealthSignalReliability.Record]? = nil
     @State private var evidenceIdentity: String? = nil
@@ -29,7 +30,8 @@ private struct HealthLandingContent: View {
         let identity = "\(repo.importedReadIds + repo.computedReadIds):\(repo.refreshSeq):\(intelligence.computing):\(day)"
         let rows = HealthMonitorSnapshot.rows(sourceRows: repo.vitalMetricRows,
                                               now: now, todayKey: day, hrvReliabilityByDay: evidenceIdentity == identity ? hrvReliability : nil,
-                                              respReliabilityByDay: evidenceIdentity == identity ? respReliability : nil)
+                                              respReliabilityByDay: evidenceIdentity == identity ? respReliability : nil,
+                                              skinTempPreferred: SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute)
         VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
             HealthspanPreviewCard()
 
