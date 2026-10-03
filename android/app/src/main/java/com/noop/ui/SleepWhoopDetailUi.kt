@@ -140,7 +140,7 @@ private fun SleepContributor(label: String, value: Double?, sufficient: Double, 
         }
         Column(horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(Metrics.space2)) {
-            Text(value?.let { "${it.roundToInt()}%" } ?: "—", style = NoopType.chartValueLarge,
+            Text(value?.let { uiString(R.string.l10n_sleep_screen_percent_2281d326, it.roundToInt()) } ?: "—", style = NoopType.chartValueLarge,
                 color = Palette.textPrimary)
             Text(description, style = NoopType.footnote, color = color)
         }
