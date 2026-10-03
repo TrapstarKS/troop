@@ -3,6 +3,7 @@ package com.noop.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.noop.R
 import com.noop.analytics.Baselines
@@ -60,7 +63,7 @@ fun RecoveryDetailScreen(
     val selectedKey = dayKey ?: today?.day ?: logicalDayNow().toString()
     val date = detailDate(selectedKey)
     val selected = days.firstOrNull { it.day == selectedKey }
-    val score = selected?.recovery?.takeIf { it.isFinite() }
+    val score = selected?.recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }
     val context = LocalContext.current
     val epoch = NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble()
     val calibration = if (selectedKey == (today?.day ?: logicalDayNow().toString())) recoveryCalibrationNights(
@@ -89,7 +92,7 @@ fun RecoveryDetailScreen(
         item {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
-                ScoreDial(uiString(R.string.d2b_recovery), detailNumber(score, 0), "%",
+                ScoreDial(uiString(R.string.d2b_recovery), detailRecoveryNumber(score), "%",
                     score?.div(100)?.toFloat(), color)
                 StatusPill(when {
                     score == null && calibration != null -> uiString(R.string.d2b_calibrating, calibration, Baselines.minNightsSeed)
@@ -375,7 +378,7 @@ private fun DetailTrend(days: List<DailyMetric>, selectedKey: String, strain: Bo
     val start = selectedDate.minusDays((count - 1).toLong()).toString()
     val points = days.filter { it.day >= start && it.day <= selectedKey }.mapNotNull { row ->
         val value = if (strain) row.strain?.let { UnitFormatter.effortValue(it, EffortScale.WHOOP) } else row.recovery
-        value?.takeIf { it.isFinite() }?.let { row.day to it }
+        value?.takeIf { if (strain) it.isFinite() else RecoveryStrainDetailLogic.recoveryPercent(it) != null }?.let { row.day to it }
     }.sortedBy { it.first }
     NoopCard {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
@@ -392,12 +395,22 @@ private fun DetailTrend(days: List<DailyMetric>, selectedKey: String, strain: Bo
                 style = NoopType.caption, color = Palette.textSecondary)
             if (points.isEmpty()) DetailEmpty(uiString(R.string.d2b_no_trend)) else {
                 val timestamps = points.map { detailDate(it.first).atStartOfDay(ZoneId.systemDefault()).toEpochSecond() }
-                LineChart(points.map { it.second }, Modifier.fillMaxWidth().height(Metrics.trendStripHeight),
-                    color = if (strain) Palette.strainPrimary else Palette.recoveryColor(points.last().second),
-                    selectionEnabled = true, selectionLabels = points.map { detailDateLabel(detailDate(it.first)) },
-                    timestamps = timestamps, segmentIds = hrGapSegmentIds(timestamps, 86400), showsPoints = true,
-                    formatValue = { value -> if (strain) detailNumber(value) else "${detailNumber(value, 0)}%" },
-                    yDomain = if (strain) 0.0..21.0 else 0.0..100.0)
+                val chartSemantics = if (strain) Modifier else {
+                    val summary = uiString(R.string.trends_trend_a11y, listOf(
+                        "${uiString(R.string.explore_latest)} ${detailRecoveryNumber(points.last().second)}%",
+                        "${uiString(R.string.trends_min)} ${detailRecoveryNumber(points.minOf { it.second })}%",
+                        "${uiString(R.string.trends_max)} ${detailRecoveryNumber(points.maxOf { it.second })}%",
+                    ).joinToString(", "))
+                    Modifier.clearAndSetSemantics { contentDescription = summary }
+                }
+                Box(chartSemantics) {
+                    LineChart(points.map { it.second }, Modifier.fillMaxWidth().height(Metrics.trendStripHeight),
+                        color = if (strain) Palette.strainPrimary else Palette.recoveryColor(points.last().second),
+                        selectionEnabled = true, selectionLabels = points.map { detailDateLabel(detailDate(it.first)) },
+                        timestamps = timestamps, segmentIds = hrGapSegmentIds(timestamps, 86400), showsPoints = true,
+                        formatValue = { value -> if (strain) detailNumber(value) else "${detailRecoveryNumber(value)}%" },
+                        yDomain = if (strain) 0.0..21.0 else 0.0..100.0)
+                }
             }
         }
     }
@@ -452,6 +465,8 @@ private fun detailWorkoutTime(row: WorkoutRow): String = uiString(R.string.d2b_a
     detailDateLabel(Instant.ofEpochSecond(row.startTs).atZone(ZoneId.systemDefault()).toLocalDate()), detailClock(row.startTs), detailClock(row.endTs))
 private fun detailNumber(value: Double?, decimals: Int = 1): String = value?.takeIf { it.isFinite() }
     ?.let { String.format(Locale.getDefault(), "%.${decimals}f", it) } ?: uiString(R.string.d2b_no_value)
+private fun detailRecoveryNumber(score: Double?): String =
+    detailNumber(RecoveryStrainDetailLogic.recoveryPercent(score)?.toDouble(), 0)
 private fun detailDuration(seconds: Double): String {
     val minutes = (seconds / 60).roundToInt().coerceAtLeast(0)
     return if (minutes >= 60) uiString(R.string.d2b_hours_minutes, minutes / 60, minutes % 60) else uiString(R.string.d2b_duration_minutes, minutes)

@@ -6,6 +6,24 @@ import org.junit.Test
 
 class RecoveryStrainDetailLogicTest {
     @Test
+    fun recoveryPercentPreservesSemanticBandsAtEveryThreshold() {
+        val scores = listOf(0.0, 33.999999, 34.0, 66.999999, 67.0, 99.999999, 100.0)
+        assertEquals(listOf(0, 33, 34, 66, 67, 99, 100), scores.map(RecoveryStrainDetailLogic::recoveryPercent))
+        for (step in 0..10_000) {
+            val raw = step / 100.0
+            val displayed = RecoveryStrainDetailLogic.recoveryPercent(raw)!!.toDouble()
+            assertEquals(raw < 34, displayed < 34)
+            assertEquals(raw < 67, displayed < 67)
+        }
+    }
+
+    @Test
+    fun recoveryPercentRejectsMissingNonfiniteAndOutOfRangeScores() {
+        listOf(null, Double.NaN, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, -0.001, 100.001)
+            .forEach { assertNull(RecoveryStrainDetailLogic.recoveryPercent(it)) }
+    }
+
+    @Test
     fun priorMeanUsesOnlyFiniteValuesInPriorCalendarWindow() {
         val keys = listOf("2026-09-01", "2026-09-02", "2026-09-15", "2026-09-20", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03")
         val values = listOf(999.0, 20.0, null, Double.NaN, Double.POSITIVE_INFINITY, 40.0, 100.0, 500.0)

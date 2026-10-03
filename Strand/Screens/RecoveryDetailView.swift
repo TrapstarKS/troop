@@ -17,7 +17,7 @@ struct RecoveryDetailView: View {
     private var key: String { dayKey ?? repo.today?.day ?? Repository.logicalDayKey(Date()) }
     private var row: DailyMetric? { repo.days.first { $0.day == key } ?? (repo.today?.day == key ? repo.today : nil) }
     private var history: [DailyMetric] { repo.days.filter { $0.day <= key }.sorted { $0.day < $1.day } }
-    private var score: Double? { row?.recovery.flatMap { $0.isFinite ? $0 : nil } }
+    private var score: Double? { row?.recovery.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil } }
     private var tint: Color { score.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.textTertiary }
     private var calibration: Int? {
         guard key == (repo.today?.day ?? Repository.logicalDayKey(Date())) else { return nil }
@@ -33,7 +33,7 @@ struct RecoveryDetailView: View {
         ScreenScaffold(title: nil, lazy: true, topBackground: recoveryStrainBackdrop()) {
             Text(RecoveryStrainDetailLogic.dateLabel(key, locale: AppLanguage.activeLocale)).strandOverline()
                 .frame(maxWidth: .infinity)
-            ScoreDial(label: String(localized: "Recovery"), value: score.map { String(Int($0.rounded())) } ?? "—",
+            ScoreDial(label: String(localized: "Recovery"), value: RecoveryStrainDetailLogic.recoveryPercent(score).map(String.init) ?? "—",
                       unit: score == nil ? "" : "%", progress: score.map { $0 / 100 }, color: tint)
                 .frame(maxWidth: .infinity)
             availability
@@ -124,7 +124,7 @@ struct RecoveryDetailView: View {
     private var trend: some View {
         let start = RecoveryStrainDetailLogic.startKey(selectedDay: key, days: trendDays - 1)
         let points = history.filter { $0.day >= start }.compactMap { day -> TrendPoint? in
-            guard let score = day.recovery, score.isFinite, let date = RecoveryStrainDetailLogic.date(day.day) else { return nil }
+            guard let score = day.recovery, RecoveryStrainDetailLogic.recoveryPercent(score) != nil, let date = RecoveryStrainDetailLogic.date(day.day) else { return nil }
             return TrendPoint(date: date, value: score)
         }
         return VStack(alignment: .leading, spacing: NoopMetrics.space3) {
@@ -161,7 +161,7 @@ private struct RecoveryHistoryPlot: View {
                         .foregroundStyle(StrandPalette.recoveryColor(point.value))
                         .cornerRadius(NoopMetrics.space1)
                         .accessibilityLabel(point.date.formatted(date: .abbreviated, time: .omitted))
-                        .accessibilityValue("\(Int(point.value.rounded()))%")
+                        .accessibilityValue("\(RecoveryStrainDetailLogic.recoveryPercent(point.value).map(String.init) ?? "—")%")
                 }
                 if let selected {
                     RuleMark(x: .value("Date", selected.date, unit: .day))
@@ -182,7 +182,7 @@ private struct RecoveryHistoryPlot: View {
             }
             .frame(height: NoopMetrics.chartHeight)
             if let point = selected {
-                Text("\(point.date.formatted(date: .abbreviated, time: .omitted)) · \(Int(point.value.rounded()))%")
+                Text("\(point.date.formatted(date: .abbreviated, time: .omitted)) · \(RecoveryStrainDetailLogic.recoveryPercent(point.value).map(String.init) ?? "—")%")
                     .font(StrandFont.captionNumber).foregroundStyle(StrandPalette.recoveryColor(point.value))
             }
         }

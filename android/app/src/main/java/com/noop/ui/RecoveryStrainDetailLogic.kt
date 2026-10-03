@@ -1,7 +1,12 @@
 package com.noop.ui
 
+import kotlin.math.floor
+
 internal object RecoveryStrainDetailLogic {
     enum class TargetStatus { Unavailable, Under, Optimal, Over }
+
+    fun recoveryPercent(score: Double?): Int? =
+        score?.takeIf { it.isFinite() && it in 0.0..100.0 }?.let { floor(it).toInt() }
 
     fun priorMean(
         dayKeys: List<String>,

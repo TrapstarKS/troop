@@ -5,6 +5,11 @@ enum RecoveryStrainDetailLogic {
         case unavailable, under, optimal, over
     }
 
+    static func recoveryPercent(_ score: Double?) -> Int? {
+        guard let score, score.isFinite, (0...100).contains(score) else { return nil }
+        return Int(floor(score))
+    }
+
     static func priorMean(dayKeys: [String], values: [Double?], fromDay: String, selectedDay: String) -> Double? {
         let readings = zip(dayKeys, values).compactMap { day, value -> Double? in
             guard day >= fromDay, day < selectedDay, let value, value.isFinite else { return nil }

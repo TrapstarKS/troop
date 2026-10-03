@@ -2,6 +2,23 @@ import XCTest
 @testable import Strand
 
 final class RecoveryStrainDetailLogicTests: XCTestCase {
+    func testWholePercentPresentationKeepsTheStoredRecoveryBand() {
+        for score in stride(from: 0.0, through: 100.0, by: 0.001) {
+            let shown = RecoveryStrainDetailLogic.recoveryPercent(score)!
+            XCTAssertEqual(shown >= 67, score >= 67)
+            XCTAssertEqual(shown >= 34, score >= 34)
+        }
+        XCTAssertEqual(RecoveryStrainDetailLogic.recoveryPercent(33.999), 33)
+        XCTAssertEqual(RecoveryStrainDetailLogic.recoveryPercent(66.999), 66)
+        XCTAssertEqual(RecoveryStrainDetailLogic.recoveryPercent(34), 34)
+        XCTAssertEqual(RecoveryStrainDetailLogic.recoveryPercent(67), 67)
+        XCTAssertEqual(RecoveryStrainDetailLogic.recoveryPercent(100), 100)
+        let invalidScores: [Double?] = [nil, .nan, .infinity, -1, 101]
+        for score in invalidScores {
+            XCTAssertNil(RecoveryStrainDetailLogic.recoveryPercent(score))
+        }
+    }
+
     func testComparisonExcludesSelectedAndFutureDaysAndMissingValues() {
         let keys = ["2026-08-31", "2026-09-01", "2026-09-15", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03"]
         let values: [Double?] = [999, 10, nil, 20, .nan, 100, 1000]
