@@ -441,6 +441,15 @@
       "platform": "kotlin",
       "rationale": "Swift app-layer IntelligenceEngine.analyzeRecent keeps the source-only imported recovery fold inline. Kotlin mechanically extracts the unchanged fold into the existing persistence helper to keep its instrumented scoring coroutine under the unchanged JaCoCo bytecode budget. The call preserves source precedence, freshness marker zero, provenance, and persistence ordering; actual-engine regressions and shared Charge oracles cover behavior. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
       "twin_path": "Strand/Data/IntelligenceEngine.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/IntelligencePersistence.kt::evictSkippedChargeBaselineDays/9#1",
+      "identity_sha256": "11fb72ac8cc360a9ff6e010f159a12e1870770bcbdd57d3544585e1162305a6a",
+      "platform": "kotlin",
+      "rationale": "Swift app-layer IntelligenceEngine.analyzeRecent retains the same normal-nonempty skipped Charge baseline map eviction inline. Kotlin mechanically extracts the byte-for-byte unchanged block into the existing persistence helper to meet its unchanged JaCoCo instrumented coroutine budget. The call preserves cutoff calculation, empty/repair guards, scored-day membership, the four map removals, and placement before Charge baseline folding. This one-sided declaration disposition does not waive numeric parity or the native bytecode guard. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/IntelligenceEngine.swift"
     }
   ]
 }
