@@ -2,8 +2,10 @@ import SwiftUI
 import StrandDesign
 import UserNotifications
 
-#if !(DEBUG && NOOP_PURE_TEST_HOST)
+// Pure hosted tests use a separate entry while the production app remains typechecked.
+#if !DEBUG || !NOOP_PURE_TEST_HOST
 @main
+#endif
 struct StrandApp: App {
     init() {
         // #1008: pin the pre-change Overnight-only default for existing installs before
@@ -37,7 +39,7 @@ struct StrandApp: App {
     /// existed on macOS before this).
     @Environment(\.scenePhase) private var scenePhase
     /// Appearance preference (System/Light/Dark). Default follows the OS; the Settings picker writes it.
-    @AppStorage(AppearanceMode.storageKey) private var appearanceRaw = AppearanceMode.system.rawValue
+    @AppStorage(AppearanceMode.storageKey) private var appearanceRaw = AppearanceMode.defaultMode.rawValue
     /// Chart data-colour style (Titanium / Classic throwback). Re-colours gauges + charts.
     @AppStorage(ChartStyle.storageKey) private var chartStyleRaw = ChartStyle.titanium.rawValue
     /// Chrome accent colour (mint / WHOOP blue / custom). Chrome only — never the data colour worlds.
@@ -99,6 +101,14 @@ struct StrandApp: App {
                 .environment(\.locale, AppLanguage.activeLocale)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+#if DEBUG && NOOP_PURE_TEST_HOST
+@main
+struct StrandPureTestHost: App {
+    var body: some Scene {
+        WindowGroup { EmptyView() }
     }
 }
 #endif

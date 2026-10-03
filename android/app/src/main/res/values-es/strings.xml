@@ -2856,4 +2856,10 @@
     <string name="raw_diag_ecg_probe_start">Iniciar captura de ECG</string>
     <string name="raw_diag_ecg_probe_stop">Detener captura de ECG</string>
     <string name="raw_diag_ecg_probe_running">Puede que siga activa una captura en esta correa. El veredicto se registra en el strap log.</string>
+    <string name="whoop_nav_home">Inicio</string>
+    <string name="whoop_nav_plan">Plan</string>
+    <string name="whoop_nav_healthspan">Longevidad</string>
+    <string name="whoop_nav_weekly_plan">Plan semanal</string>
+    <string name="whoop_plan_local_title">La planificación semanal aún no está disponible</string>
+    <string name="whoop_plan_local_detail">El diario y las tendencias siguen disponibles para revisar tus hábitos y avances locales.</string>
 </resources>

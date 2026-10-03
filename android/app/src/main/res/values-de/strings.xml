@@ -2869,4 +2869,10 @@
     <string name="raw_diag_ecg_probe_start">EKG-Aufzeichnung starten</string>
     <string name="raw_diag_ecg_probe_stop">EKG-Aufzeichnung stoppen</string>
     <string name="raw_diag_ecg_probe_running">Auf diesem Strap läuft möglicherweise noch eine Aufzeichnung. Das Ergebnis steht im Strap-Log.</string>
+    <string name="whoop_nav_home">Start</string>
+    <string name="whoop_nav_plan">Plan</string>
+    <string name="whoop_nav_healthspan">Gesundheitsspanne</string>
+    <string name="whoop_nav_weekly_plan">Wochenplan</string>
+    <string name="whoop_plan_local_title">Die Wochenplanung ist noch nicht verfügbar</string>
+    <string name="whoop_plan_local_detail">Tagebuch und Trends bleiben verfügbar, um lokale Gewohnheiten und Fortschritte zu prüfen.</string>
 </resources>
