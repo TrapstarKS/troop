@@ -186,7 +186,7 @@ private struct HealthspanOrb: View {
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
                 let rect = CGRect(x: center.x - diameter / 2, y: center.y - diameter / 2, width: diameter, height: diameter)
                 context.fill(Path(ellipseIn: rect), with: .radialGradient(Gradient(colors: [StrandPalette.surfaceBase, StrandPalette.positive.opacity(0.03), StrandPalette.positive.opacity(0.32)]), center: center, startRadius: 0, endRadius: diameter / 2))
-                context.stroke(Path(ellipseIn: rect.insetBy(dx: 1, dy: 1)), with: .color(StrandPalette.positive.opacity(0.5)), lineWidth: NoopMetrics.hairlineWidth)
+                context.stroke(Path(ellipseIn: rect.insetBy(dx: NoopMetrics.hairlineWidth, dy: NoopMetrics.hairlineWidth)), with: .color(StrandPalette.positive.opacity(0.5)), lineWidth: NoopMetrics.hairlineWidth)
                 for i in 0..<160 {
                     let angle = Double(i) * 2.3999632297
                     let radius = diameter * (0.27 + 0.22 * Double((i * 37) % 101) / 100)
