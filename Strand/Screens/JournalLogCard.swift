@@ -386,7 +386,7 @@ struct JournalLogCard: View {
                         .foregroundStyle(StrandPalette.textTertiary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear \(item.localizedDisplay)")
+                .accessibilityLabel(Text(verbatim: String(format: String(localized: "Clear %@"), item.localizedDisplay)))
             }
         }
     }
