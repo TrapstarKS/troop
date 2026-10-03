@@ -88,7 +88,7 @@ extension View {
                 case .sleepPlanner: SmartAlarmView()
                 case .healthMonitor, .healthspan: HealthView()
                 case .stressMonitor: StressView()
-                case .weeklyPlan: TabRoutePlaceholder(title: "Weekly Plan")
+                case .weeklyPlan: WeeklyPlanView()
                 case .journal: InsightsView()
                 }
             }

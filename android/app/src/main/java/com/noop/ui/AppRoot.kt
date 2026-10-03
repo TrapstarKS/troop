@@ -689,14 +689,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     )
                 }
                 composable(Destination.Plan.route) { PlanLanding(onNavigate = { nav.navigate(it) }) }
-                composable(Destination.WeeklyPlan.route) {
-                    ScreenScaffold(title = stringResource(R.string.whoop_nav_weekly_plan),
-                        topBackground = screenBackdropSlot(false, false),
-                        fullBleedBackground = screenBackdropFullBleed(false, false)) {
-                        DataPendingNote(stringResource(R.string.whoop_plan_local_title),
-                            stringResource(R.string.whoop_plan_local_detail))
-                    }
-                }
+                composable(Destination.WeeklyPlan.route) { WeeklyPlanScreen(viewModel) }
                 composable(Destination.RecoveryDetail.route) {
                     RecoveryDetailScreen(vm = viewModel, onBack = { nav.popBackStack() })
                 }
