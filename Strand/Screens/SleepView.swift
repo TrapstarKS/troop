@@ -823,7 +823,8 @@ struct SleepView: View {
     @ViewBuilder
     private func stageCard(_ night: Night, intervals: [SleepInterval]) -> some View {
         let s = night.stages
-        let isPersisted = (night.realSegments?.count ?? 0) >= 2
+        let recorded = recordedIntervals(intervals, night: night)
+        let isPersisted = night.realSegments != nil && !recorded.isEmpty
         // An Oura night's stages are the ring's RAW on-device SleepNet classification (decoded off the 0x49
         // phase stream), NOT a NOOP approximation — so it gets its own honest caption instead of the
         // "stages approximate (on-device)" one that describes NOOP's own sparse-motion staging.
@@ -839,7 +840,7 @@ struct SleepView: View {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                         Text("Stage breakdown").strandOverline()
                         Text(subtitle).font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
-                        SleepStageInspectionChart(intervals: recordedIntervals(intervals, night: night), nightStart: night.onsetDate,
+                        SleepStageInspectionChart(intervals: recorded, nightStart: night.onsetDate,
                                                   span: TimeInterval(night.session.endTs - night.session.effectiveStartTs),
                                                   highlightedStage: selectedStage)
                         stageBreakdownRows(s)
@@ -2108,62 +2109,37 @@ struct SleepView: View {
     @ViewBuilder
     private func nightNavHeader(trailing: String) -> some View {
         let lastIndex = max(navDays.count - 1, 0)
-        let title = nightRelativeLabel
-        VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
-            HStack(spacing: NoopMetrics.cardInnerSpacing) {
+        return VStack(spacing: NoopMetrics.space2) {
+            HStack(spacing: NoopMetrics.space3) {
                 Button { if nightOffset < lastIndex { nightOffset += 1 } } label: {
-                    Image(systemName: "chevron.left")
-                        .font(StrandFont.headline)
-                        .foregroundStyle(nightOffset >= lastIndex ? StrandPalette.textTertiary : StrandPalette.accent)
+                    Image(systemName: "chevron.left").font(StrandFont.headline)
+                        .frame(minWidth: NoopMetrics.touchTarget, minHeight: NoopMetrics.touchTarget)
                 }
                 .buttonStyle(LiquidPressStyle())
                 .disabled(nightOffset >= lastIndex)
                 .accessibilityLabel("Previous night")
-
-                HStack(alignment: .bottom, spacing: NoopMetrics.space3) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Sleep").strandOverline()
-                        Text(title)
-                            .font(StrandFont.title2)
-                            .foregroundStyle(StrandPalette.textPrimary)
-                    }
-                    Spacer(minLength: NoopMetrics.space2)
-                    Text(trailing)
-                        .font(StrandFont.caption.weight(.semibold))
+                VStack(spacing: NoopMetrics.space1) {
+                    Text("Sleep").strandOverline()
+                    Text(nightRelativeLabel).font(StrandFont.headline)
+                    Text(trailing).font(StrandFont.caption)
                         .foregroundStyle(StrandPalette.textSecondary)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, NoopMetrics.space3)
-                        .padding(.vertical, NoopMetrics.space2)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(StrandPalette.surfaceInset)
-                                .overlay {
-                                    Capsule(style: .continuous)
-                                        .stroke(StrandPalette.hairline, lineWidth: 1)
-                                }
-                        )
-                        .padding(.bottom, 1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
                 Button { if nightOffset > 0 { nightOffset -= 1 } } label: {
-                    Image(systemName: "chevron.right")
-                        .font(StrandFont.headline)
-                        .foregroundStyle(nightOffset == 0 ? StrandPalette.textTertiary : StrandPalette.accent)
+                    Image(systemName: "chevron.right").font(StrandFont.headline)
+                        .frame(minWidth: NoopMetrics.touchTarget, minHeight: NoopMetrics.touchTarget)
                 }
                 .buttonStyle(LiquidPressStyle())
                 .disabled(nightOffset == 0)
                 .accessibilityLabel("Next night")
             }
-            // When the older-night arrow is disabled because no earlier night is banked yet, the
-            // chevron just greying out reads as broken. Show a short, honest hint instead — earlier
-            // nights only appear once the strap has offloaded them (next-morning sync). (#614 follow-up)
+            .foregroundStyle(StrandPalette.textPrimary)
             if nightOffset >= lastIndex {
                 Text("No earlier night stored yet. Earlier nights sync in the morning.")
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
-                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
     }
