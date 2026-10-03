@@ -44,8 +44,9 @@ struct StrainDetailView: View {
                 }
             } else {
                 ForEach(workouts.indices, id: \.self) { index in
-                    NavigationLink { ActivityDetailView(row: workouts[index]) } label: {
-                        DetailActivityRow(row: workouts[index])
+                    let workout = workouts[index]
+                    NavigationLink { ActivityDetailView(row: workout) } label: {
+                        DetailActivityRow(row: workout)
                     }.buttonStyle(.plain)
                 }
             }
