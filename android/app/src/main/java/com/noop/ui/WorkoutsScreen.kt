@@ -136,6 +136,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlin.math.floor
 
 /**
  * Workouts — the activity log, instrument-grade and uniform. Ports the macOS
@@ -1620,7 +1621,8 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
             // HR-zone split — imported percentages when present, else derived from strap HR (#410).
             zoneMinutes?.let { z ->
                 val total = z.sum()
-                if (total > 0.0) {
+                if (z.size == 5 && z.all { RecoveryStrainDetailLogic.wholeNumber(it) != null } &&
+                    RecoveryStrainDetailLogic.wholeNumber(total)?.let { it > 0 } == true) {
                     CardDivider()
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Overline("HR zones", modifier = Modifier.weight(1f))
@@ -2498,15 +2500,16 @@ private fun timeRangeLabel(startTs: Long, endTs: Long): String =
 
 private fun durationLabel(s: Double?): String {
     if (s == null || s <= 0.0) return "–"
-    val total = s.roundToInt()
-    val h = total / 3600
-    val m = (total % 3600) / 60
+    val total = RecoveryStrainDetailLogic.wholeNumber(floor(s / 60)) ?: return "–"
+    val h = total / 60
+    val m = total % 60
     return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
 
 private fun oneDecimal(v: Double): String = String.format(Locale.US, "%.1f", v)
 
-private fun grouped(v: Double): String = String.format(Locale.US, "%,d", v.roundToInt())
+private fun grouped(v: Double): String = RecoveryStrainDetailLogic.wholeNumber(v)
+    ?.let { String.format(Locale.US, "%,d", it) } ?: "–"
 
 // MARK: - Sport icons (Material equivalents of the SF Symbols used on macOS)
 

@@ -1807,10 +1807,10 @@ struct WorkoutsView: View {
     }
 
     private func durationLabel(_ s: Double?) -> String {
-        guard let s, s > 0 else { return "–" }
-        let total = Int(s.rounded())
-        let h = total / 3600
-        let m = (total % 3600) / 60
+        guard let s, s > 0,
+              let total = RecoveryStrainDetailLogic.wholeNumber(floor(s / 60)) else { return "–" }
+        let h = total / 60
+        let m = total % 60
         if h > 0 { return String(localized: "\(h)h \(m)m") }
         return String(localized: "\(m)m")
     }
@@ -1830,7 +1830,8 @@ struct WorkoutsView: View {
     private func oneDecimal(_ v: Double) -> String { String(format: "%.1f", v) }
 
     private func grouped(_ v: Double) -> String {
-        Self.intFmt.string(from: NSNumber(value: Int(v.rounded()))) ?? "\(Int(v.rounded()))"
+        guard let whole = RecoveryStrainDetailLogic.wholeNumber(v) else { return "–" }
+        return Self.intFmt.string(from: NSNumber(value: whole)) ?? String(whole)
     }
     private static let intFmt: NumberFormatter = {
         let f = NumberFormatter()

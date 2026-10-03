@@ -99,10 +99,14 @@ struct RecoveryDetailView: View {
                     let kind = reading.kind == .deviation ? SkinTempDisplay.kind(of: reading.value) : reading.kind
                     let unit = UnitPrefs.resolveTemperature(system: UnitSystem(rawValue: unitSystem) ?? .metric, override: temperature)
                     Divider().overlay(StrandPalette.hairline)
-                    ContributorRow(label: String(localized: "Skin temperature"),
-                                   value: kind == .absolute ? UnitFormatter.temperatureFromCelsius(reading.value, unit: unit) : UnitFormatter.temperatureDeltaFromCelsius(reading.value, unit: unit),
-                                   systemImage: "thermometer",
-                                   comparison: kind == .absolute ? String(localized: "Wrist temperature") : String(localized: "From your baseline"))
+                    VStack(alignment: .trailing, spacing: NoopMetrics.space2) {
+                        ContributorRow(label: String(localized: "Skin temperature"),
+                                       value: kind == .absolute ? UnitFormatter.temperatureFromCelsius(reading.value, unit: unit) : UnitFormatter.temperatureDeltaFromCelsius(reading.value, unit: unit),
+                                       systemImage: "thermometer")
+                        Text(kind == .absolute ? String(localized: "Wrist temperature") : String(localized: "From your baseline"))
+                            .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                            .multilineTextAlignment(.trailing)
+                    }
                 }
                 Text("Only available measurements are shown. Missing values are not treated as zero.")
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
@@ -120,10 +124,14 @@ struct RecoveryDetailView: View {
             let change = String(format: "%+.1f", locale: AppLanguage.activeLocale, delta)
             return String(localized: "\(change) \(unit) · \(comparison)")
         } ?? comparison
-        return ContributorRow(label: label, value: format(value), unit: unit, systemImage: icon,
-                              comparison: comparisonText,
-                              comparisonSystemImage: delta.map { abs($0) < 0.05 ? "minus" : $0 > 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill" },
-                              comparisonColor: favorable.map { $0 ? StrandPalette.positive : StrandPalette.statusWarning })
+        return VStack(alignment: .trailing, spacing: NoopMetrics.space2) {
+            ContributorRow(label: label, value: format(value), unit: unit, systemImage: icon)
+            Text(comparisonText)
+                .font(StrandFont.caption)
+                .foregroundStyle(favorable.map { $0 ? StrandPalette.positive : StrandPalette.statusWarning } ?? StrandPalette.textSecondary)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var trend: some View {

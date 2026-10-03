@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.noop.R
 import com.noop.analytics.Baselines
@@ -118,10 +119,8 @@ fun RecoveryDetailScreen(
                         days, selectedKey, { it.respRateBpm })
                     val sleepByDay = sleepPerformance.toMap()
                     val sleep = sleepByDay[selectedKey] ?: selected?.let { RestScorer.restFromDaily(it) }
-                    val sleepMean = RecoveryStrainDetailLogic.priorMean(days.map { it.day }, days.map { sleepByDay[it.day] ?: RestScorer.restFromDaily(it) },
-                        date.minusDays(30).toString(), selectedKey)
-                    ContributorRow(uiString(R.string.d2b_sleep_performance), detailNumber(sleep, 0), "%",
-                        comparison = detailComparison(sleep, sleepMean, "%", 0))
+                    DetailContributor(uiString(R.string.d2b_sleep_performance), sleep, "%", days, selectedKey,
+                        { sleepByDay[it.day] ?: RestScorer.restFromDaily(it) }, decimals = 0)
                     selected?.spo2Pct?.takeIf { it.isFinite() }?.let {
                         DetailContributor(uiString(R.string.d2b_blood_oxygen), it, "%", days, selectedKey, { row -> row.spo2Pct })
                     }
@@ -131,8 +130,12 @@ fun RecoveryDetailScreen(
                             val unit = UnitPrefs.temperature(context)
                             val value = if (kind == SkinTempDisplay.Kind.ABSOLUTE) UnitFormatter.temperatureFromCelsius(reading.value, unit)
                                 else UnitFormatter.temperatureDeltaFromCelsius(reading.value, unit)
-                            ContributorRow(uiString(R.string.d2b_skin_temperature), value,
-                                comparison = uiString(if (kind == SkinTempDisplay.Kind.ABSOLUTE) R.string.d2b_absolute_temperature else R.string.d2b_temperature_deviation))
+                            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+                                ContributorRow(uiString(R.string.d2b_skin_temperature), value)
+                                Text(uiString(if (kind == SkinTempDisplay.Kind.ABSOLUTE) R.string.d2b_absolute_temperature else R.string.d2b_temperature_deviation),
+                                    style = NoopType.caption, color = Palette.textSecondary, textAlign = TextAlign.End)
+                            }
                         }
                     }
                 }
@@ -362,9 +365,13 @@ private fun DetailContributor(
         detailDate(selectedKey).minusDays(30).toString(), selectedKey)
     val favorable = if (current != null && current.isFinite() && mean != null && higherFavorable != null && kotlin.math.abs(current - mean) >= 0.05)
         (current > mean) == higherFavorable else null
-    ContributorRow(label, detailNumber(current, decimals), unit,
-        comparison = detailComparison(current, mean, unit, decimals),
-        comparisonColor = when (favorable) { true -> Palette.positive; false -> Palette.statusWarning; null -> Palette.textSecondary })
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+        ContributorRow(label, detailNumber(current, decimals), unit)
+        Text(detailComparison(current, mean, unit, decimals), style = NoopType.caption,
+            color = when (favorable) { true -> Palette.positive; false -> Palette.statusWarning; null -> Palette.textSecondary },
+            textAlign = TextAlign.End)
+    }
 }
 
 private fun detailComparison(current: Double?, mean: Double?, unit: String, decimals: Int): String {

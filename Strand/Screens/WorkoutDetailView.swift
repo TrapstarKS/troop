@@ -479,13 +479,15 @@ struct WorkoutDetailView: View {
     // MARK: - HR zones
 
     @ViewBuilder private var zonesCard: some View {
-        if let z = zoneMinutes, z.reduce(0, +) > 0 {
+        if let z = zoneMinutes, z.count == 5,
+           z.allSatisfy({ RecoveryStrainDetailLogic.wholeNumber($0) != nil }),
+           let totalMinutes = RecoveryStrainDetailLogic.wholeNumber(z.reduce(0, +)), totalMinutes > 0 {
             let total = z.reduce(0, +)
             let busiest = z.indices.max(by: { z[$0] < z[$1] }) ?? 0
             VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                 SectionHeader("HR Zones",
                               overline: zonesFromImport ? "Whoop import" : "From strap HR",
-                              trailing: String(localized: "\(Int(total.rounded()))m in zone"))
+                              trailing: String(localized: "\(totalMinutes)m in zone"))
                 NoopCard(tint: StrandPalette.effortColor) {
                     VStack(alignment: .leading, spacing: 12) {
                         GeometryReader { geo in
@@ -590,9 +592,9 @@ struct WorkoutDetailView: View {
         end > start ? "\(timeLabel(start))-\(timeLabel(end))" : timeLabel(start)
     }
     private func durationLabel(_ s: Double?) -> String {
-        guard let s, s > 0 else { return "–" }
-        let total = Int(s.rounded())
-        let h = total / 3600, m = (total % 3600) / 60
+        guard let s, s > 0,
+              let total = RecoveryStrainDetailLogic.wholeNumber(floor(s / 60)) else { return "–" }
+        let h = total / 60, m = total % 60
         if h > 0 { return String(localized: "\(h)h \(m)m") }
         return String(localized: "\(m)m")
     }
@@ -601,7 +603,8 @@ struct WorkoutDetailView: View {
         return UnitFormatter.distanceFromMeters(m, system: distanceUnitSystem)
     }
     private func grouped(_ v: Double) -> String {
-        Self.intFmt.string(from: NSNumber(value: Int(v.rounded()))) ?? "\(Int(v.rounded()))"
+        guard let whole = RecoveryStrainDetailLogic.wholeNumber(v) else { return "–" }
+        return Self.intFmt.string(from: NSNumber(value: whole)) ?? String(whole)
     }
     private static let intFmt: NumberFormatter = {
         let f = NumberFormatter(); f.numberStyle = .decimal; f.maximumFractionDigits = 0; return f
