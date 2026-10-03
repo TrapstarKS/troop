@@ -8,6 +8,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     let dayOffset: Int
     var windowDayKey: String? = nil
     private var isToday: Bool { dayOffset == 0 }
+    private var activityDayKey: String { windowDayKey ?? dayKey }
     let day: DailyMetric?
     let sleepScore: Double?
     let recovery: Double?
@@ -94,7 +95,8 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
             dial(label: String(localized: "Sleep"), value: sleepValue,
                  display: sleepValue.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
                  color: StrandPalette.sleepPrimary,
-                 caption: sleepValue == nil ? String(localized: isToday ? "No sleep yet" : "No data for this day") : nil)
+                 caption: sleepValue == nil ? String(localized: day?.totalSleepMin != nil
+                    ? "Not enough data" : (isToday ? "No sleep yet" : "No data for this day")) : nil)
         }
         .buttonStyle(.plain)
     }
@@ -173,7 +175,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 TrackedSectionHeader(title: String(localized: "My Day"))
                 Menu {
                     Button {
-                        manualEndDate = HomeDayActivities.manualEnd(dayKey: dayKey)
+                        manualEndDate = HomeDayActivities.manualEnd(dayKey: activityDayKey)
                         showManualActivity = true
                     } label: {
                         Label("Add activity", systemImage: "plus")
@@ -205,7 +207,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                                  value: day?.totalSleepMin.map { HomeDayActivities.duration($0) } ?? "—",
                                  icon: "moon.fill", color: StrandPalette.sleepPrimary)
                     }
-                    ForEach(Array(HomeDayActivities.rows(workouts, dayKey: dayKey).enumerated()), id: \.offset) { _, workout in
+                    ForEach(Array(HomeDayActivities.rows(workouts, dayKey: activityDayKey).enumerated()), id: \.offset) { _, workout in
                         Divider().overlay(StrandPalette.hairline)
                         Button { onWorkout(workout) } label: {
                             eventRow(title: WorkoutSource.displaySport(workout.sport),
@@ -217,7 +219,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                                      icon: "figure.run", color: StrandPalette.strainPrimary)
                         }
                     }
-                    if HomeDayActivities.rows(workouts, dayKey: dayKey).isEmpty {
+                    if HomeDayActivities.rows(workouts, dayKey: activityDayKey).isEmpty {
                         Text("No activities").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                     }
                 }

@@ -1224,7 +1224,7 @@ fun TodayScreen(
     val openAddActivity: () -> Unit = {
         val now = java.time.ZonedDateTime.now()
         val nowMillis = now.toInstant().toEpochMilli()
-        manualActivityEndMillis = LocalDate.parse(selectedDayKey).atTime(now.toLocalTime()).atZone(now.zone)
+        manualActivityEndMillis = selectedDay.atTime(now.toLocalTime()).atZone(now.zone)
             .toInstant().toEpochMilli().coerceAtMost(nowMillis)
     }
     val homeWorkoutRows by viewModel.workouts.collectAsStateWithLifecycle()
@@ -1237,22 +1237,31 @@ fun TodayScreen(
         if (!activeIsWhoop || !liveSnap.connected || liveSnap.charging == true ||
             !testCentre.active(com.noop.testcentre.TestDomain.BATTERY)) return@LaunchedEffect
         val now = System.currentTimeMillis() / 1000
-        val samples = viewModel.repo.batterySamples(homeStrapId, now - 14L * 86_400, now, limit = 2_000)
-            .mapNotNull { sample -> sample.soc?.let { sample.ts to it } }
         val rated = if (liveSnap.whoop5) BatteryEstimator.ratedLifeHoursWhoop5 else BatteryEstimator.ratedLifeHoursWhoop4
-        val trace = withContext(Dispatchers.Default) { BatteryEstimator.estimateTrace(samples, rated).second }
+        val trace = try {
+            val samples = viewModel.repo.batterySamples(homeStrapId, now - 14L * 86_400, now, limit = 2_000)
+                .mapNotNull { sample -> sample.soc?.let { sample.ts to it } }
+            withContext(Dispatchers.Default) { BatteryEstimator.estimateTrace(samples, rated).second }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            viewModel.ble.externalLog("Battery analysis unavailable (${error.javaClass.simpleName})",
+                com.noop.testcentre.TestDomain.BATTERY)
+            return@LaunchedEffect
+        }
         ensureActive()
         if (homeStrapId != viewModel.activeStrapId || !testCentre.active(com.noop.testcentre.TestDomain.BATTERY)) {
             return@LaunchedEffect
         }
         for (line in trace) viewModel.ble.externalLog(line, com.noop.testcentre.TestDomain.BATTERY)
     }
-    LaunchedEffect(days, selectedDayKey, homeStrapId, homeWorkoutRows) {
+    LaunchedEffect(days, selectedDay, selectedDayKey, homeStrapId, homeWorkoutRows) {
         val effectDayKey = selectedDayKey
+        val effectWindowDay = selectedDay
         val effectStrapId = homeStrapId
         homeDayWorkouts = emptyList()
         homeDayStress = null
-        val date = LocalDate.parse(effectDayKey)
+        val date = effectWindowDay
         val zone = ZoneId.systemDefault()
         val start = date.atStartOfDay(zone).toEpochSecond()
         val end = date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1
