@@ -536,6 +536,7 @@ fun SleepScreen(
     }
     val recordedStages = remember(night) { selectedNightStages(night) }
     val display = remember(model, night, recordedStages) { heroDisplay(model, night, recordedStages) }
+    val h9Display = remember(model, night) { heroDisplay(model, night, recordedStages = null) }
 
     val resultSnapshot = if (night != null && display != null) SleepResultSnapshot(
         scope = "${vm.activeStrapId}:${(night.heroGroup.ifEmpty { listOf(night.session) }).map { it.deviceId }.distinct().sorted().joinToString(",")}:${night.dayKey}",
@@ -839,6 +840,7 @@ fun SleepScreen(
                         display = display,
                         efficiencyPct = selectedEfficiencyPct,
                         asleepMin = selectedAmounts.asleepMin,
+                        h9Stages = h9Display?.stages,
                         activeIsOura = activeIsOura,
                         nightHr = nightHr,
                         session = night?.session,
@@ -1229,6 +1231,7 @@ private fun Hero(
     display: HeroDisplay?,
     efficiencyPct: Double?,
     asleepMin: Double?,
+    h9Stages: Stages?,
     activeIsOura: Boolean = false,
     session: SleepSession? = null,
     nightHr: List<HrBucket> = emptyList(),
@@ -1389,9 +1392,10 @@ private fun Hero(
             // efficiencyPct. Mirrors iOS SleepView.stageStagingIsLowConfidence.
             // Stored first, as a fraction (rows have carried both 0..1 and 0..100); otherwise
             // asleep/in-bed, capped, which is what iOS falls back to when no row value exists.
-            val h9Efficiency = efficiencyPct?.div(100.0)
-            if (h9Efficiency != null &&
-                stageStagingIsLowConfidence(s.asleep, s.deep, s.rem, h9Efficiency)
+            val h9Efficiency = session?.efficiency?.let { if (it <= 1.0) it else it / 100.0 }
+                ?: h9Stages?.takeIf { it.total > 0.0 }?.let { minOf(1.0, it.asleep / it.total) }
+            if (h9Efficiency != null && h9Stages != null &&
+                stageStagingIsLowConfidence(h9Stages.asleep, h9Stages.deep, h9Stages.rem, h9Efficiency)
             ) {
                 SleepLowConfidenceNote()
             }

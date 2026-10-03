@@ -107,7 +107,10 @@ class SleepSelectedDetailTest {
         val detail = selectedSleepDetailModel(listOf(daily), selected, ImportedSleepSeries(),
             emptyMap(), listOf(first, second, nap), true)!!
         val display = heroDisplay(detail, selected, stages)!!
+        val h9Display = heroDisplay(detail, selected, recordedStages = null)!!
         val amounts = selectedSleepAmounts(stages, daily, detail.hoursVsNeeded.selectedValue(), null)
+        assertEquals(detail.stages, h9Display.stages)
+        assertEquals(420.0 / 0.9 - 420.0, h9Display.stages.awake, 1e-9)
         assertEquals(15.0, display.stages.awake, 0.0)
         assertEquals(255.0, display.stages.total, 0.0)
         assertEquals(240.0, display.stages.asleep, 0.0)
@@ -140,5 +143,14 @@ class SleepSelectedDetailTest {
         assertEquals(450.0, withoutDay.needMin!!, 0.0)
         assertNull(withoutDay.sufficiencyPct)
         assertNull(napAsleepMinutes(listOf(selected.session)))
+        val awakeNight = selected.copy(session = selected.session.copy(
+            stagesJSON = """{"awake":60,"light":0,"deep":0,"rem":0}"""))
+        val awakeStages = selectedNightStages(awakeNight)!!
+        assertEquals(60.0, awakeStages.total, 0.0)
+        val awakeAmounts = selectedSleepAmounts(awakeStages, daily, detail.hoursVsNeeded.selectedValue(), null)
+        assertEquals(0.0, awakeAmounts.asleepMin!!, 0.0)
+        assertEquals(0.0, awakeAmounts.sufficiencyPct!!, 0.0)
+        assertEquals(0.0, heroDisplay(detail, awakeNight)!!.stages.asleep, 0.0)
+        assertEquals(0.0, selectedSleepEfficiency(awakeNight, listOf(daily))!!, 0.0)
     }
 }
