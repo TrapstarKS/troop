@@ -110,8 +110,10 @@ final class IntelligenceRRSourceTests: XCTestCase {
                 }
                 _ = try await store.upsertDailyMetrics(imported, deviceId: source)
                 _ = try await store.upsertDailyMetrics([chargeDay(day, hrv: 44)], deviceId: canonical + "-noop")
-                _ = try await store.upsertMetricSeries([MetricPoint(day: day,
-                    key: "hrv_fresh_scoring_valid", value: 1)], deviceId: canonical + "-noop")
+                _ = try await store.upsertMetricSeries([
+                    MetricPoint(day: day, key: "hrv_fresh_scoring_valid", value: 1),
+                    MetricPoint(day: day, key: "resp_fresh_scoring_valid", value: 1)
+                ], deviceId: canonical + "-noop")
                 _ = try await store.insert(Streams(rr: [RRInterval(ts: now - 10, rrMs: 1000,
                     srcChannel: .whoop5Historical)]), deviceId: active)
                 let repo = Repository(deviceId: canonical)
@@ -122,6 +124,14 @@ final class IntelligenceRRSourceTests: XCTestCase {
                 XCTAssertEqual(proof, [ChargeHrvProof(day: day, value: 50, freshScoringValid: 0)])
                 let display = await repo.unionComputedDailyMetrics(store: store, from: day, to: day)
                 XCTAssertEqual(display.first?.avgHrv, 50)
+                XCTAssertEqual(display.first?.respRateBpm, 14)
+                let reliability = try await repo.signalReliabilityByDay(from: day, to: day)
+                XCTAssertEqual(reliability.resp[day]?.value, 14)
+                XCTAssertEqual(reliability.resp[day]?.eligible, false)
+                XCTAssertFalse(reliability.resp[day]?.matches(14) ?? true)
+                let respiratoryProof = try await store.hrvProvenance(deviceIds: [canonical + "-noop"],
+                    from: day, to: day)
+                XCTAssertEqual(respiratoryProof.first?.respFreshScoringValid, 0)
                 XCTAssertNotNil(display.first?.recovery, "the imported recovery remains available for display")
                 for boundary: String? in [nil, day] {
                     let own = await repo.unionChargeComputedDailyMetrics(store: store, from: day, to: day,

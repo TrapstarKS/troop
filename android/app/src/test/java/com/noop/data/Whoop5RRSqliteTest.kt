@@ -6,6 +6,7 @@ import com.noop.ingest.RawSensorExport
 import com.noop.analytics.AnalyticsEngine
 import com.noop.analytics.DayCycleMode
 import com.noop.analytics.IntelligenceEngine
+import com.noop.analytics.HealthSignalReliability
 import com.noop.analytics.RegistryDayOwnerSource
 import com.noop.analytics.SleepStageHealer
 import com.noop.analytics.StageSegment
@@ -539,13 +540,14 @@ class Whoop5RRSqliteTest {
         val source = "garmin-import"
         val imported = (9L downTo 0L).map { back ->
             DailyMetric(source, java.time.LocalDate.parse(anchor).minusDays(back).toString(),
-                avgHrv = 44.0, restingHr = 60, totalSleepMin = 480.0, efficiency = 0.9)
+                avgHrv = 44.0, restingHr = 60, totalSleepMin = 480.0, efficiency = 0.9, respRateBpm = 14.0)
         }
         imported.forEach { days[it.deviceId to it.day] = it }
         val computedId = "$id-noop"
         days[computedId to anchor] = DailyMetric(computedId, anchor,
-            avgHrv = 77.25, restingHr = 55, recovery = 0.42)
+            avgHrv = 77.25, restingHr = 55, recovery = 0.42, respRateBpm = 14.0)
         freshMarker(anchor, 1.0)
+        repo.upsertMetricSeries(listOf(MetricSeriesRow(computedId, anchor, "resp_fresh_scoring_valid", 1.0)))
         assertEquals(ChargeHrvProof(anchor, 77.25, 1.0),
             dao.chargeHrvProof(computedId, anchor, anchor).single())
         val registry = DeviceRegistry(dao, object : DeviceRegistry.Transactor {
@@ -555,6 +557,17 @@ class Whoop5RRSqliteTest {
             nowSeconds = now, ownerSource = RegistryDayOwnerSource(registry), dayCycleMode = DayCycleMode.MIDNIGHT)
         val latest = days.getValue(computedId to anchor)
         assertEquals(44.0, latest.avgHrv!!, 0.0)
+        assertEquals(14.0, latest.respRateBpm!!, 0.0)
+        val respFresh = repo.metricSeries(computedId, "resp_fresh_scoring_valid", anchor, anchor).single().value
+        assertEquals(0.0, respFresh, 0.0)
+        assertNull(HealthSignalReliability.respiration(latest.respRateBpm, computed = true,
+            freshScoringValid = respFresh))
+        val signalSnapshot = IllnessHistory.resolve(listOf(latest), listOf(HrvProvenanceRow(
+            computedId, anchor, latest.avgHrv, 0.0, null, latest.respRateBpm, respFresh)),
+            repo.importedSourceIds(id) + repo.computedSourceIds(id), repo.computedSourceIds(id), id)
+        assertNull(signalSnapshot.alertDays.single().respRateBpm)
+        assertFalse(signalSnapshot.respReliabilityByDay.getValue(anchor).eligible)
+        assertFalse(signalSnapshot.respReliabilityByDay.getValue(anchor).matches(14.0))
         assertNotNull(latest.recovery)
         assertEquals(latest.avgHrv, result.single { it.day == anchor }.hrv)
         assertEquals(latest.recovery, result.single { it.day == anchor }.recovery)

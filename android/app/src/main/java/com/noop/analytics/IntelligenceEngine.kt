@@ -1892,6 +1892,7 @@ object IntelligenceEngine {
                 val scored = row.copy(deviceId = computedId, recovery = recovery)
                 dailies.add(scored)
                 restRows.add(MetricSeriesRow(computedId, w.day, "hrv_fresh_scoring_valid", 0.0))
+                restRows.add(MetricSeriesRow(computedId, w.day, "resp_fresh_scoring_valid", 0.0))
                 importScoredDays.add(w.day)
                 // Health Connect's compatibility DailyMetric row lives under `my-whoop`, while its
                 // AppleDaily row retains the real source. Preserve that provider fact without changing
