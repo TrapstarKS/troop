@@ -1446,7 +1446,10 @@ struct LiquidTodayView: View {
                 } label: { tile }
                 .buttonStyle(.plain)
             } else if key == HeroRingMetric.rest {
-                NavigationLink(value: TabRoute.sleepDetail) { tile }.buttonStyle(.plain)
+                NavigationLink {
+                    SleepView(initialDayKey: selectedDayKey)
+                } label: { tile }
+                .buttonStyle(.plain)
             } else if let metric = detailMetric ?? key.flatMap({ key in
                 MetricCatalog.all.first(where: { $0.key == key })
             }) {

@@ -1650,6 +1650,11 @@ struct TodayView: View {
                                 StrainDetailView(dayKey: selectedDayKey, effortOverride: effortStrain(displayDay))
                             } label: { keyMetricTile(metric) }
                             .buttonStyle(.plain)
+                        } else if metric == .rest {
+                            NavigationLink {
+                                SleepView(initialDayKey: selectedDayKey)
+                            } label: { keyMetricTile(metric) }
+                            .buttonStyle(.plain)
                         } else {
                             NavigationLink(value: HomeMetricRoute.route(metric)) { keyMetricTile(metric) }
                                 .buttonStyle(.plain)

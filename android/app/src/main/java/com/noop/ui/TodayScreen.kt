@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Accessibility
 import androidx.compose.material.icons.filled.Add
@@ -335,6 +336,8 @@ fun TodayScreen(
     onOpenPlan: (() -> Unit)? = null,
     onOpenRecoveryForDay: ((String) -> Unit)? = null,
     onOpenStrainForDay: ((String, Double?) -> Unit)? = null,
+    onOpenSleepPlanner: (() -> Unit)? = null,
+    onOpenSleepForDay: ((String) -> Unit)? = null,
 ) {
     val today by viewModel.today.collectAsStateWithLifecycle()
     val alert by viewModel.healthAlert.collectAsStateWithLifecycle()
@@ -1072,6 +1075,19 @@ fun TodayScreen(
     }
     var recoveryDetailDayKey by remember { mutableStateOf<String?>(null) }
     var strainDetailRequest by remember { mutableStateOf<Pair<String, Double?>?>(null) }
+    var sleepDetailDayKey by remember { mutableStateOf<String?>(null) }
+    var sleepDismissAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val dispatchAfterSleepClose: (() -> Unit) -> Unit = { action ->
+        sleepDismissAction = action
+        sleepDetailDayKey = null
+    }
+    LaunchedEffect(sleepDetailDayKey, sleepDismissAction) {
+        if (sleepDetailDayKey == null) {
+            val action = sleepDismissAction ?: return@LaunchedEffect
+            sleepDismissAction = null
+            action()
+        }
+    }
     var showWeeklyPlan by remember { mutableStateOf(false) }
     val openWeeklyPlan: () -> Unit = {
         if (onOpenPlan != null) onOpenPlan()
@@ -1088,10 +1104,15 @@ fun TodayScreen(
         if (onOpenStrainForDay != null) onOpenStrainForDay(selectedDayKey, effortForDay)
         else strainDetailRequest = selectedDayKey to effortForDay
     }
+    val openSleepForDisplayedDay: () -> Unit = {
+        if (onOpenSleepForDay != null) onOpenSleepForDay(selectedDayKey)
+        else sleepDetailDayKey = selectedDayKey
+    }
     val openDashboardMetric: (String) -> Unit = { key ->
         when (key) {
             HERO_CHARGE_METRIC_KEY -> openRecoveryForDisplayedDay()
             HERO_EFFORT_METRIC_KEY -> openStrainForDisplayedDay()
+            HERO_REST_METRIC_KEY -> openSleepForDisplayedDay()
             else -> onOpenMetric(key)
         }
     }
@@ -1312,7 +1333,7 @@ fun TodayScreen(
                     sleep = restScoreForDay,
                     recovery = displayMetric?.recovery ?: lastScoredCharge?.value,
                     strain = effortForDay,
-                    onSleep = onOpenSleep,
+                    onSleep = openSleepForDisplayedDay,
                     onRecovery = openRecoveryForDisplayedDay, onStrain = openStrainForDisplayedDay,
                 )
                 heroSourceLabel?.let { Text(it, style = NoopType.caption, color = Palette.textSecondary) }
@@ -1361,7 +1382,7 @@ fun TodayScreen(
                 if (selectedDayOffset == 0 && activeLiveSession != null) {
                     LiveSessionEntryCard(onOpen = { showLiveSession = true })
                 }
-                HomeDayEvents(displayMetric, homeDayWorkouts, onOpenSleep) { selectedWorkoutRow = it }
+                HomeDayEvents(displayMetric, homeDayWorkouts, openSleepForDisplayedDay) { selectedWorkoutRow = it }
             }
         }
         item(key = "home-plan") { HomePlanSummary(viewModel, openWeeklyPlan) }
@@ -1499,6 +1520,44 @@ fun TodayScreen(
                         }
                     }
                     Box(Modifier.weight(1f)) { WeeklyPlanScreen(viewModel) }
+                }
+            }
+        }
+    }
+
+    sleepDetailDayKey?.let { dayKey ->
+        var showPlanner by remember(dayKey) { mutableStateOf(false) }
+        val backFromSleepPage: () -> Unit = {
+            if (showPlanner) showPlanner = false else sleepDetailDayKey = null
+        }
+        Dialog(
+            onDismissRequest = backFromSleepPage,
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            BackHandler(onBack = backFromSleepPage)
+            Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
+                Column {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        if (showPlanner) TextButton(onClick = { showPlanner = false }) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = Palette.textPrimary,
+                                modifier = Modifier.size(Metrics.iconSmall))
+                            Text(uiString(R.string.nav_sleep), style = NoopType.headline, color = Palette.textPrimary)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { sleepDetailDayKey = null }) {
+                            Text(uiString(R.string.l10n_today_screen_done_e9b450d1), style = NoopType.headline, color = Palette.textPrimary)
+                        }
+                    }
+                    Box(Modifier.weight(1f)) {
+                        if (showPlanner) SmartAlarmScreen(viewModel) else {
+                            SleepScreen(vm = viewModel, initialDayKey = dayKey,
+                                onOpenJournal = { dispatchAfterSleepClose(onOpenJournal) },
+                                onOpenAlarms = {
+                                    if (onOpenSleepPlanner != null) dispatchAfterSleepClose(onOpenSleepPlanner)
+                                    else showPlanner = true
+                                })
+                        }
+                    }
                 }
             }
         }
