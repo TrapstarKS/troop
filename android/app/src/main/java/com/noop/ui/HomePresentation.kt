@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.Lifecycle
@@ -246,7 +247,7 @@ internal fun HomeDayEvents(day: DailyMetric?, workouts: List<WorkoutRow>, onSlee
             }
         }
         workouts.forEach { workout ->
-            NoopCard(Modifier.clickable(onClick = { onWorkout(workout) })) {
+            NoopCard(Modifier.clickable(onClickLabel = uiString(R.string.today_action_show_workout), role = Role.Button, onClick = { onWorkout(workout) })) {
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Metrics.space12)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Metrics.space4)) {

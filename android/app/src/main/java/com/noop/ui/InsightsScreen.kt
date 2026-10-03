@@ -195,10 +195,13 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     // Map<String, Double> outcome), so "caffeine mg" / "alcohol units" can rank as a numeric outcome.
     var numericJournalSeries by remember { mutableStateOf<Map<String, Map<String, Double>>>(emptyMap()) }
     var journalLoaded by remember { mutableStateOf(false) }
-    var sleepPerformance by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    androidx.compose.runtime.LaunchedEffect(days, vm.activeStrapId) {
-        sleepPerformance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", vm.activeStrapId)
+    val publishedStrapId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    var sleepPerformance by remember(publishedStrapId) { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    androidx.compose.runtime.LaunchedEffect(days, publishedStrapId) {
+        val strapDeviceId = vm.activeStrapId
+        val performance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", strapDeviceId = strapDeviceId)
             .points.associate { it.day to it.value }
+        if (strapDeviceId == vm.activeStrapId) sleepPerformance = performance
     }
     val journalSeq by vm.repo.journalRevision.collectAsStateWithLifecycle()
     var dayOffset by remember { mutableStateOf(0L) }
