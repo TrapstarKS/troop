@@ -627,7 +627,7 @@ internal class InsightsHubViewModel {
             doseCards.add(DoseCardData(behavior, response, latest))
         }
 
-        if (strapDeviceId != vm.activeStrapId) return
+        if (activeStrapId != vm.activeStrapId) return
         _state.value = Snapshot(
             loaded = true,
             behaviours = behaviours,

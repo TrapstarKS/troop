@@ -12,7 +12,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class RecoveryPaletteParityTest {
     @Test fun `Classic retains its ramp and Titanium uses exact 34 and 67 boundaries`() {
-        val context = RuntimeEnvironment.getApplication<android.app.Application>()
+        val context = RuntimeEnvironment.getApplication()
         val previous = ChartStylePrefs.style
         try {
             for (style in listOf(ChartStyle.CLASSIC, ChartStyle.TITANIUM)) {

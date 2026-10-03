@@ -99,7 +99,7 @@ Swift `TabRoute` and `tabRouteDestinations()` are internal to the app module and
 | Recovery detail | `.recoveryDetail` | `recoveryDetail` (`recovery_detail`) | RecoveryDetailView / RecoveryDetailScreen |
 | Strain detail | `.strainDetail` | `strainDetail` (`strain_detail`) | StrainDetailView / StrainDetailScreen |
 | Sleep detail | `.sleepDetail` | `sleepDetail` (`sleep`) | Existing Sleep |
-| Sleep Planner | `.sleepPlanner` | `sleepPlanner` (`smart_alarm`) | SleepPlannerView / SleepPlannerScreen; the existing alarm destination remains reachable in More |
+| Sleep Planner | `.sleepPlanner` | `sleepPlanner` (`smart_alarm`) | SmartAlarmView / SmartAlarmScreen (the redesigned Sleep Planner); the existing alarm destination remains reachable in More |
 | Health Monitor | `.healthMonitor` | `healthMonitor` (`vital_signs`) | HealthMonitorView / HealthMonitorScreen |
 | Healthspan | `.healthspan` | `healthspan` (`healthspan`) | HealthspanView / HealthspanScreen; local estimates retain their provenance |
 | Stress Monitor | `.stressMonitor` | `stressMonitor` (`stress`) | StressMonitorView / StressMonitorScreen |
