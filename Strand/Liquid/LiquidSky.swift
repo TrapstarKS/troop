@@ -23,18 +23,10 @@ private func hx(_ hex: UInt32) -> Color {
 
 /// The ten keyframes mirror the real app's day-cycle scenes (SceneHeroBackground),
 /// as pure gradients rather than painted art.
-let liquidSkyKeys: [LiquidSkyStop] = [
-    .init(h: 0,    top: hx(0x191A1F), mid: hx(0x1D1E23), hor: hx(0x22242B), stars: 0.20, warm: 0),
-    .init(h: 5,    top: hx(0x1A1B20), mid: hx(0x1D1F24), hor: hx(0x23252C), stars: 0.12, warm: 0),
-    .init(h: 6.5,  top: hx(0x1B1C21), mid: hx(0x1F2026), hor: hx(0x25272E), stars: 0.06, warm: 0),
-    .init(h: 8.5,  top: hx(0x1C1D22), mid: hx(0x202229), hor: hx(0x272A31), stars: 0, warm: 0),
-    .init(h: 11,   top: hx(0x1D1E23), mid: hx(0x21232A), hor: hx(0x292C33), stars: 0, warm: 0),
-    .init(h: 14,   top: hx(0x1D1E23), mid: hx(0x22242B), hor: hx(0x292C34), stars: 0, warm: 0),
-    .init(h: 17.5, top: hx(0x1C1D22), mid: hx(0x202229), hor: hx(0x272930), stars: 0, warm: 0),
-    .init(h: 19.5, top: hx(0x1B1C21), mid: hx(0x1F2026), hor: hx(0x24262D), stars: 0.05, warm: 0),
-    .init(h: 22,   top: hx(0x191A1F), mid: hx(0x1D1E23), hor: hx(0x22242B), stars: 0.16, warm: 0),
-    .init(h: 24,   top: hx(0x191A1F), mid: hx(0x1D1E23), hor: hx(0x22242B), stars: 0.20, warm: 0),
-]
+let liquidSkyKeys: [LiquidSkyStop] = [0.0, 24.0].map { hour in
+    LiquidSkyStop(h: hour, top: StrandPalette.canvasTop, mid: StrandPalette.surfaceBase,
+                  hor: StrandPalette.canvasBottom, stars: 0, warm: 0)
+}
 
 /// Light appearance keeps the same time-of-day movement without beginning from the dark-only
 /// keyframes above. The restrained blue-gray atmosphere settles naturally into the light canvas.
