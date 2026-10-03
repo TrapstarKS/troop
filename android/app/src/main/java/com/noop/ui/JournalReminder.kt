@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,14 +68,16 @@ fun JournalReminderCard(
 
     // The N day keys the strip covers, oldest (left) → today (right). journalDayKey(n) = today − n days,
     // the same wake/cycle key the logging card writes under, so a filled cell == "logged that day".
-    val dayKeys = remember { (JOURNAL_STRIP_DAYS - 1 downTo 0).map { journalDayKey(it.toLong()) } }
+    val anchorDay = java.time.LocalDate.now()
+    val dayKeys = remember(anchorDay) { (JOURNAL_STRIP_DAYS - 1 downTo 0).map { journalDayKey(it.toLong(), anchorDay) } }
     val todayKey = dayKeys.last()
 
     // Which of those days have any journal entry. null = still loading / read error → render nothing.
     var loggedDays by remember { mutableStateOf<Set<String>?>(null) }
     // Re-query whenever Today's data refreshes (a resume/sync bumps `days`) so the strip and the "logged
     // today" state stay current after the user logs the journal and comes back. Mirrors AutoWorkoutNudge.
-    LaunchedEffect(days) {
+    val journalSeq by viewModel.repo.journalRevision.collectAsState()
+    LaunchedEffect(days, journalSeq, anchorDay) {
         loggedDays = runCatching {
             viewModel.repo.journal(JOURNAL_DEVICE_ID, dayKeys.first(), todayKey)
                 .map { it.day }.toSet()

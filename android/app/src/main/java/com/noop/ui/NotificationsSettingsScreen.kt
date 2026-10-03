@@ -217,7 +217,7 @@ internal object NotifPrefs {
         val cal = Calendar.getInstance()
         val now = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
         // Quiet window may wrap midnight (e.g. 22:00 -> 07:00).
-        return if (start <= end) now in start until end else (now >= start || now < end)
+        return com.noop.notif.LocalNotificationPolicy.isQuiet(now, start, end, true)
     }
 }
 

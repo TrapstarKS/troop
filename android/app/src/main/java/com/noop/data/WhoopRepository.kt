@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlin.math.roundToInt
 
 /**
@@ -458,6 +459,11 @@ class WhoopRepository(
      *  so a shared counter would let one strap spend another's budget. Only the single-threaded offload
      *  path banks v18 rows, so a plain map is enough. Swift twin: `WhoopStore.v18AuxRowsSincePrune`. */
     private val v18AuxRowsSincePrune = mutableMapOf<String, Int>()
+
+    private val _journalRevision = MutableStateFlow(0L)
+    val journalRevision: StateFlow<Long> = _journalRevision.asStateFlow()
+    // Swift twin: `Repository.noteJournalChanged`.
+    fun noteJournalChanged() { _journalRevision.update { it + 1 } }
 
     private val _sleepSampleRevision = MutableStateFlow(0L)
     val sleepSampleRevision: StateFlow<Long> = _sleepSampleRevision.asStateFlow()
@@ -2111,6 +2117,21 @@ class WhoopRepository(
         ) { imported, computed, activityFile, edited ->
             // recentDaysFlow returns newest-first (DESC LIMIT); mergeDaily re-sorts ascending by day, so the
             // emitted order matches daysMergedFlow exactly.
+            mergeActivityFileSteps(
+                mergeDaily(imported = imported, computed = computed, userEditedDays = userEditedDays(edited)),
+                activityFile,
+            )
+        }
+
+    /** Bounded historical read with the incumbent source and edited-sleep precedence.
+     * Swift UI twin: HealthspanView reads Repository.refresh's same 4,000-day range. */
+    fun daysMergedRangeFlow(deviceId: String, from: String, to: String): Flow<List<DailyMetric>> =
+        combine(
+            unionDaysFlow(importedSourceIds(deviceId).map { dao.dailyMetricsRangeFlow(it, from, to) }),
+            unionDaysFlow(computedSourceIds(deviceId).map { dao.dailyMetricsRangeFlow(it, from, to) }),
+            dao.dailyMetricsRangeFlow(ACTIVITY_FILE_SOURCE, from, to),
+            editedSleepSessionsFlow(deviceId),
+        ) { imported, computed, activityFile, edited ->
             mergeActivityFileSteps(
                 mergeDaily(imported = imported, computed = computed, userEditedDays = userEditedDays(edited)),
                 activityFile,

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sleep_planner_title">Planificateur de sommeil</string>
+    <string name="sleep_planner_subtitle">Planifiez votre sommeil. Fixez l’heure limite.</string>
+    <string name="sleep_planner_next_plan">Prochain plan de sommeil</string>
+    <string name="sleep_planner_peak" formatted="false">100%\nAu mieux</string>
+    <string name="sleep_planner_perform" formatted="false">85%\nPerformant</string>
+    <string name="sleep_planner_get_by" formatted="false">70%\nMinimum</string>
+    <string name="sleep_planner_bedtime">Coucher conseillé</string>
+    <string name="sleep_planner_sleep_target">Objectif de sommeil</string>
+    <string name="sleep_planner_need">Besoin de sommeil, dette incluse</string>
+    <string name="sleep_planner_debt">Dette de sommeil ajoutée</string>
+    <string name="sleep_planner_ready">Estimation locale à partir de votre historique.</string>
+    <string name="sleep_planner_learning">L’estimation nécessite au moins 3 nuits enregistrées.</string>
+    <string name="sleep_planner_haptic">Alarme haptique</string>
+    <string name="sleep_planner_enable">Activer l’alarme du bracelet</string>
+    <string name="sleep_planner_exact">Heure exacte</string>
+    <string name="sleep_planner_goal_mode">Objectif de sommeil</string>
+    <string name="sleep_planner_recovery_mode">Récupération</string>
+    <string name="sleep_planner_adaptive_unavailable">Le réveil anticipé est indisponible dans cette version. Le bracelet utilise l’heure limite ; seules des données fraîches de sommeil ou de récupération de cette nuit peuvent l’avancer. La récupération d’hier n’est jamais utilisée.</string>
+    <string name="sleep_planner_exact_time">Heure limite par défaut</string>
+    <string name="sleep_planner_latest_time">Heure limite par défaut</string>
+    <string name="sleep_planner_wake">Heure limite par défaut</string>
+    <string name="sleep_planner_day_plan">Objectifs quotidiens et week-ends</string>
+    <string name="sleep_planner_default_goal">Objectif par défaut</string>
+    <string name="sleep_planner_use_default">Utiliser la valeur par défaut</string>
+    <string name="sleep_planner_save">Enregistrer l’alarme</string>
+    <string name="sleep_planner_reported">Le bracelet signale cette heure limite. Cette lecture est diagnostique et ne garantit pas le réveil.</string>
+    <string name="sleep_planner_sent">Commande de réveil enregistrée ; confirmation du bracelet en attente.</string>
+    <string name="sleep_planner_off">Alarme du bracelet désactivée dans NOOP.</string>
+    <string name="sleep_planner_local">Enregistré localement ; heure limite non confirmée.</string>
+    <string name="sleep_planner_saved_deadline">Heure limite enregistrée</string>
+    <string name="sleep_planner_countdown">Alarme dans %1$s</string>
+    <string name="sleep_planner_reconnect_error">Enregistrement impossible. Reconnectez et réessayez ; l’alarme existante n’a pas changé.</string>
+    <string name="sleep_planner_unsupported">Cette alarme nécessite une connexion WHOOP prise en charge. WHOOP 5/MG nécessite aussi les tests de protocole expérimentaux.</string>
+    <string name="sleep_planner_permission">Notifications bloquées. Activez-les dans les réglages système pour recevoir les rappels.</string>
+    <string name="sleep_planner_send_error">L’envoi de la commande n’a pas été enregistré. Reconnectez et réessayez.</string>
+    <string name="sleep_planner_reconnect">Reconnecter le bracelet</string>
+    <string name="sleep_planner_skip">Ignorer la prochaine alarme</string>
+    <string name="sleep_planner_awake">Je suis réveillé — annuler la prochaine alarme</string>
+    <string name="sleep_planner_skipped">%1$s ignoré. Les jours d’alarme futurs restent activés.</string>
+    <string name="sleep_planner_restore">Rétablir l’alarme ignorée</string>
+    <string name="sleep_planner_skip_saved">La prochaine occurrence est déjà ignorée.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">La dernière charge connue du bracelet était inférieure à 20%. Rechargez-le avant de compter sur le réveil.</string>
+    <string name="sleep_planner_phone_battery" formatted="false">Batterie du téléphone à 20% ou moins. C’est le seuil d’avertissement local de NOOP.</string>
+    <string name="sleep_planner_backup">Gardez une alarme indépendante pour un réveil essentiel. Une connexion active à l’app est nécessaire pour répéter l’alarme du bracelet les jours suivants.</string>
+    <string name="sleep_planner_reminders">Rappels du soir</string>
+    <string name="sleep_planner_wind_down">Me rappeler de me détendre</string>
+    <string name="sleep_planner_reminder_time">Rappel conseillé</string>
+    <string name="sleep_planner_debt_reminder">Inclure un rappel de dette de sommeil</string>
+    <string name="sleep_planner_reminder_help">Les rappels facultatifs suivent ce plan et ses objectifs quotidiens. Les conseils sur la dette sont nouvellement rédigés pour NOOP et désactivés par défaut.</string>
+    <string name="sleep_planner_phone_alarm">Fenêtre de réveil et secours du téléphone</string>
+    <string name="sleep_planner_previous_day">Jour précédent</string>
+    <string name="sleep_planner_back">Retour au planificateur</string>
+    <string name="sleep_planner_reminder_title">Il est temps de se détendre</string>
+    <string name="sleep_planner_reminder_notification">Votre plan conseille de vous détendre pour un coucher à %1$s.</string>
+    <string name="sleep_planner_debt_notification">Prévoyez du temps pour dormir cette nuit. Votre plan local conseille un coucher à %1$s et inclut la dette de sommeil récente dans vos besoins.</string>
+    <string name="sleep_planner_cancel_requested">Annulation demandée ; le bracelet ne l’a pas confirmée.</string>
+    <string name="sleep_planner_notification_settings">Réglages des notifications</string>
+    <string name="sleep_planner_phone_help">Détection du sommeil léger par téléphone avec une heure limite exacte.</string>
+    <string name="sleep_planner_update_requested">Mise à jour de l’alarme demandée ; confirmation du bracelet attendue.</string>
+</resources>

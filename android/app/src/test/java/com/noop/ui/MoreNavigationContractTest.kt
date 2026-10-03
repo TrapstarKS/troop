@@ -55,4 +55,12 @@ class MoreNavigationContractTest {
             source.contains("if (dest != Destination.Coach) selectedTabRoute = dest.route"),
         )
     }
+    @Test
+    fun primaryAppleHealthRowOpensItsOwnIntegration() {
+        val root = appRootSource()!!
+        val source = File(root.parentFile, "MoreHubScreen.kt").readText().replace(Regex("\\s+"), " ")
+        assertTrue(source.contains("MoreHubRow(uiString(R.string.nav_apple_health), Icons.Filled.Storage) { onNavigate(\"apple_health\") }"))
+        assertFalse(source.contains("MoreHubRow(uiString(R.string.nav_apple_health), Icons.Filled.Storage) { onNavigate(\"data_sources\") }"))
+    }
+
 }

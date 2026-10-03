@@ -28,33 +28,18 @@ final class JournalCatalogStore: ObservableObject {
     /// Mirrors Android STARTER_JOURNAL_QUESTIONS value-for-value (JournalLog.kt). These are DATA,
     /// not UI literals, stored verbatim in the journal table and rendered verbatim, so they must
     /// never be localised (a translated key would start a new, disconnected behaviour).
-    nonisolated static let starterQuestions: [String] = [
-        "Did you drink any alcohol?",
-        "Did you have caffeine late in the day?",
-        "Did you view a screen in bed?",
-        "Did you eat close to bedtime?",
-        "Did you feel stressed?",
-        "Did you use a sauna?",
-        "Did you share your bed?",
-        "Did you feel sick or ill?",
-        "Did you take magnesium?",
-        "Did you read before bed?",
-    ]
+    nonisolated static let starterQuestions = JournalFactor.all.map(\.canonical)
 
-    /// The default group for each starter question (canonical → group). Mirrors Android
-    /// STARTER_JOURNAL_GROUPS value-for-value. Anything not listed falls to `.other`.
-    nonisolated static let starterGroups: [String: JournalGroup] = [
-        "Did you drink any alcohol?": .nutrition,
-        "Did you have caffeine late in the day?": .nutrition,
-        "Did you eat close to bedtime?": .nutrition,
-        "Did you take magnesium?": .supplements,
-        "Did you view a screen in bed?": .lifestyle,
-        "Did you use a sauna?": .lifestyle,
-        "Did you share your bed?": .lifestyle,
-        "Did you read before bed?": .lifestyle,
-        "Did you feel sick or ill?": .health,
-        "Did you feel stressed?": .behaviour,
-    ]
+    nonisolated static let starterGroups: [String: JournalGroup] = Dictionary(uniqueKeysWithValues:
+        JournalFactor.all.map { ($0.canonical, JournalGroup(rawValue: $0.groupKey) ?? .other) })
+
+    nonisolated static func defaultKind(_ question: String) -> JournalKind {
+        JournalFactor.find(question)?.unit.map { .numeric(unitLabel: $0) } ?? .bool
+    }
+
+    nonisolated static func defaultGroup(_ question: String) -> JournalGroup {
+        JournalFactor.find(question).flatMap { JournalGroup(rawValue: $0.groupKey) } ?? .other
+    }
 
     /// The v2 catalog: one item per journal question the user has customised (renamed, retyped,
     /// regrouped, reordered, or hidden). Starter questions with default settings are NOT stored here:
@@ -110,8 +95,8 @@ final class JournalCatalogStore: ObservableObject {
             if let idx = out.firstIndex(where: { norm($0.canonical) == key }) {
                 out[idx].hidden = true   // a hidden custom question
             } else if seen.insert(key).inserted {
-                out.append(JournalCatalogItem(canonical: t, displayName: nil, kind: .bool,
-                                              group: Self.starterGroups[t] ?? .other,
+                out.append(JournalCatalogItem(canonical: t, displayName: nil, kind: Self.defaultKind(t),
+                                              group: Self.defaultGroup(t),
                                               sortIndex: i, hidden: true, custom: false))
                 i += 1
             }
@@ -205,8 +190,8 @@ final class JournalCatalogStore: ObservableObject {
             if let saved = byKey[key] {
                 out.append(saved)
             } else {
-                out.append(JournalCatalogItem(canonical: t, displayName: nil, kind: .bool,
-                                              group: Self.starterGroups[t] ?? .other,
+                out.append(JournalCatalogItem(canonical: t, displayName: nil, kind: Self.defaultKind(t),
+                                              group: Self.defaultGroup(t),
                                               sortIndex: fallbackIndex, hidden: false, custom: false))
                 fallbackIndex += 1
             }
@@ -237,8 +222,8 @@ final class JournalCatalogStore: ObservableObject {
             mutate(&items[idx])
         } else {
             let t = canonical.trimmingCharacters(in: .whitespacesAndNewlines)
-            var fresh = JournalCatalogItem(canonical: t, displayName: nil, kind: .bool,
-                                           group: Self.starterGroups[t] ?? .other,
+            var fresh = JournalCatalogItem(canonical: t, displayName: nil, kind: Self.defaultKind(t),
+                                           group: Self.defaultGroup(t),
                                            sortIndex: nextSortIndex(), hidden: false, custom: false)
             mutate(&fresh)
             items.append(fresh)
@@ -268,6 +253,10 @@ final class JournalCatalogStore: ObservableObject {
     /// The display label for a canonical key: the user's rename, or the verbatim canonical.
     func displayName(for canonical: String) -> String {
         item(for: canonical)?.displayName ?? canonical.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func localizedDisplayName(for canonical: String) -> String {
+        item(for: canonical)?.displayName ?? JournalFactor.find(canonical)?.label ?? canonical
     }
 
     /// True when `q` is a user-added custom question (not a starter/imported one).
@@ -323,18 +312,20 @@ enum JournalGroup: String, CaseIterable, Codable {
     case supplements
     case nutrition
     case lifestyle
+    case environment
     case health
     case behaviour
     case other
 
     /// Fixed display order (matches Android). Groups render in this order; empty ones hide outside edit.
-    static let displayOrder: [JournalGroup] = [.nutrition, .supplements, .lifestyle, .health, .behaviour, .other]
+    static let displayOrder: [JournalGroup] = [.nutrition, .supplements, .lifestyle, .environment, .health, .behaviour, .other]
 
     var title: String {
         switch self {
         case .supplements: return String(localized: "Supplements")
         case .nutrition:   return String(localized: "Nutrition")
         case .lifestyle:   return String(localized: "Lifestyle")
+        case .environment: return String(localized: "Environment")
         case .health:      return String(localized: "Health")
         case .behaviour:   return String(localized: "Behaviour")
         case .other:       return String(localized: "Other")
@@ -363,6 +354,10 @@ struct JournalCatalogItem: Equatable, Codable, Identifiable {
     /// What the UI renders: the rename if present, else the verbatim canonical.
     var display: String {
         displayName ?? canonical
+    }
+
+    var localizedDisplay: String {
+        displayName ?? JournalFactor.find(canonical)?.label ?? canonical
     }
 
     init(canonical: String, displayName: String?, kind: JournalKind, group: JournalGroup,

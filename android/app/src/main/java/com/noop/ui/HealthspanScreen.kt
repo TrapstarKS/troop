@@ -3,7 +3,7 @@ package com.noop.ui
 import android.app.DatePickerDialog
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +48,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.noop.R
 import com.noop.analytics.HealthspanPresentation
+import com.noop.analytics.HealthspanHistory
 import com.noop.data.DailyMetric
 import com.noop.data.MetricSeriesRow
 import com.noop.widget.StressWidgetProducer
@@ -69,12 +70,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 
 @Composable
-fun HealthspanScreen(vm: AppViewModel) {
+fun HealthspanScreen(vm: AppViewModel, onCoach: (() -> Unit)? = null) {
+    var selectedPillar by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
     val days = healthspanDays(vm)
     val bodyAge = healthspanSeries(vm, "body_age")
     var referenceDay by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
-    val earliestDay = days.minOfOrNull { it.day }?.let { LocalDate.parse(it).plusDays(30) }?.let { minOf(it, today) } ?: today
+    val earliestDay = today.minusDays(HealthspanHistory.oldestReferenceOffset(days.mapNotNull { runCatching { ChronoUnit.DAYS.between(LocalDate.parse(it.day), today).toInt() }.getOrNull() }).toLong())
     LaunchedEffect(earliestDay) { referenceDay = maxOf(referenceDay, earliestDay) }
     val profile = ProfileStore.from(LocalContext.current.applicationContext)
     val dateOfBirth = Instant.ofEpochMilli(profile.dateOfBirthMillis).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -85,21 +87,20 @@ fun HealthspanScreen(vm: AppViewModel) {
                 .getOrNull()?.let { HealthspanPresentation.AgeSample(it, row.value) }
         }
     }
-    val recoveryDays = days.count { row ->
-        row.recovery != null && row.day in referenceDay.minusDays(30).toString()..referenceDay.toString()
-    }
-    val snapshot = remember(samples, recoveryDays, chronologicalAge) {
-        HealthspanPresentation.snapshot(samples, recoveryDays, chronologicalAge)
+    val recoveryOffsets = healthspanRecoveryOffsets(days, referenceDay)
+    val snapshot = remember(samples, recoveryOffsets, chronologicalAge) {
+        HealthspanPresentation.snapshot(samples, recoveryOffsets, chronologicalAge)
     }
     val latestDay = bodyAge.lastOrNull {
         it.day <= referenceDay.toString() && it.value.isFinite() && it.value in 20.0..90.0
     }?.day
     val ageText = snapshot.age?.let(::healthspanNumber) ?: "—"
-    val stateText = when {
-        chronologicalAge < 18 -> stringResource(R.string.healthspan_adult_only)
-        recoveryDays < 21 -> stringResource(R.string.healthspan_calibrating, recoveryDays.coerceAtMost(21))
-        snapshot.age == null -> stringResource(R.string.healthspan_age_unavailable)
-        else -> stringResource(R.string.healthspan_age_comparison, healthspanNumber(snapshot.age - chronologicalAge))
+    val stateText = if (snapshot.age != null) stringResource(R.string.healthspan_age_comparison, healthspanNumber(snapshot.age - chronologicalAge))
+        else healthspanEligibilityDetail(snapshot.eligibility)
+
+    selectedPillar?.let { pillar ->
+        HealthspanContributorFlow(vm, pillar, referenceDay, { selectedPillar = null }, onCoach)
+        return
     }
 
     LazyScreenScaffold(title = stringResource(R.string.healthspan_title), subtitle = stringResource(R.string.healthspan_subtitle)) {
@@ -123,12 +124,15 @@ fun HealthspanScreen(vm: AppViewModel) {
                     TrackedSectionHeader(stringResource(R.string.healthspan_how))
                     Text(stringResource(R.string.healthspan_method), style = NoopType.body, color = Palette.textSecondary)
                     Text(stringResource(R.string.healthspan_profile_source), style = NoopType.body, color = Palette.textSecondary)
+                    Text(stringResource(R.string.healthspan_initial_method), style = NoopType.body, color = Palette.textSecondary)
                 }
             }
         }
-        item { HealthspanAgeTrend(bodyAge, referenceDay) }
+        if (snapshot.eligibility.state == HealthspanHistory.State.ready) {
+            item { HealthspanAgeTrend(bodyAge, referenceDay) }
+        }
         item {
-            HealthspanSupportingCards(vm, referenceDay, days)
+            HealthspanPillarCards { selectedPillar = it }
         }
         item { HealthSupportingMetricCards(vm) }
     }
@@ -146,12 +150,9 @@ fun HealthspanPreviewCard(vm: AppViewModel, onClick: () -> Unit) {
                 .getOrNull()?.let { HealthspanPresentation.AgeSample(it, row.value) }
         }
     }
-    val recoveryDays = days.count { it.recovery != null && it.day in referenceDay.minusDays(30).toString()..referenceDay.toString() }
-    val snapshot = HealthspanPresentation.snapshot(samples, recoveryDays, age)
+    val snapshot = HealthspanPresentation.snapshot(samples, healthspanRecoveryOffsets(days, referenceDay), age)
     val detail = if (snapshot.age != null) stringResource(R.string.healthspan_preview_detail)
-        else if (age < 18) stringResource(R.string.healthspan_adult_only)
-        else if (recoveryDays < 21) stringResource(R.string.healthspan_calibrating, recoveryDays.coerceAtMost(21))
-        else stringResource(R.string.healthspan_age_unavailable)
+        else healthspanEligibilityDetail(snapshot.eligibility)
     MetricCard(label = stringResource(R.string.healthspan_title), value = snapshot.age?.let(::healthspanNumber) ?: "—",
         unit = if (snapshot.age != null) stringResource(R.string.healthspan_years) else "", detail = detail,
         color = Palette.positive, icon = Icons.Filled.FavoriteBorder,
@@ -168,7 +169,7 @@ fun HealthSupportingMetricCards(vm: AppViewModel) {
     val reference = LocalDate.now()
     val vo2 = computedVo2.lastOrNull { it.day in reference.minusDays(179).toString()..reference.toString() && it.value.isFinite() && it.value > 0 }
     var importedVo2 by remember(strapId) { mutableStateOf<Pair<String, Double>?>(null) }
-    var steps by remember(strapId) { mutableStateOf<Pair<String, Double>?>(null) }
+    var steps by remember(strapId) { mutableStateOf<HealthspanPresentation.StepSample?>(null) }
     LaunchedEffect(vm, strapId, days, vo2, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
@@ -177,9 +178,17 @@ fun HealthSupportingMetricCards(vm: AppViewModel) {
                     withContext(Dispatchers.Default) {
                         val imported = if (vo2 == null) vm.repo.resolvedSeries("vo2max", "apple-health", through.minusDays(179).toString(),
                             through.toString(), strapDeviceId = strapId).points.lastOrNull { it.value.isFinite() && it.value > 0 } else null
-                        val recordedSteps = vm.repo.resolvedSeries("steps", "my-whoop", through.minusDays(30).toString(), through.toString(),
-                            strapDeviceId = strapId).points.lastOrNull { it.value.isFinite() && it.value >= 0 }
-                        (imported?.let { it.day to it.value }) to (recordedSteps?.let { it.day to it.value })
+                        val from = through.minusDays(30).toString()
+                        val recordedSteps = vm.repo.resolvedSeries("steps", "my-whoop", from, through.toString(), strapDeviceId = strapId).points
+                        val importedSteps = listOf("apple-health", "health-connect").flatMap { source ->
+                            vm.repo.appleDaily(source, from, through.toString()).mapNotNull { row ->
+                                row.steps?.let { HealthspanPresentation.StepSample(row.day, it.toDouble(), source) }
+                            }
+                        }
+                        val stepReading = HealthspanPresentation.latestSteps(
+                            measured = recordedSteps.map { HealthspanPresentation.StepSample(it.day, it.value, it.source) },
+                            imported = importedSteps, fromDay = from, throughDay = through.toString())
+                        (imported?.let { it.day to it.value }) to stepReading
                     }.let { (vo2Reading, stepReading) ->
                         importedVo2 = vo2Reading
                         steps = stepReading
@@ -199,44 +208,12 @@ fun HealthSupportingMetricCards(vm: AppViewModel) {
         MetricCard(stringResource(R.string.healthspan_vo2), vo2Reading?.second?.let(::healthspanNumber) ?: "—", unit = "ml/kg/min",
             detail = vo2Reading?.let { stringResource(if (vo2 != null) R.string.healthspan_estimate_date else R.string.healthspan_recorded_date,
                 healthDateLabel(LocalDate.parse(it.first))) } ?: stringResource(R.string.healthspan_no_value), color = Palette.positive)
-        MetricCard(stringResource(R.string.healthspan_steps), steps?.second?.let { NumberFormat.getIntegerInstance().format(it.roundToInt()) } ?: "—",
-            detail = steps?.let { stringResource(R.string.healthspan_recorded_date, healthDateLabel(LocalDate.parse(it.first))) }
+        MetricCard(stringResource(R.string.healthspan_steps), steps?.count?.let { NumberFormat.getIntegerInstance().format(it) } ?: "—",
+            detail = steps?.let {
+                val date = stringResource(R.string.healthspan_recorded_date, healthDateLabel(LocalDate.parse(it.day)))
+                if (it.source in listOf("apple-health", "health-connect")) stringResource(R.string.l10n_data_sources_screen_imported_434eb26f) + " · " + date else date
+            }
                 ?: stringResource(R.string.healthspan_no_value), color = Palette.strain100)
-    }
-}
-
-@Composable
-private fun HealthspanSupportingCards(vm: AppViewModel, referenceDay: LocalDate, days: List<DailyMetric>) {
-    val fitnessAge = healthspanSeries(vm, "fitness_age").lastOrNull {
-        it.day in referenceDay.minusDays(14).toString()..referenceDay.toString() && it.value.isFinite()
-    }
-    val firstDay = referenceDay.minusDays(6)
-    val week = days.filter { it.day in firstDay.toString()..referenceDay.toString() }
-    val sleep = week.mapNotNull { it.totalSleepMin?.takeIf { value -> value.isFinite() && value > 0 } }
-    val strain = week.mapNotNull { it.strain?.takeIf { value -> value.isFinite() && value in 0.0..100.0 } }
-    Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
-        TrackedSectionHeader(stringResource(R.string.healthspan_supporting), microLabel = stringResource(R.string.healthspan_weekly_context))
-        NoopCard {
-            Column {
-                ContributorRow(stringResource(R.string.healthspan_sleep),
-                    if (sleep.isEmpty()) "—" else healthDuration((sleep.average()).roundToInt()), icon = Icons.Filled.Bedtime,
-                    comparison = stringResource(R.string.healthspan_sleep_detail, sleep.size))
-                HorizontalDivider(color = Palette.hairline, thickness = Metrics.divider)
-                ContributorRow(stringResource(R.string.healthspan_strain), if (strain.isEmpty()) "—" else strain.average().roundToInt().toString(),
-                    unit = "/ 100", icon = Icons.Filled.DirectionsRun,
-                    comparison = stringResource(R.string.healthspan_sleep_detail, strain.size))
-
-            }
-        }
-        NoopCard {
-            Column {
-                ContributorRow(stringResource(R.string.healthspan_fitness_age), fitnessAge?.value?.let(::healthspanNumber) ?: "—",
-                    unit = stringResource(R.string.healthspan_years), icon = Icons.Filled.FavoriteBorder,
-                    comparison = fitnessAge?.day?.let { stringResource(R.string.healthspan_estimate_date, healthDateLabel(LocalDate.parse(it))) }
-                        ?: stringResource(R.string.healthspan_fitness_unavailable))
-            }
-        }
-        Text(stringResource(R.string.healthspan_supporting_note), style = NoopType.caption, color = Palette.textSecondary)
     }
 }
 
@@ -279,12 +256,13 @@ private fun HealthspanHalo(value: String, state: String, chronologicalAge: Doubl
 @Composable
 private fun HealthspanAgeTrend(rows: List<MetricSeriesRow>, reference: LocalDate) {
     val firstDay = reference.minusDays(179)
+    val spanDays = ChronoUnit.DAYS.between(firstDay, reference).toFloat()
     val points = remember(rows, reference) {
         rows.filter { it.day in firstDay.toString()..reference.toString() && it.value.isFinite() && it.value in 20.0..90.0 }
             .mapNotNull { row -> runCatching { LocalDate.parse(row.day) to row.value }.getOrNull() }
             .sortedBy { it.first }
     }
-    var selected by remember(points) { mutableStateOf<Pair<LocalDate, Double>?>(null) }
+    var selected by remember(points, reference) { mutableStateOf<Pair<LocalDate, Double>?>(null) }
     val reading = selected ?: points.lastOrNull()
     val description = reading?.let { stringResource(R.string.healthspan_trend_reading, healthDateLabel(it.first), healthspanNumber(it.second)) }
         ?: stringResource(R.string.healthspan_age_unavailable)
@@ -295,19 +273,19 @@ private fun HealthspanAgeTrend(rows: List<MetricSeriesRow>, reference: LocalDate
                 InsetChartPlaceholder(stringResource(R.string.healthspan_age_unavailable))
             } else {
                 fun select(x: Float, width: Float) {
-                    val day = firstDay.toEpochDay() + (167 * (x / width).coerceIn(0f, 1f)).roundToInt()
+                    val day = firstDay.toEpochDay() + (spanDays * (x / width).coerceIn(0f, 1f)).roundToInt()
                     selected = points.minByOrNull { abs(it.first.toEpochDay() - day) }
                 }
                 Canvas(Modifier.fillMaxWidth().height(Metrics.compactChartHeight).clearAndSetSemantics { contentDescription = description }
-                    .pointerInput(points) { detectTapGestures { select(it.x, size.width.toFloat()) } }
-                    .pointerInput(points) { detectDragGestures(onDragStart = { select(it.x, size.width.toFloat()) }) { change, _ ->
+                    .pointerInput(points, reference) { detectTapGestures { select(it.x, size.width.toFloat()) } }
+                    .pointerInput(points, reference) { detectHorizontalDragGestures(onDragStart = { select(it.x, size.width.toFloat()) }) { change, _ ->
                         change.consume()
                         select(change.position.x, size.width.toFloat())
                     } }) {
                     val lower = points.minOf { it.second } - 5
                     val upper = points.maxOf { it.second } + 5
                     fun position(point: Pair<LocalDate, Double>): Offset = Offset(
-                        (ChronoUnit.DAYS.between(firstDay, point.first) / 167f) * size.width,
+                        (ChronoUnit.DAYS.between(firstDay, point.first) / spanDays) * size.width,
                         ((upper - point.second) / (upper - lower)).toFloat() * size.height)
                     for (fraction in listOf(0f, 0.5f, 1f)) {
                         drawLine(Palette.hairline, Offset(0f, fraction * size.height), Offset(size.width, fraction * size.height), Metrics.chartGridWidth.toPx())
@@ -395,7 +373,7 @@ private fun healthspanDays(vm: AppViewModel): List<DailyMetric> {
     val strapId = selectedStrap ?: vm.activeStrapId
     return key(vm, strapId) {
         val days by remember(vm, strapId) {
-            vm.repo.recentDaysMergedFlow(strapId)
+            vm.repo.daysMergedRangeFlow(strapId, LocalDate.now().minusDays(3999).toString(), LocalDate.now().toString())
         }.collectAsStateWithLifecycle(initialValue = emptyList())
         days
     }
@@ -422,3 +400,17 @@ internal fun healthDateLabel(day: LocalDate): String = day.format(DateTimeFormat
 
 @Composable
 internal fun healthDuration(minutes: Int): String = stringResource(R.string.healthspan_duration, minutes / 60, minutes % 60)
+
+private fun healthspanRecoveryOffsets(days: List<DailyMetric>, reference: LocalDate): List<Int> = days.mapNotNull { row ->
+    row.recovery?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: return@mapNotNull null
+    runCatching { ChronoUnit.DAYS.between(LocalDate.parse(row.day), reference).toInt() }.getOrNull()
+}
+
+@Composable
+internal fun healthspanEligibilityDetail(eligibility: HealthspanHistory.Eligibility): String = when (eligibility.state) {
+    HealthspanHistory.State.adultOnly -> stringResource(R.string.healthspan_adult_only)
+    HealthspanHistory.State.initialCalibration -> stringResource(R.string.healthspan_initial_calibration, eligibility.initialDays.coerceAtMost(90))
+    HealthspanHistory.State.recentCoverage -> stringResource(R.string.healthspan_calibrating, eligibility.recoveryDays)
+    HealthspanHistory.State.unavailable -> stringResource(R.string.healthspan_age_unavailable)
+    HealthspanHistory.State.ready -> stringResource(R.string.healthspan_preview_detail)
+}

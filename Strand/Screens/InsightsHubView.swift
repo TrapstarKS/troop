@@ -32,6 +32,7 @@ import WhoopStore
 
 struct InsightsHubView: View {
     @EnvironmentObject private var repo: Repository
+    @StateObject private var catalog = JournalCatalogStore()
     @StateObject private var model = InsightsHubViewModel()
 
     /// The currently-selected outcome for the ranked feed (Charge / HRV / Rest / RHR).
@@ -54,7 +55,7 @@ struct InsightsHubView: View {
                 }
             }
         }
-        .task(id: repo.refreshSeq) { await model.load(repo: repo) }
+        .task(id: "\(repo.refreshSeq):\(repo.journalSeq)") { await model.load(repo: repo) }
         .onChangeCompat(of: outcome) { model.rankFor($0) }
     }
 
@@ -111,7 +112,7 @@ struct InsightsHubView: View {
                 HStack(alignment: .firstTextBaseline) {
                     HStack(spacing: 8) {
                         Circle().fill(tintColor).frame(width: 8, height: 8)
-                        Text(r.behavior)
+                        Text(verbatim: catalog.localizedDisplayName(for: r.behavior))
                             .font(StrandFont.headline)
                             .foregroundStyle(StrandPalette.textPrimary)
                             .lineLimit(1)
@@ -122,7 +123,7 @@ struct InsightsHubView: View {
                 }
 
                 // The engine's sign-aware sentence (includes the lead/lag clause).
-                Text(r.sentence())
+                Text("Recorded days with and without this habit are compared below. An association does not establish cause.")
                     .font(StrandFont.body)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -161,7 +162,7 @@ struct InsightsHubView: View {
         }
         .accessibilityElement(children: .combine)
         // One whole-string key; the args are complete sentences, never concatenated tails.
-        .accessibilityLabel(String(localized: "\(r.sentence()) Cohen's d \(String(format: "%.2f", e.cohensD)). \(Self.scoreState(r.confidence).accessibilityWord)"))
+        .accessibilityLabel(String(localized: "\(catalog.localizedDisplayName(for: r.behavior)) Cohen's d \(String(format: "%.2f", e.cohensD)). \(Self.scoreState(r.confidence).accessibilityWord)"))
     }
 
     // MARK: - Alcohol / caffeine dose-response
@@ -268,7 +269,7 @@ private struct DoseResponseCardView: View {
                 header(r)
 
                 // The engine's honest read sentence (prior / yours / contradicts-prior).
-                Text(r.sentence())
+                Text("Recorded days with and without this habit are compared below. An association does not establish cause.")
                     .font(StrandFont.body)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -496,9 +497,9 @@ final class InsightsHubViewModel: ObservableObject {
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .recovery: return String(localized: "Charge")
+            case .recovery: return String(localized: "Recovery")
             case .hrv:      return "HRV"
-            case .sleep:    return String(localized: "Rest")
+            case .sleep:    return String(localized: "Sleep Performance")
             case .rhr:      return "RHR"
             }
         }
@@ -514,9 +515,9 @@ final class InsightsHubViewModel: ObservableObject {
         /// The engine's outcome label (carried onto each RankedEffect).
         var outcomeName: String {
             switch self {
-            case .recovery: return String(localized: "Charge")
+            case .recovery: return String(localized: "Recovery")
             case .hrv:      return "HRV"
-            case .sleep:    return String(localized: "Rest")
+            case .sleep:    return String(localized: "Sleep Performance")
             case .rhr:      return String(localized: "Resting HR")
             }
         }
@@ -575,7 +576,9 @@ final class InsightsHubViewModel: ObservableObject {
         let mergedDays = repo.days
         var byKey: [String: [String: Double]] = [:]
         for key in outcomeKeys {
-            let s = await repo.series(key: key, source: "my-whoop")
+            let s = key == "sleep_performance"
+                ? await repo.exploreSeries(key: key, source: "my-whoop")
+                : await repo.series(key: key, source: "my-whoop")
             var dict: [String: Double] = [:]
             for row in s { dict[row.day] = row.value }
             for d in mergedDays where dict[d.day] == nil {
@@ -637,7 +640,7 @@ final class InsightsHubViewModel: ObservableObject {
     // MARK: Static shaping helpers
 
     /// The merged DailyMetric column backing an outcome key (strap-only fallback). sleep_performance
-    /// has no daily column, so it stays import-only — never seeded here (matches InsightsView).
+    /// has no daily column; its resolved series supplies the locally computed composite.
     private static func dailyOutcome(key: String, day d: DailyMetric) -> Double? {
         switch key {
         case "recovery": return d.recovery

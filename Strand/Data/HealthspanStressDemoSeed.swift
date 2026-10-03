@@ -25,6 +25,7 @@ enum HealthspanStressDemoSeed {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: now)
         try await seedDailyStressIfMissing(into: store, today: today, calendar: calendar)
+        try await seedYesterdayActivityIfMissing(into: store, today: today, calendar: calendar)
         var hr: [HRSample] = []
         for dayOffset in -1...0 {
             guard let day = calendar.date(byAdding: .day, value: dayOffset, to: today) else { continue }
@@ -47,6 +48,30 @@ enum HealthspanStressDemoSeed {
         let biometricTables = ["hr", "rr", "spo2", "skinTemp", "steps", "resp", "gravity",
                                "ppgHr", "sleepState", "ppgWaveform", "v18Aux"]
         return biometricTables.allSatisfy { counts[$0] == 0 }
+    }
+
+    // Kotlin twin: HealthspanStressDemoSeed.seedYesterdayActivityIfMissing.
+    private static func seedYesterdayActivityIfMissing(into store: WhoopStore, today: Date,
+                                                       calendar: Calendar) async throws {
+        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today),
+              let wakingStart = calendar.date(bySettingHour: 6, minute: 0, second: 0, of: yesterday),
+              let wakingEnd = calendar.date(bySettingHour: 22, minute: 0, second: 0, of: yesterday),
+              let noon = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: yesterday) else { return }
+        let from = Int(wakingStart.timeIntervalSince1970)
+        let to = Int(wakingEnd.timeIntervalSince1970)
+        for source in [AppleDemoSeeder.whoop, AppleDemoSeeder.apple] {
+            let existing = try await store.workouts(deviceId: source, from: 0,
+                                                    to: Int(today.timeIntervalSince1970) - 1, limit: .max)
+            if existing.contains(where: { $0.endTs > $0.startTs && $0.startTs < to && $0.endTs > from }) { return }
+        }
+
+        // Synthetic activity context for the yesterday HR fixture; no physiological metrics are fabricated.
+        let start = Int(noon.timeIntervalSince1970)
+        _ = try await store.upsertWorkouts([
+            WorkoutRow(startTs: start, endTs: start + 1200, sport: "Walking", source: AppleDemoSeeder.whoop,
+                       durationS: 1200.0, energyKcal: nil, avgHr: nil, maxHr: nil, strain: nil,
+                       distanceM: nil, zonesJSON: nil, notes: "Synthetic demo activity overlay", steps: nil),
+        ], deviceId: AppleDemoSeeder.whoop)
     }
 
     private static func seedDailyStressIfMissing(into store: WhoopStore, today: Date,

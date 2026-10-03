@@ -212,6 +212,9 @@ final class Repository: ObservableObject {
     /// date string within a day and would freeze e.g. the Today HR trend until the date rolls over.
     @Published private(set) var refreshSeq = 0
 
+    @Published private(set) var journalSeq = 0
+    func noteJournalChanged() { journalSeq &+= 1; insightsCache = nil }
+
     /// #989: bumped by every hydration mutation (log / edit / delete). Today's hydration card re-reads on
     /// this instead of waiting for a full `refreshSeq` data refresh, which a hydration write never causes,
     /// so the card sat stale until an unrelated sync landed. Race-free: Repository is @MainActor.

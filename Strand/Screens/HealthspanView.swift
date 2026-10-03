@@ -12,26 +12,37 @@ struct HealthspanView: View {
     @State private var loadedSource: String?
     @EnvironmentObject private var profile: ProfileStore
     @State private var series: [(day: String, value: Double)] = []
-    @State private var fitness: [(day: String, value: Double)] = []
     @State private var days: [DailyMetric] = []
     @State private var reference = Calendar.current.startOfDay(for: Date())
     @State private var showMethod = false
+    @State private var selectedAgeDay: String?
+    @GestureState private var ageDragIsHorizontal: Bool?
 
     private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     private var sourceLoaded: Bool { loadedSource == sourceID }
     private var earliestReference: Date {
         let today = Calendar.current.startOfDay(for: Date())
-        guard let first = days.compactMap({ healthspanDate($0.day) }).min(),
-              let completeWindow = Calendar.current.date(byAdding: .day, value: 30, to: first) else { return today }
-        return min(today, completeWindow)
+        let offsets = days.compactMap { healthspanDaysAgo($0.day, reference: today) }
+        return Calendar.current.date(byAdding: .day, value: -HealthspanHistory.oldestReferenceOffset(dayOffsets: offsets), to: today)!
     }
     private var chronologicalAge: Int { Calendar.current.dateComponents([.year], from: Calendar.current.startOfDay(for: profile.dateOfBirth), to: reference).year ?? profile.age }
     private var snapshot: HealthspanPresentation.Snapshot {
         healthspanSnapshot(series: sourceLoaded ? series : [], days: sourceLoaded ? days : [], age: chronologicalAge, reference: reference)
     }
-    private var isCalibrating: Bool { chronologicalAge >= 18 && snapshot.recoveryDays < 21 }
-    private var window: [DailyMetric] {
-        (sourceLoaded ? days : []).filter { healthspanDaysAgo($0.day, reference: reference).map { (0..<7).contains($0) } ?? false }
+    private var isCalibrating: Bool { snapshot.eligibility.state == .initialCalibration || snapshot.eligibility.state == .recentCoverage }
+    private var trendPoints: [HealthspanTrendPoint] {
+        var points: [HealthspanTrendPoint] = []
+        var previousOffset: Int?
+        var segment = 0
+        for sample in sourceLoaded ? series : [] {
+            guard sample.value.isFinite, (20...90).contains(sample.value),
+                  let offset = healthspanDaysAgo(sample.day, reference: reference), (0..<180).contains(offset),
+                  let date = healthspanDate(sample.day) else { continue }
+            if let previousOffset, previousOffset - offset > 14 { segment += 1 }
+            points.append(HealthspanTrendPoint(day: sample.day, value: sample.value, date: date, segment: segment))
+            previousOffset = offset
+        }
+        return points
     }
 
     var body: some View {
@@ -49,9 +60,9 @@ struct HealthspanView: View {
                 }
                 NoopCard {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
-                        Text(snapshot.age != nil ? String(localized: "Local wellness estimate") : isCalibrating ? String(localized: "Calibrating") : String(localized: "Unavailable")).font(StrandFont.headline)
+                        Text(healthspanEligibilityLabel(snapshot.eligibility)).font(StrandFont.headline)
                         if isCalibrating {
-                            Text(String.localizedStringWithFormat(String(localized: "Calibrating (%lld of %lld)"), snapshot.recoveryDays, 21))
+                            Text(healthspanEligibilityDetail(snapshot.eligibility))
                         }
                         Text("A wellness estimate from your habits, not a clinical biological age.")
                             .font(StrandFont.body).foregroundStyle(StrandPalette.textSecondary)
@@ -59,14 +70,8 @@ struct HealthspanView: View {
                         Button("How this estimate works") { showMethod = true }.font(StrandFont.headline).frame(minHeight: NoopMetrics.touchTarget)
                     }
                 }
-                if sourceLoaded && !series.isEmpty { ageTrend }
-                VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-                    TrackedSectionHeader(title: String(localized: "Contributors"))
-                    contributor(String(localized: "Sleep"), symbol: "moon.fill", value: average(window.compactMap(\.totalSleepMin).filter { $0.isFinite && $0 > 0 }).map { healthspanDuration(Int($0.rounded())) })
-                    contributor(String(localized: "Strain"), symbol: "figure.run", value: average(window.compactMap(\.strain).filter { $0.isFinite && (0...100).contains($0) }).map { "\(Int($0.rounded())) / 100" })
-                    contributor(String(localized: "Fitness Age"), symbol: "heart.fill", value: (sourceLoaded ? fitness : []).last(where: { $0.value.isFinite && (healthspanDaysAgo($0.day, reference: reference).map { (0...14).contains($0) } ?? false) }).map { String(format: "%.1f", locale: .current, $0.value) })
-                    Text("Recent context; not a breakdown of age impact.").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
-                }
+                if snapshot.eligibility.state == .ready && !trendPoints.isEmpty { ageTrend }
+                HealthspanPillarsView(reference: reference)
                 HealthSupportingMetricCards()
             }
             .padding(NoopMetrics.screenPadding)
@@ -76,17 +81,19 @@ struct HealthspanView: View {
         }
         .background(StrandPalette.surfaceBase)
         .navigationTitle(String(localized: "Healthspan"))
+        .onChange(of: sourceID) { _ in selectedAgeDay = nil }
+        .onChange(of: reference) { _ in selectedAgeDay = nil }
+        .onChange(of: trendPoints) { _ in selectedAgeDay = nil }
         .onReceive(healthspanSourcePublisher(model: model, repo: repo)) { observedSource = $0 }
         .task(id: "\(sourceID)|\(repo.refreshSeq)") {
             let source = sourceID
             guard await healthspanAwaitSource(source, repo: repo) else { return }
             if loadedSource != source { await repo.refresh() }
             let revision = repo.refreshSeq
-            let resolvedDays = repo.days
+            let resolvedDays = repo.days.filter { healthspanDaysAgo($0.day, reference: Calendar.current.startOfDay(for: Date())).map { (0..<4000).contains($0) } ?? false }
             let resolvedAge = await repo.exploreSeries(key: "body_age", source: "my-whoop", days: 4000)
-            let resolvedFitness = await repo.exploreSeries(key: "fitness_age", source: "my-whoop", days: 4000)
             guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
-            days = resolvedDays; series = resolvedAge; fitness = resolvedFitness; loadedSource = source
+            days = resolvedDays; series = resolvedAge; loadedSource = source
             reference = max(reference, earliestReference)
         }
         .sheet(isPresented: $showMethod) {
@@ -95,6 +102,7 @@ struct HealthspanView: View {
                     Text("How this estimate works").font(StrandFont.title2)
                     Text("Age uses the birthdate saved in Profile. Check it before interpreting this estimate.")
                     Text("NOOP Age uses the existing weekly Body Age estimate with an uncertainty of ±5 years.")
+                    Text("Initial calibration uses a 90-day span from the earliest valid dated recovery. It does not prove continuous wear. Continued use needs 21 recoveries in 31 days.")
                     Text("Pace compares the last 30 days with up to 180 days of Body Age history. It is an unvalidated local trend, not a medical prediction.")
                     Text(verbatim: "1 + 2 × (μ₃₀ − μ₁₈₀)").font(StrandFont.mono)
                     Text("Sleep, resting heart rate, HRV and steps feed Body Age. Fitness Age is shown separately; lean mass is unavailable unless supplied.")
@@ -105,28 +113,62 @@ struct HealthspanView: View {
     }
 
     private var ageTrend: some View {
-        NoopCard {
+        let points = trendPoints
+        let reading = points.first { $0.day == selectedAgeDay } ?? points.last
+        return NoopCard {
             VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                 TrackedSectionHeader(title: String(localized: "NOOP Age trend"))
                 Chart {
-                    ForEach(series.filter { $0.value.isFinite && (20...90).contains($0.value) && (healthspanDaysAgo($0.day, reference: reference).map { (0..<180).contains($0) } ?? false) }.map { HealthspanTrendPoint(day: $0.day, value: $0.value) }) { point in
-                        if let date = healthspanDate(point.day) {
-                            LineMark(x: .value("Date", date), y: .value("Age", point.value))
-                                .foregroundStyle(StrandPalette.positive)
-                            PointMark(x: .value("Date", date), y: .value("Age", point.value))
-                                .foregroundStyle(StrandPalette.positive)
+                    ForEach(points) { point in
+                        LineMark(x: .value("Date", point.date), y: .value("Age", point.value), series: .value("Segment", point.segment))
+                            .foregroundStyle(StrandPalette.positive)
+                        PointMark(x: .value("Date", point.date), y: .value("Age", point.value))
+                            .foregroundStyle(StrandPalette.positive)
+                    }
+                    if let reading {
+                        PointMark(x: .value("Date", reading.date), y: .value("Age", reading.value))
+                            .foregroundStyle(StrandPalette.textPrimary)
+                        if selectedAgeDay != nil {
+                            RuleMark(x: .value("Date", reading.date)).foregroundStyle(StrandPalette.textSecondary)
                         }
                     }
                 }.frame(height: NoopMetrics.chartHeight)
+                .chartXScale(domain: Calendar.current.date(byAdding: .day, value: -179, to: reference)!...reference)
+                .chartYScale(domain: .automatic(includesZero: false))
                 .chartYAxisLabel(String(localized: "Age"))
                 .accessibilityLabel(String(localized: "NOOP Age trend"))
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        let select: (CGPoint) -> Void = { location in
+                            let x = location.x - geometry[proxy.plotAreaFrame].origin.x
+                            guard let date: Date = proxy.value(atX: x) else { return }
+                            selectedAgeDay = points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }?.day
+                        }
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .simultaneousGesture(SpatialTapGesture().onEnded { select($0.location) })
+                            .simultaneousGesture(DragGesture()
+                                .updating($ageDragIsHorizontal) { event, horizontal, _ in
+                                    if horizontal == nil { horizontal = abs(event.translation.width) > abs(event.translation.height) }
+                                }
+                                .onChanged { event in
+                                    guard ageDragIsHorizontal ?? (abs(event.translation.width) > abs(event.translation.height)) else { return }
+                                    select(event.location)
+                                })
+                    }
+                }
+                if let reading {
+                    HStack {
+                        Text(reading.date, style: .date)
+                        Spacer()
+                        Text("NOOP Age")
+                        Text(String(format: "%.1f", locale: .current, reading.value))
+                    }.font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                }
             }
         }
     }
 
-    private func contributor(_ title: String, symbol: String, value: String?) -> some View {
-        NoopCard { ContributorRow(label: title, value: value ?? String(localized: "Unavailable"), systemImage: symbol) }
-    }
+
 }
 
 struct HealthspanPreviewCard: View {
@@ -146,7 +188,7 @@ struct HealthspanPreviewCard: View {
                     HealthspanOrb(age: snapshot.age, chronologicalAge: profile.age, compact: true)
                     VStack(alignment: .leading, spacing: NoopMetrics.space2) {
                         Text("Healthspan").font(StrandFont.headline)
-                        Text(snapshot.age != nil ? String(localized: "Local wellness estimate") : profile.age >= 18 && snapshot.recoveryDays < 21 ? String(localized: "Calibrating") : String(localized: "Unavailable")).font(StrandFont.caption)
+                        Text(healthspanEligibilityLabel(snapshot.eligibility)).font(StrandFont.caption)
                         if let pace = snapshot.pace { Text(String(format: "%.1f×", locale: .current, pace)).font(StrandFont.bodyNumber) }
                     }
                     Spacer()
@@ -160,8 +202,8 @@ struct HealthspanPreviewCard: View {
             guard await healthspanAwaitSource(source, repo: repo) else { return }
             if loadedSource != source { await repo.refresh() }
             let revision = repo.refreshSeq
-            let resolvedDays = repo.days
-            let resolvedAge = await repo.exploreSeries(key: "body_age", source: "my-whoop", days: 180)
+            let resolvedDays = repo.days.filter { healthspanDaysAgo($0.day, reference: Calendar.current.startOfDay(for: Date())).map { (0..<4000).contains($0) } ?? false }
+            let resolvedAge = await repo.exploreSeries(key: "body_age", source: "my-whoop", days: 4000)
             guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
             days = resolvedDays; series = resolvedAge; loadedSource = source
         }
@@ -174,32 +216,49 @@ struct HealthSupportingMetricCards: View {
     @State private var observedSource: String?
     @State private var loadedSource: String?
     @State private var vo2: MetricSeriesResolution?
-    @State private var steps: MetricSeriesResolution?
+    @State private var steps: HealthspanPresentation.StepSample?
     private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     var body: some View {
         VStack(spacing: NoopMetrics.gap) {
-            metric("VO₂max estimate", series: loadedSource == sourceID ? vo2 : nil, unit: "ml/kg/min")
-            metric("Steps", series: loadedSource == sourceID ? steps : nil, unit: "")
+            metric("VO₂max estimate", point: loadedSource == sourceID ? vo2?.points.last { $0.value.isFinite && $0.value > 0 } : nil, unit: "ml/kg/min")
+            metric("Steps", point: loadedSource == sourceID ? steps.map { ResolvedMetricPoint(day: $0.day, value: $0.count, source: $0.source, sourceKey: "steps") } : nil, unit: "")
         }
         .onReceive(healthspanSourcePublisher(model: model, repo: repo)) { observedSource = $0 }
         .task(id: "\(sourceID)|\(repo.refreshSeq)") {
             let source = sourceID
             guard await healthspanAwaitSource(source, repo: repo) else { return }
             let revision = repo.refreshSeq
+            let clock = Calendar.current.startOfDay(for: Date())
+            let fromDay = Repository.dayString(Calendar.current.date(byAdding: .day, value: -30, to: clock)!)
+            let throughDay = Repository.dayString(clock)
             var resolvedVO2 = await repo.resolvedSeries(key: "vo2max_est", source: "my-whoop", days: 180)
             if resolvedVO2.points.contains(where: { $0.value.isFinite && $0.value > 0 }) != true { resolvedVO2 = await repo.resolvedSeries(key: "vo2max", source: "apple-health", days: 180) }
-            let resolvedSteps = await repo.resolvedSeries(key: "steps", source: "my-whoop", days: 31)
+            let measuredSteps = await repo.resolvedSeries(key: "steps", source: "my-whoop", days: 31)
+            var importedSteps: [HealthspanPresentation.StepSample] = []
+            if let store = await repo.storeHandle() {
+                for importedSource in ["apple-health", "health-connect"] {
+                    let rows = (try? await store.appleDaily(deviceId: importedSource, from: fromDay, to: throughDay)) ?? []
+                    importedSteps += rows.compactMap { row in row.steps.map { .init(day: row.day, count: Double($0), source: importedSource) } }
+                }
+            }
+            let resolvedSteps = HealthspanPresentation.latestSteps(
+                measured: measuredSteps.points.map { .init(day: $0.day, count: $0.value, source: $0.source) },
+                imported: importedSteps, fromDay: fromDay, throughDay: throughDay)
             guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
             vo2 = resolvedVO2; steps = resolvedSteps; loadedSource = source
         }
     }
-    private func metric(_ title: LocalizedStringKey, series: MetricSeriesResolution?, unit: String) -> some View {
-        let latest = series?.points.last { $0.value.isFinite && (unit.isEmpty ? $0.value >= 0 : $0.value > 0) }
+    private func metric(_ title: LocalizedStringKey, point latest: ResolvedMetricPoint?, unit: String) -> some View {
         return NoopCard {
             HStack {
                 VStack(alignment: .leading, spacing: NoopMetrics.space2) {
                     Text(title).font(StrandFont.headline)
-                    if let latest { Text(latest.day).font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary) }
+                    if let latest {
+                        HStack(spacing: NoopMetrics.space2) {
+                            Text(latest.day)
+                            if ["apple-health", "health-connect"].contains(latest.source) { Text("Imported") }
+                        }.font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                    }
                 }
                 Spacer()
                 if let latest {
@@ -211,9 +270,11 @@ struct HealthSupportingMetricCards: View {
     }
 }
 
-private struct HealthspanTrendPoint: Identifiable {
+private struct HealthspanTrendPoint: Identifiable, Equatable {
     let day: String
     let value: Double
+    let date: Date
+    let segment: Int
     var id: String { day }
 }
 
@@ -290,11 +351,12 @@ func healthspanSnapshot(series: [(day: String, value: Double)], days: [DailyMetr
         guard let offset = healthspanDaysAgo(point.day, reference: reference) else { return nil }
         return .init(daysAgo: offset, age: point.value)
     }
-    let recoveryDays = Set(days.filter { $0.recovery != nil && (healthspanDaysAgo($0.day, reference: reference).map { (0..<31).contains($0) } ?? false) }.map(\.day)).count
-    return HealthspanPresentation.snapshot(samples: samples, recoveryDays: recoveryDays, chronologicalAge: Double(age))
+    let offsets = days.compactMap { row -> Int? in
+        guard let recovery = row.recovery, recovery.isFinite, (0...100).contains(recovery) else { return nil }
+        return healthspanDaysAgo(row.day, reference: reference)
+    }
+    return HealthspanPresentation.snapshot(samples: samples, recoveryOffsets: offsets, chronologicalAge: Double(age))
 }
-
-private func average(_ values: [Double]) -> Double? { values.isEmpty ? nil : values.reduce(0, +) / Double(values.count) }
 
 func healthspanDateSelector(reference: Date, days: Int = 1, previous: @escaping () -> Void, next: @escaping () -> Void, canAdvance: Bool, canGoBack: Bool = true) -> some View {
     HStack {

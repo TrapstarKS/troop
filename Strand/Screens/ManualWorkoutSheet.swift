@@ -64,7 +64,7 @@ struct ManualWorkoutSheet: View {
     /// itself (capped at 168) instead of being squeezed to the text field's height. See `suggestionList`.
     @State private var suggestionsHeight: CGFloat = 0
 
-    init(editing: WorkoutRow? = nil,
+    init(editing: WorkoutRow? = nil, initialEndDate: Date? = nil,
          onSave: @escaping (_ row: WorkoutRow, _ replacing: WorkoutRow?) -> Void) {
         self.editing = editing
         self.onSave = onSave
@@ -80,13 +80,13 @@ struct ManualWorkoutSheet: View {
         // values and try again."; now that an end in the future says so by name, it would greet every
         // fresh add with a red line. Anchoring to the end is also the truer default for the retroactive
         // entry this sheet is for.
-        let defaultEnd = Date()
+        let defaultEnd = initialEndDate ?? Date()
         _start = State(initialValue: e.map { Date(timeIntervalSince1970: TimeInterval($0.startTs)) }
                        ?? defaultEnd.addingTimeInterval(-45 * 60))
         _end = State(initialValue: e.map { Date(timeIntervalSince1970: TimeInterval($0.endTs)) }
                      ?? defaultEnd)
         _avgHrText = State(initialValue: e?.avgHr.map(String.init) ?? "")
-        _kcalText = State(initialValue: e?.energyKcal.map { String(Int($0.rounded())) } ?? "")
+        _kcalText = State(initialValue: e?.energyKcal.map { RecoveryStrainDetailLogic.wholeNumber($0).map(String.init) ?? String($0) } ?? "")
         // Pre-fill the distance in the user's unit so an untouched edit round-trips the stored metres
         // (buildManualRow then re-stores exactly what's shown). @AppStorage isn't usable pre-init, so read
         // the same key directly.

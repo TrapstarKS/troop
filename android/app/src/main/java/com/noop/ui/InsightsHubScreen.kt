@@ -87,11 +87,15 @@ import kotlin.math.roundToInt
 @Composable
 fun InsightsHubScreen(vm: AppViewModel) {
     val days by vm.recentDays.collectAsState()
-    val hub = remember { InsightsHubViewModel() }
+    val registryActiveId by vm.activeStrapIdFlow.collectAsState()
+    val activeStrapId = registryActiveId ?: vm.activeStrapId
+    val journalSeq by vm.repo.journalRevision.collectAsState()
+    val publishedStrapId by vm.activeStrapIdFlow.collectAsState()
+    val hub = remember(publishedStrapId) { InsightsHubViewModel() }
     val state by hub.state.collectAsState()
 
     // Re-derive whenever the cached days change underneath (journal + dose are read via repo).
-    androidx.compose.runtime.LaunchedEffect(days) { hub.load(vm, days) }
+    androidx.compose.runtime.LaunchedEffect(days, journalSeq, activeStrapId) { hub.load(vm, days, activeStrapId) }
 
     var outcome by remember { mutableStateOf(InsightsOutcome.Recovery) }
     val ranked = remember(state, outcome) { hub.rankFor(state, outcome) }
@@ -207,7 +211,7 @@ private fun MoverCard(r: RankedEffect, outcome: InsightsOutcome) {
                             .drawBehind { drawCircle(tintColor) },
                     )
                     Text(
-                        r.behavior,
+                        journalLocalizedLabel(JournalCatalogItem(r.behavior)),
                         style = NoopType.headline,
                         color = Palette.textPrimary,
                         maxLines = 1,
@@ -219,7 +223,7 @@ private fun MoverCard(r: RankedEffect, outcome: InsightsOutcome) {
                 ConfidencePill(r.confidence)
             }
 
-            Text(r.sentence(), style = NoopType.body, color = Palette.textSecondary)
+            Text(uiString(R.string.plan_association_note), style = NoopType.body, color = Palette.textSecondary)
 
             // With / without means as uniform StatTiles.
             Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
@@ -297,7 +301,7 @@ private fun DoseResponseCard(card: DoseCardData) {
                 ConfidencePill(r.confidence)
             }
 
-            Text(r.sentence(), style = NoopType.body, color = Palette.textSecondary)
+            Text(uiString(R.string.plan_association_note), style = NoopType.body, color = Palette.textSecondary)
 
             // The prior-shrunk curve.
             DoseCurveChart(
@@ -476,7 +480,7 @@ private fun DoseCurveChart(points: List<DoseCurvePoint>, accent: Color, modifier
 // MARK: - Outcome
 
 internal enum class InsightsOutcome(
-    val label: String,
+    private val defaultLabel: String,
     val outcomeName: String,
     val key: String,
     val higherIsBetter: Boolean,
@@ -484,10 +488,16 @@ internal enum class InsightsOutcome(
     val pick: (DailyMetric) -> Double?,
     val format: (Double) -> String,
 ) {
-    Recovery("Charge", "Charge", "recovery", true, DomainTheme.Charge, { it.recovery }, { "${it.roundToInt()}%" }),
+    Recovery("Recovery", "Recovery", "recovery", true, DomainTheme.Charge, { it.recovery }, { "${it.roundToInt()}%" }),
     Hrv("HRV", "HRV", "hrv", true, DomainTheme.Rest, { it.avgHrv }, { "${it.roundToInt()} ms" }),
-    Sleep("Rest", "Rest", "sleep_performance", true, DomainTheme.Rest, { it.efficiency }, { "${it.roundToInt()}%" }),
-    Rhr("RHR", "Resting HR", "rhr", false, DomainTheme.Stress, { it.restingHr?.toDouble() }, { "${it.roundToInt()} bpm" }),
+    Sleep("Sleep Performance", "Sleep Performance", "sleep_performance", true, DomainTheme.Rest, { null }, { "${it.roundToInt()}%" }),
+    Rhr("RHR", "Resting HR", "rhr", false, DomainTheme.Stress, { it.restingHr?.toDouble() }, { "${it.roundToInt()} bpm" });
+
+    val label: String get() = when (this) {
+        Recovery -> uiString(R.string.plan_trends_recovery)
+        Sleep -> uiString(R.string.plan_trends_sleep_performance)
+        else -> defaultLabel
+    }
 }
 
 // MARK: - Dose card view-data
@@ -571,10 +581,10 @@ internal class InsightsHubViewModel {
         }
     }
 
-    suspend fun load(vm: AppViewModel, days: List<DailyMetric>) {
+    suspend fun load(vm: AppViewModel, days: List<DailyMetric>, activeStrapId: String) {
         // Journal → behaviour → days (imported ∪ native, native wins). BOTH answers count now, kept in
         // separate maps; the merge is what guarantees a day cannot be Yes and No for one question.
-        val imported = vm.repo.journal("my-whoop", "0000-01-01", "9999-12-31")
+        val imported = vm.repo.importedSourceIds(activeStrapId).flatMap { vm.repo.journal(it, "0000-01-01", "9999-12-31") }
         val native = vm.repo.journal(JOURNAL_DEVICE_ID, "0000-01-01", "9999-12-31")
         val entries = mergeJournalEntries(imported, native)
         val byBehaviour = HashMap<String, MutableSet<String>>()
@@ -599,6 +609,8 @@ internal class InsightsHubViewModel {
         // Dose rows per dosed behaviour, under the dedicated dose source; logged "yes" days
         // back-fill dose = 1, explicit dose rows override (matches the Swift contract).
         val doseCards = ArrayList<DoseCardData>()
+        val performance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", strapDeviceId = activeStrapId)
+        outcomeByKey["sleep_performance"] = performance.points.associate { it.day to it.value }
         for (behavior in DosedBehavior.entries) {
             val doses = HashMap<String, Int>()
             for ((question, set) in behaviours) if (matches(behavior, question)) {
@@ -615,6 +627,7 @@ internal class InsightsHubViewModel {
             doseCards.add(DoseCardData(behavior, response, latest))
         }
 
+        if (activeStrapId != vm.activeStrapId) return
         _state.value = Snapshot(
             loaded = true,
             behaviours = behaviours,

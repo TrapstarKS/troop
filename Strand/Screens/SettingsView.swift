@@ -17,6 +17,7 @@ import WhoopProtocol
 /// Settings — profile (powers zones / calories / recovery), strap connection, and about.
 /// Grouped cards on surface.raised with a two-column form feel.
 struct SettingsView: View {
+    var category: SettingsCategory? = nil
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var live: LiveState
     @EnvironmentObject var profile: ProfileStore
@@ -253,46 +254,33 @@ struct SettingsView: View {
     @AppStorage(SettingsDisclosureDefaults.advancedOpenKey) private var advancedOpen = SettingsDisclosureDefaults.advancedOpenDefault
 
     var body: some View {
-        ScreenScaffold(title: "Settings",
-                       subtitle: "Your numbers, your strap, and how NOOP works. All on \(Platform.deviceNounPhrase).",
-                       // The day-of-sky liquid backdrop, matching Today / Health / Sleep / Trends / Devices:
-                       // a fixed, full-bleed time-of-day sky behind the scroll content (it does not scroll).
-                       // Settings' own frosted cards sit on the dark canvas below the sky band, unchanged.
-                       topBackground: liquidScaffoldSky()) {
+        ScreenScaffold(title: LocalizedStringKey(category?.title ?? String(localized: "Settings")),
+                       subtitle: "Your numbers, your strap, and how NOOP works. All on \(Platform.deviceNounPhrase).") {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
-                // Everyday sections stay expanded (S3): the ones a first-run user actually needs.
-                profileCard.staggeredAppear(index: 0)
-                unitsCard.staggeredAppear(index: 1)
-                appearanceCard.staggeredAppear(index: 2)
-                strapCard.staggeredAppear(index: 3)
-                #if os(iOS)
-                liveNotificationsCard.staggeredAppear(index: 3)
-                #endif
-                streakCard.staggeredAppear(index: 4)
-                featuresCard.staggeredAppear(index: 5)
-                #if os(iOS)
-                syncCard.staggeredAppear(index: 6)
-                #endif
-
-                // Lower-frequency sections collapse behind a single default-closed disclosure so the
-                // screen opens at ~6 sections instead of 11. Nothing is removed; every section here
-                // (Recovery / advanced scoring, Test Centre, the experimental probes + raw-capture, and
-                // Backup & restore) stays one tap away. Modelled on the Test Centre "Advanced" group.
-                SettingsDisclosureGroup(
-                    title: "Advanced",
-                    subtitle: "Recovery, HRV tuning, Test Centre, experimental probes, and backup. Tucked away to keep the everyday screen tidy.",
-                    isExpanded: $advancedOpen
-                ) {
-                    recoveryCard
-                    hrvCard   // #518: Continuous HRV capture + HRV window moved here out of the always-visible Strap card
-                    testCentreCard
-                    experimentalCard
-                    backupCard
+                if let category {
+                    categoryContent(category)
+                } else {
+                    ForEach(SettingsCategory.allCases) { item in
+                        NavigationLink {
+                            SettingsView(category: item)
+                        } label: {
+                            NoopCard {
+                                HStack(spacing: NoopMetrics.space3) {
+                                    Image(systemName: item.icon).foregroundStyle(StrandPalette.textSecondary)
+                                    Text(item.title).font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right").foregroundStyle(StrandPalette.textTertiary)
+                                }.frame(minHeight: NoopMetrics.controlHeight)
+                            }
+                        }.buttonStyle(.plain)
+                    }
+                    NavigationLink { LocalNotificationsView() } label: {
+                        NoopCard { Label("Notifications", systemImage: "bell").font(StrandFont.body) }
+                    }.buttonStyle(.plain)
+                    NavigationLink { CoachSettingsView() } label: {
+                        NoopCard { Label("Coach settings", systemImage: "sparkles").font(StrandFont.body) }
+                    }.buttonStyle(.plain)
                 }
-                .staggeredAppear(index: 6)
-
-                // About stays expanded at the foot (version, links and the help sheets people return to).
-                aboutCard.staggeredAppear(index: 7)
             }
         }
         .alert(backupAlertTitle, isPresented: $showBackupAlert) {
@@ -356,6 +344,75 @@ struct SettingsView: View {
             DiagnosticsSheet(onClose: { showDiagnostics = false })
         }
         #endif
+    }
+
+    @ViewBuilder
+    private func categoryContent(_ category: SettingsCategory) -> some View {
+        switch category {
+        case .profile:
+            profileCard
+            unitsCard
+            streakCard
+        case .appearance:
+            appearanceCard
+        case .device:
+            strapCard
+            hrvCard
+            #if os(iOS)
+            liveNotificationsCard
+            #endif
+        case .data:
+            #if os(iOS)
+            syncCard
+            #endif
+            backupCard
+            NavigationLink { DataSourcesView() } label: { Text("Data Sources") }
+            NavigationLink { BackupSyncView() } label: { Text("Backup & Sync") }
+        case .scoring:
+            recoveryCard
+            sleepStagingCard
+        case .features:
+            featuresCard
+        case .diagnostics:
+            testCentreCard
+            experimentalCard
+        case .about:
+            aboutCard
+        case .all:
+                // Everyday sections stay expanded (S3): the ones a first-run user actually needs.
+                profileCard.staggeredAppear(index: 0)
+                unitsCard.staggeredAppear(index: 1)
+                appearanceCard.staggeredAppear(index: 2)
+                strapCard.staggeredAppear(index: 3)
+                #if os(iOS)
+                liveNotificationsCard.staggeredAppear(index: 3)
+                #endif
+                streakCard.staggeredAppear(index: 4)
+                featuresCard.staggeredAppear(index: 5)
+                #if os(iOS)
+                syncCard.staggeredAppear(index: 6)
+                #endif
+
+                // Lower-frequency sections collapse behind a single default-closed disclosure so the
+                // screen opens at ~6 sections instead of 11. Nothing is removed; every section here
+                // (Recovery / advanced scoring, Test Centre, the experimental probes + raw-capture, and
+                // Backup & restore) stays one tap away. Modelled on the Test Centre "Advanced" group.
+                SettingsDisclosureGroup(
+                    title: "Advanced",
+                    subtitle: "Recovery, HRV tuning, Test Centre, experimental probes, and backup. Tucked away to keep the everyday screen tidy.",
+                    isExpanded: $advancedOpen
+                ) {
+                    recoveryCard
+                    hrvCard   // #518: Continuous HRV capture + HRV window moved here out of the always-visible Strap card
+                    testCentreCard
+                    experimentalCard
+                    backupCard
+                }
+                .staggeredAppear(index: 6)
+
+                // About stays expanded at the foot (version, links and the help sheets people return to).
+                aboutCard.staggeredAppear(index: 7)
+        }
     }
 
     // MARK: - Profile
@@ -1155,11 +1212,9 @@ struct SettingsView: View {
                 }
                 #if os(iOS)
                 rowDivider
-                // #1841: the same preference Android drives its own bar with, by name and meaning. Here
-                // the SYSTEM owns the behaviour — iOS 26 minimises the tab bar to a pill on scroll rather
-                // than sliding it away — so this asks for the platform's reading of the intent rather
-                // than reproducing ours. Below iOS 26 the modifier is inert and the row simply does
-                // nothing, which is why it is not offered there.
+                // #1841: shared with Android by name and meaning. The custom tab capsule consumes
+                // the shell's vertical-scroll callbacks to hide and restore its chrome on iOS 26.
+                // The preference remains inactive on earlier iOS versions.
                 if #available(iOS 26.0, *) {
                     FormRow(label: "Hide bar when scrolling") {
                         Toggle("", isOn: $bottomBarAutoHide)

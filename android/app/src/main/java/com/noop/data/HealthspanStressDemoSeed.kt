@@ -21,6 +21,7 @@ object HealthspanStressDemoSeed {
         val zone = ZoneId.systemDefault()
         val today = now.atZone(zone).toLocalDate()
         seedDailyStressIfMissing(repo, today)
+        seedYesterdayActivityIfMissing(repo, today, zone)
         val hr = ArrayList<HrSample>()
         for (dayOffset in -1L..0L) {
             val day = today.plusDays(dayOffset)
@@ -43,6 +44,27 @@ object HealthspanStressDemoSeed {
         val biometricTables = listOf("hr", "rr", "spo2", "skinTemp", "steps", "resp", "gravity",
             "ppgHr", "sleepState", "ppgWaveform", "v18Aux")
         return biometricTables.all { counts[it] == 0 }
+    }
+
+    // Swift twin: HealthspanStressDemoSeed.seedYesterdayActivityIfMissing.
+    private suspend fun seedYesterdayActivityIfMissing(repo: WhoopRepository, today: LocalDate, zone: ZoneId) {
+        val yesterday = today.minusDays(1)
+        val from = yesterday.atTime(6, 0).atZone(zone).toEpochSecond()
+        val to = yesterday.atTime(22, 0).atZone(zone).toEpochSecond()
+        val dayEnd = today.atStartOfDay(zone).toEpochSecond() - 1
+        for (source in listOf("my-whoop", "apple-health")) {
+            val existing = repo.workouts(source, 0L, dayEnd, limit = Int.MAX_VALUE)
+            if (existing.any { it.endTs > it.startTs && it.startTs < to && it.endTs > from }) return
+        }
+
+        // Synthetic activity context for the yesterday HR fixture; no physiological metrics are fabricated.
+        val start = yesterday.atTime(12, 0).atZone(zone).toEpochSecond()
+        repo.upsertWorkouts(listOf(
+            WorkoutRow(deviceId = "my-whoop", startTs = start, endTs = start + 1200, sport = "Walking",
+                source = "my-whoop", durationS = 1200.0, energyKcal = null, avgHr = null, maxHr = null,
+                strain = null, distanceM = null, zonesJSON = null, notes = "Synthetic demo activity overlay",
+                routePolyline = null, steps = null),
+        ))
     }
 
     /** Swift twin: `HealthspanStressDemoSeed.seedDailyStressIfMissing`. */

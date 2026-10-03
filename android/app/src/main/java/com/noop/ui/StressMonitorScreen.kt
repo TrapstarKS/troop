@@ -3,7 +3,7 @@ package com.noop.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,8 +50,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.noop.R
 import com.noop.analytics.DaytimeStress
 import com.noop.analytics.HealthspanPresentation
+import com.noop.analytics.StrainScorer
 import com.noop.data.WhoopRepository
 import com.noop.data.WorkoutRow
+import com.noop.ingest.ActivityFileImporter
+import com.noop.ingest.LiftingImporter
 import com.noop.widget.StressWidgetProducer
 import java.time.Instant
 import java.time.LocalDate
@@ -80,18 +84,21 @@ private data class StressMonitorData(
 
 @Composable
 fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
-    var showHistory by remember { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
     val days by vm.recentDays.collectAsStateWithLifecycle()
-    val workouts by vm.workouts.collectAsStateWithLifecycle()
     val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val strapId = selectedStrap ?: vm.activeStrapId
     val context = LocalContext.current
     val personalBaseline = NoopPrefs.stressPersonalBaseline(context)
+    val profile = ProfileStore.from(context.applicationContext)
+    val strainMaxHR = profile.hrMax.toDouble()
+    val sex = profile.sex
+    val effortMethod = NoopPrefs.effortMethod(context)
     val lifecycleOwner = LocalLifecycleOwner.current
-    var selectedDay by remember { mutableStateOf(LocalDate.now()) }
+    var selectedDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
     var data by remember(selectedDay, strapId) { mutableStateOf<StressMonitorData?>(null) }
     var nowSeconds by remember { mutableLongStateOf(System.currentTimeMillis() / 1000L) }
-    var selectedTimestamp by remember(selectedDay, strapId) { mutableStateOf<Long?>(null) }
+    var selectedTimestamp by rememberSaveable(selectedDay, strapId) { mutableStateOf<Long?>(null) }
 
     BackHandler(enabled = showHistory) { showHistory = false }
     if (showHistory) {
@@ -107,7 +114,6 @@ fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
         return
     }
 
-    LaunchedEffect(vm) { vm.loadWorkouts() }
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
@@ -116,13 +122,13 @@ fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
             }
         }
     }
-    LaunchedEffect(vm, strapId, selectedDay, days, workouts, personalBaseline, lifecycleOwner) {
+    LaunchedEffect(vm, strapId, selectedDay, days, personalBaseline, strainMaxHR, sex, effortMethod, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             do {
                 val now = System.currentTimeMillis() / 1000L
                 val window = stressLocalDayWindow(selectedDay, ZoneId.systemDefault())
                 try {
-                    data = loadStressMonitorData(vm, strapId, selectedDay, workouts, personalBaseline, now)
+                    data = loadStressMonitorData(vm, strapId, selectedDay, personalBaseline, now, strainMaxHR, sex, effortMethod)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -198,9 +204,11 @@ private suspend fun loadStressMonitorData(
     vm: AppViewModel,
     strapId: String,
     selectedDay: LocalDate,
-    workouts: List<WorkoutRow>,
     personalBaseline: Boolean,
     now: Long,
+    strainMaxHR: Double,
+    sex: String,
+    effortMethod: StrainScorer.Method,
 ): StressMonitorData = withContext(Dispatchers.Default) {
     val zone = ZoneId.systemDefault()
     val window = stressLocalDayWindow(selectedDay, zone)
@@ -219,6 +227,7 @@ private suspend fun loadStressMonitorData(
     val importedSleep = vm.repo.sleepSessionsUnion(strapId, sleepFrom, end)
     val computedSleep = vm.repo.computedSleepSessionsUnion(strapId, sleepFrom, end)
     val sleep = WhoopRepository.mergeSleep(importedSleep, computedSleep)
+    val workouts = stressMonitorWorkoutRows(vm.repo, strapId, now, strainMaxHR, sex, effortMethod)
     val events = (sleep.map { StressRecordedEvent(it.effectiveStartTs, it.endTs, true) } +
         workouts.map { StressRecordedEvent(it.startTs, it.endTs, false) })
         .filter { it.start < end && it.end > window.fromEpochSecond && it.end > it.start }
@@ -226,6 +235,31 @@ private suspend fun loadStressMonitorData(
     val stored = readStoredStress(vm, strapId, selectedDay, selectedDay)
     val dailyScore = stored[selectedDay.toString()]
     StressMonitorData(window, daytime, observationFrom, observationTo, events, dailyScore, mode is DaytimeStress.ScoringMode.BaselineRelative)
+}
+
+internal suspend fun stressMonitorWorkoutRows(
+    repo: WhoopRepository,
+    strapId: String,
+    now: Long,
+    strainMaxHR: Double,
+    sex: String,
+    effortMethod: StrainScorer.Method,
+): List<WorkoutRow> {
+    val whoop = repo.workoutsUnion(strapId, 0L, now)
+    val apple = repo.workouts("apple-health", 0L, now) + repo.workouts("health-connect", 0L, now)
+    val detected = repo.detectedWorkoutsUnion(strapId, 0L, now)
+    val lifting = repo.workouts(LiftingImporter.SOURCE_ID, 0L, now)
+    val activityFiles = repo.workouts(ActivityFileImporter.SOURCE_ID, 0L, now)
+    val markers = repo.dismissedDetectedUnion(strapId)
+    val filled = repo.fillWorkoutHrFromStrap(
+        whoop + apple + detected + activityFiles,
+        strapDeviceId = strapId,
+        strainMaxHR = strainMaxHR,
+        strainSex = sex,
+        effortMethod = effortMethod,
+    )
+    return WorkoutEditing.dedupCrossSource(WorkoutEditing.filterDismissed(filled + lifting, markers))
+        .sortedByDescending { it.startTs }
 }
 
 private suspend fun readStoredStress(vm: AppViewModel, strapId: String, from: LocalDate, to: LocalDate): Map<String, Double> =
@@ -315,7 +349,7 @@ private fun StressMonitorTimeline(data: StressMonitorData?, selectedTimestamp: L
                     Canvas(Modifier.fillMaxWidth().height(Metrics.chartHeight)
                         .clearAndSetSemantics { contentDescription = accessibility }
                         .pointerInput(data) { detectTapGestures { onSelectTimestamp(timestamp(it.x, size.width.toFloat())) } }
-                        .pointerInput(data) { detectDragGestures(onDragStart = { onSelectTimestamp(timestamp(it.x, size.width.toFloat())) }) { change, _ ->
+                        .pointerInput(data) { detectHorizontalDragGestures(onDragStart = { onSelectTimestamp(timestamp(it.x, size.width.toFloat())) }) { change, _ ->
                             change.consume()
                             onSelectTimestamp(timestamp(change.position.x, size.width.toFloat()))
                         } }) {

@@ -42,6 +42,9 @@ import com.noop.R
 import com.noop.ble.WhoopModel
 import com.noop.data.DemoSeeder
 import com.noop.data.WhoopRepository
+import com.noop.notif.LOCAL_NOTIFICATION_ROUTE
+import com.noop.notif.LocalNotificationContext
+import com.noop.notif.localNotificationContext
 import com.noop.push.SelfHostedPushScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,6 +59,21 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * dark-only, so we draw edge-to-edge over the near-black [Palette.surfaceBase].
  */
 class MainActivity : ComponentActivity() {
+    private var pendingLocalNotificationRoute by mutableStateOf<String?>(null)
+    private var pendingLocalNotificationContext by mutableStateOf<LocalNotificationContext?>(null)
+
+    private fun stageLocalNotification(intent: Intent?) {
+        if (intent == null) return
+        val typed = if (intent.hasExtra("localNotificationEvent")) localNotificationContext(intent) else null
+        pendingLocalNotificationContext = typed
+        pendingLocalNotificationRoute = if (typed == null) intent.getStringExtra(LOCAL_NOTIFICATION_ROUTE) else null
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        stageLocalNotification(intent)
+    }
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguagePrefs.wrap(newBase))
@@ -69,6 +87,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        stageLocalNotification(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         // NOTE: `crash` stays RAW here on purpose. acknowledge() fingerprints what it is given, and
         // pendingCrash() fingerprints the stored file — hand it redacted text and the two hashes never
@@ -96,7 +115,7 @@ class MainActivity : ComponentActivity() {
         // out of the box (no strap, no import). No-op once seeded; never runs on the full app.
         if (BuildConfig.ENABLE_DEMO) {
             lifecycleScope.launch(Dispatchers.IO) {
-                runCatching { DemoSeeder.seedIfEmpty(WhoopRepository.from(applicationContext)) }
+                runCatching { DemoSeeder.seedIfEmpty(WhoopRepository.from(applicationContext), applicationContext) }
                 // Also seed a 2nd PAIRED device (Polar H10) so the Devices screen shows WHOOP (Active)
                 // + a paired strap out of the box. No-op once seeded / if a real pairing exists.
                 runCatching {
@@ -153,7 +172,22 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             NoopTheme {
-                NoopRoot()
+                NoopRoot(
+                    localNotificationRoute = pendingLocalNotificationRoute,
+                    notificationContext = pendingLocalNotificationContext,
+                    onNotificationContextConsumed = { context ->
+                        if (pendingLocalNotificationContext == context) {
+                            pendingLocalNotificationContext = null
+                            context.wireFields.keys.forEach { intent.removeExtra(it) }
+                        }
+                    },
+                    onLocalNotificationRouteConsumed = { route ->
+                        if (pendingLocalNotificationRoute == route) {
+                            pendingLocalNotificationRoute = null
+                            intent.removeExtra(LOCAL_NOTIFICATION_ROUTE)
+                        }
+                    },
+                )
             }
         }
     }
@@ -1598,7 +1632,12 @@ object NoopPrefs {
  * state on each transition.
  */
 @Composable
-fun NoopRoot() {
+fun NoopRoot(
+    localNotificationRoute: String? = null,
+    onLocalNotificationRouteConsumed: (String) -> Unit = {},
+    notificationContext: LocalNotificationContext? = null,
+    onNotificationContextConsumed: (LocalNotificationContext) -> Unit = {},
+) {
     val context = LocalContext.current
     val prefs = remember { NoopPrefs.of(context) }
     val appViewModel: AppViewModel = viewModel()
@@ -1685,7 +1724,13 @@ fun NoopRoot() {
 
     // Existing, onboarded user: render the app, and if they've updated since last launch
     // (stored version behind current), show "What's New" once over the top.
-    AppRoot(viewModel = appViewModel)
+    AppRoot(
+        viewModel = appViewModel,
+        localNotificationRoute = localNotificationRoute,
+        onLocalNotificationRouteConsumed = onLocalNotificationRouteConsumed,
+        notificationContext = notificationContext,
+        onNotificationContextConsumed = onNotificationContextConsumed,
+    )
 
     DebugExportReviewHost()
 

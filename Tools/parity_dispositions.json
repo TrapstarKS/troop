@@ -557,6 +557,60 @@
       "platform": "kotlin",
       "rationale": "Swift IntelligenceEngine.analyzeRecent retains the same per-night metric sidecar append block inline in the excluded app layer. Kotlin moves that block into a private non-suspending helper to preserve the existing JaCoCo method-size limit. Null handling, numeric conversions, marker values, row append order and placement before computed-window persistence are unchanged. Pure scoring and provenance twins remain oracle-guarded. Refs ryanbr/noop#1524 and ryanbr/noop#1118 and ryanbr/noop#1169.",
       "twin_path": "Strand/Data/IntelligenceEngine.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WeeklyPlan.kt::calendar/0#1",
+      "identity_sha256": "7ba87fa8cc604e60bddf47943831a9452815e0bff18b56174bebcefc721d70c5",
+      "platform": "kotlin",
+      "rationale": "WeeklyPlanCalendar.calendar is a private computed property in the excluded Swift app layer; Kotlin creates the same UTC Gregorian calendar through a function. The disposition records that inventory boundary.",
+      "twin_path": "Strand/Data/WeeklyPlan.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-property",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WeeklyPlan.kt::goals@property#1",
+      "identity_sha256": "e4cfe7b169e19b66e2287e228c891888a6061fa22286a965449af282827e3167",
+      "platform": "kotlin",
+      "rationale": "WeeklyPlanPreset.goals has the same role in the excluded Swift app layer, supplying local routine presets. Paired WeeklyPlan tests cover the values; this disposition records only the inventory boundary.",
+      "twin_path": "Strand/Data/WeeklyPlan.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-property",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WeeklyPlan.kt::normalized@property#1",
+      "identity_sha256": "b64baaefae1e82d75bbc7841b67f6f89f5e4b521cbe6e0b437d458bcd34ff225",
+      "platform": "kotlin",
+      "rationale": "WeeklyPlanGoals.normalized clamps the same goal fields in the excluded Swift app layer. Paired WeeklyPlan tests cover the normalization; this disposition records only the inventory boundary.",
+      "twin_path": "Strand/Data/WeeklyPlan.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-property",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WeeklyPlan.kt::percent@property#1",
+      "identity_sha256": "a7491cb71860ad4e18092a2115fddd0e9e73ea1fd9fb09260ebe98b057aaf048",
+      "platform": "kotlin",
+      "rationale": "WeeklyPlanProgress.percent resolves progress in the excluded Swift app layer. Paired WeeklyPlan tests cover missing readings and capped goal percentages; this disposition records only the inventory boundary.",
+      "twin_path": "Strand/Data/WeeklyPlan.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-property",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WeeklyPlan.kt::overallPercent@property#1",
+      "identity_sha256": "1de3d36ebb93c2edf2ba015d0ba59d07bb305dd78e2be01a4970ea4675d12405",
+      "platform": "kotlin",
+      "rationale": "WeeklyPlanSnapshot.overallPercent combines available goal progress in the excluded Swift app layer. Paired WeeklyPlan tests cover its optional result; this disposition records only the inventory boundary.",
+      "twin_path": "Strand/Data/WeeklyPlan.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-property",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WeeklyPlan.kt::id@property#1",
+      "identity_sha256": "784562d89b3d1ac09fa73e39ceb81432936a566ac62d0bde0e46f8de82aaabd9",
+      "platform": "kotlin",
+      "rationale": "WeeklyPlanNotice.id constructs the same check-in or recap identifier in the excluded Swift app layer. Paired WeeklyPlan tests cover those identifiers; this disposition records only the inventory boundary.",
+      "twin_path": "Strand/Data/WeeklyPlan.swift"
     }
   ]
 }

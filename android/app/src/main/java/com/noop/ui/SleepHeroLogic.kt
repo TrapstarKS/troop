@@ -4,6 +4,56 @@ import com.noop.analytics.RestScorer
 import com.noop.data.DailyMetric
 import com.noop.data.SleepSession
 
+internal fun requestedSleepNightOffset(navDays: List<List<SleepSession>>, dayKey: String?): Int? {
+    if (dayKey == null) return null
+    return navDays.indexOfFirst { blocks -> blocks.any { localDayString(it.endTs) == dayKey } }
+        .takeIf { it >= 0 }
+}
+
+internal fun sleepEditGroupFor(session: SleepSession, heroGroup: List<SleepSession>): List<SleepSession> =
+    if (heroGroup.any { it.deviceId == session.deviceId && it.startTs == session.startTs }) heroGroup
+    else listOf(session)
+
+internal fun recordedSleepStages(session: SleepSession): Stages? = parseSessionStages(
+    com.noop.analytics.SleepStageTotals.clampStagesToOnset(session.stagesJSON, session.effectiveStartTs),
+)?.let { Stages(it.awake, it.light, it.deep, it.rem) }?.takeIf { it.total > 0.0 }
+
+internal fun selectedNightStages(night: HeroNight?): Stages? = night?.let {
+    it.groupStages?.let { group -> Stages(group.awake, group.light, group.deep, group.rem) }
+        ?.takeIf { group -> group.total > 0.0 } ?: recordedSleepStages(it.session)
+}
+
+internal data class SelectedSleepAmounts(val asleepMin: Double?, val needMin: Double?, val sufficiencyPct: Double?)
+
+internal fun selectedSleepAmounts(
+    stages: Stages?, day: DailyMetric?, dailySufficiencyPct: Double?, importedNeedMin: Double?,
+): SelectedSleepAmounts {
+    val dailyAsleep = day?.totalSleepMin?.takeIf { it > 0.0 }
+    val asleep = stages?.takeIf { it.total > 0.0 }?.asleep ?: dailyAsleep
+    // Recover the existing need from its original daily numerator, before choosing recorded asleep.
+    val need = importedNeedMin?.takeIf { it > 0.0 }
+        ?: dailySufficiencyPct?.takeIf { it > 0.0 }?.let { ratio -> dailyAsleep?.let { it / ratio * 100.0 } }
+    val sufficiency = if (dailySufficiencyPct != null && need != null) asleep?.let { it / need * 100.0 } else null
+    return SelectedSleepAmounts(asleep, need, sufficiency)
+}
+
+internal fun napAsleepMinutes(naps: List<SleepSession>): Double? {
+    var total = 0.0
+    for (nap in naps) {
+        total += recordedSleepStages(nap)?.asleep ?: return null
+    }
+    return total
+}
+
+internal fun selectedSleepEfficiency(
+    night: HeroNight?, days: List<DailyMetric>, stages: Stages? = selectedNightStages(night),
+): Double? {
+    val session = night?.session ?: return null
+    if (stages != null && stages.total > 0.0) return (stages.asleep / stages.total * 100.0).coerceIn(0.0, 100.0)
+    val efficiency = session.efficiency ?: days.lastOrNull { it.day == night.dayKey }?.efficiency
+    return efficiency?.takeIf { it.isFinite() }?.let { if (it <= 1.0) it * 100.0 else it }
+}
+
 /** A short Rest state word for the hero gauge — same banding the synthesis hero uses. */
 internal fun sleepScoreWord(score: Double): String = when {
     score < 50.0 -> "Poor"

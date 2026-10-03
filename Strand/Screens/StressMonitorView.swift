@@ -6,6 +6,7 @@ import StrandDesign
 import WhoopStore
 
 struct StressMonitorView: View {
+    @GestureState private var chartDragIsHorizontal: Bool?
     @EnvironmentObject private var repo: Repository
     @EnvironmentObject private var model: AppModel
     @State private var observedSource: String?
@@ -125,6 +126,7 @@ struct StressMonitorView: View {
                 ForEach(trace) { point in
                     LineMark(x: .value("Time", Date(timeIntervalSince1970: Double(point.ts))), y: .value("Stress", point.level), series: .value("Segment", point.segment))
                         .foregroundStyle(LinearGradient(colors: [StressMonitorRamp.tense, StressMonitorRamp.steady, StressMonitorRamp.calm], startPoint: .top, endPoint: .bottom))
+                        .alignsMarkStylesWithPlotArea()
                         .lineStyle(StrokeStyle(lineWidth: ChartTokens.lineWidth))
                     if point.ts == current?.startTs {
                         PointMark(x: .value("Time", Date(timeIntervalSince1970: Double(point.ts))), y: .value("Stress", point.level)).foregroundStyle(StressMonitorRamp.color(point.level))
@@ -138,12 +140,21 @@ struct StressMonitorView: View {
             .frame(height: NoopMetrics.chartHeight)
             .chartOverlay { proxy in
                 GeometryReader { geometry in
+                    let select: (CGPoint) -> Void = { location in
+                        let x = location.x - geometry[proxy.plotAreaFrame].origin.x
+                        guard let timestamp: Date = proxy.value(atX: x) else { return }
+                        selectedTs = result.timeline.min { abs(Double($0.startTs) - timestamp.timeIntervalSince1970) < abs(Double($1.startTs) - timestamp.timeIntervalSince1970) }?.startTs
+                    }
                     Rectangle().fill(.clear).contentShape(Rectangle())
-                        .gesture(DragGesture(minimumDistance: 0).onChanged { event in
-                            let x = event.location.x - geometry[proxy.plotAreaFrame].origin.x
-                            guard let timestamp: Date = proxy.value(atX: x) else { return }
-                            selectedTs = result.timeline.filter { $0.level != nil }.min { abs(Double($0.startTs) - timestamp.timeIntervalSince1970) < abs(Double($1.startTs) - timestamp.timeIntervalSince1970) }?.startTs
-                        })
+                        .simultaneousGesture(SpatialTapGesture().onEnded { select($0.location) })
+                        .simultaneousGesture(DragGesture()
+                            .updating($chartDragIsHorizontal) { event, horizontal, _ in
+                                if horizontal == nil { horizontal = abs(event.translation.width) > abs(event.translation.height) }
+                            }
+                            .onChanged { event in
+                                guard chartDragIsHorizontal ?? (abs(event.translation.width) > abs(event.translation.height)) else { return }
+                                select(event.location)
+                            })
                 }
             }
             HStack(spacing: NoopMetrics.space4) {
