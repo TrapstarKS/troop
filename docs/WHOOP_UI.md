@@ -56,7 +56,7 @@ Existing platform footprints remain available. These numbers are layout tokens, 
 | Tab capsule height | `tabHeight`: 60 | `tabHeight`: 64 |
 | Coach orb diameter | `coachDiameter`: 58 | `coachOrb`: 60 |
 | Compact header control | `compactControlSize`: 36 | `iconButton`: 48 |
-| Profile avatar | `TopChrome` uses `compactControlSize`: 36 | `chromeAvatar`: 36 inside the 48dp control |
+| Profile avatar | `TopChrome` uses `touchTarget`: 44 | `chromeAvatar`: 36 inside the 48dp control |
 | Interactive target | `touchTarget`: 44 | `iconButton`: 48; Material minimum targets retained |
 
 ## Reusable components
