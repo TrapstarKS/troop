@@ -69,7 +69,7 @@
     <string name="stress_monitor_low">Low</string>
     <string name="stress_monitor_medium">Medium</string>
     <string name="stress_monitor_high">High</string>
-    <string name="healthspan_chronological">Chronological age</string>
+    <string name="healthspan_chronological">Profile age</string>
     <string name="healthspan_how">How this estimate works</string>
     <string name="healthspan_slower">Slower</string>
     <string name="healthspan_faster">Faster</string>
@@ -85,4 +85,5 @@
     <string name="healthspan_trend">NOOP Age trend</string>
     <string name="healthspan_trend_reading">%1$s · %2$s years</string>
     <string name="stress_monitor_history">Stress history and advanced HRV</string>
+    <string name="healthspan_profile_source">Age uses the birthdate saved in Profile. Check it before interpreting this estimate.</string>
 </resources>

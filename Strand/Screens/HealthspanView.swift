@@ -78,6 +78,7 @@ struct HealthspanView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: NoopMetrics.space5) {
                     Text("How this estimate works").font(StrandFont.title2)
+                    Text("Age uses the birthdate saved in Profile. Check it before interpreting this estimate.")
                     Text("NOOP Age uses the existing weekly Body Age estimate with an uncertainty of ±5 years.")
                     Text("Pace compares the last 30 days with up to 180 days of Body Age history. It is an unvalidated local trend, not a medical prediction.")
                     Text(verbatim: "1 + 2 × (μ₃₀ − μ₁₈₀)").font(StrandFont.mono)
@@ -200,9 +201,9 @@ private struct HealthspanOrb: View {
                 Text(age.map { String(format: "%.1f", locale: .current, $0) } ?? "—").font(compact ? StrandFont.title2 : StrandFont.display())
                 if !compact {
                     Text("NOOP Age").strandOverline()
-                    Text("Chronological age").font(StrandFont.caption)
+                    Text("Profile age").font(StrandFont.caption)
                     Text(String(chronologicalAge)).font(StrandFont.bodyNumber)
-                    if let age { Text(String(format: "%+.1f", locale: .current, age - Double(chronologicalAge))).font(StrandFont.headline).foregroundStyle(StrandPalette.positive) }
+                    if let age { Text(String(format: "%+.1f", locale: .current, age - Double(chronologicalAge))).font(StrandFont.headline).foregroundStyle(StrandPalette.textSecondary) }
                     Text("±5 years").font(StrandFont.caption)
                 }
             }.foregroundStyle(StrandPalette.textPrimary)

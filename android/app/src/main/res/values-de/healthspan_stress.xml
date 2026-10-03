@@ -69,7 +69,7 @@
     <string name="stress_monitor_low">Niedrig</string>
     <string name="stress_monitor_medium">Mittel</string>
     <string name="stress_monitor_high">Hoch</string>
-    <string name="healthspan_chronological">Chronologisches Alter</string>
+    <string name="healthspan_chronological">Alter im Profil</string>
     <string name="healthspan_how">So funktioniert diese Schätzung</string>
     <string name="healthspan_slower">Langsamer</string>
     <string name="healthspan_faster">Schneller</string>
@@ -85,4 +85,5 @@
     <string name="healthspan_trend">NOOP-Alterstrend</string>
     <string name="healthspan_trend_reading">%1$s · %2$s Jahre</string>
     <string name="stress_monitor_history">Stressverlauf und erweiterte HRV</string>
+    <string name="healthspan_profile_source">Das Alter wird anhand des im Profil gespeicherten Geburtsdatums berechnet. Prüfe das Geburtsdatum, bevor du diese Schätzung interpretierst.</string>
 </resources>

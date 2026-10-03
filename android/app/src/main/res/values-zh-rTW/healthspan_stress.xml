@@ -69,7 +69,7 @@
     <string name="stress_monitor_low">低</string>
     <string name="stress_monitor_medium">中</string>
     <string name="stress_monitor_high">高</string>
-    <string name="healthspan_chronological">實際年齡</string>
+    <string name="healthspan_chronological">個人資料年齡</string>
     <string name="healthspan_how">這項估算如何計算</string>
     <string name="healthspan_slower">較慢</string>
     <string name="healthspan_faster">較快</string>
@@ -85,4 +85,5 @@
     <string name="healthspan_trend">NOOP 年齡趨勢</string>
     <string name="healthspan_trend_reading">%1$s · %2$s 歲</string>
     <string name="stress_monitor_history">壓力歷史和進階HRV</string>
+    <string name="healthspan_profile_source">年齡根據「個人資料」中儲存的出生日期計算。請先核對該日期，再解讀這項估算。</string>
 </resources>

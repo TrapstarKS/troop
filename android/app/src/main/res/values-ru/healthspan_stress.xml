@@ -69,7 +69,7 @@
     <string name="stress_monitor_low">Низкий</string>
     <string name="stress_monitor_medium">Средний</string>
     <string name="stress_monitor_high">Высокий</string>
-    <string name="healthspan_chronological">Хронологический возраст</string>
+    <string name="healthspan_chronological">Возраст в профиле</string>
     <string name="healthspan_how">Как работает эта оценка</string>
     <string name="healthspan_slower">Медленнее</string>
     <string name="healthspan_faster">Быстрее</string>
@@ -85,4 +85,5 @@
     <string name="healthspan_trend">Динамика возраста NOOP</string>
     <string name="healthspan_trend_reading">%1$s · %2$s лет</string>
     <string name="stress_monitor_history">История стресса и расширенная ВСР</string>
+    <string name="healthspan_profile_source">Возраст рассчитывается по дате рождения, сохранённой в Профиле. Проверьте эту дату, прежде чем интерпретировать эту оценку.</string>
 </resources>

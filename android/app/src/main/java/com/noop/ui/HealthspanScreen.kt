@@ -119,6 +119,7 @@ fun HealthspanScreen(vm: AppViewModel) {
                 Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
                     TrackedSectionHeader(stringResource(R.string.healthspan_how))
                     Text(stringResource(R.string.healthspan_method), style = NoopType.body, color = Palette.textSecondary)
+                    Text(stringResource(R.string.healthspan_profile_source), style = NoopType.body, color = Palette.textSecondary)
                 }
             }
         }

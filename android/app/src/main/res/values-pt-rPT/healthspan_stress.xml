@@ -69,7 +69,7 @@
     <string name="stress_monitor_low">Baixo</string>
     <string name="stress_monitor_medium">Médio</string>
     <string name="stress_monitor_high">Elevado</string>
-    <string name="healthspan_chronological">Idade cronológica</string>
+    <string name="healthspan_chronological">Idade do perfil</string>
     <string name="healthspan_how">Como funciona esta estimativa</string>
     <string name="healthspan_slower">Mais lento</string>
     <string name="healthspan_faster">Mais rápido</string>
@@ -85,4 +85,5 @@
     <string name="healthspan_trend">Tendência da idade NOOP</string>
     <string name="healthspan_trend_reading">%1$s · %2$s anos</string>
     <string name="stress_monitor_history">Histórico de stress e VFC avançada</string>
+    <string name="healthspan_profile_source">A idade é calculada a partir da data de nascimento guardada no Perfil. Verifica essa data antes de interpretares esta estimativa.</string>
 </resources>
