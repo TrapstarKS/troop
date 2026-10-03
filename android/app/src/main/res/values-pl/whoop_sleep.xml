@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whoop_sleep_detail_subtitle">Wybrana noc i czynniki snu.</string>
+    <string name="whoop_sleep_performance">Wynik snu</string>
+    <string name="whoop_sleep_hours_slept">Przespane godziny</string>
+    <string name="whoop_sleep_need">Potrzeba snu</string>
+    <string name="whoop_sleep_high_stress">Wysoki stres podczas snu</string>
+    <string name="whoop_sleep_poor">Słabo</string>
+    <string name="whoop_sleep_sufficient">Wystarczająco</string>
+    <string name="whoop_sleep_optimal">Optymalnie</string>
+    <string name="whoop_sleep_unavailable">Niedostępne</string>
+    <string name="whoop_sleep_imported_insight">Importowany wynik snu pozostaje zgodny z zapisem. Wysoki stres podczas snu jest tu niedostępny. Fazy pokazują wyłącznie zarejestrowane godziny.</string>
+    <string name="whoop_sleep_local_insight">Ten wynik jest szacunkiem wyliczonym na urządzeniu z danych snu. Wysoki stres podczas snu jest niedostępny i nie jest dodawany do wyniku.</string>
+    <string name="whoop_sleep_planner">Planer snu</string>
+    <string name="whoop_sleep_restorative">Sen regeneracyjny</string>
+    <string name="whoop_sleep_breaths_minute">oddechy/min</string>
+    <string name="whoop_sleep_duration_only">Czasy trwania faz są dostępne; ich godziny nie zostały zapisane.</string>
+    <string name="whoop_sleep_fragmented">Sen przerywany</string>
+    <string name="whoop_sleep_scrub_hint">Przeciągnij po osi czasu, aby sprawdzić dokładną godzinę i zapisaną fazę.</string>
+    <string name="whoop_sleep_stage_unrecorded">Brak zapisanej fazy</string>
+    <string name="whoop_sleep_awake">Czuwanie</string>
+    <string name="whoop_sleep_rem">REM</string>
+    <string name="whoop_sleep_light">Płytki</string>
+    <string name="whoop_sleep_deep">Głęboki</string>
+    <string name="whoop_sleep_stage_timeline">Oś czasu faz snu</string>
+    <string name="whoop_sleep_stage_subtitle">%1$s w łóżku · %2$s efektywności</string>
+    <string name="whoop_sleep_raw_stages">Nieprzetworzone fazy z urządzenia</string>
+    <string name="whoop_sleep_estimated_stages">Szacowane fazy na urządzeniu</string>
+</resources>

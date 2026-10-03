@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whoop_sleep_detail_subtitle">Выбранная ночь и её показатели сна.</string>
+    <string name="whoop_sleep_performance">Качество сна</string>
+    <string name="whoop_sleep_hours_slept">Часы сна</string>
+    <string name="whoop_sleep_need">Потребность во сне</string>
+    <string name="whoop_sleep_high_stress">Высокий стресс во сне</string>
+    <string name="whoop_sleep_poor">Низко</string>
+    <string name="whoop_sleep_sufficient">Достаточно</string>
+    <string name="whoop_sleep_optimal">Оптимально</string>
+    <string name="whoop_sleep_unavailable">Недоступно</string>
+    <string name="whoop_sleep_imported_insight">Импортированная оценка сна сохранена из вашей записи. Высокий стресс во сне здесь недоступен. Время фаз отображается только при наличии записи.</string>
+    <string name="whoop_sleep_local_insight">Эта оценка рассчитана на устройстве по вашим данным сна. Высокий стресс во сне недоступен и не включается в оценку.</string>
+    <string name="whoop_sleep_planner">Планировщик сна</string>
+    <string name="whoop_sleep_restorative">Восстановительный сон</string>
+    <string name="whoop_sleep_breaths_minute">вдохов/мин</string>
+    <string name="whoop_sleep_duration_only">Длительность фаз доступна; их время не записано.</string>
+    <string name="whoop_sleep_fragmented">Прерывистый сон</string>
+    <string name="whoop_sleep_scrub_hint">Проведите по шкале, чтобы увидеть точное время и записанную фазу.</string>
+    <string name="whoop_sleep_stage_unrecorded">Фаза не записана</string>
+    <string name="whoop_sleep_awake">Бодрствование</string>
+    <string name="whoop_sleep_rem">REM</string>
+    <string name="whoop_sleep_light">Лёгкий</string>
+    <string name="whoop_sleep_deep">Глубокий</string>
+    <string name="whoop_sleep_stage_timeline">Шкала фаз сна</string>
+    <string name="whoop_sleep_stage_subtitle">%1$s в постели · эффективность %2$s</string>
+    <string name="whoop_sleep_raw_stages">Необработанные фазы с устройства</string>
+    <string name="whoop_sleep_estimated_stages">Фазы, оценённые на устройстве</string>
+</resources>

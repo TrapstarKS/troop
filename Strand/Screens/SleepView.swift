@@ -574,23 +574,31 @@ struct SleepView: View {
         }
     }
 
+    static func selectedDebtMin(imported: Double?, asleep: Double?, latest: Double?) -> Double? {
+        if let imported { return imported }
+        guard let asleep, asleep > 0 else { return nil }
+        return latest
+    }
+
     private func selectedNightMetrics(_ model: SleepModel, detail: SleepModel?) -> some View {
         let night = displayedNight(model)
         let day = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
         let days = repo.days.filter { $0.day <= day }
-        let need = repo.importedSleep[day]?.needMin ?? SleepModel.sleepNeedMin(days: days)
+        let need: Double? = repo.importedSleep[day]?.needMin
+            ?? (selectedValue(detail?.hoursVsNeeded) != nil ? SleepModel.sleepNeedMin(days: days) : nil)
         let dailyAsleep = repo.days.last(where: { $0.day == day })?.totalSleepMin
         let asleep = dailyAsleep ?? (night.stages.asleep > 0 ? night.stages.asleep : nil)
-        let debt = repo.importedSleep[day]?.debtMin ?? ((dailyAsleep ?? 0) > 0 ? selectedValue(detail?.sleepDebt) : nil)
+        let debt = Self.selectedDebtMin(imported: repo.importedSleep[day]?.debtMin,
+                                        asleep: dailyAsleep, latest: selectedValue(detail?.sleepDebt))
         return VStack(spacing: NoopMetrics.gap) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: NoopMetrics.gap) {
                     MetricCard(label: String(localized: "Time asleep"), value: asleep.map(durationText) ?? "—", color: StrandPalette.sleepPrimary)
-                    MetricCard(label: String(localized: "Sleep Need"), value: durationText(need))
+                    MetricCard(label: String(localized: "Sleep Need"), value: need.map(durationText) ?? "—")
                 }
                 VStack(spacing: NoopMetrics.gap) {
                     MetricCard(label: String(localized: "Time asleep"), value: asleep.map(durationText) ?? "—", color: StrandPalette.sleepPrimary)
-                    MetricCard(label: String(localized: "Sleep Need"), value: durationText(need))
+                    MetricCard(label: String(localized: "Sleep Need"), value: need.map(durationText) ?? "—")
                 }
             }
             MetricCard(label: String(localized: "Restorative"),

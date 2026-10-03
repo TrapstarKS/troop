@@ -3,6 +3,13 @@ import StrandDesign
 @testable import Strand
 
 final class SleepStageInspectionTests: XCTestCase {
+    func testMissingSelectedDayDoesNotInheritPreviousDebt() {
+        XCTAssertNil(SleepView.selectedDebtMin(imported: nil, asleep: nil, latest: 90))
+        XCTAssertNil(SleepView.selectedDebtMin(imported: nil, asleep: 0, latest: 90))
+        XCTAssertEqual(SleepView.selectedDebtMin(imported: 0, asleep: nil, latest: 90), 0)
+        XCTAssertEqual(SleepView.selectedDebtMin(imported: nil, asleep: 420, latest: 90), 90)
+    }
+
     func testExactStageBoundariesAndMissingIntervals() {
         let intervals = [SleepInterval(stage: .light, start: 0, end: 60),
                          SleepInterval(stage: .deep, start: 60, end: 120),

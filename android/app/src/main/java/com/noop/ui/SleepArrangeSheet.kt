@@ -38,21 +38,23 @@ fun SleepArrangeSheet(
     onDismiss: () -> Unit,
     onSave: (order: List<SleepSection>, hidden: List<SleepSection>) -> Unit,
 ) {
+    val pinned = setOf(SleepSection.STAGES, SleepSection.NIGHT_DETAIL)
+    val editableOrder = initialOrder.filterNot { it in pinned }
     val hiddenSet = remember(initialHidden) { initialHidden.toSet() }
     val shown = remember {
-        mutableStateListOf<SleepSection>().apply { addAll(initialOrder.filterNot { it in hiddenSet }) }
+        mutableStateListOf<SleepSection>().apply { addAll(editableOrder.filterNot { it in hiddenSet }) }
     }
     val hidden = remember {
-        mutableStateListOf<SleepSection>().apply { addAll(initialOrder.filter { it in hiddenSet }) }
+        mutableStateListOf<SleepSection>().apply { addAll(editableOrder.filter { it in hiddenSet }) }
     }
 
     Dialog(onDismissRequest = onDismiss) {
-        Surface(color = Palette.surfaceOverlay, shape = RoundedCornerShape(16.dp)) {
+        Surface(color = Palette.surfaceOverlay, shape = RoundedCornerShape(Metrics.cornerSm)) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(Metrics.screenPadding),
+                verticalArrangement = Arrangement.spacedBy(Metrics.space16),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Metrics.space2)) {
                     Text(stringResource(R.string.sleep_customize_title), style = NoopType.title2, color = Palette.textPrimary)
                     Text(
                         stringResource(R.string.sleep_customize_description),
@@ -75,7 +77,7 @@ fun SleepArrangeSheet(
                     TextButton(
                         onClick = {
                             shown.clear()
-                            shown.addAll(SleepSection.defaultOrder)
+                            shown.addAll(SleepSection.defaultOrder.filterNot { it in pinned })
                             hidden.clear()
                         },
                         colors = ButtonDefaults.textButtonColors(contentColor = Palette.textSecondary),

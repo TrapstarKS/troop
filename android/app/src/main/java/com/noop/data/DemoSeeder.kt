@@ -291,6 +291,7 @@ object DemoSeeder {
         }
 
         repo.upsertDailyMetrics(daily)
+        sleepDetailExamples(sleeps, zone)
         repo.upsertSleepSessions(sleeps)
         repo.upsertMetricSeries(series)
         repo.upsertAppleDaily(apple)
@@ -299,6 +300,32 @@ object DemoSeeder {
     }
 
     // MARK: - helpers
+
+    /** Synthetic sleep-detail fixtures; no random samples or real strap data are consumed. */
+    private fun sleepDetailExamples(sleeps: MutableList<SleepSession>, zone: ZoneId) {
+        val latest = sleeps.maxByOrNull { it.endTs } ?: return
+        val durationRows = JSONArray(latest.stagesJSON ?: return)
+        val asleepRows = (0 until durationRows.length()).map { durationRows.getJSONObject(it) }
+            .filter { it.optString("stage") != "awake" && it.optString("stage") != "wake" }
+        val asleepSec = asleepRows.sumOf { (it.optDouble("min") * 60.0).toLong() }
+        val awakeSec = (latest.endTs - latest.effectiveStartTs - asleepSec).coerceAtLeast(0L)
+        val timeline = JSONArray()
+        var cursor = latest.effectiveStartTs
+        fun segment(stage: String, durationSec: Long) {
+            if (durationSec <= 0L) return
+            timeline.put(JSONObject().put("start", cursor).put("end", cursor + durationSec).put("stage", stage))
+            cursor += durationSec
+        }
+        asleepRows.forEach { segment(it.optString("stage"), (it.optDouble("min") * 60.0).toLong()) }
+        segment("wake", awakeSec)
+        val index = sleeps.indexOf(latest)
+        sleeps[index] = latest.copy(stagesJSON = timeline.toString())
+        val napStart = LocalDate.now().atTime(14, 15).atZone(zone).toEpochSecond()
+        val napTimeline = JSONArray().put(JSONObject().put("start", napStart).put("end", napStart + 30 * 60)
+            .put("stage", "light"))
+        sleeps.add(SleepSession(deviceId = WHOOP, startTs = napStart, endTs = napStart + 30 * 60,
+            efficiency = 1.0, stagesJSON = napTimeline.toString(), userEdited = true))
+    }
 
     /** Box–Muller normal sample. */
     private fun gauss(rng: Random, mean: Double, sd: Double): Double {
