@@ -48,6 +48,7 @@ import com.noop.R
 import com.noop.analytics.DaytimeStress
 import com.noop.analytics.HealthspanPresentation
 import com.noop.data.WhoopRepository
+import com.noop.data.WorkoutRow
 import com.noop.widget.StressWidgetProducer
 import java.time.Instant
 import java.time.LocalDate
@@ -103,7 +104,7 @@ fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
                 val now = System.currentTimeMillis() / 1000L
                 val window = stressLocalDayWindow(selectedDay, ZoneId.systemDefault())
                 try {
-                    data = loadStressMonitorData(vm, strapId, selectedDay, personalBaseline, now)
+                    data = loadStressMonitorData(vm, strapId, selectedDay, workouts, personalBaseline, now)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -174,6 +175,7 @@ private suspend fun loadStressMonitorData(
     vm: AppViewModel,
     strapId: String,
     selectedDay: LocalDate,
+    workouts: List<WorkoutRow>,
     personalBaseline: Boolean,
     now: Long,
 ): StressMonitorData = withContext(Dispatchers.Default) {
@@ -196,7 +198,7 @@ private suspend fun loadStressMonitorData(
     val sleep = WhoopRepository.mergeSleep(importedSleep, computedSleep)
     val recordedWorkouts = vm.repo.workoutsUnion(strapId, sleepFrom, end)
     val detectedWorkouts = vm.repo.detectedWorkoutsUnion(strapId, sleepFrom, end)
-    val allWorkouts = (recordedWorkouts + detectedWorkouts).distinctBy { it.startTs to it.sport }
+    val allWorkouts = (workouts + recordedWorkouts + detectedWorkouts).distinctBy { it.startTs to it.sport }
     val events = (sleep.map { StressRecordedEvent(it.effectiveStartTs, it.endTs, true) } +
         allWorkouts.map { StressRecordedEvent(it.startTs, it.endTs, false) })
         .filter { it.start < end && it.end > window.fromEpochSecond && it.end > it.start }
