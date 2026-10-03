@@ -551,8 +551,22 @@ struct SleepView: View {
                 Divider().overlay(StrandPalette.hairline)
                 ContributorRow(label: String(localized: "High sleep stress"), value: "—", systemImage: "waveform.path",
                                comparison: String(localized: "Not available"))
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: NoopMetrics.space2) { sleepQualityLegend }
+                    VStack(alignment: .leading, spacing: NoopMetrics.space2) { sleepQualityLegend }
+                }
+                .padding(NoopMetrics.space2)
+                .frame(maxWidth: .infinity)
+                .background(StrandPalette.surfaceInset)
             }
         }
+    }
+
+    @ViewBuilder
+    private var sleepQualityLegend: some View {
+        StatusPill(label: String(localized: "Poor"), color: StrandPalette.stressHigh)
+        StatusPill(label: String(localized: "Sufficient"), color: StrandPalette.textTertiary)
+        StatusPill(label: String(localized: "Optimal"), color: StrandPalette.positive)
     }
 
     private func sleepFactorRow(label: String, value: Double?, icon: String,
@@ -1190,6 +1204,9 @@ struct SleepView: View {
         // same colour world as the rest of the screen. Bevel treatment — content unchanged.
         NoopCard(padding: NoopMetrics.cardInnerPadding, tint: StrandPalette.restColor) {
             VStack(alignment: .leading, spacing: NoopMetrics.rowSpacing) {
+                if Self.mainNightGroup(night.sourceBlocks, habitualMidsleepSec: habitualMidsleepSec).count > 1 {
+                    StatusPill(label: String(localized: "Fragmented sleep"), color: StrandPalette.sleepPrimary)
+                }
                 HStack(spacing: 0) {
                     sleepTime(icon: "moon.zzz.fill", label: "Asleep", value: night.onsetText)
                     Spacer(minLength: 12)
