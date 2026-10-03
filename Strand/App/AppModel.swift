@@ -246,6 +246,8 @@ final class AppModel: ObservableObject {
     /// Daily re-arm timer for the single-instant firmware smart alarm (see scheduleDailySmartAlarmRearm).
     private var smartAlarmRearmTimer: Timer?
 
+    private(set) var localNotifications: LocalNotificationDispatcher?
+
     init() {
         let live = LiveState()
         self.live = live
@@ -543,6 +545,7 @@ final class AppModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_800_000_000_000)  // 30 min backstop (#836 battery)
             }
         }
+        localNotifications = LocalNotificationDispatcher(model: self)
     }
 
     /// Build the device registry + source coordinator once the store is open, then start observing.

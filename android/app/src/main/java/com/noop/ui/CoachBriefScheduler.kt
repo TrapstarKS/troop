@@ -118,6 +118,7 @@ object CoachBriefScheduler {
         // can still be in flight when that happens, and it would otherwise reach a provider with the AI
         // switched off.
         if (!NoopPrefs.coachEnabled(context.applicationContext)) return null
+        if (quietNow(context)) return null
         val ctx = context.applicationContext
         val provider = AiKeyStore.readProvider(ctx)
         val model = AiKeyStore.readModel(ctx, provider)
@@ -188,7 +189,7 @@ object CoachBriefScheduler {
     @SuppressLint("MissingPermission") // guarded by areNotificationsEnabled() + runCatching
     private fun postBrief(context: Context, text: String) {
         runCatching {
-            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+            if (!NotificationManagerCompat.from(context).areNotificationsEnabled() || quietNow(context)) return
             ensureChannel(context)
             val body = oneLineSummary(text)
             val n = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -198,7 +199,7 @@ object CoachBriefScheduler {
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 .setContentIntent(
                     android.app.PendingIntent.getActivity(
-                        context, 5, appLaunchIntent(context),
+                        context, 5, com.noop.notif.localNotificationLaunchIntent(context, "coach"),
                         android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
                     ),
                 )
@@ -213,7 +214,7 @@ object CoachBriefScheduler {
     @SuppressLint("MissingPermission")
     private fun postUnavailable(context: Context) {
         runCatching {
-            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+            if (!NotificationManagerCompat.from(context).areNotificationsEnabled() || quietNow(context)) return
             ensureChannel(context)
             val n = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_heart)
@@ -221,7 +222,7 @@ object CoachBriefScheduler {
                 .setContentText(context.getString(R.string.coach_brief_unavailable_body))
                 .setContentIntent(
                     android.app.PendingIntent.getActivity(
-                        context, 6, appLaunchIntent(context),
+                        context, 6, com.noop.notif.localNotificationLaunchIntent(context, "coach"),
                         android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
                     ),
                 )
@@ -231,6 +232,11 @@ object CoachBriefScheduler {
                 .build()
             NotificationManagerCompat.from(context).notify(NOTIF_ID_UNAVAILABLE, n)
         }
+    }
+
+    private fun quietNow(context: Context): Boolean {
+        val time = java.time.LocalTime.now()
+        return com.noop.notif.LocalNotificationPrefs.quiet(context, time.hour * 60 + time.minute)
     }
 
     private fun ensureChannel(context: Context) {
@@ -264,6 +270,7 @@ object CoachBriefScheduler {
             val ctx = applicationContext
             val settings = CoachBriefSettings.from(ctx)
             if (!settings.enabled) return Result.success()
+            if (quietNow(ctx)) return Result.retry()
             if (settings.lastRunDayKey == dayKey()) return Result.success() // already ran today
 
             val text = generateNow(ctx)
