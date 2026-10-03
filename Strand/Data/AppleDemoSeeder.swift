@@ -37,8 +37,13 @@ enum AppleDemoSeeder {
         seedDemoDeviceIfNeeded(into: store)
         let existing = (try? await store.dailyMetrics(deviceId: whoop, from: "0000-00-00", to: "9999-99-99")) ?? []
         do {
-            if existing.isEmpty { try await seed(into: store) }
-            try await HealthspanStressDemoSeed.seedIfDemo(into: store)
+            var pristineBeforeBaseSeed = false
+            if existing.isEmpty {
+                pristineBeforeBaseSeed = try await HealthspanStressDemoSeed.hasEmptyStreams(into: store)
+                try await seed(into: store)
+            }
+            try await HealthspanStressDemoSeed.seedIfDemo(into: store,
+                                                         pristineBeforeBaseSeed: pristineBeforeBaseSeed)
         }
         catch { NSLog("AppleDemoSeeder: seed failed — \(error)") }
     }

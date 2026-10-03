@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -60,6 +61,8 @@ import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
 import kotlin.math.roundToInt
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -67,7 +70,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun HealthspanScreen(vm: AppViewModel) {
-    val days by vm.recentDays.collectAsStateWithLifecycle()
+    val days = healthspanDays(vm)
     val bodyAge = healthspanSeries(vm, "body_age")
     var referenceDay by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
@@ -133,7 +136,7 @@ fun HealthspanScreen(vm: AppViewModel) {
 
 @Composable
 fun HealthspanPreviewCard(vm: AppViewModel, onClick: () -> Unit) {
-    val days by vm.recentDays.collectAsStateWithLifecycle()
+    val days = healthspanDays(vm)
     val bodyAge = healthspanSeries(vm, "body_age")
     val referenceDay = LocalDate.now()
     val age = ProfileStore.from(LocalContext.current.applicationContext).age.toDouble()
@@ -157,7 +160,7 @@ fun HealthspanPreviewCard(vm: AppViewModel, onClick: () -> Unit) {
 
 @Composable
 fun HealthSupportingMetricCards(vm: AppViewModel) {
-    val days by vm.recentDays.collectAsStateWithLifecycle()
+    val days = healthspanDays(vm)
     val computedVo2 = healthspanSeries(vm, "vo2max_est")
     val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val strapId = selectedStrap ?: vm.activeStrapId
@@ -245,11 +248,20 @@ private fun HealthspanHalo(value: String, state: String, chronologicalAge: Doubl
     Box(Modifier.fillMaxWidth().height(Metrics.detailDial + Metrics.space24), contentAlignment = Alignment.Center) {
         Box(Modifier.size(Metrics.detailDial).clearAndSetSemantics { contentDescription = description }, contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
-                val radius = size.minDimension / 2
+                val diameter = size.minDimension
+                val radius = diameter / 2
                 drawCircle(Brush.radialGradient(listOf(Palette.surfaceBase, Palette.positive.copy(alpha = StrandAlpha.chartFillSoft),
                     Palette.positive.copy(alpha = StrandAlpha.chartMarker)), radius = radius), radius)
                 drawCircle(Palette.positive.copy(alpha = StrandAlpha.selectedBorder), radius - Metrics.chartLineWidth.toPx(),
                     style = Stroke(Metrics.chartLineWidth.toPx()))
+                for (i in 0 until 160) {
+                    val angle = i * 2.3999632297
+                    val particleRadius = diameter * (0.27f + 0.22f * ((i * 37) % 101) / 100f)
+                    val dot = diameter * (0.003f + 0.006f * (i % 5) / 4f)
+                    val point = center + Offset(cos(angle).toFloat(), sin(angle).toFloat()) * particleRadius
+                    val alpha = StrandAlpha.chartMarker + (StrandAlpha.selectedBorder - StrandAlpha.chartMarker) * (i % 4) / 3f
+                    drawCircle(Palette.positive.copy(alpha = alpha), dot / 2, point + Offset(dot / 2, dot / 2))
+                }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
                 Text(value, style = NoopType.dialValueFull, color = Palette.textPrimary)
@@ -378,13 +390,27 @@ internal fun HealthDateNavigation(day: LocalDate, stepDays: Long = 1, weekly: Bo
 }
 
 @Composable
-private fun healthspanSeries(vm: AppViewModel, key: String): List<MetricSeriesRow> {
+private fun healthspanDays(vm: AppViewModel): List<DailyMetric> {
     val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val strapId = selectedStrap ?: vm.activeStrapId
-    val series by remember(vm, strapId, key) {
-        vm.repo.metricSeriesComputedUnionFlow(strapId, key, "0000-01-01", "9999-12-31")
-    }.collectAsStateWithLifecycle(initialValue = emptyList())
-    return series
+    return key(vm, strapId) {
+        val days by remember(vm, strapId) {
+            vm.repo.recentDaysMergedFlow(strapId)
+        }.collectAsStateWithLifecycle(initialValue = emptyList())
+        days
+    }
+}
+
+@Composable
+private fun healthspanSeries(vm: AppViewModel, metricKey: String): List<MetricSeriesRow> {
+    val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val strapId = selectedStrap ?: vm.activeStrapId
+    return key(vm, strapId, metricKey) {
+        val series by remember(vm, strapId, metricKey) {
+            vm.repo.metricSeriesComputedUnionFlow(strapId, metricKey, "0000-01-01", "9999-12-31")
+        }.collectAsStateWithLifecycle(initialValue = emptyList())
+        series
+    }
 }
 
 internal fun healthspanNumber(value: Double): String = NumberFormat.getNumberInstance().apply {

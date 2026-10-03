@@ -7,15 +7,12 @@ import java.time.ZoneId
 
 object HealthspanStressDemoSeed {
     /** Swift twin: `HealthspanStressDemoSeed.seedIfDemo`. */
-    suspend fun seedIfDemo(repo: WhoopRepository, seededNow: Boolean) {
+    suspend fun seedIfDemo(repo: WhoopRepository, seededNow: Boolean, pristineBeforeBaseSeed: Boolean = false) {
         if (!BuildConfig.ENABLE_DEMO) return
         if (!seededNow && repo.pairedDevices().none { it.id == "demo-polar-h10" }) return
 
-        val counts = repo.storageRowCounts()
-        val biometricTables = listOf("hr", "rr", "spo2", "skinTemp", "steps", "resp", "gravity",
-            "ppgHr", "sleepState", "ppgWaveform", "v18Aux")
         // ponytail: launch-time coverage is seeded once; reset the demo store when fresh coverage is needed.
-        if (biometricTables.any { counts[it] != 0 }) return
+        if (!pristineBeforeBaseSeed && !hasEmptyStreams(repo)) return
 
         // Synthetic banked HR only; never produced by the strap or used outside the demo seed.
         val hourlyBpm = listOf(52, 56, 64, 68, 72, 78, 84, 88, 82, 74, 68, 76, 80, 70, 60, 54)
@@ -38,6 +35,14 @@ object HealthspanStressDemoSeed {
             }
         }
         repo.insertHr(hr)
+    }
+
+    /** Swift twin: HealthspanStressDemoSeed.hasEmptyStreams */
+    suspend fun hasEmptyStreams(repo: WhoopRepository): Boolean {
+        val counts = repo.storageRowCounts()
+        val biometricTables = listOf("hr", "rr", "spo2", "skinTemp", "steps", "resp", "gravity",
+            "ppgHr", "sleepState", "ppgWaveform", "v18Aux")
+        return biometricTables.all { counts[it] == 0 }
     }
 
     /** Swift twin: `HealthspanStressDemoSeed.seedDailyStressIfMissing`. */

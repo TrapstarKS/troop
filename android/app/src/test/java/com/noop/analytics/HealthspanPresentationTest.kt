@@ -17,6 +17,7 @@ class HealthspanPresentationTest {
         rows += row(listOf(HealthspanPresentation.AgeSample(0, Double.NaN), HealthspanPresentation.AgeSample(-1, 40.0), HealthspanPresentation.AgeSample(180, 40.0)))
         rows += row(listOf(HealthspanPresentation.AgeSample(15, 40.0), HealthspanPresentation.AgeSample(89, 41.0)))
         rows += HealthspanPresentation.zoneMinutes(listOf(0.0 to 60, 0.999 to 60, 1.0 to 30, 1.999 to 60, 2.0 to 60, 3.0 to 10, null to 60, Double.NaN to 60, -1.0 to 60, 4.0 to 60, 1.0 to -1)).joinToString(",")
+        // Expected rows copied verbatim from the standalone Swift fixture stdout.
         assertEquals("""
             40.0|28|21|5|18
             40.0|10|21|5|18

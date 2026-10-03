@@ -48,8 +48,9 @@ object DemoSeeder {
     /** Seed daily history only when empty, then add the raw demo fixture once. Safe on every launch. */
     suspend fun seedIfEmpty(repo: WhoopRepository) {
         val seededNow = repo.days(WHOOP).isEmpty()
+        val pristineBeforeBaseSeed = seededNow && HealthspanStressDemoSeed.hasEmptyStreams(repo)
         if (seededNow) seed(repo)
-        HealthspanStressDemoSeed.seedIfDemo(repo, seededNow)
+        HealthspanStressDemoSeed.seedIfDemo(repo, seededNow, pristineBeforeBaseSeed)
     }
 
     /**

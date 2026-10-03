@@ -5,7 +5,7 @@ import WhoopProtocol
 import WhoopStore
 
 enum HealthspanStressDemoSeed {
-    static func seedIfDemo(into store: WhoopStore) async throws {
+    static func seedIfDemo(into store: WhoopStore, pristineBeforeBaseSeed: Bool = false) async throws {
         guard AppleDemoSeeder.requested else { return }
         let isDemo = try await store.registryWriter.read { db in
             try String.fetchOne(db, sql: "SELECT name FROM device WHERE id = ?",
@@ -13,11 +13,10 @@ enum HealthspanStressDemoSeed {
         }
         guard isDemo else { return }
 
-        let counts = try await store.storageRowCounts()
-        let biometricTables = ["hr", "rr", "spo2", "skinTemp", "steps", "resp", "gravity",
-                               "ppgHr", "sleepState", "ppgWaveform", "v18Aux"]
         // ponytail: launch-time coverage is seeded once; reset the demo store when fresh coverage is needed.
-        guard biometricTables.allSatisfy({ counts[$0] == 0 }) else { return }
+        if !pristineBeforeBaseSeed {
+            guard try await hasEmptyStreams(into: store) else { return }
+        }
 
         // Synthetic banked HR only; never produced by the strap or used outside the demo seed.
         let hourlyBPM = [52, 56, 64, 68, 72, 78, 84, 88, 82, 74, 68, 76, 80, 70, 60, 54]
@@ -41,6 +40,13 @@ enum HealthspanStressDemoSeed {
             }
         }
         _ = try await store.insert(Streams(hr: hr), deviceId: AppleDemoSeeder.whoop)
+    }
+
+    static func hasEmptyStreams(into store: WhoopStore) async throws -> Bool {
+        let counts = try await store.storageRowCounts()
+        let biometricTables = ["hr", "rr", "spo2", "skinTemp", "steps", "resp", "gravity",
+                               "ppgHr", "sleepState", "ppgWaveform", "v18Aux"]
+        return biometricTables.allSatisfy { counts[$0] == 0 }
     }
 
     private static func seedDailyStressIfMissing(into store: WhoopStore, today: Date,

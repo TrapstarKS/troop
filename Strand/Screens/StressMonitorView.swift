@@ -7,6 +7,9 @@ import WhoopStore
 
 struct StressMonitorView: View {
     @EnvironmentObject private var repo: Repository
+    @EnvironmentObject private var model: AppModel
+    @State private var observedSource: String?
+    @State private var loadedSource: String?
     @State private var selectedDate = Calendar.current.startOfDay(for: Date())
     @State private var result: DaytimeStress.Result = .empty
     @State private var latestSampleTs: Int?
@@ -21,6 +24,8 @@ struct StressMonitorView: View {
     @State private var loadedDay: Int?
     @State private var sleeps: [CachedSleepSession] = []
 
+    private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
+    private var sourceLoaded: Bool { loadedSource == sourceID }
     private var date: Date { selectedDate }
     private var earliestDate: Date { Calendar.current.date(byAdding: .day, value: -3999, to: Calendar.current.startOfDay(for: clock))! }
     private var startTs: Int { Int(Calendar.current.startOfDay(for: date).timeIntervalSince1970) }
@@ -28,15 +33,15 @@ struct StressMonitorView: View {
     private var selected: DaytimeStress.HourPoint? { selectedTs.flatMap { ts in result.timeline.first { $0.startTs == ts } } }
     private var latest: DaytimeStress.HourPoint? { result.timeline.last { $0.level != nil } }
     private var current: DaytimeStress.HourPoint? {
-        guard loadedDay == startTs else { return nil }
+        guard sourceLoaded, loadedDay == startTs else { return nil }
         if let selected { return selected }
         guard let latest, let latestSampleTs else { return nil }
         let windowEnd = min(latest.startTs + DaytimeStress.bucketSeconds, latestSampleTs)
         return date < Calendar.current.startOfDay(for: clock) || Int(clock.timeIntervalSince1970) - windowEnd <= 900 ? latest : nil
     }
-    private var daily: (day: String, value: Double)? { stored.first { $0.value.isFinite && (0...3).contains($0.value) && healthspanDaysAgo($0.day, reference: date) == 0 } }
+    private var daily: (day: String, value: Double)? { (sourceLoaded ? stored : []).first { $0.value.isFinite && (0...3).contains($0.value) && healthspanDaysAgo($0.day, reference: date) == 0 } }
     private var minutes: [Int] {
-        guard loadedDay == startTs else { return [0, 0, 0] }
+        guard sourceLoaded, loadedDay == startTs else { return [0, 0, 0] }
         return HealthspanPresentation.zoneMinutes(hours: result.hours.map { point in
             (level: point.level, minutes: max(0, min(point.startTs + DaytimeStress.bucketSeconds, observedEnd) - max(point.startTs, firstSampleTs ?? point.startTs)) / 60)
         })
@@ -54,7 +59,7 @@ struct StressMonitorView: View {
                         Text(Date(timeIntervalSince1970: Double(point.startTs)), style: .time).font(StrandFont.captionNumber)
                     }
                 }
-                if loadedDay == startTs && !result.timeline.isEmpty { timeline }
+                if sourceLoaded && loadedDay == startTs && !result.timeline.isEmpty { timeline }
                 NoopCard {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                         Text("Physiological stress estimate").font(StrandFont.headline)
@@ -93,26 +98,28 @@ struct StressMonitorView: View {
         .background(StrandPalette.surfaceBase)
         .navigationTitle(String(localized: "Stress Monitor"))
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { clock = $0 }
-        .task(id: "\(repo.refreshSeq)|\(startTs)|\(Int(clock.timeIntervalSince1970) / 900)") { await load() }
+        .onReceive(healthspanSourcePublisher(model: model, repo: repo)) { observedSource = $0 }
+        .task(id: "\(sourceID)|\(repo.refreshSeq)|\(startTs)|\(Int(clock.timeIntervalSince1970) / 900)") { await load() }
         .sheet(isPresented: $showBreathing) {
             NavigationStack { BreathingView().toolbar { Button("Done") { showBreathing = false } } }
         }
     }
 
     private var timeline: some View {
-        let sleepRows = sleeps.filter { $0.endTs > startTs && $0.effectiveStartTs < endTs }
-        let workoutRows = workouts.filter { $0.endTs > startTs && $0.startTs < endTs }
+        let visibleEnd = min(endTs, Int(clock.timeIntervalSince1970))
+        let sleepRows = sleeps.filter { $0.endTs > startTs && $0.effectiveStartTs < visibleEnd }
+        let workoutRows = workouts.filter { $0.endTs > startTs && $0.startTs < visibleEnd }
         return VStack(alignment: .leading, spacing: NoopMetrics.space3) {
             Text("Stress timeline").font(StrandFont.headline)
             Chart {
                 ForEach(sleepRows.indices, id: \.self) { index in
                     let sleep = sleepRows[index]
-                    RectangleMark(xStart: .value("Start", Date(timeIntervalSince1970: Double(max(startTs, sleep.effectiveStartTs)))), xEnd: .value("End", Date(timeIntervalSince1970: Double(min(endTs, sleep.endTs)))), yStart: .value("Low", 0), yEnd: .value("High", 3))
+                    RectangleMark(xStart: .value("Start", Date(timeIntervalSince1970: Double(max(startTs, sleep.effectiveStartTs)))), xEnd: .value("End", Date(timeIntervalSince1970: Double(min(visibleEnd, sleep.endTs)))), yStart: .value("Low", 0), yEnd: .value("High", 3))
                         .foregroundStyle(StrandPalette.sleepPrimary.opacity(0.13))
                 }
                 ForEach(workoutRows.indices, id: \.self) { index in
                     let workout = workoutRows[index]
-                    RectangleMark(xStart: .value("Start", Date(timeIntervalSince1970: Double(max(startTs, workout.startTs)))), xEnd: .value("End", Date(timeIntervalSince1970: Double(min(endTs, workout.endTs)))), yStart: .value("Low", 0), yEnd: .value("High", 3))
+                    RectangleMark(xStart: .value("Start", Date(timeIntervalSince1970: Double(max(startTs, workout.startTs)))), xEnd: .value("End", Date(timeIntervalSince1970: Double(min(visibleEnd, workout.endTs)))), yStart: .value("Low", 0), yEnd: .value("High", 3))
                         .foregroundStyle(StrandPalette.strainPrimary.opacity(0.14))
                 }
                 ForEach(trace) { point in
@@ -163,18 +170,21 @@ struct StressMonitorView: View {
 
     @MainActor private func load() async {
         loading = true
+        let source = sourceID
+        guard await healthspanAwaitSource(source, repo: repo) else { return }
+        let revision = repo.refreshSeq
         let selectedDate = date
         let from = startTs
         let to = min(Int(Date().timeIntervalSince1970), endTs - 1)
-        if loadedDay != from {
+        if loadedSource != source || loadedDay != from {
             result = .empty; latestSampleTs = nil; firstSampleTs = nil; selectedTs = nil; stored = []
         }
         let dailyValues = await repo.series(key: "stress", source: "my-whoop")
         let hr = await repo.hrSamples(from: from, to: to, limit: 200_000)
-        guard !Task.isCancelled else { return }
+        guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
         guard hr.count >= DaytimeStress.minHourHRSamples else {
             result = .empty; latestSampleTs = nil; firstSampleTs = nil; selectedTs = nil
-            workouts = []; sleeps = []; observedEnd = 0; stored = dailyValues; loadedDay = from; loading = false
+            workouts = []; sleeps = []; observedEnd = 0; stored = dailyValues; loadedDay = from; loadedSource = source; loading = false
             return
         }
         let rr = await repo.rrIntervals(from: from, to: to, limit: 200_000)
@@ -191,11 +201,11 @@ struct StressMonitorView: View {
             return AnalyticsEngine.dayString(session.endTs, offsetSec: TimeZone.current.secondsFromGMT(for: end))
         }
         let events = await repo.workoutRows(days: 4000)
-        guard !Task.isCancelled else { return }
+        guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
         firstSampleTs = hr.map(\.ts).min()
         latestSampleTs = hr.map(\.ts).max()
         observedEnd = min(to + 1, (latestSampleTs ?? from) + 1)
-        result = resolved; workouts = events; sleeps = resolvedSleep; stored = dailyValues; loadedDay = from; loading = false
+        result = resolved; workouts = events; sleeps = resolvedSleep; stored = dailyValues; loadedDay = from; loadedSource = source; loading = false
     }
 
 }
@@ -243,9 +253,14 @@ private struct StressMonitorGauge: View {
 
 struct StressMonitorPreviewCard: View {
     @EnvironmentObject private var repo: Repository
+    @EnvironmentObject private var model: AppModel
+    @State private var observedSource: String?
+    @State private var loadedSource: String?
     @State private var daily: (day: String, value: Double)?
+    private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     var body: some View {
-        NavigationLink { StressMonitorView() } label: {
+        let daily = loadedSource == sourceID ? daily : nil
+        NavigationLink(value: TabRoute.stressMonitor) {
             NoopCard {
                 HStack {
                     VStack(alignment: .leading, spacing: NoopMetrics.space2) {
@@ -259,11 +274,17 @@ struct StressMonitorPreviewCard: View {
                 }.foregroundStyle(StrandPalette.textPrimary)
             }
         }.buttonStyle(.plain)
-        .task(id: repo.refreshSeq) {
+        .onReceive(healthspanSourcePublisher(model: model, repo: repo)) { observedSource = $0 }
+        .task(id: "\(sourceID)|\(repo.refreshSeq)") {
+            let source = sourceID
+            guard await healthspanAwaitSource(source, repo: repo) else { return }
+            let revision = repo.refreshSeq
             let reference = Date()
-            daily = (await repo.series(key: "stress", source: "my-whoop", days: 180)).last {
+            let resolved = (await repo.series(key: "stress", source: "my-whoop", days: 180)).last {
                 $0.value.isFinite && (0...3).contains($0.value) && (healthspanDaysAgo($0.day, reference: reference).map { (0..<180).contains($0) } ?? false)
             }
+            guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
+            self.daily = resolved; loadedSource = source
         }
     }
 }
