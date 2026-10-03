@@ -99,7 +99,7 @@ Swift `TabRoute` and `tabRouteDestinations()` are internal to the app module and
 | Recovery detail | `.recoveryDetail` | `recoveryDetail` (`recovery_detail`) | RecoveryDetailView / RecoveryDetailScreen |
 | Strain detail | `.strainDetail` | `strainDetail` (`strain_detail`) | StrainDetailView / StrainDetailScreen |
 | Sleep detail | `.sleepDetail` | `sleepDetail` (`sleep`) | Existing Sleep |
-| Sleep Planner | `.sleepPlanner` | `sleepPlanner` (`smart_alarm`) | Existing alarm settings; not a claim of WHOOP planner parity |
+| Sleep Planner | `.sleepPlanner` | `sleepPlanner` (`smart_alarm`) | SleepPlannerView / SleepPlannerScreen; the existing alarm destination remains reachable in More |
 | Health Monitor | `.healthMonitor` | `healthMonitor` (`vital_signs`) | HealthMonitorView / HealthMonitorScreen |
 | Healthspan | `.healthspan` | `healthspan` (`healthspan`) | HealthspanView / HealthspanScreen; local estimates retain their provenance |
 | Stress Monitor | `.stressMonitor` | `stressMonitor` (`stress`) | StressMonitorView / StressMonitorScreen |
@@ -131,3 +131,5 @@ Selected-day Home links use `sleepDetailForDay(dayKey:)`, `recoveryDetailForDay(
 Dated local taps use `NavRouter.openLocalNotification(context:)` on Apple and the optional `notificationContext` / `onNotificationContextConsumed` hooks through `NoopRoot` and `AppRoot` on Android. Both app roots retain the complete owner `LocalNotificationContext` through mandatory gates. Briefings pass the captured report to the offline host; saved week/workout notices use the recorded-notice host. Android stores wire fields in the notice entry's `SavedStateHandle`, preserving them across recreation. Legacy String hooks remain available.
 
 `ScoreDial` accepts additive `viewportWidth` (`CGFloat?` on Apple, `Dp?` on Android). Full dials use the shared `fullScoreDialWidthFraction` token, 0.662 of that viewport, scaling ring stroke and score typography together. Omit it to retain the 260-point/dp default; compact dials retain their existing dimensions. Pass the phone viewport width, including page insets, rather than the card's inner width.
+
+Android `Destination.rootForRoute` accepts only the four exact tab roots. Detail routes, including the recorded `local_notice` host, retain the tab installed by their caller. `Destination.forRoute` keeps its legacy title fallback and must not determine tab ownership.
