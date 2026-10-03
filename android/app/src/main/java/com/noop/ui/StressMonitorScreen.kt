@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -63,6 +64,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -313,7 +315,7 @@ private fun StressMonitorHero(data: StressMonitorData?, nowSeconds: Long, select
             Text("3.0", style = NoopType.captionNumber, color = Palette.textSecondary)
         }
         Text(state, style = NoopType.caption, color = Palette.textSecondary, textAlign = TextAlign.Center)
-        if (data != null && !data.readFailed && current?.level == null) {
+        if (data != null && !data.readFailed && current?.level == null && (!stale || selected != null)) {
             Text(stringResource(if (selected?.maskedForActivity == true) R.string.stress_monitor_activity_masked
                 else if (selected != null) R.string.stress_monitor_gap else R.string.stress_monitor_calibrating),
                 style = NoopType.caption, color = Palette.textSecondary, textAlign = TextAlign.Center)
@@ -345,6 +347,10 @@ private fun StressMonitorTimeline(data: StressMonitorData?, selectedTimestamp: L
                     val from = data.window.fromEpochSecond
                     val to = data.window.toEpochSecondInclusive + 1
                     val span = (to - from).toFloat()
+                    fun position(stamp: Long, width: Float): Float = ((stamp - from) / span * width).coerceIn(0f, width)
+                    val ticks = listOf(0, 6, 12, 18).map { hour ->
+                        data.window.day.atTime(hour, 0).atZone(ZoneId.systemDefault()).toEpochSecond()
+                    }
                     fun timestamp(x: Float, width: Float): Long = from + (span * (x / width).coerceIn(0f, 1f)).toLong()
                     Canvas(Modifier.fillMaxWidth().height(Metrics.chartHeight)
                         .clearAndSetSemantics { contentDescription = accessibility }
@@ -355,7 +361,7 @@ private fun StressMonitorTimeline(data: StressMonitorData?, selectedTimestamp: L
                         } }) {
                         val top = Metrics.space16.toPx()
                         val plotHeight = size.height - top
-                        fun x(stamp: Long): Float = ((stamp - from) / span * size.width).coerceIn(0f, size.width)
+                        fun x(stamp: Long): Float = position(stamp, size.width)
                         fun y(level: Double): Float = top + (1 - level.coerceIn(0.0, 3.0).toFloat() / 3) * plotHeight
                         for (level in 0..3) drawLine(Palette.hairline, Offset(0f, y(level.toDouble())), Offset(size.width, y(level.toDouble())), Metrics.chartGridWidth.toPx())
                         for (event in data.events) {
@@ -376,8 +382,19 @@ private fun StressMonitorTimeline(data: StressMonitorData?, selectedTimestamp: L
                             it.level?.let { value -> drawCircle(Palette.textPrimary, Metrics.space4.toPx(), Offset(x(it.startTs), y(value))) }
                         }
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        listOf(0, 6, 12, 18).forEach { hour -> Text(stressMonitorTime(from + hour * 3600L), style = NoopType.captionNumber, color = Palette.textSecondary) }
+                    Layout(content = {
+                        ticks.forEach { stamp ->
+                            Text(stressMonitorTime(stamp), style = NoopType.captionNumber, color = Palette.textSecondary)
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { measurables, constraints ->
+                        val labels = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+                        layout(constraints.maxWidth, labels.maxOfOrNull { it.height } ?: 0) {
+                            labels.zip(ticks).forEach { (label, stamp) ->
+                                val x = (position(stamp, constraints.maxWidth.toFloat()) - label.width / 2f).roundToInt()
+                                    .coerceIn(0, (constraints.maxWidth - label.width).coerceAtLeast(0))
+                                label.place(x, 0)
+                            }
+                        }
                     }
                 }
             }
