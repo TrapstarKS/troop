@@ -37,4 +37,5 @@
     <string name="home_metrics_count" translatable="false">%1$d/5</string>
     <string name="home_dial_label" translatable="false">%1$s ›</string>
     <string name="home_status_capture_experimental">实时记录 · 历史同步为实验功能</string>
+    <string name="home_dashboard_edit_description">选择“我的仪表盘”的卡片。拖动或使用箭头调整顺序。</string>
 </resources>

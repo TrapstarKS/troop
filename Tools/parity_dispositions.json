@@ -614,6 +614,42 @@
     },
     {
       "type": "out_of_scope_twin",
+      "kind": "add-unpaired-file",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/RecoveryStrainDemoSeed.kt",
+      "identity_sha256": "0ba37558bb67a91ee8170ab046d91741d435322239c81555d121dd8f5911b5ca",
+      "platform": "kotlin",
+      "rationale": "The separate synthetic Recovery/Strain fixture lives in the excluded Swift app layer. This exact file disposition records the inventory boundary; it does not waive production analytics or stored-data parity.",
+      "twin_path": "Strand/Data/RecoveryStrainDemoSeed.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/RecoveryStrainDemoSeed.kt::seed/2#1",
+      "identity_sha256": "a53f152b7a3886935f855f3e1748680a0b302566dd9789a3f07caa9be04c4938",
+      "platform": "kotlin",
+      "rationale": "RecoveryStrainDemoSeed.seed populates synthetic detail examples through the excluded Swift app fixture twin. It runs only through the inert Demo seeder, with no production render-time seeding.",
+      "twin_path": "Strand/Data/RecoveryStrainDemoSeed.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/DemoSeeder.kt::segment/2#1",
+      "identity_sha256": "e4dddc5a9bd49a01c83c10ff388cb96bc57bff6bdb45c6a273c07e636765b0c8",
+      "platform": "kotlin",
+      "rationale": "The local segment builder supplies the separate synthetic Sleep example fixture. Its matching construction is in the excluded AppleDemoSeeder app layer; no production sleep classification changes.",
+      "twin_path": "Strand/Data/AppleDemoSeeder.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/DemoSeeder.kt::sleepDetailExamples/2#1",
+      "identity_sha256": "1d04248715ab897ae613b2cc00abcb51fb408a68390d2362a4cd667acf94fd1b",
+      "platform": "kotlin",
+      "rationale": "Synthetic Sleep detail examples are populated by the excluded AppleDemoSeeder app-layer twin. This exact inventory-boundary disposition does not waive the production stage or stored-value contract.",
+      "twin_path": "Strand/Data/AppleDemoSeeder.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
       "kind": "add-unpaired-function",
       "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::daysMergedRangeFlow/3#1",
       "identity_sha256": "cdd2e595ff78a8e1eacb2738e627f5af076820bd5965d15a286e54b8f579e26d",

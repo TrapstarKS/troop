@@ -2,12 +2,14 @@ package com.noop.ui
 
 import android.app.DatePickerDialog
 import android.content.SharedPreferences
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -31,6 +33,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -93,6 +96,7 @@ internal fun HomeChrome(
     onPick: (Int) -> Unit,
     onProfile: () -> Unit,
     onDevices: () -> Unit,
+    recordingState: HomeRecordingState? = null,
 ) {
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
@@ -125,6 +129,9 @@ internal fun HomeChrome(
                 modifier = Modifier.size(Metrics.iconSmall))
             Text(uiPlural(R.plurals.settings_streak_run, streak, streak), style = NoopType.captionNumber, color = Palette.textSecondary)
         }
+        recordingState?.let { state ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { HomeRecordingStatus(state) }
+        }
     }
 }
 
@@ -137,11 +144,12 @@ internal fun HomeDials(
     onRecovery: () -> Unit,
     onStrain: () -> Unit,
 ) {
-    val availableRecovery = recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }
-    val availableStrain = strain?.takeIf { it.isFinite() && it in 0.0..100.0 }
+    val availableRecovery = homeScoreValue(recovery)
+    val availableStrain = homeScoreValue(strain)
+    val sleepValue = homeScoreValue(sleep)
     Row(Modifier.fillMaxWidth().padding(vertical = Metrics.space16),
         horizontalArrangement = Arrangement.spacedBy(Metrics.space8), verticalAlignment = Alignment.Top) {
-        HomeDial(uiString(R.string.home_sleep), sleep?.roundToInt()?.toString(), "%", sleep,
+        HomeDial(uiString(R.string.home_sleep), sleepValue?.roundToInt()?.toString(), "%", sleepValue,
             Palette.sleepPrimary, Modifier.weight(1f), onSleep)
         HomeDial(uiString(R.string.home_recovery), RecoveryStrainDetailLogic.recoveryPercent(availableRecovery)?.toString(), "%", availableRecovery,
             availableRecovery?.let { Palette.recoveryColor(it) } ?: Palette.ringTrack, Modifier.weight(1f), onRecovery)
@@ -153,10 +161,13 @@ internal fun HomeDials(
 @Composable
 private fun HomeDial(label: String, value: String?, unit: String, progress: Double?, color: Color,
     modifier: Modifier, onClick: () -> Unit) {
+    val displayValue = value ?: uiString(R.string.home_no_value)
+    val displayUnit = if (value != null) unit else ""
     Column(modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
-        ScoreDial(label = uiString(R.string.home_dial_label, label), value = value ?: uiString(R.string.home_no_value),
-            unit = if (value != null) unit else "", progress = progress?.div(100)?.toFloat(),
-            color = color, size = ScoreDialSize.Compact)
+        ScoreDial(label = uiString(R.string.home_dial_label, label), value = displayValue,
+            unit = displayUnit, progress = progress?.div(100)?.toFloat(),
+            color = color, size = ScoreDialSize.Compact,
+            accessibilityLabel = listOf(label, displayValue + displayUnit).joinToString(", "))
     }
 }
 
@@ -179,8 +190,14 @@ internal fun HomeRecordingStatus(state: HomeRecordingState) {
 
 @Composable
 internal fun HomeGuidance(title: String, detail: String, onCoach: (() -> Unit)?) {
-    NoopCard {
-        Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+    val shape = RoundedCornerShape(Metrics.cardRadius)
+    Box(Modifier.fillMaxWidth().padding(bottom = Metrics.space8)) {
+        Box(Modifier.matchParentSize().padding(horizontal = Metrics.space16)
+            .offset(y = Metrics.space8).background(Palette.surfaceOverlay, shape))
+        Box(Modifier.matchParentSize().padding(horizontal = Metrics.space8)
+            .offset(y = Metrics.space4).background(Palette.surfaceRaised, shape))
+        Column(Modifier.fillMaxWidth().background(Palette.surfaceBase, shape).padding(Metrics.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = NoopType.headline, color = Palette.textPrimary, modifier = Modifier.weight(1f))
                 if (onCoach != null) IconButton(onClick = onCoach, modifier = Modifier.size(Metrics.iconButton)) {
