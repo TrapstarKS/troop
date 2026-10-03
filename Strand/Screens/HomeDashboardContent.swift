@@ -192,7 +192,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Add activity")
             }
-            if isToday { ActiveWorkoutIndicatorSection() }
+            if isToday { ActiveWorkoutIndicatorSection(onOpen: { startWorkoutRequested = true }) }
             NoopCard {
                 VStack(spacing: NoopMetrics.space3) {
                     NavigationLink(value: TabRoute.sleepDetail) {
@@ -219,7 +219,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 .buttonStyle(.plain)
             }
             if isToday {
-                WorkoutStartControl(startRequested: $startWorkoutRequested)
+                WorkoutStartControl(showsButton: false, startRequested: $startWorkoutRequested)
                 Text("Current day is still in progress.")
                     .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
             }

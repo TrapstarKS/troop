@@ -1356,7 +1356,8 @@ fun TodayScreen(
                     onStart = if (selectedDayOffset == 0) ({ homeStartRequested = true }) else null,
                     startEnabled = liveSnap.bonded && activeWorkout == null)
                 if (selectedDayOffset == 0) WorkoutStartSection(viewModel, onAdd = openAddActivity,
-                    startRequested = homeStartRequested, onStartRequestConsumed = { homeStartRequested = false })
+                    startRequested = homeStartRequested, onStartRequestConsumed = { homeStartRequested = false },
+                    showIdleControls = false)
                 if (selectedDayOffset == 0 && activeLiveSession != null) {
                     LiveSessionEntryCard(onOpen = { showLiveSession = true })
                 }

@@ -192,6 +192,7 @@ fun WorkoutStartSection(
     onAdd: () -> Unit,
     startRequested: Boolean = false,
     onStartRequestConsumed: () -> Unit = {},
+    showIdleControls: Boolean = true,
 ) {
     val live by vm.live.collectAsStateWithLifecycle()
     val activeWorkout by vm.activeWorkout.collectAsStateWithLifecycle()
@@ -273,9 +274,9 @@ fun WorkoutStartSection(
                     }
                 }
             }
-            AddWorkoutButton(onAdd, Modifier.fillMaxWidth())
+            if (showIdleControls) AddWorkoutButton(onAdd, Modifier.fillMaxWidth())
         }
-    } else if (live.bonded) {
+    } else if (showIdleControls && live.bonded) {
         // Start + Add as an equal-width action row (EXP-018 parity with the iOS workoutActionRow).
         // Both actions use the shared opaque button surfaces: unlike the old accent-muted/translucent
         // pair, their fills and labels keep their contrast over the full-bleed daytime scene (#1625).
@@ -292,7 +293,7 @@ fun WorkoutStartSection(
             )
             AddWorkoutButton(onAdd, Modifier.weight(1f))
         }
-    } else {
+    } else if (showIdleControls) {
         // No strap to stream from: no live Start, but keep Add so a user with no imports can still log.
         // PRIMARY here, unlike the pair above. There is no Start to be secondary to, and this is the
         // only action the screen offers, so the secondary treatment would leave a wearer with no strap

@@ -173,6 +173,7 @@ private struct ActiveWorkoutIndicatorCard: View {
 /// `WorkoutInProgressCard`) from drifting. It carries its own `app`/`router` environment objects, so a caller
 /// only needs to place `ActiveWorkoutIndicatorSection()` in its body.
 struct ActiveWorkoutIndicatorSection: View {
+    var onOpen: (() -> Void)? = nil
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var router: NavRouter
 
@@ -180,7 +181,8 @@ struct ActiveWorkoutIndicatorSection: View {
         if let model = ActiveWorkoutIndicatorModel.make(from: app.activeWorkout) {
             ActiveWorkoutIndicatorCard(model: model) {
                 StrandHaptic.selection.play()
-                router.openActiveWorkout()
+                if let onOpen { onOpen() }
+                else { router.openActiveWorkout() }
             }
             .transition(.opacity)
         }
