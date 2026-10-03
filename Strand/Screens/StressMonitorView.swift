@@ -255,7 +255,12 @@ struct StressMonitorPreviewCard: View {
                 }.foregroundStyle(StrandPalette.textPrimary)
             }
         }.buttonStyle(.plain)
-        .task(id: repo.refreshSeq) { daily = (await repo.series(key: "stress", source: "my-whoop")).last { $0.value.isFinite && (0...3).contains($0.value) && healthspanDate($0.day) != nil } }
+        .task(id: repo.refreshSeq) {
+            let reference = Date()
+            daily = (await repo.series(key: "stress", source: "my-whoop", days: 180)).last {
+                $0.value.isFinite && (0...3).contains($0.value) && (healthspanDaysAgo($0.day, reference: reference).map { (0..<180).contains($0) } ?? false)
+            }
+        }
     }
 }
 
