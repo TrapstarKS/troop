@@ -495,7 +495,7 @@ private fun JournalNumericField(
     val fieldLabel = listOfNotNull(journalLocalizedLabel(item), item.kind.unitLabel).joinToString(" ")
     Row(verticalAlignment = Alignment.CenterVertically) {
         JournalChip("−", selected = false,
-            accessibilityLabel = uiString(R.string.l10n_components_decrease_accessibility_df5f1511, fieldLabel)) { onCommit(if (item.kind.unitLabel == "°C") (value ?: 0.0) - 1 else ((value ?: 0.0) - 1).coerceAtLeast(0.0)) }
+            accessibilityLabel = uiString(R.string.l10n_components_decrease_accessibility_df5f1511, fieldLabel)) { onCommit(if (journalAllowsNegative(item.canonical)) (value ?: 0.0) - 1 else ((value ?: 0.0) - 1).coerceAtLeast(0.0)) }
         Spacer(Modifier.width(Metrics.space4))
         OutlinedTextField(
             value = text,

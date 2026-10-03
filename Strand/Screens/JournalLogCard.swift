@@ -362,7 +362,7 @@ struct JournalLogCard: View {
     private func numericField(_ item: JournalCatalogItem) -> some View {
         let current = draftNumeric[item.canonical]
         return HStack(spacing: NoopMetrics.space2) {
-            stepperButton("minus", q: item.canonical, current: current, unitLabel: item.kind.unitLabel)
+            stepperButton("minus", q: item.canonical, current: current)
             NumericLogField(
                 text: Binding(get: { draftNumericText[item.canonical] ?? draftNumeric[item.canonical].map(NumericLogField.format) ?? "" },
                               set: { editNumeric(item.canonical, text: $0) }),
@@ -377,7 +377,7 @@ struct JournalLogCard: View {
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            stepperButton("plus", q: item.canonical, current: current, unitLabel: item.kind.unitLabel)
+            stepperButton("plus", q: item.canonical, current: current)
             if current != nil {
                 Button {
                     draftNumeric.removeValue(forKey: item.canonical)
@@ -394,10 +394,10 @@ struct JournalLogCard: View {
         }
     }
 
-    private func stepperButton(_ symbol: String, q: String, current: Double?, unitLabel: String?) -> some View {
+    private func stepperButton(_ symbol: String, q: String, current: Double?) -> some View {
         Button {
             let base = current ?? 0
-            let next = symbol == "plus" ? base + 1 : (unitLabel == "°C" ? base - 1 : max(0, base - 1))
+            let next = symbol == "plus" ? base + 1 : (journalAllowsNegative(q) ? base - 1 : max(0, base - 1))
             commitNumeric(q, value: next)
         } label: {
             Image(systemName: "\(symbol).circle")
