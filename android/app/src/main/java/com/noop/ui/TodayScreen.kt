@@ -1246,10 +1246,7 @@ fun TodayScreen(
     var manualActivityEndMillis by remember { mutableStateOf<Long?>(null) }
     var homeStartRequested by remember { mutableStateOf(false) }
     val openAddActivity: () -> Unit = {
-        val now = java.time.ZonedDateTime.now()
-        val nowMillis = now.toInstant().toEpochMilli()
-        manualActivityEndMillis = selectedDay.atTime(now.toLocalTime()).atZone(now.zone)
-            .toInstant().toEpochMilli().coerceAtMost(nowMillis)
+        manualActivityEndMillis = homeManualActivityEnd(selectedDayKey)
     }
     val homeWorkoutRows by viewModel.workouts.collectAsStateWithLifecycle()
     // Preserve the existing Test Centre battery analysis after replacing the old source-summary header.
@@ -1279,16 +1276,12 @@ fun TodayScreen(
     }
     LaunchedEffect(days, selectedDay, selectedDayKey, homeStrapId, homeWorkoutRows) {
         val effectDayKey = selectedDayKey
-        val effectWindowDay = selectedDay
         val effectStrapId = homeStrapId
         homeDayWorkouts = emptyList()
         homeDayStress = null
-        val date = effectWindowDay
-        val zone = ZoneId.systemDefault()
-        val start = date.atStartOfDay(zone).toEpochSecond()
-        val end = date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1
+        val activityWindow = homeActivityWindow(effectDayKey)
         val workouts = runCatching {
-            viewModel.repo.workoutsAllSources(effectStrapId, start, end)
+            viewModel.repo.workoutsAllSources(effectStrapId, activityWindow.first, activityWindow.last)
                 .sortedBy { it.startTs }
         }.getOrElse {
             if (it is CancellationException) throw it

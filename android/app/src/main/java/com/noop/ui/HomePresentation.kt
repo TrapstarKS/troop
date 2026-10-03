@@ -17,7 +17,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material3.Icon
@@ -38,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -59,6 +60,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -82,6 +84,15 @@ internal fun homeRecordingState(
     historySyncExperimental -> HomeRecordingState.ExperimentalHistory
     !hasSessionHistory -> HomeRecordingState.ConnectedNoData
     else -> HomeRecordingState.Idle
+}
+
+internal fun homeManualActivityEnd(dayKey: String, now: ZonedDateTime = ZonedDateTime.now()): Long =
+    LocalDate.parse(dayKey).atTime(now.toLocalTime()).atZone(now.zone)
+        .toInstant().toEpochMilli().coerceAtMost(now.toInstant().toEpochMilli())
+
+internal fun homeActivityWindow(dayKey: String, zone: ZoneId = ZoneId.systemDefault()): LongRange {
+    val date = LocalDate.parse(dayKey)
+    return date.atStartOfDay(zone).toEpochSecond()..(date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1)
 }
 
 @Composable
@@ -122,13 +133,9 @@ internal fun HomeChrome(
             },
             onProfile = onProfile,
             onStrap = onDevices,
+            streakCount = streak,
+            streakLabel = uiPlural(R.plurals.settings_streak_run, streak, streak),
         )
-        Row(verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Metrics.space4)) {
-            Icon(Icons.Filled.LocalFireDepartment, null, tint = Palette.textSecondary,
-                modifier = Modifier.size(Metrics.iconSmall))
-            Text(uiPlural(R.plurals.settings_streak_run, streak, streak), style = NoopType.captionNumber, color = Palette.textSecondary)
-        }
         recordingState?.let { state ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { HomeRecordingStatus(state) }
         }
@@ -167,6 +174,7 @@ private fun HomeDial(label: String, value: String?, unit: String, progress: Doub
         ScoreDial(label = uiString(R.string.home_dial_label, label), value = displayValue,
             unit = displayUnit, progress = progress?.div(100)?.toFloat(),
             color = color, size = ScoreDialSize.Compact,
+            viewportWidth = LocalConfiguration.current.screenWidthDp.dp,
             accessibilityLabel = listOf(label, displayValue + displayUnit).joinToString(", "))
     }
 }

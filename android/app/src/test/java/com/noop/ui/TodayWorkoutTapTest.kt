@@ -1,9 +1,13 @@
 package com.noop.ui
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import com.noop.data.DailyMetric
 
 /** Home activity actions stay in the shared detail flow and survive lazy-item disposal. */
 class TodayWorkoutTapTest {
@@ -58,21 +62,35 @@ class TodayWorkoutTapTest {
     }
 
     @Test
-    fun bothPlatformsWindowMyDayToTheSelectedCalendarDay() {
-        val android = todayScreen()
-        assertTrue(android.contains("val effectWindowDay = selectedDay"))
-        assertTrue(android.contains("val date = effectWindowDay"))
-        assertTrue(android.contains("val start = date.atStartOfDay(zone).toEpochSecond()"))
-        assertTrue(android.contains("val end = date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1"))
-        assertTrue(android.contains("viewModel.repo.workoutsAllSources(effectStrapId, start, end)"))
-        assertTrue(android.contains("HomeDayEvents(displayMetric, homeDayWorkouts, openSleepForDisplayedDay)"))
-        val dashboard = source("Strand/Screens/HomeDashboardContent.swift")
-        assertTrue(dashboard.contains("HomeDayActivities.rows(workouts, dayKey: activityDayKey)"))
-        assertTrue(dashboard.contains("private var activityDayKey: String { windowDayKey ?? dayKey }"))
-        for (path in listOf("Strand/Screens/TodayView.swift", "Strand/Liquid/LiquidTodayView.swift")) {
-            assertTrue(source(path).contains("windowDayKey: Repository.localDayKey(selectedLogicalDay)"))
+    fun preFourBankedNightKeepsPostMidnightActivityAndDisplayedManualDate() {
+        val zone = ZoneId.of("America/Sao_Paulo")
+        val now = ZonedDateTime.of(2026, 10, 3, 2, 0, 0, 0, zone)
+        val days = listOf("2026-10-02", "2026-10-03").map {
+            DailyMetric(deviceId = "my-whoop", day = it, totalSleepMin = 430.0)
         }
-        assertTrue(source("Strand/Screens/TodayView.swift").contains("workouts.filter { WorkoutSource.isAppleHealth"))
+        val logicalKey = logicalDay(now).toString()
+        val displayedKey = resolveTodayRow(days, logicalKey, now.toLocalDate().toString())!!.day
+        assertEquals("2026-10-02", logicalKey)
+        assertEquals("2026-10-03", displayedKey)
+        val midnightWorkout = now.minusMinutes(30).toEpochSecond()
+        val previousWorkout = now.minusHours(3).toEpochSecond()
+        assertEquals(listOf(midnightWorkout), listOf(previousWorkout, midnightWorkout)
+            .filter { it in homeActivityWindow(displayedKey, zone) })
+        assertEquals(now.toInstant().toEpochMilli(), homeManualActivityEnd(displayedKey, now))
+
+        val android = todayScreen()
+        assertTrue(android.contains("manualActivityEndMillis = homeManualActivityEnd(selectedDayKey)"))
+        assertTrue(android.contains("val activityWindow = homeActivityWindow(effectDayKey)"))
+        assertTrue(android.contains("viewModel.repo.workoutsAllSources(effectStrapId, activityWindow.first, activityWindow.last)"))
+        val dashboard = source("Strand/Screens/HomeDashboardContent.swift")
+        assertTrue(dashboard.contains("HomeDayActivities.rows(workouts, dayKey: dayKey)"))
+        assertTrue(dashboard.contains("HomeDayActivities.manualEnd(dayKey: dayKey)"))
+        assertFalse(dashboard.contains("windowDayKey ?? dayKey"))
+        for (path in listOf("Strand/Screens/TodayView.swift", "Strand/Liquid/LiquidTodayView.swift")) {
+            val text = source(path)
+            assertTrue(text.contains("HomeDashboardContent(dayKey: selectedDayKey"))
+            assertTrue(text.contains("windowDayKey: Repository.localDayKey(selectedLogicalDay)"))
+        }
     }
 
     @Test

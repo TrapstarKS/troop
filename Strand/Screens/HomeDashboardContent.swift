@@ -8,7 +8,6 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     let dayOffset: Int
     var windowDayKey: String? = nil
     private var isToday: Bool { dayOffset == 0 }
-    private var activityDayKey: String { windowDayKey ?? dayKey }
     let day: DailyMetric?
     let sleepScore: Double?
     let recovery: Double?
@@ -32,6 +31,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     }
     @State private var manualActivity: ManualActivityTarget?
     @State private var startWorkoutRequested = false
+    @State private var dialViewportWidth: CGFloat?
     @ScaledMetric private var columnWidth = NoopMetrics.compactScoreDialDiameter
 
     var body: some View {
@@ -87,6 +87,13 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
             }
         }
         .padding(.vertical, NoopMetrics.space4)
+        .background(GeometryReader { geometry in
+            Color.clear.preference(key: HomeDialWidthKey.self,
+                                   value: geometry.size.width + NoopMetrics.screenHPadding * 2)
+        })
+        .onPreferenceChange(HomeDialWidthKey.self) { width in
+            if width.isFinite && width > 0 { dialViewportWidth = width }
+        }
     }
 
     private var sleepValue: Double? { HomeScoreValue.resolve(sleepScore) }
@@ -130,7 +137,8 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
         VStack(spacing: NoopMetrics.space1) {
             ScoreDial(label: "\(label) ›", value: display, unit: value == nil ? "" : unit,
                       progress: value.map { $0 / 100 }, color: color, size: .compact,
-                      accessibilityLabel: "\(label), \(display)\(value == nil ? "" : unit)")
+                      accessibilityLabel: "\(label), \(display)\(value == nil ? "" : unit)",
+                      viewportWidth: dialViewportWidth)
             if let caption {
                 Text(caption).font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                     .multilineTextAlignment(.center)
@@ -210,7 +218,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 Menu {
                     Button {
                         manualActivity = ManualActivityTarget(
-                            endDate: HomeDayActivities.manualEnd(dayKey: activityDayKey))
+                            endDate: HomeDayActivities.manualEnd(dayKey: dayKey))
                     } label: {
                         Label("Add activity", systemImage: "plus")
                     }
@@ -241,7 +249,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                                  value: day?.totalSleepMin.map { HomeDayActivities.duration($0) } ?? "—",
                                  icon: "moon.fill", color: StrandPalette.sleepPrimary)
                     }
-                    ForEach(Array(HomeDayActivities.rows(workouts, dayKey: activityDayKey).enumerated()), id: \.offset) { _, workout in
+                    ForEach(Array(HomeDayActivities.rows(workouts, dayKey: dayKey).enumerated()), id: \.offset) { _, workout in
                         Divider().overlay(StrandPalette.hairline)
                         Button { onWorkout(workout) } label: {
                             eventRow(title: WorkoutSource.displaySport(workout.sport),
@@ -253,7 +261,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                                      icon: "figure.run", color: StrandPalette.strainPrimary)
                         }
                     }
-                    if HomeDayActivities.rows(workouts, dayKey: activityDayKey).isEmpty {
+                    if HomeDayActivities.rows(workouts, dayKey: dayKey).isEmpty {
                         Text("No activities").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                     }
                 }
@@ -315,9 +323,13 @@ enum HomeDayActivities {
             : String(localized: "\(rounded)m")
     }
 
-    static func rows(_ rows: [WorkoutRow], dayKey: String) -> [WorkoutRow] {
-        rows.filter {
-            Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval($0.startTs))) == dayKey
+    static func rows(_ rows: [WorkoutRow], dayKey: String, calendar: Calendar = .current) -> [WorkoutRow] {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return rows.filter {
+            formatter.string(from: Date(timeIntervalSince1970: TimeInterval($0.startTs))) == dayKey
         }.sorted { $0.startTs < $1.startTs }
     }
 }
@@ -338,15 +350,13 @@ struct HomeDateChrome: View {
             TopChrome(dateLabel: headerLabel, previousLabel: String(localized: "Previous day"),
                       nextLabel: String(localized: "Next day"), profileLabel: String(localized: "Menu and settings"),
                       strapLabel: live.connected ? String(localized: "Connected") : String(localized: "Disconnected"),
+                      streakCount: streak, streakLabel: String(localized: "Scored-day streak") + ", " + streak.formatted(.number.locale(AppLanguage.activeLocale)),
                       batteryPercent: batteryPercent, isConnected: live.connected, canGoNext: selectedOffset > 0,
                       onPrevious: { step(1) }, onNext: { step(-1) }, onDate: { showCalendar = true },
                       onProfile: onProfile, onStrap: { router.openDevices() })
-            HStack(spacing: NoopMetrics.space2) {
-                Label("\(streak)", systemImage: "flame.fill")
-                    .font(StrandFont.captionNumber).foregroundStyle(StrandPalette.textSecondary)
-                    .accessibilityLabel("Scored-day streak")
-                Spacer()
-                if selectedOffset == 0 {
+            if selectedOffset == 0 {
+                HStack(spacing: NoopMetrics.space2) {
+                    Spacer()
                     if live.backfilling {
                         StatusPill(label: String(localized: "Syncing history"), systemImage: "arrow.triangle.2.circlepath",
                                    color: StrandPalette.textSecondary)
@@ -408,4 +418,9 @@ enum HomeMetricRoute {
         case .skinTemp: return .metric("skin_temp")
         }
     }
+}
+
+private struct HomeDialWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
