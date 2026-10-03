@@ -269,7 +269,8 @@ struct SleepView: View {
                                 onSave: { newBedTs, newWakeTs in
                     await repo.editSleepTimes(detectedStartTs: edit.detectedStartTs, oldEndTs: edit.wakeTs,
                                               storedStagesJSON: edit.stagesJSON,
-                                              newStartTs: newBedTs, newEndTs: newWakeTs)
+                                              newStartTs: newBedTs, newEndTs: newWakeTs,
+                                              visibleOwnerDeviceId: edit.ownerDeviceId)
                     // Re-score the day so the dashboard aggregates (Rest / recovery) honor the corrected
                     // sleep window, not just the Sleep tab's session view; then refresh the read cache.
                     await intelligence.analyzeRecent()
@@ -281,7 +282,8 @@ struct SleepView: View {
                     // #65: the returned snapshot lets the user UNDO within a few seconds. It restores the
                     // deleted row into its ORIGINAL namespace and lifts the tombstone.
                     let snapshot = await repo.deleteSleepSession(detectedStartTs: edit.detectedStartTs,
-                                                                 endTs: edit.wakeTs)
+                                                                 endTs: edit.wakeTs,
+                                                                 visibleOwnerDeviceId: edit.ownerDeviceId)
                     await intelligence.analyzeRecent()
                     await repo.refresh()
                     // `edit.bedTs` is the effective (displayed) onset, so the banner shows the same clock
@@ -1363,7 +1365,8 @@ struct SleepView: View {
     }
 
     private func openEditor(_ target: CachedSleepSession) {
-        wakeEdit = WakeEdit(detectedStartTs: target.startTs, bedTs: target.effectiveStartTs,
+        wakeEdit = WakeEdit(detectedStartTs: target.startTs, ownerDeviceId: target.deviceId,
+                            bedTs: target.effectiveStartTs,
                             wakeTs: target.endTs, stagesJSON: target.stagesJSON, userEdited: target.userEdited)
     }
 
@@ -2456,6 +2459,7 @@ private struct SleepUndoBanner {
 
 private struct WakeEdit: Identifiable {
     let detectedStartTs: Int   // immutable detected key the edit writes against
+    let ownerDeviceId: String?
     let bedTs: Int             // current effective onset (seeds the bed picker)
     let wakeTs: Int            // current wake (seeds the wake picker)
     let stagesJSON: String?
@@ -2463,7 +2467,7 @@ private struct WakeEdit: Identifiable {
     /// never re-detected), so the editor's delete-confirm copy must NOT promise re-detection suppression
     /// for it. Mirrors the undo-banner branch (#65 banner/confirm honesty).
     let userEdited: Bool
-    var id: Int { detectedStartTs }
+    var id: String { "\(ownerDeviceId ?? ""):\(detectedStartTs)" }
 }
 
 /// Seeds the "Add nap" picker (#508). A nap is short, so seed a 30-minute window anchored to the night's

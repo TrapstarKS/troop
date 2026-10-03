@@ -20,10 +20,14 @@ struct SleepStageInspectionChart: View {
     let highlightedStage: SleepStage?
     var filled = false
     var stagePalette: SleepStagePalette = .noop
-    @State private var selection: SleepStageInspection?
+    @State private var selectionFraction: Double?
     private let stages: [SleepStage] = [.awake, .rem, .light, .deep]
 
     var body: some View {
+        let selection = selectionFraction.flatMap {
+            SleepStageInspection.resolve(fraction: $0, span: span, intervals: intervals)
+        }
+        let readout = selectionText(selection)
         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
             HStack(spacing: NoopMetrics.space3) {
                 VStack(alignment: .trailing, spacing: 0) {
@@ -84,17 +88,16 @@ struct SleepStageInspectionChart: View {
                         .onContinuousHover { phase in
                             switch phase {
                             case .active(let location): inspect(location.x, width: geometry.size.width)
-                            case .ended: selection = nil
+                            case .ended: selectionFraction = nil
                             }
                         }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(Text("Stage breakdown"))
-                        .accessibilityValue(Text(selectionText))
+                        .accessibilityValue(Text(readout))
                         .accessibilityAdjustableAction { direction in
-                            let fraction = (selection?.seconds ?? 0) / max(span, 1)
+                            let fraction = selectionFraction ?? 0
                             let step = 60 / max(span, 1)
-                            selection = SleepStageInspection.resolve(fraction: fraction + (direction == .increment ? step : -step),
-                                                                     span: span, intervals: intervals)
+                            selectionFraction = min(max(fraction + (direction == .increment ? step : -step), 0), 1)
                         }
                     }
                     .frame(height: NoopMetrics.chartHeight)
@@ -109,24 +112,24 @@ struct SleepStageInspectionChart: View {
                     .foregroundStyle(StrandPalette.textSecondary)
                 }
             }
-            Text(selectionText)
+            Text(readout)
                 .font(StrandFont.caption)
                 .foregroundStyle(StrandPalette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .onChange(of: nightStart) { _ in selection = nil }
+        .onChange(of: nightStart) { _ in selectionFraction = nil }
     }
 
     private func inspect(_ x: CGFloat, width: CGFloat) {
         guard width > 0 else { return }
-        selection = SleepStageInspection.resolve(fraction: Double(x / width), span: span, intervals: intervals)
+        selectionFraction = min(max(Double(x / width), 0), 1)
     }
 
     private func clock(_ seconds: TimeInterval) -> String {
         AppClock.hourMinuteFormatter().string(from: nightStart.addingTimeInterval(seconds))
     }
 
-    private var selectionText: String {
+    private func selectionText(_ selection: SleepStageInspection?) -> String {
         guard let selection else { return String(localized: "Touch the timeline to inspect sleep stages.") }
         let stage = selection.stage?.label ?? String(localized: "No data")
         return "\(clock(selection.seconds)) · \(stage)"
