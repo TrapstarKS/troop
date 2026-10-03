@@ -1648,9 +1648,7 @@ struct TodayView: View {
                             NavigationLink(value: TabRoute.strainDetailForDay(dayKey: selectedDayKey, effortOverride: effortStrain(displayDay).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }, windowDayKey: Repository.localDayKey(selectedLogicalDay))) { keyMetricTile(metric) }
                             .buttonStyle(.plain)
                         } else if metric == .rest {
-                            NavigationLink {
-                                SleepView(initialDayKey: selectedDayKey)
-                            } label: { keyMetricTile(metric) }
+                            NavigationLink(value: TabRoute.sleepDetailForDay(dayKey: selectedDayKey)) { keyMetricTile(metric) }
                             .buttonStyle(.plain)
                         } else {
                             NavigationLink(value: HomeMetricRoute.route(metric)) { keyMetricTile(metric) }

@@ -259,10 +259,14 @@ object Palette {
     }
 
     /** Sample the recovery gradient at a recovery score 0..100. */
-    fun recoveryColor(score: Double): Color = when {
-        score < 34 -> recoveryLow
-        score < 67 -> recoveryMedium
-        else -> recoveryHigh
+    fun recoveryColor(score: Double): Color {
+        if (!score.isFinite()) return textTertiary
+        if (isClassic) return sample(recoveryStops, (score / 100.0).toFloat())
+        return when {
+            score < 34 -> recoveryLow
+            score < 67 -> recoveryMedium
+            else -> recoveryHigh
+        }
     }
 
     /** Sample the strain gradient at an Effort value on the 0..100 scale. */

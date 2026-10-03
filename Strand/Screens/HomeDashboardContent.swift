@@ -90,9 +90,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     private var strainValue: Double? { HomeScoreValue.resolve(strain) }
 
     private var sleepDial: some View {
-        NavigationLink {
-            SleepView(initialDayKey: dayKey)
-        } label: {
+        NavigationLink(value: TabRoute.sleepDetailForDay(dayKey: dayKey)) {
             dial(label: String(localized: "Sleep"), value: sleepValue,
                  display: sleepValue.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
                  color: StrandPalette.sleepPrimary,
@@ -200,9 +198,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
             if isToday { ActiveWorkoutIndicatorSection(onOpen: { startWorkoutRequested = true }) }
             NoopCard {
                 VStack(spacing: NoopMetrics.space3) {
-                    NavigationLink {
-                        SleepView(initialDayKey: dayKey)
-                    } label: {
+                    NavigationLink(value: TabRoute.sleepDetailForDay(dayKey: dayKey)) {
                         eventRow(title: String(localized: "Sleep"),
                                  subtitle: String(localized: day?.totalSleepMin == nil
                                     ? (isToday ? "No sleep yet" : "No data for this day") : "Recorded sleep"),
