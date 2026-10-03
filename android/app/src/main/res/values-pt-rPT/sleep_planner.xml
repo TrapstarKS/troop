@@ -26,7 +26,7 @@
     <string name="sleep_planner_use_default">Usar predefinição</string>
     <string name="sleep_planner_save">Guardar alarme</string>
     <string name="sleep_planner_reported">A pulseira comunica esta hora limite. A leitura é de diagnóstico e não garante o despertar.</string>
-    <string name="sleep_planner_sent">Hora limite enviada; aguarda confirmação da pulseira.</string>
+    <string name="sleep_planner_sent">Comando de despertar registado; a aguardar confirmação da pulseira.</string>
     <string name="sleep_planner_off">Alarme da pulseira desligado no NOOP.</string>
     <string name="sleep_planner_local">Guardado localmente; hora limite não confirmada.</string>
     <string name="sleep_planner_saved_deadline">Hora limite guardada</string>
@@ -41,7 +41,7 @@
     <string name="sleep_planner_skipped">%1$s ignorado. Os dias futuros continuam ativos.</string>
     <string name="sleep_planner_restore">Repor alarme ignorado</string>
     <string name="sleep_planner_skip_saved">A próxima ocorrência já foi ignorada.</string>
-    <string name="sleep_planner_strap_battery" formatted="false">Bateria da pulseira abaixo de 20%. Carrega antes de depender do alarme.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">A última carga comunicada pela pulseira era inferior a 20%. Carregue-a antes de confiar no alarme.</string>
     <string name="sleep_planner_phone_battery" formatted="false">Bateria do telefone a 20% ou menos. Este é o limiar de aviso local do NOOP.</string>
     <string name="sleep_planner_backup">Mantém um alarme independente para despertares importantes. A pulseira precisa de uma ligação ativa à aplicação para repetir o alarme nos dias seguintes.</string>
     <string name="sleep_planner_reminders">Lembretes noturnos</string>

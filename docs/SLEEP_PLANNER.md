@@ -31,9 +31,10 @@ alarm searches two weeks ahead so skipping next week does not lose the following
 Only the existing curated exact-time arm/disarm commands are reused; no new BLE command is added.
 Saving or skipping requires the paired strap connection. A disconnected save reports failure and
 preserves the previous alarm settings. WHOOP 5/MG remains behind the existing Protocol probes gate.
-The settings being saved is distinct from a write being sent, and both are distinct from a matching
-readback from the active strap. A countdown requires matching readback evidence; an unconfirmed
-write is labelled unconfirmed. The 5/MG command has no dependable alarm-time readback and is not
+Saved settings and a recorded wake command are distinct from matching readback from the active
+strap. Existing diagnostic metadata records the arm invocation; it does not prove GATT delivery.
+A countdown requires matching readback evidence; an unconfirmed command is labelled unconfirmed.
+The 5/MG command has no dependable alarm-time readback and is not
 presented as confirmed. Hardware wake reliability still requires a real strap test.
 
 Exact time uses the selected deadline. Sleep-goal and Recovery modes describe the final hour before
@@ -59,9 +60,13 @@ after a wake. iOS cannot keep this sideloaded app continuously observing overnig
 loud wake, bypass Focus/silent mode, or deliver notifications after permission is denied. macOS does
 not schedule the phone backup. The built-in Clock alarm remains the recommended backup.
 
-Android retains its existing exact OS alarm at the hard deadline, independent of BLE. Skipping
-recomputes the next deadline rather than disabling the recurring schedule. Android exact-alarm and
-notification permissions still apply; a powered-off phone cannot deliver a phone alarm.
+Android retains its existing exact OS alarm at the hard deadline, independent of BLE. When the
+phone alarm's actual window start matches the skipped wake, its next deadline is recomputed;
+independently timed phone alarms stay scheduled. The existing haptic companion uses that same
+resolved window start, including its date across midnight and daylight saving changes. An open
+window advances that companion to its next selected occurrence without moving the phone's current
+deadline. Android exact-alarm and notification permissions still apply;
+a powered-off phone cannot deliver a phone alarm.
 
 Bedtime/wind-down advice follows the same plan and per-day goal. Apple replaces seven upcoming
 one-shot bedtime reminders on refresh, omitting the skipped occurrence; opening the app replenishes

@@ -1,4 +1,5 @@
 import XCTest
+import StrandAnalytics
 @testable import Strand
 
 final class SleepPlannerAlarmTests: XCTestCase {
@@ -84,5 +85,19 @@ final class SleepPlannerAlarmTests: XCTestCase {
         XCTAssertEqual(local.component(.hour, from: next), 1)
         XCTAssertEqual(local.component(.minute, from: next), 30)
         XCTAssertEqual(next.timeIntervalSince(now), 150 * 60)
+    }
+
+    func testSkippedLaterFoldStaysPendingDuringEarlierHour() throws {
+        var local = calendar
+        local.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        let formatter = ISO8601DateFormatter()
+        let now = try XCTUnwrap(formatter.date(from: "2026-11-01T05:31:00Z"))
+        let expired = try XCTUnwrap(formatter.date(from: "2026-11-01T06:31:00Z"))
+        let nextWeek = try XCTUnwrap(formatter.date(from: "2026-11-08T06:30:00Z"))
+        let key = "2026-11-01|90"
+        XCTAssertTrue(PlannerAlarmPolicy.isSkipPending(skippedOccurrence: key, from: now, calendar: local))
+        XCTAssertFalse(PlannerAlarmPolicy.isSkipPending(skippedOccurrence: key, from: expired, calendar: local))
+        XCTAssertEqual(AppModel.nextSmartAlarmDate(minutes: 90, weekdays: [1], skippedOccurrence: key,
+                                                   from: now, calendar: local), nextWeek)
     }
 }

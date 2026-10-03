@@ -5,6 +5,7 @@ import com.noop.alarm.SmartAlarmScheduler
 import com.noop.alarm.WindDownScheduler
 import com.noop.analytics.PlannerAlarmPolicy
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -70,6 +71,26 @@ class SleepPlannerAlarmTest {
         val resolved = (now.clone() as Calendar).apply { timeInMillis = next!! * 1000 }
         assertEquals(15, resolved.get(Calendar.DAY_OF_MONTH))
         assertEquals(2, resolved.get(Calendar.HOUR_OF_DAY))
+    }
+
+    @Test fun aPendingSkipCannotBeReplacedDuringTheFirstFoldHour() {
+        val now = Calendar.getInstance(TimeZone.getTimeZone("America/New_York")).apply {
+            timeInMillis = java.time.Instant.parse("2026-11-01T05:31:00Z").toEpochMilli()
+        }
+        val skipped = "2026-11-01|90"
+        assertTrue(PlannerAlarmPolicy.isSkipPending(skipped, now))
+        val wake = nextSmartAlarmEpochSec(
+            90, setOf(Calendar.SUNDAY), nowMs = now.timeInMillis,
+            calendarFactory = { now.clone() as Calendar },
+        )
+        assertEquals(java.time.Instant.parse("2026-11-01T06:30:00Z").epochSecond, wake)
+        val next = nextSmartAlarmEpochSec(
+            90, setOf(Calendar.SUNDAY), nowMs = now.timeInMillis,
+            calendarFactory = { now.clone() as Calendar }, skippedOccurrence = skipped,
+        )
+        assertEquals(java.time.Instant.parse("2026-11-08T06:30:00Z").epochSecond, next)
+        now.timeInMillis = java.time.Instant.parse("2026-11-01T06:31:00Z").toEpochMilli()
+        assertFalse(PlannerAlarmPolicy.isSkipPending(skipped, now))
     }
 
     @Test fun remindersUseWeekdayGoalAndDebt() {

@@ -26,7 +26,7 @@
     <string name="sleep_planner_use_default">Użyj domyślnych</string>
     <string name="sleep_planner_save">Zapisz alarm</string>
     <string name="sleep_planner_reported">Opaska zgłasza tę godzinę graniczną. Odczyt ma charakter diagnostyczny i nie gwarantuje pobudki.</string>
-    <string name="sleep_planner_sent">Godzina wysłana; oczekiwanie na potwierdzenie opaski.</string>
+    <string name="sleep_planner_sent">Zarejestrowano polecenie budzenia; oczekiwanie na potwierdzenie opaski.</string>
     <string name="sleep_planner_off">Alarm opaski wyłączony w NOOP.</string>
     <string name="sleep_planner_local">Zapisano lokalnie; godzina niepotwierdzona.</string>
     <string name="sleep_planner_saved_deadline">Zapisana godzina pobudki</string>
@@ -41,7 +41,7 @@
     <string name="sleep_planner_skipped">Pominięto %1$s. Przyszłe dni alarmu pozostają włączone.</string>
     <string name="sleep_planner_restore">Przywróć pominięty alarm</string>
     <string name="sleep_planner_skip_saved">Następne wystąpienie jest już pominięte.</string>
-    <string name="sleep_planner_strap_battery" formatted="false">Bateria opaski poniżej 20%. Naładuj ją przed poleganiem na alarmie.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">Ostatnio zgłoszony poziom baterii opaski wynosił poniżej 20%. Naładuj ją przed użyciem alarmu.</string>
     <string name="sleep_planner_phone_battery" formatted="false">Bateria telefonu ma 20% lub mniej. To lokalny próg ostrzeżenia NOOP.</string>
     <string name="sleep_planner_backup">Na ważną pobudkę ustaw osobny alarm. Opaska wymaga aktywnej łączności z aplikacją, aby powtarzać alarm w kolejnych dniach.</string>
     <string name="sleep_planner_reminders">Wieczorne przypomnienia</string>

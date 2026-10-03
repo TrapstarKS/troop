@@ -26,7 +26,7 @@
     <string name="sleep_planner_use_default">使用默认值</string>
     <string name="sleep_planner_save">保存闹钟</string>
     <string name="sleep_planner_reported">手环报告了此时间。此回读仅用于诊断，不保证唤醒。</string>
-    <string name="sleep_planner_sent">时间已发送，正在等待手环确认。</string>
+    <string name="sleep_planner_sent">唤醒命令已记录，等待腕带确认。</string>
     <string name="sleep_planner_off">手环闹钟已在 NOOP 中禁用。</string>
     <string name="sleep_planner_local">已本地保存，手环时间尚未确认。</string>
     <string name="sleep_planner_saved_deadline">已保存的唤醒时间</string>
@@ -41,7 +41,7 @@
     <string name="sleep_planner_skipped">已跳过 %1$s。未来闹钟日期仍然启用。</string>
     <string name="sleep_planner_restore">恢复跳过的闹钟</string>
     <string name="sleep_planner_skip_saved">已跳过下一次闹钟。</string>
-    <string name="sleep_planner_strap_battery" formatted="false">手环电量低于 20%。依赖闹钟前请充电。</string>
+    <string name="sleep_planner_strap_battery" formatted="false">腕带最后上报的电量低于20%。请先充电，再依靠闹钟唤醒。</string>
     <string name="sleep_planner_phone_battery" formatted="false">手机电量为 20% 或更低。这是 NOOP 的本地警告阈值。</string>
     <string name="sleep_planner_backup">重要唤醒请保留独立备用闹钟。手环需与应用保持连接，才能在以后的日期重复闹钟。</string>
     <string name="sleep_planner_reminders">晚间提醒</string>

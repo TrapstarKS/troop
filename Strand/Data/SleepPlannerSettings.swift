@@ -41,7 +41,7 @@ final class SleepPlannerSettings: ObservableObject {
 
     func plan(weekday: Int, wakeMinutes: Int, leadMinutes: Int = 30) -> SleepPlan {
         SleepPlanner.plan(baseNeedMinutes: baseNeedMinutes, debtMinutes: debtMinutes,
-                          goalPercent: goalOverrides[weekday] ?? goalPercent,
+                          goalPercent: SleepPlanner.weekdayGoal(weekday, overrides: goalOverrides, defaultPercent: goalPercent),
                           wakeMinutes: wakeMinutes, leadMinutes: leadMinutes,
                           historyNights: historyNights)
     }

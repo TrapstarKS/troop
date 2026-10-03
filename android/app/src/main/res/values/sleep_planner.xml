@@ -26,7 +26,7 @@
     <string name="sleep_planner_use_default">Use default</string>
     <string name="sleep_planner_save">Save alarm</string>
     <string name="sleep_planner_reported">Strap reports this deadline. This readback is diagnostic, not a wake guarantee.</string>
-    <string name="sleep_planner_sent">Deadline sent; awaiting strap confirmation.</string>
+    <string name="sleep_planner_sent">Wake command recorded; awaiting strap confirmation.</string>
     <string name="sleep_planner_off">Strap alarm disabled in NOOP.</string>
     <string name="sleep_planner_local">Saved locally; strap deadline not confirmed.</string>
     <string name="sleep_planner_saved_deadline">Saved wake deadline</string>
@@ -41,7 +41,7 @@
     <string name="sleep_planner_skipped">Skipped %1$s. Future alarm days stay enabled.</string>
     <string name="sleep_planner_restore">Restore skipped alarm</string>
     <string name="sleep_planner_skip_saved">The next occurrence is already skipped.</string>
-    <string name="sleep_planner_strap_battery" formatted="false">Strap battery is below 20%. Charge before relying on its alarm.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">Last reported strap charge was below 20%. Charge it before relying on the alarm.</string>
     <string name="sleep_planner_phone_battery" formatted="false">Phone battery is 20% or lower. This is NOOP’s local warning threshold.</string>
     <string name="sleep_planner_backup">Keep a separate backup for a wake you cannot miss. Strap alarms need an active app connection to repeat on later days.</string>
     <string name="sleep_planner_reminders">Evening reminders</string>

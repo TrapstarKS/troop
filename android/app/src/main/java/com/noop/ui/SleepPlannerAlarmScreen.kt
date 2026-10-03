@@ -144,11 +144,7 @@ fun SmartAlarmScreen(vm: AppViewModel) {
     var result by remember { mutableStateOf<String?>(null) }
     var showDays by remember { mutableStateOf(false) }
     val clock = Calendar.getInstance().apply { timeInMillis = nowMs }
-    val currentOccurrence = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(
-        clock.get(Calendar.YEAR), clock.get(Calendar.MONTH) + 1,
-        clock.get(Calendar.DAY_OF_MONTH), clock.get(Calendar.HOUR_OF_DAY) * 60 + clock.get(Calendar.MINUTE),
-    )
-    val skippedPending = com.noop.analytics.PlannerAlarmPolicy.isSkipPending(settings.skippedOccurrence, currentOccurrence)
+    val skippedPending = com.noop.analytics.PlannerAlarmPolicy.isSkipPending(settings.skippedOccurrence, clock)
     val planWeekday = snapshot.wake.get(Calendar.DAY_OF_WEEK)
     var requestingDebtPermission by remember { mutableStateOf(false) }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -225,7 +221,7 @@ fun SmartAlarmScreen(vm: AppViewModel) {
                     )
                     snapshot.countdownMinutes?.let { Text(stringResource(R.string.sleep_planner_countdown, durationMinutes(it.toInt())), style = NoopType.footnote, color = Palette.textSecondary) }
                     result?.let {
-                        Text(stringResource(when (it) {
+                        val messageResource = when (it) {
                             "reconnect" -> R.string.sleep_planner_reconnect_error
                             "unsupported" -> R.string.sleep_planner_unsupported
                             "permission" -> R.string.sleep_planner_permission
@@ -234,7 +230,8 @@ fun SmartAlarmScreen(vm: AppViewModel) {
                             "requested" -> R.string.sleep_planner_update_requested
                             "alreadySkipped" -> R.string.sleep_planner_skip_saved
                             else -> R.string.sleep_planner_send_error
-                        }), style = NoopType.footnote, color = if (it == "sent") Palette.textSecondary else Palette.statusWarning)
+                        }
+                        Text(stringResource(messageResource), style = NoopType.footnote, color = if (it == "sent") Palette.textSecondary else Palette.statusWarning)
                     }
                     if (!live.connected || !live.encryptedBond) NoopButton(text = stringResource(R.string.sleep_planner_reconnect), kind = NoopButtonKind.Secondary, fullWidth = true, onClick = { vm.connect() })
                     if (enabled && !skippedPending) {
@@ -247,7 +244,7 @@ fun SmartAlarmScreen(vm: AppViewModel) {
                         Text(stringResource(R.string.sleep_planner_skipped, settings.skippedOccurrence.substringBefore('|')), style = NoopType.footnote, color = Palette.textSecondary)
                         NoopButton(text = stringResource(R.string.sleep_planner_restore), kind = NoopButtonKind.Secondary, fullWidth = true, onClick = { result = vm.restoreSleepPlannerOccurrence() })
                     }
-                    if (enabled && live.batteryPct?.let { it < 20 } == true) Text(stringResource(R.string.sleep_planner_strap_battery), style = NoopType.footnote, color = Palette.statusWarning)
+                    if (enabled && activeIsWhoop && live.batteryPct?.let { it < 20 } == true) Text(stringResource(R.string.sleep_planner_strap_battery), style = NoopType.footnote, color = Palette.statusWarning)
                     val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
                     val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
                     val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1

@@ -2778,7 +2778,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         setSleepPlannerSettings(_sleepPlannerSettings.value.copy(alarmMode = mode, skippedOccurrence = ""))
         if (phoneAlarmStore.enabled) SmartAlarmScheduler.arm(appContext, phoneAlarmStore)
         reconcileStrapAlarm(nowMs)
-        return if (!enabled) "cancelRequested" else if (NoopPrefs.of(appContext).getLong("alarm.lastArmAt", 0L) >= nowMs) "sent" else "notSent"
+        if (!enabled) return "cancelRequested"
+        val prefs = NoopPrefs.of(appContext)
+        if (prefs.getLong("alarm.lastArmAt", 0L) < nowMs) return "notSent"
+        val expected = nextSmartAlarmEpochSec(
+            _smartAlarmMinutes.value, _smartAlarmWeekdays.value, nowMs = nowMs,
+            dayOverrides = _smartAlarmDayOverrides.value,
+        )
+        val recorded = prefs.getLong("alarm.lastArmSentEpoch", 0L) == expected
+            && prefs.getString("alarm.lastArmDeviceId", null) == activeStrapId
+            && prefs.getBoolean("alarm.lastArmConnected", false)
+        return if (recorded) "sent" else "requested"
     }
 
     fun skipNextSleepPlannerAlarm(nowMs: Long = System.currentTimeMillis()): String {
@@ -2787,11 +2797,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (!live.value.connected || !live.value.encryptedBond || !ble.commandChannelReady) return "reconnect"
         if (live.value.whoop5Detected && !PuffinExperiment.from(appContext).isEnabled) return "unsupported"
         val clock = java.util.Calendar.getInstance().apply { timeInMillis = nowMs }
-        val currentOccurrence = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(
-            clock.get(java.util.Calendar.YEAR), clock.get(java.util.Calendar.MONTH) + 1,
-            clock.get(java.util.Calendar.DAY_OF_MONTH), clock.get(java.util.Calendar.HOUR_OF_DAY) * 60 + clock.get(java.util.Calendar.MINUTE),
-        )
-        if (com.noop.analytics.PlannerAlarmPolicy.isSkipPending(_sleepPlannerSettings.value.skippedOccurrence, currentOccurrence)) return "alreadySkipped"
+        if (com.noop.analytics.PlannerAlarmPolicy.isSkipPending(_sleepPlannerSettings.value.skippedOccurrence, clock)) return "alreadySkipped"
         val epoch = nextSmartAlarmEpochSec(
             _smartAlarmMinutes.value, _smartAlarmWeekdays.value, nowMs = nowMs,
             dayOverrides = _smartAlarmDayOverrides.value,
@@ -3157,24 +3163,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 skippedOccurrence = _sleepPlannerSettings.value.skippedOccurrence,
             )
         } else null
-        // Buzz-WHOOP-4 companion's requested time: the phone alarm's EARLIEST wake time, next occurrence
-        // ON A DAY THAT ALARM ACTUALLY FIRES. This routes through the same weekday-aware resolver the
-        // smart alarm uses rather than nextDailyEpochSec, which is unconditionally daily: leaving it daily
-        // would buzz the strap on a morning the phone alarm is switched off, which is precisely the day the
-        // user asked to sleep in. An empty weekday set still means every day.
-        //
-        // #1858: the per-day overrides go through TOO. This companion exists to buzz the strap at the phone
-        // alarm's earliest wake time, so a day whose wake time was moved must move the buzz with it — the
-        // comment here used to say "the phone alarm has none", which stopped being true the moment it got
-        // them, and a strap buzzing at the old time is worse than one not buzzing at all.
+        // The companion uses the next future elapsed window start, including midnight and DST changes.
+        // An already-open phone window keeps its independent deadline while the companion advances.
         val buzzEpoch = if (_buzzWhoop4Enabled.value) {
-            nextSmartAlarmEpochSec(
-                phoneAlarmStore.targetMinutes,
-                phoneAlarmStore.weekdays,
-                dayOverrides = phoneAlarmStore.targetOverrides,
-                nowMs = nowMs,
+            SmartAlarmScheduler.nextFutureWindowStart(
+                now = java.util.Calendar.getInstance().apply { timeInMillis = nowMs },
+                weekdays = phoneAlarmStore.weekdays,
+                windowMinutes = phoneAlarmStore.windowMinutes,
                 skippedOccurrence = _sleepPlannerSettings.value.skippedOccurrence,
-            )
+            ) { phoneAlarmStore.targetFor(it) }
+                ?.timeInMillis?.div(1000L)
         } else null
 
         val epochSec = earliestStrapAlarmEpochSec(smartEpoch, buzzEpoch)
@@ -3423,7 +3421,7 @@ internal fun zoneCoachBuzzLoops(previousZone: Int, zone: Int, recoveryEnabled: B
  *    Numbers outside 1…7 are ignored.
  *  - [nowMs]/[calendarFactory]: injected for tests; default to the real clock + local calendar.
  *
- * Scans today through +7 days for the next strictly-future occurrence on an enabled weekday. Returns
+ * Scans today through +14 days for the next strictly-future occurrence on an enabled weekday. Returns
  * null only when no valid weekday falls in that range (i.e. the set held nothing in 1…7).
  */
 internal fun nextSmartAlarmEpochSec(
@@ -3470,7 +3468,7 @@ internal fun nextSmartAlarmEpochSec(
  * epoch-second. Pure + clock-injectable so it can be unit-tested.
  *
  * NO PRODUCTION CALLER as of the phone alarm gaining weekday selection: the "Buzz WHOOP 4/5" companion
- * was its only one, and it now routes through [nextSmartAlarmEpochSec] so a day switched off on the
+ * was its only one, and it now routes through [SmartAlarmScheduler.nextFutureWindowStart] so a day switched off on the
  * phone alarm cannot leave the strap buzzing on that morning. Kept because it is the reference for what
  * "unconditionally daily" means here — [nextSmartAlarmEpochSec] with an empty weekday set must stay
  * equivalent to it, and its own test is what pins that. Delete it only alongside that equivalence.

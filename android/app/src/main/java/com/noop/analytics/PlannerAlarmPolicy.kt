@@ -1,5 +1,7 @@
 package com.noop.analytics
 
+import java.util.Calendar
+
 /**
  * Pure policy for advancing an alarm within its final hour. The caller supplies only
  * a recovery value from the current night; this helper cannot establish freshness.
@@ -45,13 +47,20 @@ object PlannerAlarmPolicy {
     }
 
     /**
-     * Pending through the saved local minute. Scheduling still matches the exact
+     * Pending until the saved wake instant. Scheduling still matches the exact
      * occurrence key; this comparison only gates the pending status and duplicate skip.
      */
-    fun isSkipPending(skippedOccurrence: String, currentOccurrence: String): Boolean {
-        val skipped = occurrenceParts(skippedOccurrence) ?: return false
-        val current = occurrenceParts(currentOccurrence) ?: return false
-        return skipped.first > current.first || (skipped.first == current.first && skipped.second >= current.second)
+    fun isSkipPending(skippedOccurrence: String, now: Calendar): Boolean {
+        val saved = occurrenceParts(skippedOccurrence) ?: return false
+        val parts = saved.first.split('-').map { it.toInt() }
+        val savedDay = (now.clone() as Calendar).apply {
+            clear()
+            set(parts[0], parts[1] - 1, parts[2], 12, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        if (savedDay.get(Calendar.YEAR) != parts[0] || savedDay.get(Calendar.MONTH) != parts[1] - 1 ||
+            savedDay.get(Calendar.DAY_OF_MONTH) != parts[2]) return false
+        return SleepPlanner.wakeDate(saved.second, savedDay).timeInMillis >= now.timeInMillis
     }
 
     private fun occurrenceParts(key: String): Pair<String, Int>? {

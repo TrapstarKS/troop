@@ -363,10 +363,8 @@ final class AppModel: ObservableObject {
             // Keep the battery night-guard's learned bedtime warm off the same signal (throttled inside).
             self?.refreshHabitualMidsleep()
         }.store(in: &hrCancellables)
-        repo.$refreshSeq.dropFirst().sink { [weak self] _ in
-            guard let self else { return }
-            SleepPlannerSettings.shared.updateInputs(days: self.repo.days, sleeps: self.repo.sleeps,
-                                                      habitualMidsleepSec: self.habitualMidsleepCache)
+        repo.$refreshSeq.dropFirst().sink { [weak self] revision in
+            self?.refreshSleepPlannerInputs(revision: revision)
         }.store(in: &hrCancellables)
         NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
             .sink { [weak self] _ in self?.applySmartAlarm() }
@@ -1609,21 +1607,6 @@ final class AppModel: ObservableObject {
         #endif
     }
 
-    /// Arm (or clear) the strap's firmware alarm from the smart-alarm settings. The firmware alarm
-    /// fires even if the Mac is asleep / NOOP is closed. No-op until bonded (send is gated on bond).
-    ///
-    /// On iOS this ALSO (dis)arms the best-effort backup wake notification (#4 + #6): a repeating daily
-    /// `UNCalendarNotificationTrigger` that survives suspend/relaunch, so a missed strap buzz still gets
-    /// an OS-level wake. macOS keeps just the firmware alarm (the static helpers are no-ops there).
-    ///
-    /// #1864: the per-weekday wake-time overrides (`WindDownNudge.perDayWakeOverrides`, #554) now flow
-    /// through to BOTH the strap firmware alarm and the backup notification — so a user who sets
-    /// "Tuesday 03:30" on the alarm screen is woken at 03:30 on Tuesday, not at the default time with
-    /// only the wind-down reminder shifting. Before this, the overrides had exactly two readers
-    /// (`wakeMinutes(forWeekday:)` → the nudge fan-out, and `SmartAlarmView` which edits them) and the
-    /// alarm backup took a single time plus a day set, so the control on the alarm screen silently moved
-    /// only the evening reminder. Mirrors Android's `reconcileStrapAlarm` which passes `dayOverrides`
-    /// to `nextSmartAlarmEpochSec`, and `SmartAlarmScheduler.arm` which reads `targetOverrides`.
     /// Warn about a strap last seen LOW that has not been heard from since (#2556).
     ///
     /// The crossings wired into `live.onBatteryUpdate` only run when a reading ARRIVES, so a strap that
@@ -1645,10 +1628,24 @@ final class AppModel: ObservableObject {
             enabled: behavior.batteryAlerts)
     }
 
-    func applySmartAlarm() {
-        WindDownNudge.reschedule()
+    /// Arm (or clear) the strap's firmware alarm from the smart-alarm settings. The firmware alarm
+    /// fires even if the Mac is asleep / NOOP is closed. No-op until bonded (send is gated on bond).
+    ///
+    /// On iOS this also refreshes best-effort backup notifications for the next 28 selected wakes
+    /// (#4 + #6). Permission, Focus and silent mode can suppress delivery. macOS keeps the firmware
+    /// alarm; the phone-notification helpers are no-ops there.
+    ///
+    /// #1864: the per-weekday wake-time overrides (`WindDownNudge.perDayWakeOverrides`, #554) now flow
+    /// through to BOTH the strap firmware alarm and the backup notification — so a user who sets
+    /// "Tuesday 03:30" on the alarm screen is woken at 03:30 on Tuesday, not at the default time with
+    /// only the wind-down reminder shifting. Before this, the overrides had exactly two readers
+    /// (`wakeMinutes(forWeekday:)` → the nudge fan-out, and `SmartAlarmView` which edits them) and the
+    /// alarm backup took a single time plus a day set, so the control on the alarm screen silently moved
+    /// only the evening reminder. Mirrors Android's `reconcileStrapAlarm` which passes `dayOverrides`
+    /// to `nextSmartAlarmEpochSec`, and `SmartAlarmScheduler.arm` which reads `targetOverrides`.
+    func applySmartAlarm(from now: Date = Date()) {
+        WindDownNudge.reschedule(from: now)
         let overrides = WindDownNudge.perDayWakeOverrides
-        let now = Date()
         let skipped = SleepPlannerSettings.shared.skippedOccurrence
         guard behavior.smartAlarmEnabled else {
             ble.disableStrapAlarm()

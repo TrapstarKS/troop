@@ -47,6 +47,7 @@ struct SmartAlarmView: View {
             overrides = WindDownNudge.perDayWakeOverrides
             enabled = behavior.smartAlarmEnabled
             mode = planner.alarmMode
+            model.refreshSleepPlannerInputs()
         }
         .alert(String(localized: "Alarm could not be saved"), isPresented: $showSaveError) {
             Button(String(localized: "OK"), role: .cancel) {}
@@ -108,7 +109,7 @@ struct SmartAlarmView: View {
 
     private func skipIsPending(from now: Date) -> Bool {
         PlannerAlarmPolicy.isSkipPending(skippedOccurrence: planner.skippedOccurrence,
-                                         currentOccurrence: AppModel.smartAlarmOccurrenceKey(now))
+                                         from: now, calendar: .current)
     }
 
     private var goalCard: some View {
@@ -260,7 +261,7 @@ struct SmartAlarmView: View {
 
     private func alarmStatus(_ snapshot: SleepPlannerSnapshot) -> String {
         if snapshot.alarmConfirmed { return String(localized: "Confirmed on strap") }
-        if snapshot.alarmSent { return String(localized: "Sent to strap · awaiting confirmation") }
+        if snapshot.alarmSent { return String(localized: "Wake command recorded · awaiting confirmation") }
         return String(localized: "Saved locally · strap not confirmed")
     }
 
@@ -308,7 +309,7 @@ struct SmartAlarmView: View {
     }
 
     private func countdown(until date: Date, now: Date) -> String {
-        let minutes = max(Int(date.timeIntervalSince(now) / 60), 0)
+        let minutes = max(Int((date.timeIntervalSince(now) / 60).rounded(.up)), 0)
         let span = duration(minutes)
         return String(localized: "Alarm in \(span)")
     }

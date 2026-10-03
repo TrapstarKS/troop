@@ -182,9 +182,33 @@ object SmartAlarmScheduler {
     ): Int {
         val deadline = nextDeadline(now, weekdays, windowMinutes, afterFire = false, skippedOccurrence = skippedOccurrence, targetForDay = targetForDay)
             ?: return defaultTarget
-        val deadlineMin = deadline.get(Calendar.HOUR_OF_DAY) * 60 + deadline.get(Calendar.MINUTE)
-        return (deadlineMin - windowMinutes + SmartAlarmStore.MINUTES_PER_DAY) %
-            SmartAlarmStore.MINUTES_PER_DAY
+        val windowStart = (deadline.clone() as Calendar).apply {
+            timeInMillis -= windowMinutes.toLong() * 60_000L
+        }
+        return windowStart.get(Calendar.HOUR_OF_DAY) * 60 + windowStart.get(Calendar.MINUTE)
+    }
+
+    /** Future companion start, advancing past an already-open window without moving its phone deadline. */
+    internal fun nextFutureWindowStart(
+        now: Calendar,
+        weekdays: Set<Int>,
+        windowMinutes: Int,
+        skippedOccurrence: String = "",
+        targetForDay: (Int) -> Int,
+    ): Calendar? {
+        var cursor = now.clone() as Calendar
+        for (attempt in 0..14) {
+            val deadline = nextDeadline(
+                cursor, weekdays, windowMinutes, skippedOccurrence = skippedOccurrence,
+                targetForDay = targetForDay,
+            ) ?: return null
+            val start = (deadline.clone() as Calendar).apply {
+                timeInMillis -= windowMinutes.toLong() * 60_000L
+            }
+            if (start.timeInMillis > now.timeInMillis) return start
+            cursor = deadline
+        }
+        return null
     }
 
     /**
@@ -231,11 +255,13 @@ object SmartAlarmScheduler {
             val deadlineMin =
                 (targetForDay(dow) + windowMinutes) % SmartAlarmStore.MINUTES_PER_DAY
             candidate = com.noop.analytics.SleepPlanner.wakeDate(deadlineMin, candidate)
-            val resolvedTarget = com.noop.analytics.SleepPlanner.wakeDate(targetForDay(dow), candidate)
+            val windowStart = (candidate.clone() as Calendar).apply {
+                timeInMillis -= windowMinutes.toLong() * 60_000L
+            }
             val occurrence = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(
-                candidate.get(Calendar.YEAR), candidate.get(Calendar.MONTH) + 1,
-                candidate.get(Calendar.DAY_OF_MONTH),
-                resolvedTarget.get(Calendar.HOUR_OF_DAY) * 60 + resolvedTarget.get(Calendar.MINUTE),
+                windowStart.get(Calendar.YEAR), windowStart.get(Calendar.MONTH) + 1,
+                windowStart.get(Calendar.DAY_OF_MONTH),
+                windowStart.get(Calendar.HOUR_OF_DAY) * 60 + windowStart.get(Calendar.MINUTE),
             )
             if (occurrence == skippedOccurrence) continue
             if (candidate.timeInMillis > now.timeInMillis) return candidate

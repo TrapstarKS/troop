@@ -32,9 +32,9 @@ object DemoSeeder {
         if (prefs.contains("sleepPlanner.goalPercent")) return
         com.noop.alarm.SleepPlannerStore.from(context).write(com.noop.alarm.SleepPlannerSettings(
             goalPercent = 100,
-            goals = mapOf(2 to 100, 3 to 85, 4 to 100, 5 to 85, 6 to 70, 7 to 100, 1 to 100),
+            goals = mapOf(6 to 85, 7 to 70),
             baseNeedMinutes = 480,
-            debtMinutes = 45,
+            debtMinutes = 75,
             historyNights = 14,
         ))
     }

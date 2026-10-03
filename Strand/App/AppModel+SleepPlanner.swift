@@ -3,6 +3,18 @@ import StrandAnalytics
 import WhoopProtocol
 
 extension AppModel {
+    func refreshSleepPlannerInputs(revision: Int? = nil) {
+        let expectedRevision = revision ?? repo.refreshSeq
+        let expectedDevice = repo.deviceId
+        Task { [weak self] in
+            guard let self else { return }
+            let habitualMidsleep = await self.repo.habitualMidsleepSec()
+            guard self.repo.refreshSeq == expectedRevision, self.repo.deviceId == expectedDevice else { return }
+            SleepPlannerSettings.shared.updateInputs(days: self.repo.days, sleeps: self.repo.sleeps,
+                                                      habitualMidsleepSec: habitualMidsleep)
+        }
+    }
+
     var activeDeviceSupportsStrapAlarm: Bool {
         guard let registry = deviceRegistry,
               let device = registry.devices.first(where: { $0.id == registry.activeDeviceId }) else { return false }
@@ -45,7 +57,7 @@ extension AppModel {
         settings.skippedOccurrence = ""
         settings.alarmMode = mode
         behavior.smartAlarmMinutes = min(max(minutes, 0), 1439)
-        behavior.smartAlarmWeekdays = weekdays
+        behavior.smartAlarmWeekdays = Set(weekdays.filter { (1...7).contains($0) })
         behavior.smartAlarmEnabled = enabled
         WindDownNudge.replaceWakeSchedule(minutes: behavior.smartAlarmMinutes, overrides: overrides)
         applySmartAlarm()
@@ -55,13 +67,12 @@ extension AppModel {
     func skipNextSleepPlannerAlarm(from now: Date) -> Bool {
         let settings = SleepPlannerSettings.shared
         guard !PlannerAlarmPolicy.isSkipPending(skippedOccurrence: settings.skippedOccurrence,
-                                                currentOccurrence: Self.smartAlarmOccurrenceKey(now)) else { return false }
+                                                from: now, calendar: .current) else { return false }
         guard behavior.smartAlarmEnabled, activeDeviceSupportsStrapAlarm, live.connected, live.encryptedBond, ble.commandChannelReady,
               !(whoop5Detected && !PuffinExperiment.isEnabled),
               let snapshot = sleepPlannerSnapshot(from: now) else { return false }
         settings.skippedOccurrence = Self.smartAlarmOccurrenceKey(snapshot.wake)
-        applySmartAlarm()
-        WindDownNudge.reschedule()
+        applySmartAlarm(from: now)
         return true
     }
 

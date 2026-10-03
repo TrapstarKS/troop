@@ -154,11 +154,11 @@ enum WindDownNudge {
         reschedule()
     }
 
-    static func reschedule() {
-        schedule()
+    static func reschedule(from now: Date = Date()) {
+        schedule(from: now)
     }
 
-    private static func schedule() {
+    private static func schedule(from now: Date) {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [requestId] + perDayRequestIds)
         let planner = SleepPlannerSettings.shared
@@ -167,7 +167,6 @@ enum WindDownNudge {
         let defaultWake = defaults.object(forKey: "behavior.smartAlarmMinutes") as? Int ?? wakeMinutes
         let selectedDays = Set(defaults.array(forKey: "behavior.smartAlarmWeekdays") as? [Int] ?? [])
         let alarmOn = defaults.bool(forKey: "behavior.smartAlarmEnabled")
-        let now = Date()
         let calendar = Calendar.current
         var cursor = now
         var count = 0

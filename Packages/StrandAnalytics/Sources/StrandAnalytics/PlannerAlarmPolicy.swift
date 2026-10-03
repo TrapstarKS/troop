@@ -1,3 +1,5 @@
+import Foundation
+
 /// Pure policy for advancing an alarm within its final hour. The caller supplies only
 /// a recovery value from the current night; this helper cannot establish freshness.
 /// Only recovery percentages in 67...100 can advance the alarm.
@@ -40,11 +42,17 @@ public enum PlannerAlarmPolicy {
         return start < end ? currentMinute >= start && currentMinute < end : currentMinute >= start || currentMinute < end
     }
 
-    /// Pending through the saved local minute. Scheduling still matches the exact
+    /// Pending until the saved wake instant. Scheduling still matches the exact
     /// occurrence key; this comparison only gates the pending status and duplicate skip.
-    public static func isSkipPending(skippedOccurrence: String, currentOccurrence: String) -> Bool {
-        guard let skipped = occurrenceParts(skippedOccurrence), let current = occurrenceParts(currentOccurrence) else { return false }
-        return skipped.day > current.day || (skipped.day == current.day && skipped.minutes >= current.minutes)
+    public static func isSkipPending(skippedOccurrence: String, from now: Date, calendar: Calendar) -> Bool {
+        guard let saved = occurrenceParts(skippedOccurrence) else { return false }
+        let parts = DateComponents(year: Int(saved.day.prefix(4)), month: Int(saved.day.dropFirst(5).prefix(2)),
+                                   day: Int(saved.day.suffix(2)), hour: 12)
+        guard let savedDay = calendar.date(from: parts) else { return false }
+        let resolved = calendar.dateComponents([.year, .month, .day], from: savedDay)
+        guard resolved.year == parts.year, resolved.month == parts.month, resolved.day == parts.day,
+              let wake = SleepPlanner.wakeDate(minutes: saved.minutes, on: savedDay, calendar: calendar) else { return false }
+        return wake >= now
     }
 
     private static func occurrenceParts(_ key: String) -> (day: String, minutes: Int)? {

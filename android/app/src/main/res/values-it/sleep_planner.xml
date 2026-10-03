@@ -26,7 +26,7 @@
     <string name="sleep_planner_use_default">Usa predefinito</string>
     <string name="sleep_planner_save">Salva sveglia</string>
     <string name="sleep_planner_reported">Il bracciale segnala questa ora limite. La lettura è diagnostica e non garantisce il risveglio.</string>
-    <string name="sleep_planner_sent">Ora limite inviata; in attesa di conferma del bracciale.</string>
+    <string name="sleep_planner_sent">Comando di sveglia registrato; in attesa della conferma del cinturino.</string>
     <string name="sleep_planner_off">Sveglia del bracciale disattivata in NOOP.</string>
     <string name="sleep_planner_local">Salvato localmente; ora limite non confermata.</string>
     <string name="sleep_planner_saved_deadline">Ora limite salvata</string>
@@ -41,7 +41,7 @@
     <string name="sleep_planner_skipped">%1$s saltato. I giorni futuri restano attivi.</string>
     <string name="sleep_planner_restore">Ripristina sveglia saltata</string>
     <string name="sleep_planner_skip_saved">La prossima occorrenza è già saltata.</string>
-    <string name="sleep_planner_strap_battery" formatted="false">Batteria del bracciale sotto il 20%. Carica prima di affidarti alla sveglia.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">L’ultima carica rilevata del cinturino era inferiore al 20%. Ricaricalo prima di affidarti alla sveglia.</string>
     <string name="sleep_planner_phone_battery" formatted="false">Batteria del telefono al 20% o meno. È la soglia di avviso locale di NOOP.</string>
     <string name="sleep_planner_backup">Mantieni una sveglia indipendente per risvegli importanti. Per ripetere la sveglia nei giorni successivi serve una connessione attiva con l’app.</string>
     <string name="sleep_planner_reminders">Promemoria serali</string>

@@ -26,7 +26,7 @@
     <string name="sleep_planner_use_default">По умолчанию</string>
     <string name="sleep_planner_save">Сохранить будильник</string>
     <string name="sleep_planner_reported">Браслет сообщает это крайнее время. Диагностическое чтение не гарантирует пробуждение.</string>
-    <string name="sleep_planner_sent">Время отправлено; ожидается подтверждение браслета.</string>
+    <string name="sleep_planner_sent">Команда пробуждения записана; ожидается подтверждение браслета.</string>
     <string name="sleep_planner_off">Будильник браслета отключён в NOOP.</string>
     <string name="sleep_planner_local">Сохранено локально; время не подтверждено.</string>
     <string name="sleep_planner_saved_deadline">Сохранённое время подъёма</string>
@@ -41,7 +41,7 @@
     <string name="sleep_planner_skipped">%1$s пропущено. Будущие дни остаются включены.</string>
     <string name="sleep_planner_restore">Вернуть пропущенный будильник</string>
     <string name="sleep_planner_skip_saved">Следующее срабатывание уже пропущено.</string>
-    <string name="sleep_planner_strap_battery" formatted="false">Заряд браслета ниже 20%. Зарядите его, прежде чем полагаться на будильник.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">Последний известный заряд браслета был ниже 20%. Зарядите его, прежде чем полагаться на будильник.</string>
     <string name="sleep_planner_phone_battery" formatted="false">Заряд телефона 20% или ниже. Это локальный порог предупреждения NOOP.</string>
     <string name="sleep_planner_backup">Для важного подъёма используйте отдельный будильник. Для повторения в следующие дни браслету нужна активная связь с приложением.</string>
     <string name="sleep_planner_reminders">Вечерние напоминания</string>

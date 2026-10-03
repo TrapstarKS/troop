@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Calendar
+import java.util.TimeZone
 
 /**
  * Day and time selection for the PHONE smart alarm (distinct from com.noop.ui.SmartAlarmWeekdayTest,
@@ -32,7 +33,8 @@ class PhoneAlarmWeekdayTest {
         window: Int = 30,
         afterFire: Boolean = false,
         perDay: Map<Int, Int> = emptyMap(),
-    ): Calendar? = SmartAlarmScheduler.nextDeadline(now, weekdays, window, afterFire) {
+        skippedOccurrence: String = "",
+    ): Calendar? = SmartAlarmScheduler.nextDeadline(now, weekdays, window, afterFire, skippedOccurrence) {
         perDay[it] ?: target
     }
 
@@ -159,6 +161,44 @@ class PhoneAlarmWeekdayTest {
         assertEquals(Calendar.MONDAY, d.get(Calendar.DAY_OF_WEEK))
         assertEquals(0, d.get(Calendar.HOUR_OF_DAY))
         assertEquals(20, d.get(Calendar.MINUTE))
+    }
+
+    @Test fun aCrossMidnightSkipUsesTheActualPreviousEvening() {
+        val now = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+            clear()
+            set(2026, Calendar.AUGUST, 23, 23, 0, 0)
+        }
+        val differentEvening = deadline(
+            now, weekdays = setOf(Calendar.MONDAY), target = 23 * 60 + 50,
+            skippedOccurrence = "2026-08-24|1430",
+        )!!
+        assertEquals(24, differentEvening.get(Calendar.DAY_OF_MONTH))
+        assertEquals(0, differentEvening.get(Calendar.HOUR_OF_DAY))
+        assertEquals(20, differentEvening.get(Calendar.MINUTE))
+        val skipped = deadline(
+            now, weekdays = setOf(Calendar.MONDAY), target = 23 * 60 + 50,
+            skippedOccurrence = "2026-08-23|1430",
+        )!!
+        assertEquals(31, skipped.get(Calendar.DAY_OF_MONTH))
+    }
+
+    @Test fun dstWindowStartsUseElapsedMinutesForLabelsAndSkipKeys() {
+        for ((month, day, target) in listOf(
+            Triple(Calendar.MARCH, 8, 2 * 60 + 40),
+            Triple(Calendar.NOVEMBER, 1, 40),
+        )) {
+            val now = Calendar.getInstance(TimeZone.getTimeZone("America/New_York")).apply {
+                clear()
+                set(2026, month, day, 0, 0, 0)
+            }
+            val start = SmartAlarmScheduler.nextWindowStartMinutes(
+                now, setOf(Calendar.SUNDAY), 30, target,
+            ) { target }
+            assertEquals(100, start)
+            val key = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(2026, month + 1, day, 100)
+            val skipped = deadline(now, setOf(Calendar.SUNDAY), target, skippedOccurrence = key)!!
+            assertEquals(day + 7, skipped.get(Calendar.DAY_OF_MONTH))
+        }
     }
 
     /** An unreachable set yields null rather than spinning — a missed alarm is recoverable, a hung
