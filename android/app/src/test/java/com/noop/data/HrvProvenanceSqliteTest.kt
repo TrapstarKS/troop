@@ -113,11 +113,13 @@ class HrvProvenanceSqliteTest {
             val values = listOf(40.0, 60.0, 16.0, 98.0, 0.4, 33.5, 75.0, 480.0)
             val days = (1..9).map { "2026-06-${it.toString().padStart(2, '0')}" }
             db.createStatement().use { statement ->
+                statement.execute("DELETE FROM dailyMetric")
+                statement.execute("DELETE FROM metricSeries")
                 columns.forEachIndexed { index, column ->
                     statement.execute("INSERT INTO dailyMetric(deviceId, day, $column) VALUES ('active-noop', '${days[index]}', ${values[index]})")
                 }
                 statement.execute("INSERT INTO dailyMetric(deviceId, day) VALUES ('active-noop', '2026-06-09')")
-                statement.execute("INSERT INTO dailyMetric(deviceId, day, recovery) VALUES ('active-noop', '2026-05-31', 75), ('my-whoop-noop', '2026-06-01', 75)")
+                statement.execute("INSERT INTO dailyMetric(deviceId, day, recovery) VALUES ('active-noop', '2026-05-31', 75), ('active-noop', '2026-06-10', 75), ('my-whoop-noop', '2026-06-01', 75)")
                 statement.execute("INSERT INTO metricSeries VALUES ('active-noop', '2026-06-08', 'hrv_fresh_scoring_valid', 1), ('my-whoop-noop', '2026-06-01', 'hrv_fresh_scoring_valid', 1), ('active-noop', '2026-06-12', 'hrv_fresh_scoring_valid', 1)")
             }
             val rows = read(db, listOf("active-noop"), days.first(), days.last())
