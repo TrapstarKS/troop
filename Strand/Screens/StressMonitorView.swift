@@ -125,6 +125,7 @@ struct StressMonitorView: View {
                 ForEach(trace) { point in
                     LineMark(x: .value("Time", Date(timeIntervalSince1970: Double(point.ts))), y: .value("Stress", point.level), series: .value("Segment", point.segment))
                         .foregroundStyle(LinearGradient(colors: [StressMonitorRamp.tense, StressMonitorRamp.steady, StressMonitorRamp.calm], startPoint: .top, endPoint: .bottom))
+                        .alignsMarkStylesWithPlotArea()
                         .lineStyle(StrokeStyle(lineWidth: ChartTokens.lineWidth))
                     if point.ts == current?.startTs {
                         PointMark(x: .value("Time", Date(timeIntervalSince1970: Double(point.ts))), y: .value("Stress", point.level)).foregroundStyle(StressMonitorRamp.color(point.level))
