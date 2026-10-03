@@ -1,8 +1,15 @@
 import Foundation
+import WhoopStore
 
 /// Serializes store initialization before automatic BLE startup can consult the device registry.
 @MainActor
 final class BLEStartupGate {
+    /// A HealthKit-only watch preserves the WHOOP link, while other selected devices replace it.
+    static func allowsWhoopBLE(for row: PairedDevice?) -> Bool {
+        guard let row else { return true }
+        return SourceIdentity.isWhoop(row) || row.sourceKind == .liveAppleWatch
+    }
+
     private var preparation: Task<Bool, Never>?
     enum RestorationAction: Hashable { case connect, discover }
     struct RestorationToken: Equatable {
