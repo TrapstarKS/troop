@@ -277,7 +277,7 @@ struct WorkoutsView: View {
             }
         }
         .sheet(item: $detail) { target in
-            // These shared screens aren't hosted in a per-screen NavigationStack, so the read-only
+            // These shared screens aren't hosted in a per-screen NavigationStack, so the activity
             // detail rides its own NavigationStack inside the sheet (the Done toolbar item + iOS
             // grabber give the dismiss affordances). Mirrors HealthView presenting MetricDetailView.
             NavigationStack {

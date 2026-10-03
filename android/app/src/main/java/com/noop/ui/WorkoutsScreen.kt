@@ -1458,7 +1458,18 @@ private fun SessionRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, onDismiss: () -> Unit) {
+internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetails: Boolean = false, onDismiss: () -> Unit) {
+    if (!expandedDetails) {
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = Palette.surfaceBase,
+        ) {
+            ActivityDetailScreen(vm, row, onBack = onDismiss)
+        }
+        return
+    }
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Per-window reads (#410): the HR curve (downsampled bucket means) and the HR-zone split. Zones
@@ -1994,7 +2005,7 @@ private fun Cell(text: String, modifier: Modifier, color: Color? = null) {
 // dialog to plain numeric fields — the persisted startTs is identical).
 
 @Composable
-private fun ManualWorkoutDialog(
+internal fun ManualWorkoutDialog(
     editing: WorkoutRow?,
     isCopy: Boolean = false,
     onDismiss: () -> Unit,
