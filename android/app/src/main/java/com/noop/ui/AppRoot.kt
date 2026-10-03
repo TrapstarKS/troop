@@ -125,7 +125,7 @@ import com.noop.push.SelfHostedPushScreen
 // Home, Health, Plan and More share one NavHost. Coach is a separate orb.
 // Existing routes remain stable for local feature links and the demo harness.
 
-/** A single drawer destination: stable route, display title (localized via [titleRes]), sidebar icon. */
+/** Stable detail hooks backed by local feature screens. */
 object WhoopRoute {
     const val recoveryDetail = "recovery_detail"
     const val strainDetail = "strain_detail"
@@ -138,6 +138,7 @@ object WhoopRoute {
     const val journal = "insights"
 }
 
+/** A single drawer destination: stable route, display title (localized via [titleRes]), sidebar icon. */
 internal enum class Destination(
     val route: String,
     @StringRes val titleRes: Int,
