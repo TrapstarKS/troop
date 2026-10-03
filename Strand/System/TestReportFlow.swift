@@ -61,13 +61,17 @@ enum TestReportFlow {
                     gate: ReportReviewGate,
                     entries: [FileExport.BundleEntry],
                     showToast: @escaping (String) -> Void,
-                    copyToPasteboard: @escaping (String) -> Void) async {
+                    copyToPasteboard: @escaping (String) -> Void,
+                    export: (([FileExport.BundleEntry], String) async -> URL?)? = nil) async {
         // Review-before-share is mandatory: do nothing until the user has confirmed.
-        guard shouldProceed(gate: gate) else { return }
+        guard shouldProceed(gate: gate), !Task.isCancelled else { return }
         let name = Plan.bundleName(profile: profile, platform: platform, version: version)
         // Share the .zip and stop. Nothing is opened, navigated to, or sent: the destination is whatever
         // the user picks in the sheet, and the app never names one.
-        _ = await FileExport.exportBundle(entries: entries, suggestedName: name)
+        let saved: URL?
+        if let export { saved = await export(entries, name) }
+        else { saved = await FileExport.exportBundle(entries: entries, suggestedName: name) }
+        guard saved != nil, !Task.isCancelled else { return }
         showToast(Plan.attachToast(savedName: name))
         if Plan.offersCopyFallback(platform: platform),
            let report = entries.first(where: { $0.name == "report.txt" }),

@@ -63,6 +63,7 @@ struct ContentView: View {
                 UpdateWatch.runIfDue(currentVersion: UpdateWatch.installedVersion, sideloadHint: false)
             }
         }
+        .modifier(DebugExportReviewHost())
         .onChangeCompat(of: acceptedTerms) { _ in showWhatsNewIfDue() }
     }
 

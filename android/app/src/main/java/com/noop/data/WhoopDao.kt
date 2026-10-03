@@ -9,6 +9,13 @@ import androidx.room.Update
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
+internal const val CHARGE_HRV_PROOF_SQL =
+    "SELECT d.day, d.avgHrv AS value, fresh.value AS freshScoringValid " +
+        "FROM dailyMetric d LEFT JOIN metricSeries fresh ON fresh.deviceId = d.deviceId " +
+        "AND fresh.day = d.day AND fresh.key = 'hrv_fresh_scoring_valid' " +
+        "WHERE d.deviceId = :deviceId AND d.day >= :from AND d.day <= :to " +
+        "AND d.avgHrv IS NOT NULL ORDER BY d.day ASC"
+
 /** Kept as one compile-time constant so Room and the plain-JVM SQLite regression test execute the exact
  * same statement. Swift's twin lives in WhoopStore.analysisFingerprint(). */
 internal const val ANALYSIS_FINGERPRINT_SQL =
@@ -232,6 +239,29 @@ internal const val WHOOP5_RR_FILL_MIGRATION_SQL = "UPDATE rrInterval SET tsSuspe
 internal const val PROMOTE_WHOOP4_HISTORY_SQL =
     "UPDATE rrInterval SET srcChannel = 8, ord = :ord " +
     "WHERE deviceId = :deviceId AND ts = :ts AND rrMs = :rrMs AND seq = :seq AND srcChannel IS NULL"
+
+/** One physical source's HRV, respiration and fresh-scan evidence from one SQLite read snapshot. */
+data class HrvProvenanceRow(
+    val deviceId: String,
+    val day: String,
+    val value: Double?,
+    val freshScoringValid: Double?,
+    val overcount: Double?,
+    val respValue: Double? = null,
+    val respFreshScoringValid: Double? = null,
+)
+
+internal const val HRV_PROVENANCE_SQL =
+    "SELECT d.deviceId, d.day, d.avgHrv AS value, fresh.value AS freshScoringValid, overcount.value AS overcount, d.respRateBpm AS respValue, respFresh.value AS respFreshScoringValid " +
+        "FROM dailyMetric d " +
+        "LEFT JOIN metricSeries fresh ON fresh.deviceId = d.deviceId AND fresh.day = d.day " +
+        "AND fresh.key = 'hrv_fresh_scoring_valid' " +
+        "LEFT JOIN metricSeries overcount ON overcount.deviceId = d.deviceId AND overcount.day = d.day " +
+        "AND overcount.key = 'hrv_rr_overcount' " +
+        "LEFT JOIN metricSeries respFresh ON respFresh.deviceId = d.deviceId AND respFresh.day = d.day " +
+        "AND respFresh.key = 'resp_fresh_scoring_valid' " +
+        "WHERE d.deviceId IN (:deviceIds) AND d.day >= :from AND d.day <= :to AND (d.avgHrv IS NOT NULL OR d.respRateBpm IS NOT NULL) " +
+        "ORDER BY d.day, d.deviceId"
 
 /**
  * Data-access for the local store. Mirrors the GRDB reads/writes in WhoopStore
@@ -925,6 +955,12 @@ interface WhoopDao : DeviceRegistryDao {
     )
     fun dailyMetricsRangeFlow(deviceId: String, from: String, to: String): Flow<List<DailyMetric>>
 
+    @Query(CHARGE_HRV_PROOF_SQL)
+    suspend fun chargeHrvProof(deviceId: String, from: String, to: String): List<ChargeHrvProof>
+
+    @Query(CHARGE_HRV_PROOF_SQL)
+    fun chargeHrvProofFlow(deviceId: String, from: String, to: String): Flow<List<ChargeHrvProof>>
+
     /**
      * Delete a source's cached daily rows whose day-key is in [from, to] (inclusive, yyyy-MM-dd
      * lexicographic = chronological). The #277 local-day re-bucketing migration uses this to drop the
@@ -986,7 +1022,7 @@ interface WhoopDao : DeviceRegistryDao {
         "DELETE FROM dailyMetric WHERE deviceId = 'my-whoop' " +
             "AND efficiency IS NULL AND deepMin IS NULL AND remMin IS NULL AND lightMin IS NULL " +
             "AND disturbances IS NULL AND recovery IS NULL AND strain IS NULL " +
-            "AND steps IS NULL AND activeKcalEst IS NULL " +
+            "AND steps IS NULL AND activeKcalEst IS NULL AND activeEnergyKcalEst IS NULL " +
             "AND day IN (SELECT day FROM dailyMetric d WHERE d.deviceId LIKE '%-noop')"
     )
     suspend fun purgeHcShadowedDailyMetrics(): Int
@@ -1019,6 +1055,10 @@ interface WhoopDao : DeviceRegistryDao {
     fun editedSleepSessionsFlow(deviceId: String): Flow<List<SleepSession>>
 
     // MARK: - Generic metric series (Swift metricSeries, v9)
+
+    /** Swift twin: `WhoopStore.hrvProvenance`; Room observes the same joined read snapshot. */
+    @Query(HRV_PROVENANCE_SQL)
+    fun hrvProvenanceFlow(deviceIds: List<String>, from: String, to: String): Flow<List<HrvProvenanceRow>>
 
     @Query(
         "SELECT * FROM metricSeries WHERE deviceId = :deviceId AND key = :key AND day >= :from AND day <= :to " +

@@ -39,7 +39,7 @@ enum XiaomiImporter {
                 exerciseCount: nil,
                 spo2Pct: d.avgSpo2,
                 skinTempDevC: nil,
-                respRateBpm: nil))
+                respRateBpm: nil, activeEnergyKcalEst: d.activeKcal))
         }
         // Capture the rows the store actually wrote (summed SQLite changes) for the Import test mode.
         let metricsWritten = try await store.upsertDailyMetrics(metrics, deviceId: deviceId)
@@ -74,7 +74,7 @@ enum XiaomiImporter {
         for d in result.days {
             add(d.day, "steps", d.steps.map(Double.init))
             add(d.day, "distance_m", d.distanceM)
-            add(d.day, "energy_kcal", d.activeKcal)
+            add(d.day, "active_kcal", d.activeKcal)
             add(d.day, "rhr", d.restingHr.map(Double.init))
             add(d.day, "avg_hr", d.avgHr.map(Double.init))
             add(d.day, "max_hr", d.maxHr.map(Double.init))

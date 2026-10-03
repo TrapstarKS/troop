@@ -31,13 +31,20 @@ enum AppleDemoSeeder {
     /// launch … --demo-seed`).
     static var requested: Bool { CommandLine.arguments.contains("--demo-seed") }
 
-    /// Seed only if requested AND the store is empty. Safe to call on every launch.
+    /// Seed daily history only when empty, then add the raw demo fixture once. Safe on every launch.
     static func seedIfRequested(into store: WhoopStore) async {
         guard requested else { return }
         seedDemoDeviceIfNeeded(into: store)
         let existing = (try? await store.dailyMetrics(deviceId: whoop, from: "0000-00-00", to: "9999-99-99")) ?? []
-        guard existing.isEmpty else { return }
-        do { try await seed(into: store) }
+        do {
+            var pristineBeforeBaseSeed = false
+            if existing.isEmpty {
+                pristineBeforeBaseSeed = try await HealthspanStressDemoSeed.hasEmptyStreams(into: store)
+                try await seed(into: store)
+            }
+            try await HealthspanStressDemoSeed.seedIfDemo(into: store,
+                                                         pristineBeforeBaseSeed: pristineBeforeBaseSeed)
+        }
         catch { NSLog("AppleDemoSeeder: seed failed — \(error)") }
     }
 
@@ -223,12 +230,23 @@ enum AppleDemoSeeder {
         }
 
         _ = try await store.upsertDailyMetrics(daily, deviceId: whoop)
+        try await seedHealthMonitor(into: store, days: daily)
         _ = try await store.upsertSleepSessions(sleeps, deviceId: whoop)
         _ = try await store.upsertMetricSeries(series, deviceId: whoop)
         _ = try await store.upsertAppleDaily(appleRows, deviceId: apple)
         if !workouts.isEmpty { _ = try await store.upsertWorkouts(workouts, deviceId: whoop) }
         if !journal.isEmpty { _ = try await store.upsertJournal(journal, deviceId: whoop) }
         NSLog("AppleDemoSeeder: seeded \(daily.count) days, \(workouts.count) workouts.")
+    }
+
+    /// Kotlin twin: `DemoSeeder.seedHealthMonitor`.
+    private static func seedHealthMonitor(into store: WhoopStore, days: [DailyMetric]) async throws {
+        let points = days.flatMap { day in
+            [MetricPoint(day: day.day, key: "hrv_fresh_scoring_valid", value: day.avgHrv?.isFinite == true ? 1 : 0),
+             MetricPoint(day: day.day, key: "resp_fresh_scoring_valid", value: day.respRateBpm?.isFinite == true ? 1 : 0),
+             MetricPoint(day: day.day, key: "hrv_rr_overcount", value: 0)]
+        }
+        _ = try await store.upsertMetricSeries(points, deviceId: whoop + "-noop")
     }
 
     // MARK: - helpers

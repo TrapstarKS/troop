@@ -9,7 +9,11 @@ import com.noop.alarm.SmartAlarmScheduler
 import com.noop.alarm.SmartAlarmStore
 import com.noop.alarm.WindDownScheduler
 import com.noop.alarm.WindDownStore
+import com.noop.analytics.AnalyticsEngine
+import com.noop.analytics.ChargeBaselines
 import com.noop.analytics.Baselines
+import com.noop.analytics.HealthSignalReliability
+import com.noop.ingest.WhoopCsvImporter
 import com.noop.analytics.IllnessSignalEngine
 import com.noop.analytics.IllnessWatch
 import com.noop.analytics.IntelligenceEngine
@@ -36,6 +40,7 @@ import com.noop.ble.WhoopConnectionService
 import com.noop.ble.WhoopModel
 import androidx.health.connect.client.HealthConnectClient
 import com.noop.data.DailyMetric
+import com.noop.data.IllnessHistory
 import com.noop.data.CycleTrackingStore
 import com.noop.data.HrSample
 import com.noop.data.WhoopRepository
@@ -590,8 +595,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // Declared BEFORE the init block on purpose: the recentDays collector launched from init
     // runs synchronously on Main.immediate and reads this on its very first (cached) emission —
     // a declaration after init would still be null there (JVM initializes fields in declaration
-    // order) and crash the constructor. Opt-OUT, default ON (Android has always run the watch);
-    // port of macOS behavior.illnessWatch, which is opt-in.
+    // order) and crash the constructor. Opt-in, default OFF, matching macOS behavior.illnessWatch.
     private val _illnessWatchEnabled = MutableStateFlow(NoopPrefs.illnessWatch(appContext))
     /** Whether the illness early-warning runs (banner + notification). */
     val illnessWatchEnabled: StateFlow<Boolean> = _illnessWatchEnabled.asStateFlow()
@@ -831,6 +835,62 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         repository.recentDaysMergedFlow(deviceId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val illnessHistory: StateFlow<IllnessHistory.Snapshot?> =
+        IllnessHistory.observe(repository, combine(recentDays, activeStrapIdFlow) { days, activeId ->
+            effectiveActiveStrapId(activeId, deviceId) to days
+        })
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val healthSignalEvidence: StateFlow<IllnessHistory.Snapshot?> get() = illnessHistory
+
+    /** Validated transport era; manual restart preferences remain separate for truthful copy. */
+    val hrvRegimeEpoch: StateFlow<Double> = combine(recentDays, activeStrapIdFlow) { _, active ->
+        val now = System.currentTimeMillis()
+        repository.effectiveHrvEpoch(active ?: deviceId, manualEpoch = 0.0,
+            offsetSec = java.util.TimeZone.getDefault().getOffset(now) / 1_000L)
+    }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
+
+    /**
+     * #2525: the Charge baselines (HRV, resting HR, respiration) resolved with the engine's own rule from the
+     * imported and own daily rows, read apart because the rule needs to know which nights are imported. The
+     * single funnel every Charge readout below the headline reads (the "What shaped it" rows, the
+     * calibration count, the confidence tier), so none of them can fold a different history than the score
+     * was computed against. Anchored on today's local day and the two recalibration epochs, read on each
+     * emission exactly as the engine reads them per pass. The read range starts at this ViewModel's first
+     * window start, so it only ever covers MORE days than the window; [ChargeBaselines.history] trims to the
+     * current one. Mirrors the Swift `Repository.chargeBaselines`.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val chargeBaselines: StateFlow<ChargeBaselines.Resolved?> = run {
+        val startSec = System.currentTimeMillis() / 1000L
+        val startTz = java.util.TimeZone.getDefault().getOffset(startSec * 1000L) / 1000L
+        val from = Baselines.cutoffKey(AnalyticsEngine.dayString(startSec, startTz), ChargeBaselines.windowDays - 1)
+        activeStrapIdFlow.flatMapLatest { selected ->
+            val owner = effectiveActiveStrapId(selected, deviceId)
+            hrvRegimeEpoch.flatMapLatest { regime ->
+                val requiredFreshDay = if (regime > 0.0) AnalyticsEngine.dayString(regime.toLong(), 0L) else null
+                combine(
+                    repository.importedDailyUnionFlow(owner, from, "9999-12-31"),
+                    repository.chargeComputedDailyUnionFlow(owner, from, "9999-12-31", requiredFreshDay),
+                ) { imported, own ->
+                    val nowSec = System.currentTimeMillis() / 1000L
+                    val tz = java.util.TimeZone.getDefault().getOffset(nowSec * 1000L) / 1000L
+                    val prefs = NoopPrefs.of(appContext)
+                    ChargeBaselines.resolve(
+                        imported = imported,
+                        own = own,
+                        anchorDay = AnalyticsEngine.dayString(nowSec, tz),
+                        hrvEpoch = maxOf(prefs.getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(), regime),
+                        recoveryEpoch = prefs.getLong(Baselines.recoveryBaselineEpochKey, 0L).toDouble(),
+                    )
+                }
+            }
+        }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    }
+
     /**
      * Today's measured steps follow the newest confirmed sleep-onset cycle, independently of the fixed
      * 04:00 presentation day used by the rest of the dashboard. The marker is persisted by the analytics
@@ -1059,13 +1119,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         // Recompute the illness banner + today's row whenever cached days change.
         viewModelScope.launch {
-            while (true) {
+            while (isActive) {
                 delay(60_000)
                 refreshLocalNotifications()
             }
         }
         viewModelScope.launch {
-            recentDays.collect { days ->
+            recentDays.collect { days -> refreshLocalNotifications(days) }
+        }
+        viewModelScope.launch {
+            illnessHistory.collect { snapshot ->
+                if (snapshot == null || !snapshot.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId))) return@collect
+                val days = snapshot.days
+                val prefs = appContext.getSharedPreferences(NoopPrefs.NAME, android.content.Context.MODE_PRIVATE)
                 // Only treat a row as "today" if its date is the phone's ACTUAL local calendar day.
                 // Was days.lastOrNull() — the newest stored row regardless of date — so after importing
                 // historical data the newest import (e.g. months old) showed as today's synthesis (#23).
@@ -1079,17 +1145,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // So: if the local calendar day differs from the logical day AND a row for the local day
                 // has a banked night (totalSleepMin != null), prefer it; otherwise fall back to the
                 // logical-day row, preserving the #144 anti-blank guard (no night yet ⇒ keep yesterday's).
-                val localNow = java.time.ZonedDateTime.now()
-                val logicalKey = logicalDay(localNow).toString()
-                val localKey = localNow.toLocalDate().toString()
-                refreshLocalNotifications(days, localNow)
-                _healthAlert.value =
-                    (if (_illnessWatchEnabled.value && _today.value != null &&
-                        days.lastOrNull()?.day == _today.value?.day
-                    ) {
-                        IllnessWatch.evaluate(days)
-                    } else null)
-                        ?.let { IllnessAlertNotifier.withWindow(appContext, it, days) }
+                val logicalKey = logicalDayKeyNow()       // ISO yyyy-MM-dd, local logical day
+                val localKey = java.time.LocalDate.now().toString()
+                _today.value = resolveTodayRow(days, logicalKey, localKey)
+                val illnessEvaluation = if (_illnessWatchEnabled.value && _today.value != null &&
+                    days.lastOrNull()?.day == _today.value?.day) {
+                    IllnessWatch.evaluateWindow(snapshot.alertDays,
+                        prefs.getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(),
+                        prefs.getLong(Baselines.recoveryBaselineEpochKey, 0L).toDouble())
+                } else null
+                _healthAlert.value = illnessEvaluation?.alert?.let { IllnessAlertNotifier.withWindow(appContext, it, days) }
                 // EVERY evaluation is reported, raised or clear. The clear-to-raised edge now lives in
                 // the notifier's PERSISTED state (#2586): `_healthAlert` starts null on every ViewModel
                 // build, so gating here made a cold start look like a transition, and the day gate then
@@ -1097,7 +1162,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // `previousAlert == null` gate this change arrived with is NOT restored: it is the gate
                 // the persisted edge replaced, and reinstating it would bring the cold start back.
                 // A loading/error emission with fewer than 14 days cannot establish a real clear.
-                if (days.size >= 14) IllnessAlertNotifier.onEvaluated(appContext, _healthAlert.value)
+                if (_illnessWatchEnabled.value && days.size >= 14 && _today.value != null &&
+                    days.lastOrNull()?.day == _today.value?.day && snapshot == illnessHistory.value && snapshot.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId)))
+                    IllnessAlertNotifier.onEvaluated(appContext, _healthAlert.value,
+                        enabled = _illnessWatchEnabled.value, valid = illnessEvaluation?.valid == true)
                 // Morning recap (#517) — opt-in, default OFF. Once today's row carries a banked night
                 // (totalSleepMin != null), post a one-per-day Charge + Rest recap. recovery == Charge;
                 // Rest is recomputed from the night's totals via RestScorer (the same single source of
@@ -1126,8 +1194,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     lastCircadianBins = circadianActivityBins()
                     val loggedPeriodStarts = CycleTrackingStore(repository).starts()
                     _periodStarts.value = loggedPeriodStarts
+                    if (!isActive || snapshot != illnessHistory.value || !snapshot.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId))) return@runCatching
                     _v5Signals.value = V5HealthSignals.evaluate(
-                        days = days,
+                        days = snapshot.alertDays,
                         cycleOptedIn = _cycleTrackingEnabled.value,
                         loggedPeriodStarts = loggedPeriodStarts,
                         journalContext = illnessJournalContext(days),
@@ -1219,6 +1288,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     NoopPrefs.setTsHealDone(appContext)
                     NoopPrefs.setTsHealPending(appContext, false)
                 }
+            }.onFailure { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
+            runCatching {
+                val repairPrefs = NoopPrefs.of(appContext)
+                WhoopCsvImporter.repairAbsoluteSkinTempIfNeeded(
+                    repo = repository,
+                    flagGet = { repairPrefs.getBoolean(WhoopCsvImporter.skinTempRepairFlagKey, false) },
+                    flagSet = { repairPrefs.edit().putBoolean(WhoopCsvImporter.skinTempRepairFlagKey, true).apply() },
+                )
             }.onFailure { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
             // One-shot shared Effort and sleep-wear repair: recompute strain from source across the FULL
             // history and replay pre-fix sleep once. Either pending flag triggers one pass; both flags
@@ -2914,26 +2991,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         else WindDownScheduler.cancel(appContext)
     }
 
-    // --- Illness watch (opt-out; the evaluation itself is the pure IllnessWatch.evaluate).
+    // --- Illness watch (opt-in; the evaluation itself is the pure IllnessWatch.evaluateWindow).
     // State lives next to _healthAlert above (declaration-order constraint); setter here with
     // the other settings mutators. ---
     fun setIllnessWatchEnabled(enabled: Boolean) {
         _illnessWatchEnabled.value = enabled
         NoopPrefs.setIllnessWatch(appContext, enabled)
         // Recompute now — the recentDays collector only fires on data changes.
-        val days = recentDays.value
-        _healthAlert.value = (if (enabled && _today.value != null &&
+        val snapshot = illnessHistory.value?.takeIf { it.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId)) }
+        val days = snapshot?.days.orEmpty()
+        val valid = snapshot != null && days.size >= 14 && _today.value != null &&
             days.lastOrNull()?.day == _today.value?.day
-        ) {
-            IllnessWatch.evaluate(days)
-        } else null)
-            ?.let { IllnessAlertNotifier.withWindow(appContext, it, days) }
-        // Reported like any other evaluation, because the persisted edge (#2586) is only correct if
-        // EVERY change of state reaches it. Switching the watch off while an alert was raised used to
-        // clear the banner here and leave the stored flag raised, so the next genuine transition —
-        // possibly months later, after switching the watch back on — would be read as "already raised"
-        // and silently suppressed.
-        if (days.size >= 14) IllnessAlertNotifier.onEvaluated(appContext, _healthAlert.value)
+        val prefs = appContext.getSharedPreferences(NoopPrefs.NAME, android.content.Context.MODE_PRIVATE)
+        val evaluation = if (enabled && valid) {
+            IllnessWatch.evaluateWindow(snapshot!!.alertDays,
+                prefs.getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(),
+                prefs.getLong(Baselines.recoveryBaselineEpochKey, 0L).toDouble())
+        } else null
+        _healthAlert.value = evaluation?.alert?.let { IllnessAlertNotifier.withWindow(appContext, it, days) }
+        IllnessAlertNotifier.onEvaluated(appContext, _healthAlert.value,
+            enabled = enabled, valid = evaluation?.valid == true)
     }
 
     /** #hide-cycle: hide/show the cycle-awareness offer. Hiding also stops active tracking, so "hidden"
@@ -2952,8 +3029,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Launched, like the sibling toggles, because the bins may need a store read before this snapshot
         // is safe to publish — evaluating straight off an empty cache is what erased `bodyClock`.
         viewModelScope.launch {
-            val days = recentDays.value
+            val snapshot = illnessHistory.value ?: return@launch
+            val days = snapshot.alertDays
             val bins = freshCircadianBins()
+            if (!isActive || snapshot != illnessHistory.value || !snapshot.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId))) return@launch
             runCatching {
                 _v5Signals.value = V5HealthSignals.evaluate(
                     days = days,
@@ -3020,8 +3099,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun reloadPeriodStartsAndCycle(store: CycleTrackingStore) {
         val starts = store.starts()
         _periodStarts.value = starts
-        val days = recentDays.value
+        val snapshot = illnessHistory.value ?: return
+        val days = snapshot.alertDays
         val bins = freshCircadianBins()
+        if (!kotlinx.coroutines.currentCoroutineContext().isActive || snapshot != illnessHistory.value ||
+            !snapshot.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId))) return
         _v5Signals.value = V5HealthSignals.evaluate(
             days = days,
             cycleOptedIn = _cycleTrackingEnabled.value,

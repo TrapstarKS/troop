@@ -45,10 +45,12 @@ object DemoSeeder {
         "Running", "Cycling", "Strength", "HIIT", "Swimming", "Yoga", "Walking", "Rowing"
     )
 
-    /** Seed only if the demo (and the user) has no daily history yet. Safe to call on every launch. */
+    /** Seed daily history only when empty, then add the raw demo fixture once. Safe on every launch. */
     suspend fun seedIfEmpty(repo: WhoopRepository) {
-        if (repo.days(WHOOP).isNotEmpty()) return
-        seed(repo)
+        val seededNow = repo.days(WHOOP).isEmpty()
+        val pristineBeforeBaseSeed = seededNow && HealthspanStressDemoSeed.hasEmptyStreams(repo)
+        if (seededNow) seed(repo)
+        HealthspanStressDemoSeed.seedIfDemo(repo, seededNow, pristineBeforeBaseSeed)
     }
 
     /**
@@ -290,12 +292,25 @@ object DemoSeeder {
             }
         }
 
+        seedHealthMonitor(series, daily)
+
         repo.upsertDailyMetrics(daily)
         repo.upsertSleepSessions(sleeps)
         repo.upsertMetricSeries(series)
         repo.upsertAppleDaily(apple)
         if (workouts.isNotEmpty()) repo.upsertWorkouts(workouts)
         if (journal.isNotEmpty()) repo.upsertJournal(journal)
+    }
+
+    /** Swift twin: `AppleDemoSeeder.seedHealthMonitor`. */
+    internal fun seedHealthMonitor(into: MutableList<MetricSeriesRow>, days: List<DailyMetric>) {
+        for (day in days) {
+            into.add(MetricSeriesRow(WHOOP_NOOP, day.day, "hrv_fresh_scoring_valid",
+                if (day.avgHrv?.isFinite() == true) 1.0 else 0.0))
+            into.add(MetricSeriesRow(WHOOP_NOOP, day.day, "resp_fresh_scoring_valid",
+                if (day.respRateBpm?.isFinite() == true) 1.0 else 0.0))
+            into.add(MetricSeriesRow(WHOOP_NOOP, day.day, "hrv_rr_overcount", 0.0))
+        }
     }
 
     // MARK: - helpers

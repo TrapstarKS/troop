@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
@@ -78,6 +77,7 @@ class MainActivity : ComponentActivity() {
         CrashCapture.pendingCrash(this)?.let { crash ->
             setContent {
                 NoopTheme {
+                    DebugExportReviewHost()
                     CrashRecoveryScreen(
                         crash = crash,
                         onContinue = {
@@ -185,13 +185,14 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun CrashRecoveryScreen(crash: String, onContinue: () -> Unit) {
     val clipboard = LocalClipboardManager.current
-    // Masked for the two paths that leave the device — the visible trace and the clipboard. The stored
-    // file stays verbatim for anything that needs it, and the acknowledgement fingerprint is taken on
-    // the raw text by the caller. redactStrapLogPii is the same sink the strap log and the test bundle
-    // use (BLE MACs and WHOOP serials) and is documented as total, so it cannot throw here. A BLE
-    // exception carrying a device address is exactly its shape, and this screen's copy button exists
-    // to paste into public bug reports.
-    val shown = remember(crash) { com.noop.ble.redactStrapLogPii(crash) }
+    val copyScope = androidx.compose.runtime.rememberCoroutineScope()
+    // Acknowledgement keeps the caller's raw fingerprint; display and copy use the bounded debug policy.
+    val shown by androidx.compose.runtime.produceState(initialValue = "", key1 = crash) {
+        value = kotlinx.coroutines.withContext(Dispatchers.IO) {
+            String(DebugExportReview.prepare(listOf("report.txt" to crash.toByteArray(Charsets.UTF_8)))
+                .single().second, Charsets.UTF_8)
+        }
+    }
     Surface(Modifier.fillMaxSize(), color = Palette.surfaceBase) {
         Column(
             Modifier.padding(horizontal = 20.dp, vertical = 32.dp).verticalScroll(rememberScrollState()),
@@ -199,16 +200,32 @@ private fun CrashRecoveryScreen(crash: String, onContinue: () -> Unit) {
         ) {
             Text(stringResource(R.string.crash_recovery_title), style = NoopType.title1, color = Palette.textPrimary)
             Text(stringResource(R.string.crash_recovery_body), style = NoopType.body, color = Palette.textSecondary)
-            Button(onClick = { clipboard.setText(AnnotatedString(shown)) }) {
+            Button(onClick = {
+                copyScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    DebugExportReview.shared.stageCopy(crash) { clipboard.setText(AnnotatedString(it)) }
+                }
+            }) {
                 Text(stringResource(R.string.crash_recovery_copy))
             }
             Button(onClick = onContinue) {
                 Text(stringResource(R.string.crash_recovery_continue))
             }
-            SelectionContainer {
-                Text(shown, style = NoopType.caption, color = Palette.textSecondary)
-            }
+            Text(shown, style = NoopType.caption, color = Palette.textSecondary)
         }
+    }
+}
+
+@Composable
+private fun DebugExportReviewHost() {
+    val reviewScope = androidx.compose.runtime.rememberCoroutineScope()
+    DebugExportReview.shared.pending?.let { pending ->
+        ReportReviewDialog(
+            previewText = pending.gate.previewText,
+            modeInactive = false,
+            onCancel = { DebugExportReview.shared.cancel() },
+            onShare = { reviewScope.launch { DebugExportReview.shared.confirm(pending.id) } },
+            isCopy = pending.isCopy,
+        )
     }
 }
 
@@ -1669,6 +1686,8 @@ fun NoopRoot() {
     // Existing, onboarded user: render the app, and if they've updated since last launch
     // (stored version behind current), show "What's New" once over the top.
     AppRoot(viewModel = appViewModel)
+
+    DebugExportReviewHost()
 
     if (lastSeenChangelog != AppChangelog.CURRENT_VERSION) {
         Dialog(

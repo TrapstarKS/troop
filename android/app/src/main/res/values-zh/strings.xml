@@ -2533,6 +2533,7 @@
     <string name="ground_truth_export">导出会话</string>
     <string name="ground_truth_exporting">正在创建导出…</string>
     <string name="ground_truth_export_failed">无法导出会话：%1$s</string>
+    <string name="debug_export_failed">无法导出文件：%1$s</string>
     <string name="ground_truth_sessions">已记录的会话</string>
     <string name="ground_truth_no_sessions">尚无已记录的会话。</string>
     <string name="ground_truth_comment">会话备注</string>

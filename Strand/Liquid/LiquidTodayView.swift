@@ -1215,7 +1215,7 @@ struct LiquidTodayView: View {
                         // The reason the count is not moving, when nights are arriving empty. Sits under
                         // the progress rather than replacing it: the wearer needs both the number and why.
                         if let why = chargeDisplay.calibrationReason(
-                            dayKeys: repo.days.map(\.day), nightlyHrv: repo.days.map(\.avgHrv),
+                            dayKeys: repo.hrvCalibrationHistory.map(\.day), nightlyHrv: repo.hrvCalibrationHistory.map(\.value),
                             today: Repository.logicalDayKey(Date())) {
                             Text(why).font(StrandFont.caption)
                                 .foregroundStyle(StrandPalette.textSecondary)
@@ -1434,10 +1434,10 @@ struct LiquidTodayView: View {
             let (val, cap) = weightTile(weightKg)
             ktile(String(localized: "Weight"), icon: keyMetricIcon(metric), val, "", StrandPalette.metricAmber, nil, key: "weight", caption: cap)
         case .calories:
-            // #616: imported-first value (imported ?: activeKcalEst) + route the tap to the matching
+            // #616: imported-first value (imported ?: activeEnergyKcalEst) + route the tap to the matching
             // detail source, so the number, its sparkline and the chart it opens all agree.
             ktile(String(localized: "Calories"), icon: keyMetricIcon(metric), intText(caloriesCount), "kcal", StrandPalette.metricAmber,
-                  fracOver(caloriesCount, 800), key: "energy_kcal", detailMetric: caloriesDetailMetric)
+                  fracOver(caloriesCount, 800), key: "active_kcal", detailMetric: caloriesDetailMetric)
         case .skinTemp:
             // Added 2026-08-24 (queue 11c follow-up): first Key Metrics appearance for Skin Temp — was
             // already a "Your Cards" tile (`DashboardCard.skinTemp`), never a Key Metrics one. Same
@@ -1658,8 +1658,8 @@ struct LiquidTodayView: View {
         // classic Today reads, so the two screens agree on when a wearer is genuinely mid-calibration
         // rather than simply lacking a scored night.
         let calNights = (selectedDayOffset == 0)
-            ? RecoveryScorer.calibrationNights(nightlyHrv: repo.days.map(\.avgHrv),
-                                               dayKeys: repo.days.map(\.day),
+            ? RecoveryScorer.calibrationNights(nightlyHrv: repo.hrvCalibrationHistory.map(\.value),
+                                               dayKeys: repo.hrvCalibrationHistory.map(\.day),
                                                hasRecovery: day?.recovery != nil)
             : nil
         let priorScored = TodayView.lastScoredRecoveryDay(
@@ -1777,7 +1777,7 @@ struct LiquidTodayView: View {
             if let k = r.activeKcal { winImportedKcal[r.day] = max(winImportedKcal[r.day] ?? 0, k) }
         }
         var winOnDeviceKcal: [String: Double] = [:]
-        for r in sparkRows { if let k = r.activeKcalEst { winOnDeviceKcal[r.day] = k } }
+        for r in sparkRows { if let k = r.activeEnergyKcalEst { winOnDeviceKcal[r.day] = k } }
         let energyKcalSpark: [(String, Double)] = Set(winImportedKcal.keys).union(winOnDeviceKcal.keys).sorted()
             .compactMap { day in (winImportedKcal[day] ?? winOnDeviceKcal[day]).map { (day, $0) } }
         kSparks = [
@@ -1795,7 +1795,7 @@ struct LiquidTodayView: View {
             // #616: the Calories tile drew no trend line — this dict had no matching entry, so windowedSpark
             // returned []. Bank the imported-first calorie series (built above) so the sparkline matches the
             // tile's imported-first number and a Health-Connect / Apple-only user gets a trend.
-            "energy_kcal": energyKcalSpark,
+            "active_kcal": energyKcalSpark,
             "steps_est": stepsSeries.filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey }
                 .map { ($0.day, $0.value) },
             "sleep_performance": restSeries.filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey }
@@ -1960,8 +1960,8 @@ struct LiquidTodayView: View {
         // night for > staleDays), say so directly instead of "still learning your baseline" — the honest
         // calibrating state with its reason attached. `stale` is always > staleDays (14), so always plural.
         if readiness.level == .insufficient,
-           let stale = Baselines.nightsSinceNewestValidNight(dayKeys: repo.days.map(\.day),
-                                                             nightlyHrv: repo.days.map(\.avgHrv),
+           let stale = Baselines.nightsSinceNewestValidNight(dayKeys: repo.hrvCalibrationHistory.map(\.day),
+                                                             nightlyHrv: repo.hrvCalibrationHistory.map(\.value),
                                                              today: Repository.logicalDayKey(Date())),
            stale > Baselines.staleDays {
             return String(localized: "No new nights from your strap for \(stale) days. Check it's connected and saving data.")
@@ -1997,18 +1997,18 @@ struct LiquidTodayView: View {
     private var stepsDetailSource: String { stepsDetailMetric?.source ?? "my-whoop" }
 
     // #616: calories resolved IMPORTED-FIRST (the day's imported Apple active energy — the figure these
-    // surfaces already showed — else NOOP's on-device HR estimate `activeKcalEst`) — one number across the
+    // surfaces already showed — else NOOP's on-device HR estimate `activeEnergyKcalEst`) — one number across the
     // tile, card and the detail it taps to. Mirrors the steps precedence above.
     private var caloriesCount: Double? {
-        importedActiveKcalDay ?? displayDay?.activeKcalEst
+        importedActiveKcalDay ?? displayDay?.activeEnergyKcalEst
     }
 
     private var caloriesDetailMetric: MetricDescriptor? {
         MetricCatalog.todayCaloriesMetric(hasImportedKcal: importedActiveKcalDay != nil,
-                                          hasOnDeviceKcal: displayDay?.activeKcalEst != nil)
+                                          hasOnDeviceKcal: displayDay?.activeEnergyKcalEst != nil)
     }
 
-    private var caloriesDetailKey: String { caloriesDetailMetric?.key ?? "energy_kcal" }
+    private var caloriesDetailKey: String { caloriesDetailMetric?.key ?? "active_kcal" }
     private var caloriesDetailSource: String { caloriesDetailMetric?.source ?? "my-whoop" }
 
     private var liveHour: Double {

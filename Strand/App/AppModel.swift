@@ -366,6 +366,11 @@ final class AppModel: ObservableObject {
             // Keep the battery night-guard's learned bedtime warm off the same signal (throttled inside).
             self?.refreshHabitualMidsleep()
         }.store(in: &hrCancellables)
+        // Fresh scan eligibility can change even when a legacy daily score is retained verbatim.
+        intelligence.$computing.dropFirst().filter { !$0 }.sink { [weak self] _ in
+            guard let self else { return }
+            self.evaluateIllness(self.repo.days)
+        }.store(in: &hrCancellables)
         // Re-arm the strap's firmware alarm once the connection has SETTLED — not the instant it (re)bonds.
         // A smart-alarm time changed while the strap was away never reached it , the send is gated on bond
         // , so the strap kept the OLD time and fired at it (#59).
@@ -497,6 +502,10 @@ final class AppModel: ObservableObject {
             // BEFORE the Effort rescore + analyzeRecent loop so both operate on a cleaned DB. Persisted
             // flag → no-op on every subsequent launch; idempotent on a clean DB.
             await self.intelligence.runTimestampHealIfNeeded()
+            if let store = await self.repo.storeHandle(),
+               await WhoopImporter.repairAbsoluteSkinTempIfNeeded(store: store) {
+                await self.repo.refresh()
+            }
             // One-shot on-upgrade Effort rescore (#313): recompute strain from source across the FULL
             // history and repair sleep rejected by unmatched WRIST_OFF in one pass. Both persisted flags
             // describe that shared pass; either pending flag triggers it.
@@ -1945,16 +1954,33 @@ final class AppModel: ObservableObject {
         return (c.hour ?? 0) * 3600 + (c.minute ?? 0) * 60 + (c.second ?? 0)
     }
 
+    private var illnessEvaluationGeneration = 0
+
     private func evaluateIllness(_ days: [DailyMetric]) {
-        guard behavior.illnessWatch, days.count >= 14,
+        illnessEvaluationGeneration &+= 1
+        let generation = illnessEvaluationGeneration
+        guard behavior.illnessWatch, !intelligence.computing, days.count >= 14,
               let latestDay = days.last?.day, latestDay == repo.today?.day else {
             healthAlert = nil; illnessSignal = nil; illnessDistance = nil; return
         }
         Task { [weak self] in
             guard let self else { return }
+            let sourceIds = self.repo.computedReadIds
+            guard let firstDay = days.first?.day else { return }
+            let records: (hrv: [String: HealthSignalReliability.Record], resp: [String: HealthSignalReliability.Record])
+            do { records = try await self.repo.signalReliabilityByDay(from: firstDay, to: latestDay) }
+            catch { return }
+            var hrvByDay: [String: Double] = [:]
+            var respByDay: [String: Double] = [:]
+            for row in self.repo.vitalMetricRows.sorted(by: { $0.source.vitalPriority < $1.source.vitalPriority }) {
+                if hrvByDay[row.metric.day] == nil, let value = row.metric.avgHrv,
+                   records.hrv[row.metric.day]?.matches(value) == true { hrvByDay[row.metric.day] = value }
+                if respByDay[row.metric.day] == nil, let value = row.metric.respRateBpm,
+                   records.resp[row.metric.day]?.matches(value) == true { respByDay[row.metric.day] = value }
+            }
             // Confounder tags from the recent journal (within the last ~2 days). Read once, off the
             // engine's hot path , the engine only needs presence flags, not the rows.
-            let recentDays = Set(days.suffix(2).map(\.day))
+            let recentDays = Set(HealthSignalReliability.dayKeys(ending: latestDay, count: 2))
             let journal = await self.repo.journalEntries(days: 7)
             var ctxAlcohol = false, ctxHardWorkout = false, ctxAlreadyUnwell = false
             for e in journal where e.answeredYes && recentDays.contains(e.day) {
@@ -1963,8 +1989,9 @@ final class AppModel: ObservableObject {
                 if q.contains("workout") || q.contains("train") || q.contains("exercise") { ctxHardWorkout = true }
                 if q.contains("sick") || q.contains("ill") || q.contains("unwell") { ctxAlreadyUnwell = true }
             }
-            self.applyIllnessSignal(days, alcohol: ctxAlcohol, hardOrLateWorkout: ctxHardWorkout,
-                                    alreadyUnwell: ctxAlreadyUnwell)
+            guard sourceIds == self.repo.computedReadIds else { return }
+            self.applyIllnessSignal(days, hrvByDay: hrvByDay, respByDay: respByDay, generation: generation, alcohol: ctxAlcohol,
+                                    hardOrLateWorkout: ctxHardWorkout, alreadyUnwell: ctxAlreadyUnwell)
         }
     }
 
@@ -1981,43 +2008,58 @@ final class AppModel: ObservableObject {
 
     /// Run the `IllnessSignalEngine` from the day history + the journal-derived confounder context, then
     /// publish the result + the semantic `healthAlert` banner payload.
-    private func applyIllnessSignal(_ days: [DailyMetric], alcohol: Bool,
+    private func applyIllnessSignal(_ days: [DailyMetric], hrvByDay: [String: Double], respByDay: [String: Double], generation: Int, alcohol: Bool,
                                     hardOrLateWorkout: Bool, alreadyUnwell: Bool) {
         // A newer day can arrive while the journal read is in flight. Never publish the older
         // task's alert over that day's result.
-        guard days.last?.day == repo.days.last?.day, days.last?.day == repo.today?.day else { return }
-        let previous = healthAlert
-        let recent = Array(days.suffix(2))
-        let latest = days[days.count - 1]
-        let base = Array(days.suffix(31).dropLast(3))    // ~28 days ending 3 days ago
-        func mean(_ vals: [Double]) -> Double? { vals.isEmpty ? nil : vals.reduce(0, +) / Double(vals.count) }
-        func rm(_ kp: (DailyMetric) -> Double?) -> Double? { mean(recent.compactMap(kp)) }
+        guard !Task.isCancelled, generation == illnessEvaluationGeneration,
+              behavior.illnessWatch, !intelligence.computing, days == repo.days,
+              let latest = days.last, latest.day == repo.today?.day else { return }
+        let byDay = Dictionary(days.map { ($0.day, $0) }, uniquingKeysWith: { _, last in last })
+        let recentKeys = HealthSignalReliability.dayKeys(ending: latest.day, count: 2)
+        let baseKeys = HealthSignalReliability.dayKeys(ending: latest.day, count: 28, daysAgo: 3)
+        let recent = recentKeys.compactMap { byDay[$0] }
+        func mean(_ values: [Double]) -> Double? { values.isEmpty ? nil : values.reduce(0, +) / Double(values.count) }
+        func rm(_ value: (DailyMetric) -> Double?) -> Double? { mean(recent.compactMap(value)) }
+        let hrvEpoch = Baselines.hrvBaselineEpoch()
+        let recoveryEpoch = Baselines.recoveryBaselineEpoch()
+        var signalBaselines: [String: Double] = [:]
 
-        // Build each signal's illness-ward z against the personal baseline (Baselines.deviation). The
-        // baseline is folded over the full pre-recent history; a trusted baseline (≥14 nights) is the
-        // engine's gate for actually raising. Skin-temp is already a stored DEVIATION (°C), so it's
-        // z-scored against a zero-centred personal spread; the others z-score the raw column.
-        func signal(_ kp: (DailyMetric) -> Double?, cfgKey: String, illnessUp: Bool) -> (IllnessSignalEngine.SignalReading, Bool)? {
-            guard let cfg = Baselines.metricCfg[cfgKey], let recentMean = rm(kp),
-                  let latestValue = kp(latest) else { return nil }
-            let state = Baselines.foldHistory(base.map(kp), cfg: cfg)
-            guard state.usable else { return (IllnessSignalEngine.SignalReading(zIllnessward: 0, present: false), false) }
+        // Trust belongs to each signal. Missing civil days and recalibration epochs enter the same fold.
+        func signal(_ value: (DailyMetric) -> Double?, cfgKey: String, illnessUp: Bool) -> (IllnessSignalEngine.SignalReading, Bool)? {
+            guard let cfg = Baselines.metricCfg[cfgKey] else { return nil }
+            func eligible(_ row: DailyMetric) -> Double? {
+                guard let number = value(row), number.isFinite, number >= cfg.minVal,
+                      number <= cfg.maxVal else { return nil }
+                return number
+            }
+            let history = baseKeys.map { byDay[$0].flatMap(eligible) }
+            let state = Baselines.foldHistory(history, dayKeys: baseKeys, cfg: cfg,
+                                              baselineEpoch: cfgKey == "hrv" ? hrvEpoch : recoveryEpoch)
+            guard state.trusted, let recentMean = mean(recent.compactMap(eligible)),
+                  let latestValue = eligible(latest) else { return nil }
+            signalBaselines[cfgKey] = state.baseline
             let dev = Baselines.deviation(recentMean, state: state)
             let latestDev = Baselines.deviation(latestValue, state: state)
-            // Keep the two-night smoothing, but only count a signal while the newest night
-            // independently clears the same illness-ward threshold (#2533).
             let z = illnessUp ? min(dev.z, latestDev.z) : min(-dev.z, -latestDev.z)
-            return (IllnessSignalEngine.SignalReading(zIllnessward: z), state.trusted)
+            return (IllnessSignalEngine.SignalReading(zIllnessward: z), true)
         }
 
         let rhr = signal({ $0.restingHr.map(Double.init) }, cfgKey: "resting_hr", illnessUp: true)
-        let hrv = signal({ $0.avgHrv }, cfgKey: "hrv", illnessUp: false)
-        let resp = signal({ $0.respRateBpm }, cfgKey: "resp", illnessUp: true)
-        // Skin-temp deviation: a stored °C delta. Build a small zero-centred state from its own recent
-        // spread so a +0.6 °C reads as a meaningful z without needing a separate baseline column.
+        let hrv = signal({ hrvByDay[$0.day] }, cfgKey: "hrv", illnessUp: false)
+        let resp = signal({ respByDay[$0.day] }, cfgKey: "resp", illnessUp: true)
+        let skinCfg = VitalBands.skinTempDeviationCfg
+        let skinValue: (DailyMetric) -> Double? = { row in
+            row.skinTempDevC.flatMap {
+                $0.isFinite && $0 >= skinCfg.minVal && $0 <= skinCfg.maxVal && !VitalBands.isAbsoluteSkinTemp($0) ? $0 : nil
+            }
+        }
+        let skinState = Baselines.foldHistory(baseKeys.map { byDay[$0].flatMap(skinValue) },
+            dayKeys: baseKeys, cfg: skinCfg, baselineEpoch: recoveryEpoch)
         var skin: (IllnessSignalEngine.SignalReading, Bool)? = nil
-        if let recentSkin = rm({ $0.skinTempDevC }), let latestSkin = latest.skinTempDevC {
-            let z = min(recentSkin, latestSkin) / 0.3 // ~0.3 °C ≈ one personal spread
+        if skinState.trusted, let recentSkin = rm(skinValue), let latestSkin = skinValue(latest) {
+            // Keep the established local +0.6 °C threshold; it is a wellness heuristic.
+            let z = min(recentSkin, latestSkin) / 0.3
             skin = (IllnessSignalEngine.SignalReading(zIllnessward: z), true)
         }
 
@@ -2048,11 +2090,11 @@ final class AppModel: ObservableObject {
 
         // Caller-rendered phrases for the signals that fire (the engine surfaces only the firing ones).
         var labels: [String: String] = [:]
-        if let r = latest.restingHr.map(Double.init), let b = mean(base.compactMap { $0.restingHr.map(Double.init) }), r > b {
+        if let r = latest.restingHr.map(Double.init), let b = signalBaselines["resting_hr"], r > b {
             let delta = Int((r - b).rounded())
             labels["restingHR"] = String(localized: "RHR +\(delta)")
         }
-        if let r = latest.avgHrv, let b = mean(base.compactMap { $0.avgHrv }), b > 0, r < b {
+        if let r = hrvByDay[latest.day], let b = signalBaselines["hrv"], b > 0, r < b {
             let percent = Int(((1 - r / b) * 100).rounded())
             labels["hrv"] = String(localized: "HRV −\(percent)%")
         }
@@ -2073,7 +2115,7 @@ final class AppModel: ObservableObject {
                 locale: AppLanguage.activeLocale)
             labels["skinTemp"] = String(localized: "Skin temperature \(temperature)")
         }
-        if let r = latest.respRateBpm, let b = mean(base.compactMap { $0.respRateBpm }), r > b {
+        if let r = respByDay[latest.day], let b = signalBaselines["resp"], r > b {
             labels["respiration"] = String(localized: "Respiration up")
         }
 
@@ -2091,10 +2133,9 @@ final class AppModel: ObservableObject {
         case .quiet, .mild, .suppressed:
             healthAlert = nil
         }
-        if healthAlert != nil, previous == nil {
-            // Notifications retain their established copy contract; Home renders the semantic result.
-            IllnessNotifier.post(result.copy)
-        }
+        let presentSignals = [rhr?.0, hrv?.0, skin?.0, resp?.0].compactMap { $0 }.filter(\.present).count
+        IllnessNotifier.onEvaluated(healthAlert == nil ? nil : result.copy,
+            enabled: behavior.illnessWatch, valid: trusted && presentSignals >= IllnessSignalEngine.minCorroboratingSignals)
     }
 
     /// #593: once-a-day "optimal strain reached" nudge. Reads the resolved today-row (the same

@@ -74,13 +74,13 @@ class PhysiologicalStepsTest {
         assertEquals(PhysiologicalSteps.SleepKind.NAP, classified["daytime"])
     }
 
-    @Test fun longDaytimeNapCannotHideAShorterValidMainNight() {
+    @Test fun explicitDaytimeNapCannotHideAShorterValidMainNight() {
         fun utc(day: Int, hour: Int, minute: Int = 0) =
             LocalDateTime.of(2026, 8, day, hour, minute).toEpochSecond(ZoneOffset.UTC)
         val classified = PhysiologicalSteps.classifyForCycle(
             listOf(
                 PhysiologicalSteps.SleepBlock(utc(21, 1), utc(21, 4, 30), id = "night"),
-                PhysiologicalSteps.SleepBlock(utc(21, 13), utc(21, 19), id = "nap"),
+                PhysiologicalSteps.SleepBlock(utc(21, 13), utc(21, 19), id = "nap", kind = PhysiologicalSteps.SleepKind.NAP),
             ),
             0,
             null,

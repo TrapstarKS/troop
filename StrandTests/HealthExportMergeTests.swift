@@ -22,7 +22,7 @@ final class HealthExportMergeTests: XCTestCase {
         DailyMetric(day: day, totalSleepMin: 420, efficiency: 0.91, deepMin: 90, remMin: 100,
                     lightMin: 230, disturbances: 3, restingHr: restingHr, avgHrv: avgHrv,
                     recovery: recovery, strain: 12.5, exerciseCount: 2, spo2Pct: 96.5,
-                    skinTempDevC: -0.4, respRateBpm: 14.2, steps: 8123, activeKcalEst: 512.5,
+                    skinTempDevC: -0.4, respRateBpm: 14.2, steps: 8123, activeKcalEst: 512.5, activeEnergyKcalEst: 123.5,
                     spo2Red: 1234, spo2Ir: 5678, avgSdnn: avgSdnn, skinTempC: 33.2,
                     sleepHrOnly: true)
     }
@@ -49,6 +49,7 @@ final class HealthExportMergeTests: XCTestCase {
         XCTAssertEqual(merged.respRateBpm, imported.respRateBpm, "respRateBpm", file: file, line: line)
         XCTAssertEqual(merged.steps, imported.steps, "steps", file: file, line: line)
         XCTAssertEqual(merged.activeKcalEst, imported.activeKcalEst, "activeKcalEst", file: file, line: line)
+        XCTAssertEqual(merged.activeEnergyKcalEst, imported.activeEnergyKcalEst, "activeEnergyKcalEst", file: file, line: line)
         XCTAssertEqual(merged.spo2Red, imported.spo2Red, "spo2Red", file: file, line: line)
         XCTAssertEqual(merged.spo2Ir, imported.spo2Ir, "spo2Ir", file: file, line: line)
         XCTAssertEqual(merged.skinTempC, imported.skinTempC, "skinTempC", file: file, line: line)

@@ -448,7 +448,10 @@ struct RootView: View {
             }
         case .trends: TrendsView()
         case .workouts: WorkoutsView()
-        case .health: HealthView()
+        case .health:
+            NavigationStack {
+                HealthView().tabRouteDestinations()
+            }
         case .stress: StressView()
         case .labBook: LabBookView()
         case .rhythm: RhythmHost()

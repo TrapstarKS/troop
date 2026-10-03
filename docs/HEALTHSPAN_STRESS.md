@@ -1,0 +1,35 @@
+# Local Healthspan and Stress Monitor
+
+Healthspan presents the existing on-device `body_age` series as **NOOP Age**. It is a wellness comparison with a ±5-year uncertainty band, not a measured biological age, a clinical risk score, or the official WHOOP calculation. `VitalityEngine` remains the single age calculation: weekly resting-HR and HRV medians, mean sleep duration and duration regularity, and mean steps contribute conservative log-hazard offsets. Its existing correlated-input shrink and age clamp remain unchanged. Fitness Age / VO₂max is a separate fitness comparison; it is not silently blended into Body Age. No database schema, stored score, import or strap command changes.
+
+The display needs an adult profile, 21 unique recovery days in the selected preceding 31 days, and a valid Body Age sample no more than 14 days old. Insufficient or stale data shows calibration/unavailability instead of zero. The number is the last available weekly estimate, not a daily measurement. Historical selection uses the same reference date for calibration, history and contributors. The age comparison is labelled **Profile age** and derives from the birthdate saved in Profile at that selected date. Both existing profile stores can persist a default age of 30; onboarding does not provide a separate DOB-provenance flag. The method information asks the user to check the saved birthdate before interpreting the estimate. No measured or verified chronological age is claimed.
+
+## Pace of Aging estimate
+
+`HealthspanPresentation` provides an independent, **unvalidated local trend proxy**. A 30-day mean is compared with an up-to-180-day mean from the same stored Body Age series:
+
+```
+pace = clamp(1 + 2 * (meanAge30 - meanAge180), -1, 3)
+```
+
+The factor 2 is a chosen display scale; the two windows do not establish an annualized aging rate. A flat age trend maps to 1×; a lower recent mean reduces the ratio. This is a visualization of the local age estimate, not a prediction of lifespan or a validated rate of biological aging. It is especially sensitive to sparse history, profile changes and estimator noise. The gate additionally requires at least 3 recent weekly samples, 8 samples in the long window and a history span of 90 days. One decimal is quantized identically in Swift and Kotlin; duplicate days use the last canonical sample, non-finite/out-of-domain/future points are discarded. No pace value is persisted or fed to Recovery, illness, notifications or other downstream decisions.
+
+Sleep, Strain and Fitness cards describe recent context. Their numbers are not additive age-impact contributions. Strain and fitness do not feed the existing Body Age model. Unavailable lean mass/body composition is not inferred from strap data. The method sheet preserves these distinctions.
+
+## Stress Monitor
+
+The 0–3 gauge and trace reuse `DaytimeStress` without a scoring change. It is physiological activation relative to the local calm reference, not a mental-health diagnosis. The optional existing personal-baseline lens retains its own opt-in. The monitor never arms a realtime stream or sends a strap command. With no usable banked HR, the gauge is unavailable. A recorded daily stress point is labelled separately with its own day, and never substitutes for an intraday/live reading.
+
+The display timeline uses overlapping one-hour windows every 30 minutes. Zone durations use **only non-overlapping hourly buckets**, clipped at the last observed timestamp; unscored and activity-masked windows do not receive a zone. These are estimates at hourly resolution, not minute-level observations. Low is below 1, medium is [1,2), high is [2,3]. Missing points break the trace. Logged sleep and activity overlays are clipped at the selected day’s boundary and at the current time for today. They annotate real stored intervals; they do not change the score or establish psychological stress. The motion mask can only separate exertion when gravity observations exist.
+
+Local calendar boundaries bound every raw-data read; inclusive SQL ends before the next midnight. Date selection updates the trace and duration summary together. The latest-recorded-window hero is unavailable if its window is stale on the current day. Selecting a chart point explicitly labels the selected window. The breathing action reuses the existing local Breathing/Breathe screen. Synthetic demo raw samples live only in the guarded seed functions and do not validate physiological accuracy or live hardware behavior. An empty demo stress series also receives daily preview fixtures of 1.8 yesterday and 1.2 today; these are independent synthetic stored values, not outputs of raw-HR analysis. Existing stress history prevents daily fixture additions. Raw HR fixtures require either an entirely empty decoded-stream store before the ordinary demo seed begins, or a demo store whose decoded streams remain entirely empty on a later launch. The pre-seed check lets independently owned synthetic base fixtures coexist without relaxing protection for pre-existing recordings. No synthetic timestamps extend past the launch clock. Resetting a QA-owned demo database is required to regenerate coverage on a later day.
+
+## Validation contract
+
+The pure Swift helper is compiled standalone and its stdout is copied verbatim into the Kotlin oracle test and a matching Swift test. Cases cover varying rising/flat/falling age inputs, insufficient calibration, minors, stale/invalid samples and stress threshold boundaries. Required application compiles cover shared Swift on both macOS and iOS, plus Android; demo captures are supplemental layout evidence. No physical strap verification is claimed.
+
+Healthspan's week selector stays within the loaded daily-metric history and requires a complete 31-day lookback boundary before walking backward. A short new history still shows today's calibration. Stress Monitor exposes up to 4,000 local days; sleep overlays read the selected range (including two preceding local days for cross-midnight sessions) and preserve the existing imported/computed richness precedence. Workout overlays filter the existing reconciled workout list to that day, including imported and detected sources while preserving dismissal and overlap suppression. The open current-day monitor reloads every 15 minutes, with a one-minute freshness clock; raw HR writes do not require a day-cache refresh to become visible.
+
+All detail and preview loads follow the registry’s active strap. Apple observes that registry publisher, waits for the existing repository adoption, and discards canceled or superseded responses before publishing state. Healthspan captures its daily context after that source’s dashboard refresh. Android resets collected series and daily context by active strap, rather than keeping startup-pinned view-model history. Read resolution retains the repository’s canonical/imported/computed and registered raw-source unions.
+
+Primary Health-tab preview cards push the shared value routes, so retapping the active tab can return its bound navigation path to the root. The shell owner resolves those routes to the concrete details.

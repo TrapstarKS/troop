@@ -257,6 +257,7 @@ struct RootTabView: View {
         // A session left running by a previous launch is back before this view exists
         // (`LiftSessionController.resumeSaved`, from `StrandiOSApp.init`), as the BAR — not as a sheet
         // thrown in the user's face; they open it when they want it.
+        .modifier(DebugExportReviewHost())
         .sheet(isPresented: $liftSession.isPresented, onDismiss: presentPendingCoach) {
             LiftSessionView { }
         }
@@ -674,7 +675,7 @@ private enum MoreDestination: Hashable {
         case .liftLog:         LiftLogView()
         case .health:          HealthView()
         case .labBook:         LabBookView()
-        case .stress:          StressView()
+        case .stress:          StressMonitorView()
         case .breathe:         BreathingView()
         case .intervals:       IntervalTimerView()
         case .rhythm:          RhythmHost()
@@ -696,8 +697,8 @@ private enum MoreDestination: Hashable {
         case .weeklyPlan:      TabRoutePlaceholder(title: "Weekly Plan")
         case .sleep:           SleepView()
         case .sleepPlanner:    SmartAlarmView()
-        case .healthMonitor:   HealthView()
-        case .healthspan:      HealthView()
+        case .healthMonitor:   HealthMonitorView()
+        case .healthspan:      HealthspanView()
         }
     }
 }
