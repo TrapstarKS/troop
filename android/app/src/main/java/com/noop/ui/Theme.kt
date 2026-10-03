@@ -96,7 +96,7 @@ object Palette {
     val recovery078 get() = active.recovery078
     val recovery100 get() = active.recovery100
 
-    /** Ordered gradient stops for the recovery scale (Titanium gold, or Classic red→green). */
+    /** Ordered gradient stops retained for existing recovery visualizations. */
     val recoveryStops: List<Pair<Float, Color>>
         get() = if (isClassic) classic.recovery
                 else listOf(0.00f to recovery000, 0.30f to recovery030, 0.55f to recovery055, 0.78f to recovery078, 1.00f to recovery100)
@@ -174,7 +174,7 @@ object Palette {
     val chargeGradientStops: List<Pair<Float, Color>> get() = listOf(0.0f to chargeDeep, 1.0f to chargeBright)
     val effortGradientStops: List<Pair<Float, Color>> get() = listOf(0.0f to effortDeep, 1.0f to effortBright)
     val restGradientStops: List<Pair<Float, Color>> get() = listOf(0.0f to restDeep, 1.0f to restBright)
-    // Stress ramp: Titanium calm-blue→gold→orange, or Classic green→amber→red.
+    // Stress ramp: blue → teal → amber; Classic retains its existing palette.
     val stressGradientStops: List<Pair<Float, Color>>
         get() = if (isClassic) classic.stress else listOf(0.0f to stressDeep, 0.5f to stressColor, 1.0f to stressBright)
 
@@ -187,7 +187,7 @@ object Palette {
     val cardFillTop get() = active.cardFillTop
     val cardFillBottom get() = active.cardFillBottom
 
-    // Gold & Titanium ramps.
+    // Legacy compatibility ramps.
     val gold get() = active.gold
     val goldLight get() = active.goldLight
     val goldDeep get() = active.goldDeep
@@ -594,7 +594,7 @@ private val NoopShapes = Shapes(
 )
 
 /**
- * NoopTheme — instrument-grade, now System / Light / Dark. The chosen mode (default System) drives
+ * NoopTheme — the chosen mode (default Dark) drives
  * both `Palette.active` (so every `Palette.*` read re-resolves) and the Material scheme. The write to
  * `Palette.active` is guarded + idempotent, and happens before children compose, so there's no flash
  * and no recomposition loop (NoopTheme itself never reads `active`).
