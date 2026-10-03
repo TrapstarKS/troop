@@ -178,8 +178,9 @@ struct TestCentreView: View {
             refreshToken &+= 1
             ScheduledDebugExport.activateIfEnabled()
         }
-        .sheet(item: $report.pending) { _ in
-            ReportReviewSheet(report: report)
+        .sheet(item: $report.pending, onDismiss: { report.reviewDismissed() }) { pending in
+            ReportReviewSheet(preview: pending.gate.previewText, modeInactive: pending.modeInactive,
+                              onCancel: { report.cancel() }, onConfirm: { report.confirm() })
         }
         .confirmationDialog("Recalibrate your Charge baseline?",
                             isPresented: $showRecalibrateConfirm, titleVisibility: .visible) {
@@ -330,12 +331,12 @@ struct TestCentreView: View {
                     Text("STRAP LOG").font(StrandFont.overline).tracking(StrandFont.overlineTracking)
                         .foregroundStyle(StrandPalette.textSecondary)
                     Spacer()
-                    Button("Copy") { PlatformPasteboard.copy(live.exportableLogText()) }
+                    Button("Copy") { FileExport.copyDebugText(live.exportableLogText()) }
                         .buttonStyle(.plain).font(StrandFont.mono).foregroundStyle(StrandPalette.accent)
                     Button("Save…") {
                         Task {
                             let extra = await DebugDataDiagnostics.dynamicLines(repo: model.repo)
-                            FileExport.exportText(live.exportableLogText(extraHeaderLines: extra),
+                            FileExport.exportDebugText(live.exportableLogText(extraHeaderLines: extra),
                                                   suggestedName: FileExport.timestampedName("noop-strap-log", ext: "txt"))
                         }
                     }
@@ -380,7 +381,7 @@ struct TestCentreView: View {
                 // Environment dump: the IOSDiagnostics-backed block exportableLogText already carries,
                 // surfaced as a copyable readout (spec section 3.4).
                 NoopButton("Copy environment dump", systemImage: "info.circle", kind: .secondary) {
-                    PlatformPasteboard.copy(live.exportableLogText())
+                    FileExport.copyDebugText(live.exportableLogText())
                 }
 
                 // #polar-debug: only when a Polar strap is paired. The caption is the model auto-detected
@@ -1231,16 +1232,18 @@ private struct ReadoutRow: View {
 
 /// The mandatory review-before-share sheet (spec sections 9 and 12): shows the exact redacted report.txt
 /// the user is about to share, with explicit Share and Cancel. Nothing leaves the device until Share.
-private struct ReportReviewSheet: View {
-    @ObservedObject var report: TestCentreReport
-    @Environment(\.dismiss) private var dismiss
+struct ReportReviewSheet: View {
+    let preview: String
+    var modeInactive = false
+    var isCopy = false
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
 
     var body: some View {
-        let preview = report.pending?.gate.previewText ?? ""
-        return ScreenScaffold(title: "Review before sharing",
-                              subtitle: "This is exactly what your report will contain. Nothing leaves \(Platform.deviceNounPhrase) until you tap Share.") {
+        ScreenScaffold(title: "Review before sharing",
+                              subtitle: isCopy ? nil : "This is exactly what your report will contain. Nothing leaves \(Platform.deviceNounPhrase) until you tap Share.") {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
-                if report.pending?.modeInactive == true {
+                if modeInactive {
                     // #1002: the selected profile's test mode is not on, so this bundle carries no capture
                     // for the very thing being reported (the #812 capture_check only grades ACTIVE modes,
                     // so without this the report just looked thin with no explanation). Warn plainly, with
@@ -1265,10 +1268,10 @@ private struct ReportReviewSheet: View {
                 }
                 HStack(spacing: NoopMetrics.space3) {
                     NoopButton("Cancel", systemImage: "xmark", kind: .secondary) {
-                        report.cancel(); dismiss()
+                        onCancel()
                     }
-                    NoopButton("Share", systemImage: "square.and.arrow.up", kind: .primary) {
-                        report.confirm(); dismiss()
+                    NoopButton(isCopy ? "Copy" : "Share", systemImage: isCopy ? "doc.on.doc" : "square.and.arrow.up", kind: .primary) {
+                        onConfirm()
                     }
                 }
             }

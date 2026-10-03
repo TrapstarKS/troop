@@ -1440,12 +1440,12 @@ struct SettingsView: View {
                     Text("STRAP LOG").font(StrandFont.overline).tracking(StrandFont.overlineTracking)
                         .foregroundStyle(StrandPalette.textSecondary)
                     Spacer()
-                    Button("Copy") { PlatformPasteboard.copy(live.exportableLogText()) }
+                    Button("Copy") { FileExport.copyDebugText(live.exportableLogText()) }
                         .buttonStyle(.plain).font(StrandFont.mono).foregroundStyle(StrandPalette.accent)
                     Button("Save…") {
                         Task {
                             let extra = await DebugDataDiagnostics.dynamicLines(repo: model.repo)
-                            FileExport.exportText(live.exportableLogText(extraHeaderLines: extra),
+                            FileExport.exportDebugText(live.exportableLogText(extraHeaderLines: extra),
                                                   suggestedName: FileExport.timestampedName("noop-strap-log", ext: "txt"))
                         }
                     }
@@ -2920,7 +2920,7 @@ private struct DiagnosticsSheet: View {
                 Spacer()
                 Button {
                     // UIPasteboard via the shared cross-platform wrapper.
-                    PlatformPasteboard.copy(lines.joined(separator: "\n"))
+                    FileExport.copyDebugText(lines.joined(separator: "\n"))
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
                         .frame(minWidth: 120)

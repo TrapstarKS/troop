@@ -87,27 +87,41 @@ enum FileExport {
         #endif
     }
 
-    /// Export an existing file AND a block of text together as a matched pair (#510, raw capture plus the
-    /// strap log that produced it). Now a 2-entry case of `exportBundle`: both ride in one `.zip` so a
-    /// reporter saves them in a single gesture on every platform (the old macOS path opened two save
-    /// panels back-to-back; the bundle is one panel). The caller's text is already redacted by its sink;
-    /// the file's bytes are passed through unchanged here. If the source file is absent, falls back to a
-    /// single-entry bundle (just the text) so the tap is never a dead end.
-    ///
-    /// #646/#651: reading `src` off disk is staged on a detached task, same as `exportBundle`'s zip build,
-    /// so a multi-MB raw capture doesn't block the main actor before the share sheet / save panel appears.
     @MainActor
-    static func exportPair(file src: URL, fileSuggestedName: String,
-                           text: String, textSuggestedName: String) async {
-        let zipName = timestampedName("noop-export", ext: "zip")
-        let entries = await Task.detached(priority: .userInitiated) { () -> [BundleEntry] in
-            var entries: [BundleEntry] = [BundleEntry(name: textSuggestedName, data: Data(text.utf8))]
-            if FileManager.default.fileExists(atPath: src.path), let fileData = try? Data(contentsOf: src) {
-                entries.insert(BundleEntry(name: fileSuggestedName, data: fileData), at: 0)
-            }
-            return entries
-        }.value
-        await exportBundle(entries: entries, suggestedName: zipName)
+    static func exportDebugText(_ text: String, suggestedName: String) {
+        guard !Task.isCancelled else { return }
+        let ticket = DebugExportReview.shared.beginPreparation()
+        Task {
+            await DebugExportReview.shared.stage([.init(name: "report.txt", data: Data(text.utf8))],
+                                                destination: .text(suggestedName), ticket: ticket)
+        }
+    }
+
+    @MainActor
+    static func copyDebugText(_ text: String) {
+        guard !Task.isCancelled else { return }
+        let ticket = DebugExportReview.shared.beginPreparation()
+        Task {
+            await DebugExportReview.shared.stage([.init(name: "report.txt", data: Data(text.utf8))], destination: .copy, ticket: ticket)
+        }
+    }
+
+    // Raw captures use the canonical name so the shared cap and attachment preview apply.
+    @MainActor
+    static func exportPair(file src: URL, fileSuggestedName _: String,
+                           text: String, textSuggestedName: String,
+                           read: (() async -> [BundleEntry])? = nil) async {
+        guard !Task.isCancelled else { return }
+        let ticket = DebugExportReview.shared.beginPreparation()
+        let entries: [BundleEntry]
+        if let read { entries = await read() }
+        else {
+            entries = await Task.detached(priority: .userInitiated) {
+                DebugExportReview.pairEntries(file: src, text: text, textName: textSuggestedName)
+            }.value
+        }
+        await DebugExportReview.shared.stage(entries,
+            destination: .bundle(timestampedName("noop-export", ext: "zip")), ticket: ticket)
     }
 
     #if os(iOS)
@@ -159,7 +173,7 @@ enum FileExport {
     /// meta.json) are produced by the assembler; existing on-disk files (raw-capture, screenshot) are
     /// read into Data by the assembler. EVERY entry must already be redacted by the caller (section 5.3).
     /// Equatable so the assembler cap can assert an undersized bundle is returned untouched (section 5.4).
-    struct BundleEntry: Equatable { let name: String; let data: Data }
+    struct BundleEntry: Equatable, Sendable { let name: String; let data: Data }
 
     /// Zip `entries` into a single staged `.zip` under the temporary directory and return its URL, or nil
     /// if there are no entries. Pure file IO, no UI, so it is unit-testable. Uses ZIPFoundation's `Archive`
