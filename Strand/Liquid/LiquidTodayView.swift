@@ -1344,7 +1344,7 @@ struct LiquidTodayView: View {
             // hero are the same number, so a carry that reached only one of them would put two answers for
             // Charge on one screen. (#543: one prior row feeds every recovery-derived read-out.) Strain below
             // stays raw, matching the Effort hero, which correctly does not carry.
-            ktile(String(localized: "Recovery"), icon: keyMetricIcon(metric), intText(recovery), "%", recovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack, frac(recovery), key: HeroRingMetric.charge)
+            ktile(String(localized: "Recovery"), icon: keyMetricIcon(metric), RecoveryStrainDetailLogic.recoveryPercent(recovery).map(String.init) ?? "—", "%", recovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack, frac(recovery), key: HeroRingMetric.charge)
         case .effort:
             // #492: Effort is a load index (0–100 NOOP / 0–21 WHOOP), NOT a percentage, and the unit was
             // wrong on either axis. Fixed on Android and in `TodayView` at the time; THIS view kept the old

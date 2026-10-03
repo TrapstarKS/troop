@@ -3918,9 +3918,9 @@ struct TodayView: View {
             }
             StatTile(
                 label: "Recovery",
-                value: recovery.map { "\(Int($0.rounded()))%" }
+                value: RecoveryStrainDetailLogic.recoveryPercent(recovery).map { "\($0)%" }
                     ?? recoveryCalibration.map { "\($0)/\(Baselines.minNightsSeed)" }
-                    ?? carried.map { "\(Int($0.value.rounded()))%" } ?? "—",
+                    ?? carried.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0.value) }.map { "\($0)%" } ?? "—",
                 // Component 2: never a bare blank, when there's no number, no calibration count and
                 // nothing to carry, the caption states the honest "Needs the strap" rather than nothing.
                 caption: recovery.map { StrandPalette.recoveryState($0).capitalized }

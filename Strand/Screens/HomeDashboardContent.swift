@@ -101,7 +101,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     }
 
     private var recoveryDial: some View {
-        let availableRecovery = recoveryValue.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }
+        let availableRecovery = recoveryValue
         return NavigationLink {
             RecoveryDetailView(dayKey: recoveryDayKey)
         } label: {
@@ -114,7 +114,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     }
 
     private var strainDial: some View {
-        let availableStrain = strainValue.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }
+        let availableStrain = strainValue
         return NavigationLink {
             StrainDetailView(dayKey: dayKey, effortOverride: strainValue)
         } label: {

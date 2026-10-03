@@ -5568,7 +5568,7 @@ private fun MetricGrid(
             val v = homeScoreValue(d?.recovery ?: lastScoredCharge?.value)
             KeyTileData(
                 label = uiString(R.string.l10n_today_screen_recovery_ea924f72),
-                value = v?.let { "${it.roundToInt()}" }
+                value = RecoveryStrainDetailLogic.recoveryPercent(v)?.toString()
                     ?: recoveryCalibration?.let { "$it/${Baselines.minNightsSeed}" } ?: NO_DATA,
                 unit = if (v != null) "%" else "",
                 tint = v?.let { Palette.recoveryColor(it) } ?: Palette.chargeColor,

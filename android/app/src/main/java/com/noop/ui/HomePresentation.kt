@@ -137,11 +137,9 @@ internal fun HomeDials(
     onRecovery: () -> Unit,
     onStrain: () -> Unit,
 ) {
-    val availableRecovery = recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }
-    val availableStrain = strain?.takeIf { it.isFinite() && it in 0.0..100.0 }
+    val availableRecovery = homeScoreValue(recovery)
+    val availableStrain = homeScoreValue(strain)
     val sleepValue = homeScoreValue(sleep)
-    val recoveryValue = homeScoreValue(recovery)
-    val strainValue = homeScoreValue(strain)
     Row(Modifier.fillMaxWidth().padding(vertical = Metrics.space16),
         horizontalArrangement = Arrangement.spacedBy(Metrics.space8), verticalAlignment = Alignment.Top) {
         HomeDial(uiString(R.string.home_sleep), sleepValue?.roundToInt()?.toString(), "%", sleepValue,
