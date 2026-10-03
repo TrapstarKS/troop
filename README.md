@@ -1,3 +1,5 @@
+> **troop fork:** see [Install troop](docs/INSTALL.md) for SideStore, privately signed Android releases, migration, and the current unpublished-distribution boundary. Upstream credits and history below are retained.
+
 <p align="center">
   <img src="docs/assets/logo-v3.png" alt="NOOP" width="72">
 </p>
@@ -19,12 +21,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ryanbr/noop/releases/latest"><img alt="Latest release" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Frelease.json&style=flat-square"></a>
   <a href="https://github.com/ryanbr/noop/stargazers"><img alt="Stars" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Fstars.json&style=flat-square"></a>
 </p>
 
 <p align="center">
-  <a href="#download">⬇&nbsp;Download</a> ·
+  <a href="#download-stable-fork-publication-pending">⬇&nbsp;Download</a> ·
   <a href="https://github.com/ryanbr/noop/wiki/FAQ">❓&nbsp;FAQ</a> ·
   <a href="https://discord.com/invite/wKgyqVdjrP">💬&nbsp;Discord</a> ·
   <a href="https://www.reddit.com/r/NoopBand/">👽&nbsp;Reddit</a> ·
@@ -34,7 +35,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ryanbr/noop/releases/latest"><img src="docs/assets/hero-v8.jpg" alt="NOOP in the new Liquid Metal design, on iPhone, Mac and Android" width="820"></a>
+  <a href="https://github.com/TrapstarKS/troop/releases/latest"><img src="docs/assets/hero-v8.jpg" alt="NOOP in the new Liquid Metal design, on iPhone, Mac and Android" width="820"></a>
 </p>
 
 <p align="center">
@@ -48,20 +49,18 @@
 
 ---
 
-## Download
+## Download (stable fork publication pending)
 
-Pre-built apps you can run right now:
+Stable fork distribution is being prepared:
 
 <p>
-  <a href="https://github.com/ryanbr/noop/releases/latest"><img alt="Version" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Frelease.json&style=flat-square"></a>
-  <img alt="Released" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Freleased.json&style=flat-square">
 </p>
 
 | Platform | Build | Notes |
 |---|---|---|
-| **macOS** | `NOOP.app` (see [Releases](https://github.com/ryanbr/noop/releases)) | Apple Silicon + Intel. Drag to Applications. Not notarized — see **First launch on macOS** below. _(A Homebrew cask isn't currently published for this fork — grab the `.app` from Releases.)_ |
-| **Android** | `NOOP-full.apk` (see [Releases](https://github.com/ryanbr/noop/releases)) | The full app. `minSdk 26` (Android 8+). Sideload — enable "install unknown apps". Blocked by Play Protect? See **Installing on Android** below. |
-| **iOS** | **AltStore / SideStore source** (recommended — one-tap install + auto-updates): add `https://raw.githubusercontent.com/ryanbr/noop/main/altstore-source.json` as a source. Or a **direct** [`NOOP-vX-ios.ipa`](https://github.com/ryanbr/noop/releases) download. | The `.ipa` is unsigned; **you** sign it on your iPhone with your own free Apple ID (no App Store, no developer account — NOOP stays anonymous). Re-signs every 7 days (AltStore/SideStore automates it). See [docs/IOS.md](docs/IOS.md). Or build from source in Xcode. |
+| **macOS** | `NOOP.app` (see [Releases](https://github.com/TrapstarKS/troop/releases)) | Apple Silicon + Intel. Drag to Applications. Not notarized — see **First launch on macOS** below. _(A Homebrew cask isn't currently published for this fork — grab the `.app` from Releases.)_ |
+| **Android** | Privately signed `NOOP-android-v<VERSION>.apk` from this fork | Android 8+. Stable identity/signer and Obtainium instructions: [Install](docs/INSTALL.md). |
+| **iOS** | SideStore + user-provisioned IPA from this fork | iOS 17+. Initial computer/account setup, seven-day free provisioning, explicit upgrades, and capability caveats: [Install](docs/INSTALL.md). |
 
 > **First launch on macOS.** NOOP is **not notarized** by Apple — notarization needs a paid Apple
 > Developer ID tied to a real identity, which doesn't fit an anonymous, free project. The app *is*
@@ -77,22 +76,7 @@ Pre-built apps you can run right now:
 >
 > Prefer to avoid this entirely? Build from source — see [Quickstart](#quickstart-macos).
 
-> **Installing on Android (Play Protect blocked it?).** NOOP isn't on the Play Store — it's an
-> **unsigned, source-available APK** you sideload, because the project is anonymous and has no paid
-> Play identity to publish or sign under. So Android treats it as an "unknown app" and **Google
-> Play Protect** may warn or block on install (most stubbornly on stock Pixel / recent Android).
-> Nothing is wrong with the file — it's just missing a Play signature. To get it on:
->
-> - **Tap "Install anyway."** When the warning appears, choose **More details → Install anyway**.
-> - **No "Install anyway" button?** It can vanish after a first install + uninstall. Grant the source
->   directly: **Settings → Apps → Special app access → Install unknown apps**, pick the **browser or
->   file manager you're installing from**, turn on **"Allow from this source"**, then open the APK again.
-> - **Still blocked by Play Protect?** It's your call to make for an unsigned app you trust: open the
->   **Play Store → your profile icon → Play Protect → ⚙ Settings**, toggle **"Scan apps with Play
->   Protect" off**, install NOOP, then switch it **back on**.
-> - **Reinstalling is safe.** Uninstalling and installing again won't hurt anything — NOOP keeps all
->   data on-device with `allowBackup=false`, so a reinstall simply starts fresh. There's no cloud copy
->   to lose either way.
+> **Installing on Android:** stable APKs require the fork’s durable private signing key. Follow [INSTALL.md](docs/INSTALL.md) for downloads, checksums, platform policy, and upgrades. Export `.noopbak` before removing or changing an installed app; uninstalling deletes its local data.
 
 Prefer to build it yourself? See [`docs/BUILD.md`](docs/BUILD.md).
 
@@ -226,7 +210,6 @@ with the strap and **score recovery, strain and sleep on your own device** — n
 import required.
 
 <p>
-  <a href="https://github.com/ryanbr/noop/releases/latest"><img alt="Latest across all platforms" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Frelease.json&style=flat-square"></a>
   <img alt="Commits per month" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Flastcommit.json&style=flat-square">
   <img alt="Top language" src="https://img.shields.io/badge/languages-Swift%20%C2%B7%20Kotlin-E8B84B?style=flat-square">
   <img alt="Code size" src="https://img.shields.io/badge/build-from%20source-6B737B?style=flat-square">
@@ -235,8 +218,8 @@ import required.
 | Platform | Status |
 |---|---|
 | **macOS** | ✅ Full app (`Strand/`, SwiftUI, macOS 13+). Pairs over BLE, offloads the strap's history, and scores recovery / strain / sleep on-device. The complete feature set above runs here. |
-| **Android** | ✅ Full app (`android/`, Jetpack Compose, Android 8+). Pairs over BLE, persists and scores on-device, and imports WHOOP / Apple Health / Health Connect. Grab the APK from [Releases](https://github.com/ryanbr/noop/releases). |
-| **iOS** | 📲 **Direct download**: an unsigned `.ipa` you sideload with AltStore/SideStore — it signs on your iPhone with your *own* free Apple ID, so there's an anonymous install path with no App Store / developer account (see [docs/IOS.md](docs/IOS.md)). Also still builds from source in Xcode. Shares the cross-platform Swift packages, so scoring matches macOS. Newer and less battle-tested than macOS/Android — live BLE on a real iPhone is still being validated; Apple Health + Live Activity widgets can be limited under a free signing identity. |
+| **Android** | ✅ Full app (`android/`, Jetpack Compose, Android 8+). Pairs over BLE, persists and scores on-device, and imports WHOOP / Apple Health / Health Connect. After a validated stable fork release is published, grab the APK from [Releases](https://github.com/TrapstarKS/troop/releases). |
+| **iOS** | Source build today; user-provisioned SideStore IPA/source after the first validated stable fork publication. See [Install](docs/INSTALL.md) for account/setup, expiry, capabilities, and data preservation. No App Store channel is added. |
 
 ### Strap support
 

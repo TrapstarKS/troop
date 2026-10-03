@@ -56,6 +56,7 @@ struct SettingsView: View {
     /// writes nothing to the strap. See [PuffinExperiment.spo2CandidateDisplayKey].
     @AppStorage(PuffinExperiment.spo2CandidateDisplayKey) private var spo2CandidateDisplayEnabled = false
     @AppStorage(AppModel.ouraAllDayLiveHRKey) private var ouraAllDayLiveHREnabled = false   // item 27
+    @AppStorage(FirmwareSimulationPreference.enabledKey) private var firmwareSimulationEnabled = false
 
     /// #1545 opt-in: score Effort with Banister's exponential TRIMP instead of Edwards' heart-rate zones.
     /// Default OFF — it re-scores the whole window against a different recipe. See
@@ -1851,12 +1852,31 @@ struct SettingsView: View {
     @ViewBuilder private var experimentalCard: some View {
         liquidTodayCard
         liveSessionsCard
+        firmwareSimulationCard
         // WHOOP 5/MG protocol research now lives in Test Centre. Everyday Settings no longer carries
         // a second copy; the persisted keys and reversible disable actions remain unchanged there.
         if showFiveMGControls || model.repo.activeDeviceIsOura { spo2CandidateCard }
         if model.repo.activeDeviceIsOura { ouraAllDayLiveHRCard }   // item 27
         sleepStagingCard
         rawSensorDiagnosticsCard
+    }
+
+    private var firmwareSimulationCard: some View {
+        SettingsSection(
+            icon: "play.rectangle",
+            title: "Experimental · Firmware simulation",
+            blurb: "SIMULATION — no strap is changed."
+        ) {
+            Toggle("Firmware update simulation", isOn: $firmwareSimulationEnabled)
+                .font(StrandFont.subhead)
+                .foregroundStyle(StrandPalette.textPrimary)
+                .toggleStyle(.switch)
+                .tint(StrandPalette.accent)
+            Text("Off by default. Enables the local mock flow in Devices → How to update firmware. No firmware is downloaded and no Bluetooth command is sent.")
+                .font(StrandFont.caption)
+                .foregroundStyle(StrandPalette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     /// Opt-in liquid Today redesign (default ON in this build). Off falls back to the

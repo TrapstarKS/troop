@@ -1,5 +1,7 @@
 # Building NOOP
 
+For installation and stable signing setup in this fork, start with [INSTALL.md](INSTALL.md).
+
 NOOP is a standalone, fully **offline** companion app for WHOOP straps (4.0 and 5.0). It pairs
 directly with the strap over Bluetooth Low Energy, stores everything on-device in SQLite, imports
 WHOOP CSV exports and Apple Health exports, and computes recovery / strain / HRV / sleep locally.
@@ -17,7 +19,7 @@ works only with **your own data**.
 
 The codebase is split into reusable, cross-platform Swift packages plus a thin platform-specific
 app layer. The **macOS app is the reference implementation**; **Android ships as a full app** under
-`android/`, and **iOS ships as a build-from-source target (`NOOPiOS`)** folded into main in v1.94 —
+`android/`, and **iOS supports source builds and user-provisioned sideloads (`NOOPiOS`)** folded into main in v1.94 —
 built in Xcode, not distributed (no App Store / TestFlight, to stay anonymous). All reuse the same
 packages where they can.
 
@@ -254,19 +256,9 @@ swift run backfill
 
 ---
 
-## iOS (build-from-source only)
+## iOS (source build or user-provisioned sideload)
 
-iOS ships as a **build-from-source-only** target, folded into main in v1.94. There is **no App
-Store or TestFlight build** — both require a real Apple Developer identity, which is fundamentally
-at odds with NOOP staying anonymous, so the only way to run it is to build it yourself in Xcode.
-The iOS app is **newer and less battle-tested** than macOS and Android: live BLE on a real iPhone
-isn't yet fully validated. It shares the same analytics packages, so once data is in, results match
-macOS.
-
-The `NOOPiOS` app target (plus the `NOOPiOSWidgets` WidgetKit / Live Activity extension) already
-exists in `project.yml` — you don't need to add it. All five packages target `.iOS(.v16)`, so the
-protocol, storage, analytics, import, and design cores compile for iOS unmodified; the iOS app
-shell lives in `StrandiOS/` with shared iOS code in `StrandiOSShared/`.
+[INSTALL.md](INSTALL.md) is the installation front door for this fork. The `NOOPiOS` app and widget targets already exist. Release device IPAs are packaged with an ad-hoc capability template, then re-signed by each user's sideloader; they are not directly authorized to run by the maintainer. No App Store/TestFlight distribution identity is used. BLE still requires physical-device validation.
 
 ### Build & run
 
@@ -309,7 +301,7 @@ Notes:
 
 Android ships as a **full, native client** — a separate Kotlin/Gradle module rather than a port of
 the Swift app. It lives under **`android/`** with its own `README`, and a pre-built APK
-(`NOOP-full.apk`) is published in [Releases](https://github.com/ryanbr/noop/releases). A sample-data **demo** flavour still
+(`NOOP-android-v<VERSION>.apk`) is published in [Releases](https://github.com/TrapstarKS/troop/releases). A sample-data **demo** flavour still
 exists for exploring every screen with no strap, but it's now **build-from-source only**
 (`./gradlew assembleDemoDebug`) — it is no longer published as a release asset.
 

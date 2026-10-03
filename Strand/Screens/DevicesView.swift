@@ -751,6 +751,7 @@ private struct DeviceCard: View {
     /// The active+connected strap's firmware version (from the connect handshake). nil when not the
     /// active/connected device, or for a source that reports no firmware (e.g. a non-WHOOP strap).
     var liveFirmware: String? = nil
+    @State private var showingFirmwareGuidance = false
     /// The active+connected strap's observed banked-history record layout (`hist_version`).
     var liveHistoryLayout: Int? = nil
     /// #987: the active+connected strap's clock-state line ("Clock latched: yes · last frame 12s ago"),
@@ -937,6 +938,9 @@ private struct DeviceCard: View {
             actionsMenu
                 .padding(18)
         }
+        .sheet(isPresented: $showingFirmwareGuidance) {
+            FirmwareView(deviceName: device.displayName, observedFirmware: liveFirmware)
+        }
     }
 
     /// The card's primary tap action, or nil when there isn't one. A paired-but-not-active band → make it
@@ -1029,6 +1033,11 @@ private struct DeviceCard: View {
                 // BLE link). Confirmation-gated by the parent. (#166)
                 if isLiveConnected, SourceCoordinator.isWhoop(device), let onReboot {
                     Button { onReboot() } label: { Label("Restart strap…", systemImage: "arrow.clockwise") }
+                }
+                if SourceCoordinator.isWhoop(device) {
+                    Button { showingFirmwareGuidance = true } label: {
+                        Label("How to update firmware", systemImage: "info.circle")
+                    }
                 }
                 // Stop a sync that is part-way through. Present only while this strap is actually
                 // offloading; the parent owns that condition.

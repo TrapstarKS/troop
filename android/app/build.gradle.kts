@@ -6,16 +6,29 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-// Optional release signing. Credentials live in `keystore.properties` (git-ignored, never
-// committed); when it's absent — clones, CI without secrets — release falls back to the debug
-// key so `assembleRelease` always produces an installable APK. See docs/BUILD.md.
+// Stable releases require private signing credentials in gitignored keystore.properties.
+// Only explicitly requested staging releases may use the public debug key. See docs/INSTALL.md.
 val keystorePropsFile = rootProject.file("keystore.properties")
 val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
 }
+if (keystorePropsFile.exists()) {
+    for (key in listOf("storeFile", "storePassword", "keyAlias", "keyPassword")) {
+        require(!keystoreProps.getProperty(key).isNullOrBlank()) { "Missing release signing property: $key" }
+    }
+    require(rootProject.file(keystoreProps.getProperty("storeFile")).canonicalFile !=
+        rootProject.file("fork-debug.keystore").canonicalFile) { "Public staging key cannot be a release signer" }
+}
 val isStagingRelease = project.hasProperty("stagingRelease")
-val requestedReleaseBuild = gradle.startParameter.taskNames.any {
-    it.contains("Release", ignoreCase = true)
+// Inspect resolved tasks so aggregate and abbreviated selectors cannot bypass the signing guard.
+gradle.taskGraph.whenReady {
+    val hasReleaseWork = allTasks.any { it.project == project && it.name.contains("Release", ignoreCase = true) }
+    if (hasReleaseWork && !keystorePropsFile.exists() && !isStagingRelease) {
+        throw GradleException(
+            "Refusing to build a real release without keystore.properties. " +
+                "Use -PstagingRelease for debug-key staging artifacts only."
+        )
+    }
 }
 
 android {
@@ -23,7 +36,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.noop.whoop"
+        applicationId = "com.trapstarks.troop"
         minSdk = 26
         targetSdk = 34
         versionCode = 550
@@ -73,22 +86,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            if (!keystorePropsFile.exists() && !isStagingRelease && requestedReleaseBuild) {
-                throw GradleException(
-                    "Refusing to build a real release without keystore.properties. " +
-                        "Use -PstagingRelease for debug-key staging artifacts only."
-                )
-            }
             // Real release key when keystore.properties is present. The debug-key fallback is allowed
             // only for explicit fork/staging artifacts that install under their own application id.
-            signingConfig = if (keystorePropsFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
+            signingConfig = if (isStagingRelease && !keystorePropsFile.exists()) {
                 signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.getByName("release")
             }
             // Fork staging release: built with -PstagingRelease (the fork testing-build CI only), the
             // release APK gets its own id/name so it installs BESIDE both the official app and the
-            // .debug staging build. A real release (no property) keeps the true com.noop.whoop id.
+            // .debug staging build. A real release (no property) keeps the stable com.trapstarks.troop id.
             if (isStagingRelease) {
                 applicationIdSuffix = ".staging"
                 versionNameSuffix = "-staging"
@@ -97,8 +104,8 @@ android {
     }
 
     // Two clearly-distinct apps that install side-by-side:
-    //   • full → "NOOP"      (com.noop.whoop)     — the real app, starts empty, pair a strap / import.
-    //   • demo → "NOOP Demo"  (com.noop.whoop.demo) — preloaded with 120 days of synthetic data and
+    //   • full → "NOOP"      (com.trapstarks.troop)     — the real app, starts empty, pair a strap / import.
+    //   • demo → "NOOP Demo"  (com.trapstarks.troop.demo) — preloaded with 120 days of synthetic data and
     //                          a visible DEMO badge, so anyone can explore every screen with no strap.
     // Build e.g. ./gradlew assembleFullRelease assembleDemoRelease.
     flavorDimensions += "tier"

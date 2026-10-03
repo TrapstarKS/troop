@@ -28,37 +28,44 @@ APP="${1:?usage: $0 path/to/App.app}"
 [ -d "$APP" ] || { echo "no such app bundle: $APP" >&2; exit 1; }
 
 HOME_PATH="$HOME"                       # e.g. /Users/alice
-REPL="/Users/builder"                   # generic, anonymous
-# Pad or trim REPL to EXACTLY the length of $HOME so byte offsets are preserved.
-while [ ${#REPL} -lt ${#HOME_PATH} ]; do REPL="${REPL}_"; done
-REPL="${REPL:0:${#HOME_PATH}}"
 
-python3 - "$APP" "$HOME_PATH" "$REPL" <<'PY'
+python3 - "$APP" "$HOME_PATH" <<'PY'
 import sys, os
-app, home, repl = sys.argv[1], sys.argv[2].encode(), sys.argv[3].encode()
+app, home = sys.argv[1], os.fsencode(sys.argv[2])
+# Use byte length rather than shell character length, including for Unicode home paths.
+repl = (b"/Users/builder" + b"_" * len(home))[:len(home)]
 assert len(home) == len(repl), "replacement length must match"
 total = files = 0
+def fail_walk(error):
+    raise error
 # Walk the whole bundle and scrub any file that embeds the home path (main exe, *.appex,
 # Frameworks/*.dylib, *.framework binaries). Same-length replacement keeps Mach-O valid.
-for root, _dirs, names in os.walk(app):
+for root, _dirs, names in os.walk(app, onerror=fail_walk):
     for name in names:
         p = os.path.join(root, name)
         if os.path.islink(p) or not os.path.isfile(p):
             continue
-        try:
-            data = open(p, "rb").read()
-        except Exception:
-            continue
+        with open(p, "rb") as source:
+            data = source.read()
         hits = data.count(home)
         if hits:
-            open(p, "wb").write(data.replace(home, repl))
+            with open(p, "wb") as target:
+                target.write(data.replace(home, repl))
             total += hits
             files += 1
             print(f"  scrubbed {hits:>4} in {os.path.relpath(p, app)}")
 print(f"scrubbed {total} occurrence(s) across {files} file(s)")
+# Verify raw bytes on disk, including binaries; read/walk failures must stop packaging.
+residual = 0
+for root, _dirs, names in os.walk(app, onerror=fail_walk):
+    for name in names:
+        p = os.path.join(root, name)
+        if os.path.islink(p) or not os.path.isfile(p):
+            continue
+        with open(p, "rb") as source:
+            residual += source.read().count(home)
+print(f"residual home-path hits: {residual}")
+if residual:
+    sys.exit("residual paths remain")
+print("✓ clean")
 PY
-
-# Verify: no residual home-path bytes anywhere in the bundle.
-residual=$(grep -rac "$HOME" "$APP" 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
-echo "residual home-path hits: ${residual:-0}"
-[ "${residual:-0}" -eq 0 ] && echo "✓ clean" || { echo "✗ residual paths remain" >&2; exit 1; }

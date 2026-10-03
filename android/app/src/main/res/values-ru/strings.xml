@@ -2751,4 +2751,42 @@
     <string name="raw_diag_ecg_probe_start">Начать запись ЭКГ</string>
     <string name="raw_diag_ecg_probe_stop">Остановить запись ЭКГ</string>
     <string name="raw_diag_ecg_probe_running">На этом ремешке запись может всё ещё идти. Результат попадёт в strap log.</string>
+
+    <!-- Local firmware guidance and isolated mock simulation. -->
+    <string name="firmware_guidance_title">Как обновить прошивку</string>
+    <string name="firmware_reported">Прошивка, сообщённая браслетом: %1$s</string>
+    <string name="firmware_last_reported">Последняя сообщённая прошивка: %1$s</string>
+    <string name="firmware_not_reported">Прошивка ещё не сообщена</string>
+    <string name="firmware_guidance_intro">Обновления прошивки устанавливает официальное приложение WHOOP. WHOOP определяет их доступность и может требовать доступ к учётной записи.</string>
+    <string name="firmware_guidance_handoff">Экспортируйте локальную копию .noopbak и дождитесь окончания синхронизации. Перед сменой приложения отключите браслет существующей кнопкой, чтобы к нему подключалось только одно приложение.</string>
+    <string name="firmware_guidance_steps">Сначала обновите приложение WHOOP. В WHOOP: Настройки устройства → Расширенные настройки → Проверка прошивки → Обновить сейчас. Зарядите браслет минимум до 20%, держите его не дальше 3 м от телефона и обеспечьте хорошее подключение Wi-Fi или мобильный интернет. Обновление может занять до 10 минут; краткое отключение ожидаемо.</string>
+    <string name="firmware_guidance_return">Когда WHOOP закончит, вернитесь сюда и подключитесь существующими кнопками, чтобы увидеть сообщённую версию. При необходимости следуйте инструкции повторного сопряжения.</string>
+    <string name="firmware_guide_link">Открыть инструкцию WHOOP</string>
+    <string name="firmware_reference_label">Ваша контрольная версия (необязательно)</string>
+    <string name="firmware_reference_detail">Хранится только пока открыто это окно. Используйте числовую версию с точками для той же группы устройств. Это Ваш ориентир, а не источник последних версий.</string>
+    <string name="firmware_reference_older">Сообщённая версия старее Вашей контрольной версии. Проверьте в WHOOP, предлагается ли обновление.</string>
+    <string name="firmware_reference_equal">Сообщённая версия совпадает с Вашей контрольной версией. Это не определяет доступность обновления.</string>
+    <string name="firmware_reference_newer">Сообщённая версия новее Вашей контрольной версии. Это не определяет доступность обновления.</string>
+    <string name="firmware_reference_unknown">Безопасное сравнение с этой версией невозможно. Проверьте доступность обновлений в WHOOP.</string>
+    <string name="firmware_sim_title">Симуляция обновления прошивки · Эксперимент</string>
+    <string name="firmware_sim_banner">СИМУЛЯЦИЯ — ни один браслет не изменяется. Все этапы и прогресс искусственные.</string>
+    <string name="firmware_sim_enable">Включить на время этого посещения</string>
+    <string name="firmware_sim_next">Следующий условный шаг</string>
+    <string name="firmware_sim_fail">Имитировать сбой</string>
+    <string name="firmware_sim_start">Запустить симуляцию</string>
+    <string name="firmware_sim_progress">Условный прогресс: %1$d%%</string>
+    <string name="firmware_sim_idle">Симуляция не запущена</string>
+    <string name="firmware_sim_check">Условная проверка требований</string>
+    <string name="firmware_sim_download">Условная загрузка</string>
+    <string name="firmware_sim_verify">Условная проверка</string>
+    <string name="firmware_sim_transfer">Условная передача</string>
+    <string name="firmware_sim_reboot">Условная перезагрузка</string>
+    <string name="firmware_sim_done">Симуляция завершена</string>
+    <string name="firmware_sim_failed">Симуляция не удалась</string>
+    <string name="firmware_sim_cancelled">Симуляция отменена</string>
+    <string name="firmware_sim_prerequisites_failure">Условный сбой требований</string>
+    <string name="firmware_sim_verification_failure">Условный сбой проверки</string>
+    <string name="firmware_sim_timeout_failure">Условное истечение времени</string>
+    <string name="firmware_sim_disconnected_failure">Условное отключение</string>
+    <string name="firmware_sim_mock_failure">Вызванный тестовый сбой</string>
 </resources>

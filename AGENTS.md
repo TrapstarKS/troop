@@ -133,12 +133,7 @@ xcodegen generate && xcodebuild -project Strand.xcodeproj -scheme Strand \
 | `prune-stale-branches.yml` | Deletes branches whose PR merged or closed unmerged | ubuntu | **active**, weekly + dispatch |
 | `fork-testing-build.yml` / `fork-release.yml` | Staging / release builds (apk + mac + ios) | — | on dispatch |
 
-**The trap:** `swift-packages` does **NOT** compile the app targets. So if you touch **app-target
-Swift** — anything under `Strand/`, `StrandiOS/`, `StrandiOSShared/`, `StrandiOSWidgets/` (Views,
-`AppModel`, `BLEManager`, `Repository`, `RootTabView`, widget publish, …) — **no default CI validates
-it**, because `app-build.yml` is disabled. A compile error there (e.g. `'self' used before all stored
-properties are initialized`) will pass every green check and still be broken. If you change app-target
-Swift, you MUST build the app yourself: `xcodebuild … build` locally, or run `app-build.yml` on demand.
+**Package tests do not compile app targets.** The active `app-build.yml` checks matching PRs, but app-target Swift changes still require a local app build (or an authorized dispatch) before claiming compile validation. Build shared files under both `Strand` and `NOOPiOS`; a package-only green result does not cover views, AppModel, or BLEManager.
 
 ### Local walls (things that will *not* build where you expect)
 - **On Linux:** `WhoopProtocol` / `OuraProtocol` (pure) build & test with a bare toolchain. The
@@ -150,8 +145,7 @@ Swift, you MUST build the app yourself: `xcodebuild … build` locally, or run `
   and a change can break it silently.
 - **App targets** (`Strand`, `NOOPiOS`) need **Xcode on macOS**; `StrandTests` runs only under
   `xcodebuild … test` on macOS — locally, or via `app-build.yml`, which does run it on the `Strand` leg.
-  Since that workflow is **disabled by default**, app-target tests are only as validated as your last
-  on-demand dispatch: writing them is not the same as having run them.
+  The workflow runs on matching PRs and on dispatch; record the actual local or CI run rather than assuming writing tests means they ran.
 - **BLE behavior cannot be CI- or Linux-tested.** Anything on the CoreBluetooth / offload / live-HR
   path (`Strand/BLE`, `Strand/Collect`, Android `com.noop.ble`) must be **validated on a real strap**;
   compile-success proves nothing about connection behavior. Say what you tested on hardware.
