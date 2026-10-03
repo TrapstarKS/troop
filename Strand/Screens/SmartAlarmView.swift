@@ -73,7 +73,7 @@ struct SmartAlarmView: View {
                 }
                 Text("Target sleep: \(duration(snapshot.plan.targetSleepMinutes)) · Need: \(duration(snapshot.plan.needMinutes))")
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
-                Text(goalLabel(snapshot.plan.goalPercent))
+                Text(goalLabel(snapshot.goalPercent))
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                 Text(snapshot.plan.historyReady
                      ? String(localized: "A local estimate from your recent sleep, debt, and selected goal.")

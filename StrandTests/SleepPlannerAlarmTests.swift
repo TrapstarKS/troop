@@ -86,6 +86,32 @@ final class SleepPlannerAlarmTests: XCTestCase {
     }
 
     @MainActor
+    func testResolvedGoalAndTargetStayTogetherAcrossWeekdayOverrides() throws {
+        let suite = "SleepPlannerAlarmTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(480, forKey: "sleepPlanner.baseNeedMinutes")
+        defaults.set(75, forKey: "sleepPlanner.debtMinutes")
+        defaults.set(3, forKey: "sleepPlanner.historyNights")
+        let settings = SleepPlannerSettings(defaults: defaults)
+        settings.goalOverrides = [7: 70]
+        let saturday = settings.resolvedPlan(weekday: 7, wakeMinutes: 480)
+        XCTAssertEqual(saturday.goalPercent, 70)
+        XCTAssertEqual(saturday.plan.needMinutes, 555)
+        XCTAssertEqual(saturday.plan.targetSleepMinutes, 389)
+        XCTAssertEqual(settings.plan(weekday: 7, wakeMinutes: 480), saturday.plan)
+        let sunday = settings.resolvedPlan(weekday: 1, wakeMinutes: 480)
+        XCTAssertEqual(sunday.goalPercent, 100)
+        XCTAssertEqual(sunday.plan.targetSleepMinutes, 555)
+        settings.goalOverrides[7] = 42
+        let normalized = settings.resolvedPlan(weekday: 7, wakeMinutes: 480)
+        XCTAssertEqual(normalized.goalPercent, 100)
+        XCTAssertEqual(normalized.plan.targetSleepMinutes, 555)
+        XCTAssertEqual(saturday.goalPercent, 70)
+        XCTAssertEqual(saturday.plan.targetSleepMinutes, 389)
+    }
+
+    @MainActor
     func testMalformedSavedSkipCannotSuppressWake() throws {
         let suite = "SleepPlannerAlarmTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

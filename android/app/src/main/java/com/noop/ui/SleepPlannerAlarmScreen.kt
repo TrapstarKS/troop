@@ -43,6 +43,7 @@ internal data class PlannerAlarmSnapshot(
     val bedtime: Calendar,
     val reminder: Calendar,
     val epochSec: Long?,
+    val goalPercent: Int,
     val plan: SleepPlan,
     val status: String,
     val countdownMinutes: Long?,
@@ -75,7 +76,7 @@ internal fun plannerAlarmSnapshot(
     val epoch = if (enabled) planEpoch else null
     val wake = calendarFactory().apply { timeInMillis = planEpoch?.times(1000L) ?: nowMs }
     val minute = wake.get(Calendar.HOUR_OF_DAY) * 60 + wake.get(Calendar.MINUTE)
-    val plan = settings.plan(wake.get(Calendar.DAY_OF_WEEK), minute, leadMinutes)
+    val (goalPercent, plan) = settings.resolvedPlan(wake.get(Calendar.DAY_OF_WEEK), minute, leadMinutes)
     val bedtime = com.noop.analytics.SleepPlanner.bedtime(wake, plan.targetSleepMinutes)
     val reminder = (bedtime.clone() as Calendar).apply {
         timeInMillis = bedtime.timeInMillis - leadMinutes.coerceIn(0, 120) * 60_000L
@@ -93,6 +94,7 @@ internal fun plannerAlarmSnapshot(
         bedtime = bedtime,
         reminder = reminder,
         epochSec = epoch,
+        goalPercent = goalPercent,
         plan = plan,
         status = status,
         countdownMinutes = if (reported) ((epoch!! * 1000L - nowMs + 59_999L) / 60_000L).coerceAtLeast(0) else null,
@@ -158,7 +160,7 @@ fun SmartAlarmScreen(vm: AppViewModel) {
                 Column(verticalArrangement = Arrangement.spacedBy(Metrics.space16)) {
                     Overline(stringResource(R.string.sleep_planner_next_plan))
                     Text(DateFormat.getDateInstance(DateFormat.MEDIUM).format(snapshot.wake.time), style = NoopType.title2, color = Palette.textPrimary)
-                    GoalChoices(settings.goals[planWeekday] ?: settings.goalPercent) {
+                    GoalChoices(snapshot.goalPercent) {
                         vm.setSleepPlannerSettings(settings.copy(goals = settings.goals + (planWeekday to it)))
                     }
                     PlannerFigure(stringResource(R.string.sleep_planner_bedtime), plannerClock(snapshot.bedtime, snapshot.wake))

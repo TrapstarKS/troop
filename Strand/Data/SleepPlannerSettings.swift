@@ -40,10 +40,15 @@ final class SleepPlannerSettings: ObservableObject {
     }
 
     func plan(weekday: Int, wakeMinutes: Int, leadMinutes: Int = 30) -> SleepPlan {
-        SleepPlanner.plan(baseNeedMinutes: baseNeedMinutes, debtMinutes: debtMinutes,
-                          goalPercent: SleepPlanner.weekdayGoal(weekday, overrides: goalOverrides, defaultPercent: goalPercent),
-                          wakeMinutes: wakeMinutes, leadMinutes: leadMinutes,
-                          historyNights: historyNights)
+        resolvedPlan(weekday: weekday, wakeMinutes: wakeMinutes, leadMinutes: leadMinutes).plan
+    }
+
+    func resolvedPlan(weekday: Int, wakeMinutes: Int, leadMinutes: Int = 30) -> (goalPercent: Int, plan: SleepPlan) {
+        let goal = SleepPlanner.weekdayGoal(weekday, overrides: goalOverrides, defaultPercent: goalPercent)
+        let plan = SleepPlanner.plan(baseNeedMinutes: baseNeedMinutes, debtMinutes: debtMinutes,
+                                    goalPercent: goal, wakeMinutes: wakeMinutes, leadMinutes: leadMinutes,
+                                    historyNights: historyNights)
+        return (goal, plan)
     }
 
     func updateInputs(days: [DailyMetric], sleeps: [CachedSleepSession], habitualMidsleepSec: Int?) {
@@ -72,6 +77,7 @@ struct SleepPlannerSnapshot {
     let wake: Date
     let bedtime: Date
     let reminder: Date
+    let goalPercent: Int
     let plan: SleepPlan
     let alarmConfirmed: Bool
     let alarmSent: Bool

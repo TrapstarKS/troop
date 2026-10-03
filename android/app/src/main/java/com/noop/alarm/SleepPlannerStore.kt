@@ -16,14 +16,20 @@ data class SleepPlannerSettings(
     val historyNights: Int = 0,
     val debtReminderEnabled: Boolean = false,
 ) {
-    fun plan(weekday: Int, wakeMinutes: Int, leadMinutes: Int): SleepPlan = SleepPlanner.plan(
-        baseNeedMinutes = baseNeedMinutes,
-        debtMinutes = debtMinutes,
-        goalPercent = SleepPlanner.weekdayGoal(weekday, goals, goalPercent),
-        wakeMinutes = wakeMinutes,
-        leadMinutes = leadMinutes,
-        historyNights = historyNights,
-    )
+    fun plan(weekday: Int, wakeMinutes: Int, leadMinutes: Int): SleepPlan =
+        resolvedPlan(weekday, wakeMinutes, leadMinutes).second
+
+    fun resolvedPlan(weekday: Int, wakeMinutes: Int, leadMinutes: Int): Pair<Int, SleepPlan> {
+        val resolvedGoal = SleepPlanner.weekdayGoal(weekday, goals, goalPercent)
+        return resolvedGoal to SleepPlanner.plan(
+            baseNeedMinutes = baseNeedMinutes,
+            debtMinutes = debtMinutes,
+            goalPercent = resolvedGoal,
+            wakeMinutes = wakeMinutes,
+            leadMinutes = leadMinutes,
+            historyNights = historyNights,
+        )
+    }
 }
 
 class SleepPlannerStore(private val prefs: SharedPreferences) {

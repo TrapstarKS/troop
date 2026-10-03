@@ -30,7 +30,8 @@ extension AppModel {
                                                 from: now, calendar: calendar) else { return nil }
         let day = calendar.component(.weekday, from: wake)
         let minutes = calendar.component(.hour, from: wake) * 60 + calendar.component(.minute, from: wake)
-        let plan = settings.plan(weekday: day, wakeMinutes: minutes, leadMinutes: WindDownNudge.leadMinutes)
+        let resolved = settings.resolvedPlan(weekday: day, wakeMinutes: minutes, leadMinutes: WindDownNudge.leadMinutes)
+        let plan = resolved.plan
         let bedtime = SleepPlanner.bedtime(wake: wake, targetSleepMinutes: plan.targetSleepMinutes)
         let reminder = bedtime.addingTimeInterval(-Double(min(max(WindDownNudge.leadMinutes, 0), 120) * 60))
         let defaults = UserDefaults.standard
@@ -46,7 +47,8 @@ extension AppModel {
             && defaults.double(forKey: "alarm.lastReportedAt") >= defaults.double(forKey: "alarm.lastArmAt")
             && defaults.integer(forKey: "alarm.rejectStreak") == 0
         let earlyWake = confirmed && wake.timeIntervalSince(now) <= 60 * 60
-        return SleepPlannerSnapshot(wake: wake, bedtime: bedtime, reminder: reminder, plan: plan,
+        return SleepPlannerSnapshot(wake: wake, bedtime: bedtime, reminder: reminder,
+                                    goalPercent: resolved.goalPercent, plan: plan,
                                     alarmConfirmed: confirmed, alarmSent: sent, earlyWake: earlyWake)
     }
 

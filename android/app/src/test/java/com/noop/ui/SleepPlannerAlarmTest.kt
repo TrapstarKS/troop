@@ -133,6 +133,32 @@ class SleepPlannerAlarmTest {
         assertTrue(next.plan.debtNudge)
     }
 
+    @Test fun resolvedGoalAndTargetStayTogetherInTheSelectedWakeSnapshot() {
+        val now = calendar(hour = 12)
+        for ((goals, expectedGoal, expectedTarget) in listOf(
+            Triple(emptyMap<Int, Int>(), 100, 555),
+            Triple(mapOf(Calendar.THURSDAY to 70), 70, 389),
+            Triple(mapOf(Calendar.THURSDAY to 99), 100, 555),
+        )) {
+            val settings = SleepPlannerSettings(baseNeedMinutes = 480, debtMinutes = 75, goals = goals)
+            val (goal, plan) = settings.resolvedPlan(Calendar.THURSDAY, 420, 30)
+            assertEquals(expectedGoal, goal)
+            assertEquals(555, plan.needMinutes)
+            assertEquals(expectedTarget, plan.targetSleepMinutes)
+            val snapshot = plannerAlarmSnapshot(
+                nowMs = now.timeInMillis, enabled = true, wakeMinutes = 420,
+                weekdays = setOf(Calendar.THURSDAY), overrides = emptyMap(),
+                settings = settings, leadMinutes = 30,
+                sentEpoch = 0, sentAt = 0, sentDevice = null, sentConnected = false,
+                reportedEpoch = 0, reportedAt = 0, reportedDevice = null, activeDevice = "active",
+                calendarFactory = { now.clone() as Calendar },
+            )
+            assertEquals(Calendar.THURSDAY, snapshot.wake.get(Calendar.DAY_OF_WEEK))
+            assertEquals(expectedGoal, snapshot.goalPercent)
+            assertEquals(expectedTarget, snapshot.plan.targetSleepMinutes)
+        }
+    }
+
     @Test fun skippedReminderRetainsTheFutureWeek() {
         val next = WindDownScheduler.nextPlannerReminder(
             calendar(day = 16, hour = 12),
