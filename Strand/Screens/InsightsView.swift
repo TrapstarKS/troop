@@ -202,6 +202,7 @@ struct InsightsView: View {
     @State private var dayNumeric: [String: Double] = [:]
     /// -1 = tomorrow (log ahead), 0 = today, 1 = yesterday (late logging).
     @State private var journalDayOffset = 0
+    @State private var journalDraftDirty = false
     /// #860 item 4: today's local calendar-day key, captured on appear and refreshed on foreground. The
     /// journal day chips ("Today"/"Yesterday"/"Tomorrow") are relative to the CURRENT date, but the
     /// answers (`dayAnswers`) and the resolved day key are derived from `Date()` only inside `load()`,
@@ -226,6 +227,15 @@ struct InsightsView: View {
                 ComingSoon(what: "Reading your journal and outcomes…")
             } else {
                 VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
+                    // Native logging, always reachable: the account-free way into Insights.
+                    JournalLogCard(importedQuestions: importedQuestions,
+                                   answers: dayAnswers,
+                                   numericAnswers: dayNumeric,
+                                   dayOffset: $journalDayOffset,
+                                   answersDayKey: answersDayKey,
+                                   anchorDay: currentDayKey,
+                                   onDirtyChanged: { journalDraftDirty = $0 },
+                                   onChanged: { Task { await load() } })
                     // v5: a single row into the "What moves you" hub, the lag-aware ranked-effect feed
                     // + alcohol/caffeine dose-response. Reachable as its own destination too; this is the
                     // honest in-Insights entry point.
@@ -239,14 +249,6 @@ struct InsightsView: View {
                             }
                         }
                     }.buttonStyle(.plain)
-                    // Native logging, always reachable: the account-free way into Insights.
-                    JournalLogCard(importedQuestions: importedQuestions,
-                                   answers: dayAnswers,
-                                   numericAnswers: dayNumeric,
-                                   dayOffset: $journalDayOffset,
-                                   answersDayKey: answersDayKey,
-                                   anchorDay: currentDayKey,
-                                   onChanged: { Task { await load() } })
                     // Mind, daily mood check-in + mood↔body correlations.
                     // Self-contained (owns its own load/state); sits with the
                     // journal card so the two daily-logging surfaces read as one
@@ -314,9 +316,8 @@ struct InsightsView: View {
     private func refreshCurrentDayKey() {
         let key = Repository.localDayKey(Date())
         if key != currentDayKey {
-            if journalDayOffset != 0, let old = JournalCalendar.date(currentDayKey), let new = JournalCalendar.date(key) {
-                journalDayOffset += Calendar.current.dateComponents([.day], from: old, to: new).day ?? 0
-            }
+            journalDayOffset = JournalCalendar.rolloverOffset(offset: journalDayOffset, from: currentDayKey,
+                                                             to: key, preserveDraft: journalDraftDirty)
             currentDayKey = key
         }
     }

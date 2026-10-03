@@ -460,6 +460,7 @@ class WhoopRepository(
 
     private val _journalRevision = MutableStateFlow(0L)
     val journalRevision: StateFlow<Long> = _journalRevision.asStateFlow()
+    // Swift twin: `Repository.noteJournalChanged`.
     fun noteJournalChanged() { _journalRevision.update { it + 1 } }
 
     private val _sleepSampleRevision = MutableStateFlow(0L)

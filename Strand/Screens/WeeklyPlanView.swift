@@ -10,6 +10,8 @@ struct WeeklyPlanView: View {
     @State private var weekOffset = 0
     @State private var goals = WeeklyPlanGoals()
     @State private var draft = WeeklyPlanGoals()
+    @State private var editingWeek = ""
+    @State private var editingBaseline = WeeklyPlanGoals()
     @State private var journal: [WeeklyPlanJournalDay] = []
     @State private var editing = false
     @State private var loaded = false
@@ -46,14 +48,13 @@ struct WeeklyPlanView: View {
                                 NoopButton(preferences.hasPlan(weekStart: selectedWeek) ? "Edit goals" : "Create plan", systemImage: "pencil", kind: .secondary) { openEditor() }
                             }
                         }
-                        if !preferences.hasPlan(weekStart: selectedWeek) {
-                            Text("Suggested targets use the last 30 days of available data. Save to start your plan.")
-                                .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
-                        } else if let percent = snapshot.overallPercent {
-                            ProgressView(value: Double(percent), total: 100).tint(StrandPalette.accent)
-                        } else {
-                            Text("Progress appears when sleep, strain and selected journal data are available.")
-                                .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
+                        if preferences.hasPlan(weekStart: selectedWeek) {
+                            if let percent = snapshot.overallPercent {
+                                ProgressView(value: Double(percent), total: 100).tint(StrandPalette.accent)
+                            } else {
+                                Text("Progress appears when sleep, strain and selected journal data are available.")
+                                    .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
+                            }
                         }
                     }
                 }
@@ -92,7 +93,7 @@ struct WeeklyPlanView: View {
             Spacer()
             Button { moveWeek(by: 1) } label: { Image(systemName: "chevron.right") }
                 .frame(width: NoopMetrics.controlHeight, height: NoopMetrics.controlHeight)
-                .disabled(weekOffset == 0).accessibilityLabel("Next week")
+                .disabled(weekOffset >= 0).accessibilityLabel("Next week")
         }
         .tint(StrandPalette.textSecondary)
     }
@@ -153,7 +154,9 @@ struct WeeklyPlanView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
-                    Text(preferences.hasPlan(weekStart: currentWeek) && draft.normalized == goals ? String(localized: "Goals saved for this week") : String(localized: "Unsaved changes"))
+                    Text("\(editingWeek) – \(WeeklyPlanCalendar.adding(days: 6, to: editingWeek) ?? editingWeek)")
+                        .font(StrandFont.captionNumber).foregroundStyle(StrandPalette.textPrimary)
+                    Text(preferences.hasPlan(weekStart: editingWeek) && draft.normalized == editingBaseline ? String(localized: "Goals saved for this week") : String(localized: "Unsaved changes"))
                         .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                     NoopCard {
                         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
@@ -201,8 +204,11 @@ struct WeeklyPlanView: View {
                     }
                     NoopButton("Save goals", kind: .primary, fullWidth: true) {
                         goals = draft.normalized
-                        preferences.save(goals, weekStart: currentWeek)
-                        if let notice { dismiss(notice) }
+                        preferences.save(goals, weekStart: editingWeek)
+                        if editingWeek == currentWeek, let notice { dismiss(notice) }
+                        if let target = WeeklyPlanCalendar.date(editingWeek), let anchor = WeeklyPlanCalendar.date(currentWeek) {
+                            weekOffset = Int(target.timeIntervalSince(anchor) / 604_800)
+                        }
                         saved = true
                         editing = false
                     }
@@ -229,7 +235,12 @@ struct WeeklyPlanView: View {
         loaded = true
     }
 
-    private func openEditor() { draft = goals; editing = true }
+    private func openEditor() {
+        editingWeek = selectedWeek
+        editingBaseline = goals
+        draft = goals
+        editing = true
+    }
     private func moveWeek(by offset: Int) {
         weekOffset += offset
         goals = preferences.goals(weekStart: selectedWeek, suggested: WeeklyPlanEngine.suggestedGoals(days: days, today: today))

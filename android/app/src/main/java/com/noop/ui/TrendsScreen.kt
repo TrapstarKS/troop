@@ -70,14 +70,16 @@ import kotlin.math.roundToInt
 fun TrendsScreen(vm: AppViewModel) {
     // Reactive cache (oldest → newest) as the immediate backing.
     val reactiveDays by vm.recentDays.collectAsStateWithLifecycle()
+    val registryActiveId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeStrapId = registryActiveId ?: vm.activeStrapId
 
     // Full history backs calendar navigation; recent data populates the first frame.
     var fullHistory by remember { mutableStateOf<List<DailyMetric>?>(null) }
-    LaunchedEffect(reactiveDays, vm.activeStrapId) {
+    LaunchedEffect(reactiveDays, activeStrapId) {
         // Merged: imported WHOOP days win; on-device computed days gap-fill the trends. Reads the registry's
         // ACTIVE strap id so daysMerged resolves the active-id ∪ canonical "my-whoop" union (SPINE / #814) ,
         // a re-added strap's data and the canonical import both surface; a single-WHOOP install is unchanged.
-        fullHistory = vm.repo.daysMerged(vm.activeStrapId)
+        fullHistory = vm.repo.daysMerged(activeStrapId)
     }
     val days = fullHistory ?: reactiveDays
 
@@ -141,7 +143,7 @@ fun TrendsScreen(vm: AppViewModel) {
     LaunchedEffect(days) {
         sleepPerfByDay = runCatching {
             vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0000-00-00", "9999-99-99",
-                strapDeviceId = vm.activeStrapId)
+                strapDeviceId = activeStrapId)
                 .values.associate { it.first to it.second }
         }.getOrDefault(emptyMap())
     }

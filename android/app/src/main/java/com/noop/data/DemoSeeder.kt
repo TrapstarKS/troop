@@ -45,7 +45,8 @@ object DemoSeeder {
         "Running", "Cycling", "Strength", "HIIT", "Swimming", "Yoga", "Walking", "Rowing"
     )
 
-    /** Seed only if the demo (and the user) has no daily history yet. Safe to call on every launch. */
+    /** Seed only if the demo (and the user) has no daily history yet. Safe to call on every launch.
+     * Swift twin: `AppleDemoSeeder.seedIfRequested`. */
     suspend fun seedIfEmpty(repo: WhoopRepository, context: android.content.Context? = null) {
         if (repo.days(WHOOP).isNotEmpty()) return
         seed(repo)
@@ -302,6 +303,7 @@ object DemoSeeder {
         seedPlanJournal(repo)
     }
 
+    // Swift twin: `AppleDemoSeeder.seedPlanJournal`.
     private suspend fun seedPlanJournal(repo: WhoopRepository) {
         val today = LocalDate.now()
         val rows = (1..90).flatMap { offset ->
