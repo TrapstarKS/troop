@@ -97,6 +97,8 @@ private fun HealthspanContributorDetail(vm: AppViewModel, driver: HealthspanDriv
     val strapId = selectedStrap ?: vm.activeStrapId
     val context = androidx.compose.ui.platform.LocalContext.current
     val profile = ProfileStore.from(context.applicationContext)
+    val unitSystem = UnitPrefs.system(context)
+    fun formattedValue(value: Double): String = if (driver == HealthspanDriver.leanMass) UnitFormatter.massFromKilograms(value, unitSystem) else healthspanNumber(value) + " " + driver.unit
     var samples by remember(vm, strapId, reference, driver) { mutableStateOf(emptyList<HealthspanHistory.Sample>()) }
     var windowDays by rememberSaveable(driver, reference) { mutableStateOf(180) }
     var selectedOffset by remember(samples, windowDays) { mutableStateOf<Int?>(null) }
@@ -116,8 +118,8 @@ private fun HealthspanContributorDetail(vm: AppViewModel, driver: HealthspanDriv
         item {
             NoopCard {
                 Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
-                    HealthspanComparisonRow(stringResource(R.string.healthspan_average_30), comparison.recentTenths, comparison.recentCount, driver.unit)
-                    HealthspanComparisonRow(stringResource(R.string.healthspan_average_180), comparison.longTermTenths, comparison.longTermCount, driver.unit)
+                    HealthspanComparisonRow(stringResource(R.string.healthspan_average_30), comparison.recentTenths, comparison.recentCount, ::formattedValue)
+                    HealthspanComparisonRow(stringResource(R.string.healthspan_average_180), comparison.longTermTenths, comparison.longTermCount, ::formattedValue)
                     Text(stringResource(if (driver.weekly) R.string.healthspan_logged_weekly else R.string.healthspan_recorded_mean), style = NoopType.caption, color = Palette.textSecondary)
                 }
             }
@@ -151,7 +153,7 @@ private fun HealthspanContributorDetail(vm: AppViewModel, driver: HealthspanDriv
                             Text(healthDateLabel(reference), style = NoopType.caption, color = Palette.textSecondary)
                         }
                         reading?.let {
-                            Text(healthDateLabel(reference.minusDays(it.daysAgo.toLong())) + " · " + healthspanNumber(it.value) + " " + driver.unit,
+                            Text(healthDateLabel(reference.minusDays(it.daysAgo.toLong())) + " · " + formattedValue(it.value),
                                 style = NoopType.caption, color = Palette.textSecondary)
                         }
                     }
@@ -176,10 +178,10 @@ private fun HealthspanContributorDetail(vm: AppViewModel, driver: HealthspanDriv
 }
 
 @Composable
-private fun HealthspanComparisonRow(title: String, tenths: Int?, count: Int, unit: String) {
+private fun HealthspanComparisonRow(title: String, tenths: Int?, count: Int, formatValue: (Double) -> String) {
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space6)) {
         Overline(title)
-        Text(tenths?.let { healthspanNumber(it / 10.0) + " " + unit } ?: stringResource(R.string.healthspan_no_value), style = NoopType.tileValueLarge, color = Palette.textPrimary)
+        Text(tenths?.let { formatValue(it / 10.0) } ?: stringResource(R.string.healthspan_no_value), style = NoopType.tileValueLarge, color = Palette.textPrimary)
         Text(stringResource(R.string.healthspan_observation_count, count), style = NoopType.caption, color = Palette.textSecondary)
     }
 }
