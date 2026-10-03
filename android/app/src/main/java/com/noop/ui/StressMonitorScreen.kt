@@ -90,6 +90,7 @@ fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
     var nowSeconds by remember { mutableLongStateOf(System.currentTimeMillis() / 1000L) }
     var selectedTimestamp by remember(selectedDay, strapId) { mutableStateOf<Long?>(null) }
 
+    LaunchedEffect(vm) { vm.loadWorkouts() }
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
