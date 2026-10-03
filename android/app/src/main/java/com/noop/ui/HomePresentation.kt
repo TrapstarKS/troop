@@ -18,7 +18,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material3.Icon
@@ -146,16 +145,16 @@ internal fun HomeDials(
     val availableStrain = homeScoreValue(strain)
     val sleepValue = homeScoreValue(sleep)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-    val viewportWidth = maxWidth + Metrics.screenPadding * 2
-    Row(Modifier.fillMaxWidth().padding(vertical = Metrics.space16),
-        horizontalArrangement = Arrangement.spacedBy(Metrics.space8), verticalAlignment = Alignment.Top) {
-        HomeDial(uiString(R.string.home_sleep), sleepValue?.roundToInt()?.toString(), "%", sleepValue,
-            Palette.sleepPrimary, Modifier.weight(1f), viewportWidth, onSleep)
-        HomeDial(uiString(R.string.home_recovery), RecoveryStrainDetailLogic.recoveryPercent(availableRecovery)?.toString(), "%", availableRecovery,
-            availableRecovery?.let { Palette.recoveryColor(it) } ?: Palette.ringTrack, Modifier.weight(1f), viewportWidth, onRecovery)
-        HomeDial(uiString(R.string.home_strain), availableStrain?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) }, "", availableStrain,
-            Palette.strainPrimary, Modifier.weight(1f), viewportWidth, onStrain)
-    }
+        val viewportWidth = maxWidth + Metrics.screenPadding * 2
+        Row(Modifier.fillMaxWidth().padding(vertical = Metrics.space16),
+            horizontalArrangement = Arrangement.spacedBy(Metrics.space8), verticalAlignment = Alignment.Top) {
+            HomeDial(uiString(R.string.home_sleep), sleepValue?.roundToInt()?.toString(), "%", sleepValue,
+                Palette.sleepPrimary, Modifier.weight(1f), viewportWidth, onSleep)
+            HomeDial(uiString(R.string.home_recovery), RecoveryStrainDetailLogic.recoveryPercent(availableRecovery)?.toString(), "%", availableRecovery,
+                availableRecovery?.let { Palette.recoveryColor(it) } ?: Palette.ringTrack, Modifier.weight(1f), viewportWidth, onRecovery)
+            HomeDial(uiString(R.string.home_strain), availableStrain?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) }, "", availableStrain,
+                Palette.strainPrimary, Modifier.weight(1f), viewportWidth, onStrain)
+        }
     }
 }
 
