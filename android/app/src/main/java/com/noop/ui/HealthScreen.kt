@@ -139,20 +139,11 @@ fun HealthScreen(
         topBackground = screenBackdropSlot(showDayCycleBackground, skyBehindCards),
         fullBleedBackground = screenBackdropFullBleed(showDayCycleBackground, skyBehindCards),
     ) {
-        item { HealthspanLandingCard(onOpenHealthspan) }
+        item { HealthspanPreviewCard(vm, onOpenHealthspan) }
         item { HealthMonitorPreview(vm, days, onOpenHealthMonitor) }
-        item {
-            HealthFeatureCard(
-                title = stringResource(R.string.health_stress_title),
-                detail = stringResource(R.string.health_stress_preview),
-                color = Palette.metricCyan,
-                onClick = onOpenStress,
-            )
-        }
+        item { StressMonitorPreviewCard(vm, onOpenStress) }
+        item { HealthSupportingMetricCards(vm) }
         item { SyncStatusSection(vm = vm, onSyncNow = { vm.syncNow() }) }
-        if (days.isNotEmpty()) {
-            item { VitalitySection(vm = vm, days = days, profile = profile) }
-        }
         item {
             SkinTempSuiteSection(
                 signals = v5Signals,

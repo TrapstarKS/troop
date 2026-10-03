@@ -251,30 +251,6 @@ private fun HealthMonitorAlerts(vm: AppViewModel) {
 }
 
 @Composable
-internal fun HealthspanLandingCard(onClick: () -> Unit) {
-    NoopCard(Modifier.clickable(role = Role.Button, onClick = onClick)) {
-        Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
-            HealthFeatureHeader(stringResource(R.string.health_healthspan_title))
-            Text(stringResource(R.string.health_healthspan_heading), style = NoopType.title2,
-                color = Palette.statusPositive)
-            Text(stringResource(R.string.health_healthspan_preview), style = NoopType.caption,
-                color = Palette.textSecondary)
-            StatusPill(stringResource(R.string.health_healthspan_local_estimates), Icons.Filled.Info, Palette.textSecondary)
-        }
-    }
-}
-
-@Composable
-internal fun HealthFeatureCard(title: String, detail: String, color: Color, onClick: () -> Unit) {
-    NoopCard(Modifier.clickable(role = Role.Button, onClick = onClick)) {
-        Column(verticalArrangement = Arrangement.spacedBy(Metrics.space10)) {
-            HealthFeatureHeader(title)
-            Text(detail, style = NoopType.caption, color = color)
-        }
-    }
-}
-
-@Composable
 private fun HealthFeatureHeader(title: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = NoopType.headline, color = Palette.textPrimary, modifier = Modifier.weight(1f))

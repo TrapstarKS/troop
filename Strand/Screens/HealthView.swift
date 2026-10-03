@@ -31,28 +31,7 @@ private struct HealthLandingContent: View {
                                               now: now, todayKey: day, hrvReliabilityByDay: evidenceIdentity == identity ? hrvReliability : nil,
                                               respReliabilityByDay: evidenceIdentity == identity ? respReliability : nil)
         VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
-            NavigationLink(value: TabRoute.healthspan) {
-                NoopCard(tint: StrandPalette.positive) {
-                    VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
-                        HealthFeatureHeading(title: String(localized: "Healthspan"), symbol: "sparkles")
-                        HStack(spacing: NoopMetrics.space4) {
-                            Image(systemName: "circle.dotted.circle.fill")
-                                .font(StrandFont.display(NoopMetrics.compactScoreDisplaySize))
-                                .foregroundStyle(StrandPalette.positive)
-                                .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: NoopMetrics.space1) {
-                                Text("Long-term health")
-                                    .font(StrandFont.title1).monospacedDigit()
-                                    .foregroundStyle(StrandPalette.textPrimary)
-                                Text("Local estimates")
-                                    .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
-                            }
-                        }
-                        Text("Explore long-term health estimates from your local history.")
-                            .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
-                    }
-                }
-            }.buttonStyle(.plain)
+            HealthspanPreviewCard()
 
             NavigationLink(value: TabRoute.healthMonitor) {
                 NoopCard {
@@ -71,15 +50,8 @@ private struct HealthLandingContent: View {
                 }
             }.buttonStyle(.plain)
 
-            NavigationLink(value: TabRoute.stressMonitor) {
-                NoopCard(tint: StrandPalette.stressMedium) {
-                    VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
-                        HealthFeatureHeading(title: String(localized: "Stress Monitor"), symbol: "waveform.path")
-                        Text("See your local stress estimate and daily timeline.")
-                            .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
-                    }
-                }
-            }.buttonStyle(.plain)
+            StressMonitorPreviewCard()
+            HealthSupportingMetricCards()
             SkinTempSection()
             HealthHubLinksSection()
             NavigationLink(value: TabRoute.dataSources) {
