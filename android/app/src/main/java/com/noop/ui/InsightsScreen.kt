@@ -435,8 +435,8 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
                 "Rest" -> Outcome.Sleep
                 else -> Outcome.entries.firstOrNull { it.outcomeName == experimentOutcomeName } ?: Outcome.Recovery
             }
-            val resolvedBehaviour = resolveExperimentBehaviour(candidates, experimentBehaviour)
-            val snapshot = remember(model, behaviours, experimentStartedDay, experimentOutcomeName, experimentDurationDays, experimentBaselineDays, experimentSeq) {
+            val resolvedBehaviour = resolveExperimentBehaviour(candidates, experimentBehaviour, experimentStartedDay)
+            val snapshot = remember(model, behaviours, resolvedBehaviour, experimentStartedDay, experimentOutcomeName, experimentDurationDays, experimentBaselineDays, experimentSeq) {
                 buildExperimentSnapshot(
                     model = model,
                     behaviours = behaviours,
@@ -452,6 +452,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
                 snapshot = snapshot,
                 candidates = candidates,
                 resolvedBehaviour = resolvedBehaviour,
+                catalogItems = catalogItems,
                 outcome = expOutcome,
                 length = ExperimentLength.fromDays(experimentDurationDays),
                 onBehaviour = {
@@ -969,6 +970,7 @@ private fun ExperimentSection(
     snapshot: ExperimentSnapshot?,
     candidates: List<String>,
     resolvedBehaviour: String?,
+    catalogItems: List<JournalCatalogItem>,
     outcome: Outcome,
     length: ExperimentLength,
     onBehaviour: (String) -> Unit,
@@ -986,11 +988,12 @@ private fun ExperimentSection(
         )
         NoopCard {
             if (snapshot != null) {
-                ActiveExperimentCard(snapshot, onMark = onMark, onEnd = onEnd)
+                ActiveExperimentCard(snapshot, catalogItems, onMark = onMark, onEnd = onEnd)
             } else {
                 ExperimentSetupCard(
                     candidates = candidates,
                     resolvedBehaviour = resolvedBehaviour,
+                    catalogItems = catalogItems,
                     outcome = outcome,
                     length = length,
                     onBehaviour = onBehaviour,
@@ -1007,6 +1010,7 @@ private fun ExperimentSection(
 private fun ExperimentSetupCard(
     candidates: List<String>,
     resolvedBehaviour: String?,
+    catalogItems: List<JournalCatalogItem>,
     outcome: Outcome,
     length: ExperimentLength,
     onBehaviour: (String) -> Unit,
@@ -1043,6 +1047,7 @@ private fun ExperimentSetupCard(
                 ExperimentBehaviourPicker(
                     candidates = candidates,
                     selection = resolvedBehaviour ?: candidates.first(),
+                    catalogItems = catalogItems,
                     onSelect = onBehaviour,
                 )
             }
@@ -1080,9 +1085,12 @@ private fun ExperimentSetupCard(
 @Composable
 private fun ActiveExperimentCard(
     snapshot: ExperimentSnapshot,
+    catalogItems: List<JournalCatalogItem>,
     onMark: (Boolean) -> Unit,
     onEnd: () -> Unit,
 ) {
+    val item = catalogItems.firstOrNull { normJournalKey(it.canonical) == normJournalKey(snapshot.behavior) }
+        ?: JournalCatalogItem(snapshot.behavior)
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1090,7 +1098,7 @@ private fun ActiveExperimentCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    snapshot.behavior,
+                    journalLocalizedLabel(item),
                     style = NoopType.headline,
                     color = Palette.textPrimary,
                     maxLines = 2,
@@ -1272,9 +1280,13 @@ private fun ExperimentMeasure(
 private fun ExperimentBehaviourPicker(
     candidates: List<String>,
     selection: String,
+    catalogItems: List<JournalCatalogItem>,
     onSelect: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val selectedItem = catalogItems.firstOrNull { normJournalKey(it.canonical) == normJournalKey(selection) }
+        ?: JournalCatalogItem(selection)
+    val selectedLabel = journalLocalizedLabel(selectedItem)
     // liquidPress on the tappable picker row (same interactionSource on the clickable + press; indication
     // nulled so only the liquid settle reads). Same expand-on-tap + same accessibility label.
     val interaction = remember { MutableInteractionSource() }
@@ -1288,11 +1300,11 @@ private fun ExperimentBehaviourPicker(
                 .clickable(interactionSource = interaction, indication = null) { expanded = true }
                 .liquidPress(interaction)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .semantics { contentDescription = uiString(R.string.l10n_insights_screen_experiment_behaviour_selection_bcb29b58, selection) },
+                .semantics { contentDescription = uiString(R.string.l10n_insights_screen_experiment_behaviour_selection_bcb29b58, selectedLabel) },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                selection,
+                selectedLabel,
                 style = NoopType.subhead,
                 color = Palette.textPrimary,
                 modifier = Modifier.weight(1f),
@@ -1303,8 +1315,10 @@ private fun ExperimentBehaviourPicker(
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             candidates.forEach { q ->
+                val item = catalogItems.firstOrNull { normJournalKey(it.canonical) == normJournalKey(q) }
+                    ?: JournalCatalogItem(q)
                 DropdownMenuItem(
-                    text = { Text(journalLocalizedLabel(JournalCatalogItem(q)), style = NoopType.subhead, color = Palette.textPrimary) },
+                    text = { Text(journalLocalizedLabel(item), style = NoopType.subhead, color = Palette.textPrimary) },
                     onClick = {
                         onSelect(q)
                         expanded = false
@@ -1344,9 +1358,12 @@ private fun experimentCandidates(
     return out
 }
 
-/** The saved behaviour if still eligible, else the first candidate (or null when empty). */
-private fun resolveExperimentBehaviour(candidates: List<String>, saved: String): String? {
-    val savedTrim = saved.trim()
+/** Active experiments keep their saved canonical identity; setup falls back to an eligible candidate. */
+internal fun resolveExperimentBehaviour(candidates: List<String>, saved: String, startedDay: String): String? {
+    val savedTrim = saved.trim {
+        (it.isWhitespace() && it !in '\u001C'..'\u001F') || it == '\u0085' || it == '\u200B'
+    }
+    if (startedDay.isNotEmpty()) return savedTrim.takeIf { it.isNotEmpty() }
     if (savedTrim.isNotEmpty() && candidates.contains(savedTrim)) return savedTrim
     return candidates.firstOrNull()
 }

@@ -842,10 +842,9 @@ struct InsightsView: View {
     }
 
     private var resolvedExperimentBehaviour: String? {
-        let candidates = experimentCandidates
-        let saved = experimentBehaviour.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !saved.isEmpty, candidates.contains(saved) { return saved }
-        return candidates.first
+        resolveExperimentBehaviour(candidates: experimentCandidates,
+                                   saved: experimentBehaviour,
+                                   startedDay: experimentStartedDay)
     }
 
     private var experimentBehaviourBinding: Binding<String> {
@@ -1589,3 +1588,12 @@ private func insightsPreviewRepo() -> Repository {
         .preferredColorScheme(.dark)
 }
 #endif
+
+func resolveExperimentBehaviour(candidates: [String], saved: String, startedDay: String) -> String? {
+    let savedBehaviour = saved.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !startedDay.isEmpty {
+        return savedBehaviour.isEmpty ? nil : savedBehaviour
+    }
+    if !savedBehaviour.isEmpty, candidates.contains(savedBehaviour) { return savedBehaviour }
+    return candidates.first
+}
