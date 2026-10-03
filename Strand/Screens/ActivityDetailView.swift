@@ -78,6 +78,9 @@ struct ActivityDetailView: View {
             }.buttonStyle(.plain)
         }
         .navigationTitle(WorkoutSource.displaySport(row.sport))
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(canEdit ? String(localized: "Edit") : String(localized: "Edit a copy")) { showEdit = true }

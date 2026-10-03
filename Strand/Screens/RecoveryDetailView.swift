@@ -48,6 +48,9 @@ struct RecoveryDetailView: View {
             .buttonStyle(.plain)
         }
         .navigationTitle(String(localized: "Recovery"))
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .sheet(isPresented: $showInsights) { NavigationStack { InsightsView() } }
         .sheet(isPresented: $showGuide) {
             ScoringGuideView(initialSection: .charge, onClose: { showGuide = false })

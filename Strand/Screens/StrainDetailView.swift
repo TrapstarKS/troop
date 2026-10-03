@@ -51,6 +51,9 @@ struct StrainDetailView: View {
             }
         }
         .navigationTitle(String(localized: "Strain"))
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .task(id: "\(key)|\(repo.deviceId)|\(repo.refreshSeq)|\(cycleMode)") { await load() }
     }
 
