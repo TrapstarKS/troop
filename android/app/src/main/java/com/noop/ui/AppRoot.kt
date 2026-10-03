@@ -597,8 +597,11 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     GlassBottomBar(
                         current = selectedTab,
                         onTabSelected = { dest ->
+                            val reselected = dest != Destination.Coach && dest.route == selectedTabRoute
                             if (dest != Destination.Coach) selectedTabRoute = dest.route
-                            if (dest.route != currentRoute) {
+                            if (reselected && nav.popBackStack(dest.route, false)) {
+                                // Reselect returns to the owning tab root.
+                            } else if (dest.route != currentRoute) {
                                 if (dest == Destination.Coach) nav.navigate(dest.route)
                                 else nav.navigateTopLevel(dest.route)
                             }
@@ -981,8 +984,9 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
         if (BottomBarStyleStore.overlay && barPresent) GlassBottomBar(
             current = selectedTab,
             onTabSelected = { dest ->
+                val reselected = dest != Destination.Coach && dest.route == selectedTabRoute
                 if (dest != Destination.Coach) selectedTabRoute = dest.route
-                if (dest != Destination.Coach && nav.popBackStack(dest.route, false)) {
+                if (reselected && nav.popBackStack(dest.route, false)) {
                     // Reselect returns to the owning tab root.
                 } else if (dest.route != currentRoute) {
                     if (dest == Destination.Coach) nav.navigate(dest.route)
