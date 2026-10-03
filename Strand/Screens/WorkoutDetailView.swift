@@ -10,9 +10,8 @@ import MapKit
 
 // MARK: - Workout detail (#410)
 //
-// A READ-ONLY drill-down for one tapped session, built ONLY from the locked Noop component system
-// (NoopCard / ChartCard / SectionHeader / StatTile / SegmentBar idiom) so it sits in the same
-// instrument-grade, Effort-amber colour world as the Workouts list it opens from.
+// The default host presents ActivityDetailView. This extended drill-down remains reachable from its
+// More activity details action, using the shared design tokens and components.
 //
 //   • a header (sport displayName · date · duration) with the source badge,
 //   • a 3-up StatTile strip (avg HR · max HR · calories / distance),
@@ -21,7 +20,6 @@ import MapKit
 //   • an HR-curve ChartCard fed the workout's 5-min-ish HR buckets over [startTs, endTs],
 //   • an HR-zones bar — imported per-workout zones when the row carries them, else the window's raw
 //     HR samples binned into age-derived %HRmax zone-minutes (honestly labelled as approximate),
-//   • the session's Effort/strain contribution when one was captured.
 //
 // Presented as a `.sheet` wrapped in a NavigationStack by WorkoutsView — these screens aren't hosted in
 // a per-screen NavigationStack, so a sheet is the in-app drill-down idiom (mirrors HealthView opening
@@ -29,6 +27,7 @@ import MapKit
 
 struct WorkoutDetailView: View {
     let row: WorkoutRow
+    var expandedDetails = false
 
     @EnvironmentObject private var repo: Repository
     @StateObject private var profile = ProfileStore()
@@ -41,9 +40,6 @@ struct WorkoutDetailView: View {
             system: UnitSystem(rawValue: unitSystemRaw) ?? .metric,
             override: distanceSystemRaw)
     }
-
-    @AppStorage(UnitPrefs.effortScaleKey) private var effortScaleRaw = EffortScale.hundred.rawValue
-    private var effortScale: EffortScale { UnitPrefs.resolveEffortScale(effortScaleRaw) }
 
     /// Loaded HR curve over the session window (5-min-ish bucket means). Empty until loaded.
     @State private var hrPoints: [TrendPoint] = []
@@ -70,11 +66,24 @@ struct WorkoutDetailView: View {
     private struct StepReadout { let count: Int; let fromStrap: Bool }
     @State private var steps: StepReadout?
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        if expandedDetails {
+            detailedContent
+        } else {
+            ActivityDetailView(row: row)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+        }
+    }
+
+    private var detailedContent: some View {
         ScreenScaffold(title: "\(WorkoutSource.displaySport(row.sport))",
                        subtitle: "\(dateLabel(row.startTs))",
                        // PERF: chart/map-heavy column (a MapKit route map, the session HR curve, the
-                       // zone-split chart and the effort card). The LazyVStack path builds the off-screen
+                       // zone-split chart). The LazyVStack path builds the off-screen
                        // ones on demand — byte-identical layout — so a tall detail doesn't materialise the
                        // map + both charts before the header is even on screen.
                        lazy: true,
@@ -89,9 +98,6 @@ struct WorkoutDetailView: View {
             hrCurveCard
             zonesCard
             heartRateRecoveryCard
-            if let strain = row.strain {
-                effortCard(strain: strain)
-            }
         }
         .toolbar {
             // A Done affordance for the sheet on both platforms (iOS gets the grabber too).
@@ -99,12 +105,21 @@ struct WorkoutDetailView: View {
                 Button("Done") { dismiss() }
             }
         }
-        .task { await load() }
+        .task(id: "\(row.startTs)|\(row.endTs)|\(row.source)|\(repo.deviceId)|\(repo.refreshSeq)") { await load() }
     }
 
     // MARK: - Load
 
     private func load() async {
+        let deviceId = repo.deviceId
+        await MainActor.run {
+            hrPoints = []
+            zoneMinutes = nil
+            zonesFromImport = false
+            heartRateRecovery = nil
+            steps = nil
+            loaded = false
+        }
         // #524: the GPS route, if this session recorded one on-device. A cheap UserDefaults read keyed
         // by the row's natural key (startTs + sport); decoded to points only when ≥2 were captured so the
         // map only ever draws a real route.
@@ -158,6 +173,7 @@ struct WorkoutDetailView: View {
         }
 
         await MainActor.run {
+            guard repo.deviceId == deviceId, !Task.isCancelled else { return }
             self.route = routePoints
             self.hrPoints = points
             self.zoneMinutes = minutes
@@ -244,8 +260,7 @@ struct WorkoutDetailView: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: NoopMetrics.gap)],
                   alignment: .leading, spacing: NoopMetrics.gap) {
             StatTile(label: "Duration",
-                     value: durationLabel(row.durationS),
-                     caption: String(localized: "active"),
+                     value: durationLabel(row.durationS, fallbackSeconds: Double(row.endTs - row.startTs)),
                      accent: StrandPalette.effortColor)
             StatTile(label: "Avg HR",
                      value: row.avgHr.map { "\($0)" } ?? "–",
@@ -463,13 +478,15 @@ struct WorkoutDetailView: View {
     // MARK: - HR zones
 
     @ViewBuilder private var zonesCard: some View {
-        if let z = zoneMinutes, z.reduce(0, +) > 0 {
+        if let z = zoneMinutes, z.count == 5,
+           z.allSatisfy({ RecoveryStrainDetailLogic.wholeNumber($0) != nil }),
+           let totalMinutes = RecoveryStrainDetailLogic.wholeNumber(z.reduce(0, +)), z.reduce(0, +) > 0 {
             let total = z.reduce(0, +)
             let busiest = z.indices.max(by: { z[$0] < z[$1] }) ?? 0
             VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                 SectionHeader("HR Zones",
                               overline: zonesFromImport ? "Whoop import" : "From strap HR",
-                              trailing: String(localized: "\(Int(total.rounded()))m in zone"))
+                              trailing: String(localized: "\(totalMinutes)m in zone"))
                 NoopCard(tint: StrandPalette.effortColor) {
                     VStack(alignment: .leading, spacing: 12) {
                         GeometryReader { geo in
@@ -526,51 +543,6 @@ struct WorkoutDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Effort contribution
-
-    private func effortCard(strain: Double) -> some View {
-        // The session's Effort as the signature liquid gauge: a `LiquidVessel` tinted Effort, filled to the
-        // session's contribution on the user's selected scale, with the value counting up over it — the
-        // same hero language as the Workouts list's Typical Effort gauge and the Sleep Rest hero. The
-        // explanatory sentence keeps its place beside the gauge.
-        let displayValue = UnitFormatter.effortValue(strain, scale: effortScale)
-        let scaleMax: Double = effortScale == .whoop ? 21 : 100
-        let fraction = max(0, min(1, displayValue / scaleMax))
-        return VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Effort", overline: "This session")
-            NoopCard(tint: StrandPalette.effortColor) {
-                HStack(alignment: .center, spacing: 18) {
-                    ZStack {
-                        // Static (posed) vessel — a compact liquid gauge inside a card, so it costs a single
-                        // cached frame rather than a live canvas (same call as Trends' pip vessels).
-                        LiquidVessel(value: fraction, tint: StrandPalette.effortColor, animated: false)
-                            .frame(width: 88, height: 88)
-                        VStack(spacing: 0) {
-                            // The session's Effort contribution ticks up to its value — the NOOP signature.
-                            CountUpText(value: displayValue,
-                                        format: { String(format: "%.1f", $0) },
-                                        font: StrandFont.rounded(28),
-                                        color: StrandPalette.textPrimary)
-                                .shadow(color: .black.opacity(0.5), radius: 5, y: 1)
-                            Text(effortScale == .whoop ? "of 21" : "of 100")
-                                .font(StrandFont.caption)
-                                .foregroundStyle(StrandPalette.textSecondary)
-                        }
-                        .allowsHitTesting(false)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(String(localized: "Effort \(UnitFormatter.effortDisplay(strain, scale: effortScale)) \(effortScale == .whoop ? "of 21" : "of 100")"))
-                    Spacer(minLength: 0)
-                    Text("This session's contribution to the day's Effort, as captured during the workout.")
-                        .font(StrandFont.subhead)
-                        .foregroundStyle(StrandPalette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 240, alignment: .leading)
-                }
-            }
-        }
-    }
-
     // MARK: - Bits
 
     private func emptyNote(_ text: String) -> some View {
@@ -618,10 +590,9 @@ struct WorkoutDetailView: View {
     private func timeRangeLabel(_ start: Int, _ end: Int) -> String {
         end > start ? "\(timeLabel(start))-\(timeLabel(end))" : timeLabel(start)
     }
-    private func durationLabel(_ s: Double?) -> String {
-        guard let s, s > 0 else { return "–" }
-        let total = Int(s.rounded())
-        let h = total / 3600, m = (total % 3600) / 60
+    private func durationLabel(_ s: Double?, fallbackSeconds: Double? = nil) -> String {
+        guard let total = RecoveryStrainDetailLogic.durationMinutes(seconds: s, fallbackSeconds: fallbackSeconds) else { return "–" }
+        let h = total / 60, m = total % 60
         if h > 0 { return String(localized: "\(h)h \(m)m") }
         return String(localized: "\(m)m")
     }
@@ -630,7 +601,8 @@ struct WorkoutDetailView: View {
         return UnitFormatter.distanceFromMeters(m, system: distanceUnitSystem)
     }
     private func grouped(_ v: Double) -> String {
-        Self.intFmt.string(from: NSNumber(value: Int(v.rounded()))) ?? "\(Int(v.rounded()))"
+        guard let whole = RecoveryStrainDetailLogic.wholeNumber(v) else { return "–" }
+        return Self.intFmt.string(from: NSNumber(value: whole)) ?? String(whole)
     }
     private static let intFmt: NumberFormatter = {
         let f = NumberFormatter(); f.numberStyle = .decimal; f.maximumFractionDigits = 0; return f

@@ -43,6 +43,22 @@ final class SleepWearHistoryRepairTests: XCTestCase {
     }
 
     func testRepairsOlderThan21DaysPersistsAndRunsOnlyOnce() async throws {
+        try await verifyHistoryRepair(queueForcedRescore: false)
+    }
+
+    func testQueuedForcedRescoreCompletesRepairAndReturnsToRecentWindow() async throws {
+        try await verifyHistoryRepair(queueForcedRescore: true)
+    }
+
+    func testOldDuplicateHealRetainsWideRepairAndDefersCompletion() async throws {
+        try await verifyHistoryRepair(queueForcedRescore: false, healOldDuplicate: true)
+    }
+
+    func testOldHealAndQueuedRecentUpdateCoalesceIntoOneWideRepair() async throws {
+        try await verifyHistoryRepair(queueForcedRescore: true, healOldDuplicate: true)
+    }
+
+    private func verifyHistoryRepair(queueForcedRescore: Bool, healOldDuplicate: Bool = false) async throws {
         try await withPreferences {
             let store = try await WhoopStore.inMemory()
             let source = "my-whoop"
@@ -72,18 +88,64 @@ final class SleepWearHistoryRepairTests: XCTestCase {
                 efficiency: 0.9, restingHr: 50, avgHrv: nil, stagesJSON: "[]", userEdited: true,
                 startTsAdjusted: editedStart + 300)
             _ = try await store.upsertSleepSessions([edited], deviceId: source + "-noop")
+            let secondary = source + "-archived"
+            if healOldDuplicate {
+                try registry.add(PairedDevice(id: secondary, brand: "WHOOP", model: "4.0",
+                    sourceKind: .liveBLE, capabilities: [.hr, .hrv], status: .archived, addedAt: 1, lastSeenAt: 1))
+                _ = try await store.upsertSleepSessions([
+                    CachedSleepSession(startTs: start, endTs: end, efficiency: nil, restingHr: nil, avgHrv: nil, stagesJSON: "[]"),
+                    CachedSleepSession(startTs: start + 60, endTs: end, efficiency: nil, restingHr: nil, avgHrv: nil, stagesJSON: "[]"),
+                ], deviceId: secondary)
+            }
             let repo = Repository(deviceId: source)
             repo.setStoreForTesting(store)
             let engine = IntelligenceEngine(repo: repo, profile: ProfileStore(), deviceId: source)
+            defer { engine.diagnosticSink = nil }
             var triggers = 0
+            var completedPasses = 0
+            var queuedWasObserved = false
+            var oldHealWasObserved = false
+            var queuedCall: Task<Void, Never>?
+            let followUpFinished = XCTestExpectation(description: "Queued recent pass completed")
             engine.diagnosticSink = { line, _ in
-                if line.contains("trigger=sleep-wear-history-repair") { triggers += 1 }
+                if line.contains("trigger=sleep-wear-history-repair") {
+                    triggers += 1
+                    if queueForcedRescore, queuedCall == nil {
+                        queuedCall = Task { @MainActor in
+                            await engine.analyzeRecent(force: true)
+                        }
+                    }
+                }
+                if line.contains("queued behind a 40-day pass") { queuedWasObserved = true }
+                if line.contains("Dedup(#899): removed") { oldHealWasObserved = true }
+                if line.contains("re-score: done") {
+                    completedPasses += 1
+                    if completedPasses == 3 { followUpFinished.fulfill() }
+                }
             }
             // The normal recent pass cannot repair this older night.
             await engine.analyzeRecent(maxDays: 21)
             let before = try await store.sleepSessions(deviceId: source + "-noop", from: dayStart, to: dayStart + 86400, limit: 100)
             XCTAssertTrue(before.isEmpty)
             await engine.runSleepWearRescoreIfNeeded(historyDays: 40)
+            // External data cannot delay completion; a deleted old duplicate requires a wide re-pass.
+            XCTAssertEqual(UserDefaults.standard.bool(forKey: IntelligenceEngine.sleepWearRescoreFlagKey), !healOldDuplicate)
+            XCTAssertEqual(UserDefaults.standard.bool(forKey: IntelligenceEngine.effortRescoreFlagKey), !healOldDuplicate)
+            if queueForcedRescore {
+                await queuedCall?.value
+                XCTAssertTrue(queuedWasObserved, "The forced update must actually overlap the repair")
+            }
+            if queueForcedRescore || healOldDuplicate {
+                await fulfillment(of: [followUpFinished], timeout: 30)
+                XCTAssertEqual(engine.results.contains { $0.day == AnalyticsEngine.dayString(dayStart, offsetSec: tz) }, healOldDuplicate,
+                    "Only an internal old-day heal requires the wide follow-up")
+                XCTAssertEqual(completedPasses, 3, "Recent and internal requests share one follow-up")
+            }
+            if healOldDuplicate {
+                XCTAssertTrue(oldHealWasObserved)
+                let survivors = try await store.sleepSessions(deviceId: secondary, from: dayStart, to: dayStart + 86400, limit: 100)
+                XCTAssertEqual(survivors.count, 1)
+            }
             let after = try await store.sleepSessions(deviceId: source + "-noop", from: dayStart, to: dayStart + 86400, limit: 100)
             XCTAssertEqual(after.count, 1)
             let day = AnalyticsEngine.dayString(dayStart, offsetSec: tz)

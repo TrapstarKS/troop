@@ -2,8 +2,8 @@ import XCTest
 @testable import StrandAnalytics
 import WhoopProtocol
 
-/// Tests Calories.estimateDayCalories — the APPROXIMATE whole-day HR-only energy estimate
-/// (Keytel active + Harris–Benedict BMR) that backs DailyMetric.activeKcalEst for BLE-only
+/// Tests Calories.estimateDayEnergy — the APPROXIMATE whole-day HR-only energy estimate
+/// (Keytel active + Harris–Benedict BMR) that backs the stored total and active energy for BLE-only
 /// users. Pure-function tests; no DB. Not cloud/clinical parity. Mirrors the Android
 /// DayCaloriesTest vectors value-for-value.
 final class DayCaloriesTests: XCTestCase {
@@ -14,7 +14,7 @@ final class DayCaloriesTests: XCTestCase {
 
     func testDayCaloriesEmptyIsZero() {
         XCTAssertEqual(
-            Calories.estimateDayCalories([], profile: UserProfile(), hrmax: 190.0, restingHR: 55.0),
+            Calories.estimateDayEnergy([], profile: UserProfile(), hrmax: 190.0, restingHR: 55.0).totalKcal,
             0.0, accuracy: 1e-12)
     }
 
@@ -33,7 +33,7 @@ final class DayCaloriesTests: XCTestCase {
         // path's flat one-second-per-sample. They diverge on gappy streams, but not here.
         let profile = UserProfile(weightKg: 80, heightCm: 180, age: 35, sex: "male")
         let hr = hrDay(bpm: 130, n: 600)  // 10 min above the active threshold, dense 1 Hz
-        let day = Calories.estimateDayCalories(hr, profile: profile, hrmax: 185.0, restingHR: 55.0)
+        let day = Calories.estimateDayEnergy(hr, profile: profile, hrmax: 185.0, restingHR: 55.0).totalKcal
         let bout = Calories.estimateBoutCalories(hr, profile: profile, hrmax: 185.0, restingHR: 55.0).0
         XCTAssertEqual(day, bout, accuracy: 1e-9)
     }
@@ -46,8 +46,8 @@ final class DayCaloriesTests: XCTestCase {
         let day = hrDay(bpm: 55, n: block)
             + hrDay(bpm: 130, n: block, start: block)
             + hrDay(bpm: 70, n: block, start: 2 * block)
-        let total = Calories.estimateDayCalories(day, profile: profile,
-                                                 hrmax: 185.0, restingHR: 55.0)
+        let total = Calories.estimateDayEnergy(day, profile: profile,
+                                                 hrmax: 185.0, restingHR: 55.0).totalKcal
         // Measured from the legacy estimator on main. Its per-sample summation differs from the
         // new R × N association by ~6.6e-9 kcal, so keep tolerance above that rounding noise.
         XCTAssertEqual(total, 6_774.323772067612, accuracy: 1e-6,
@@ -59,10 +59,10 @@ final class DayCaloriesTests: XCTestCase {
         // and the resting-day total is positive (BMR floor).
         let profile = UserProfile(weightKg: 70, heightCm: 170, age: 30, sex: "nonbinary")
         // Day activeThreshold = 55 + 0.50*(185-55) = 120 bpm; 60 < 120 (resting), 150 >= 120 (active).
-        let restingDay = Calories.estimateDayCalories(hrDay(bpm: 60, n: 3600), profile: profile,
-                                                      hrmax: 185.0, restingHR: 55.0)
-        let activeDay = Calories.estimateDayCalories(hrDay(bpm: 150, n: 3600), profile: profile,
-                                                     hrmax: 185.0, restingHR: 55.0)
+        let restingDay = Calories.estimateDayEnergy(hrDay(bpm: 60, n: 3600), profile: profile,
+                                                      hrmax: 185.0, restingHR: 55.0).totalKcal
+        let activeDay = Calories.estimateDayEnergy(hrDay(bpm: 150, n: 3600), profile: profile,
+                                                     hrmax: 185.0, restingHR: 55.0).totalKcal
         XCTAssertGreaterThan(restingDay, 0.0, "resting day must burn > 0 (BMR floor)")
         XCTAssertGreaterThan(activeDay, restingDay, "active day must exceed resting day")
     }
@@ -74,8 +74,8 @@ final class DayCaloriesTests: XCTestCase {
         // Harris–Benedict BMR ≈ 1825 kcal. This is an APPROXIMATE estimate, not medical advice.
         let profile = UserProfile(weightKg: 80, heightCm: 180, age: 35, sex: "male")
         let sedentary = hrDay(bpm: 55, n: 86_400)   // 24 h, all at resting HR
-        let total = Calories.estimateDayCalories(sedentary, profile: profile,
-                                                 hrmax: 185.0, restingHR: 55.0)
+        let total = Calories.estimateDayEnergy(sedentary, profile: profile,
+                                                 hrmax: 185.0, restingHR: 55.0).totalKcal
         XCTAssertEqual(total, 1825.25, accuracy: 1.0,
                        "a sedentary full day must total ≈ the subject's BMR (~1825 kcal)")
     }
@@ -91,8 +91,8 @@ final class DayCaloriesTests: XCTestCase {
         let lightDay = hrDay(bpm: 55, n: block)
             + hrDay(bpm: 70, n: block, start: block)
             + hrDay(bpm: 100, n: block, start: 2 * block)
-        let total = Calories.estimateDayCalories(lightDay, profile: profile,
-                                                 hrmax: 185.0, restingHR: 55.0)
+        let total = Calories.estimateDayEnergy(lightDay, profile: profile,
+                                                 hrmax: 185.0, restingHR: 55.0).totalKcal
         // NEW total ≈ 1825 kcal (every second below the 120 bpm gate → BMR floor).
         XCTAssertEqual(total, 1825.25, accuracy: 1.0,
                        "a light-activity day must land near BMR, not the old inflated total")
@@ -137,25 +137,48 @@ final class DayCaloriesTests: XCTestCase {
 
     func testDayEnergyParityVectorOracle() {
         let profile = UserProfile(weightKg: 80, heightCm: 180, age: 35, sex: "male")
-        let vectors = [
-            hrDay(bpm: 55, n: 86_400),
-            (0..<600).map { HRSample(ts: $0, bpm: 130) },
+        let cases: [[HRSample]] = [
+            [], hrDay(bpm: 55, n: 600), hrDay(bpm: 130, n: 600),
             stride(from: 0, to: 600, by: 30).map { HRSample(ts: $0, bpm: 130) },
             [HRSample(ts: 0, bpm: 130), HRSample(ts: 3600, bpm: 130)],
-        ].map { Calories.estimateDayEnergy($0, profile: profile, hrmax: 185, restingHR: 55) }
-        // Generated from the Swift implementation and copied verbatim to Android's parity test.
-        let expected: [(resting: Double, active: Double, total: Double, seconds: Double)] = [
-            (1825.247000000000, 0.000000000000, 1825.247000000000, 86_400.0),
-            (12.675326388889, 103.105766084605, 115.781092473494, 600.0),
-            (12.675326388889, 103.105766084603, 115.781092473492, 600.0),
-            (2.535065277778, 20.621153216921, 23.156218494699, 120.0),
+            [HRSample(ts: 0, bpm: 150), HRSample(ts: 0, bpm: 60), HRSample(ts: 60, bpm: 60)],
+            hrDay(bpm: 130, n: 120) + hrDay(bpm: 130, n: 120, start: 200),
         ]
-        for (value, oracle) in zip(vectors, expected) {
-            XCTAssertEqual(value.restingKcal, oracle.resting, accuracy: 1e-9)
-            XCTAssertEqual(value.activeKcal, oracle.active, accuracy: 1e-9)
-            XCTAssertEqual(value.totalKcal, oracle.total, accuracy: 1e-9)
-            XCTAssertEqual(value.observedSeconds, oracle.seconds, accuracy: 1e-9)
+        // Verbatim standalone swiftc -O stdout; also pinned by Android's twin.
+        let expected = """
+        0|0.000000000000|0.000000000000|0.000000000000|0.000000000000
+        1|12.675326388889|0.000000000000|12.675326388889|600.000000000000
+        2|12.675326388889|103.105766084605|115.781092473494|600.000000000000
+        3|12.675326388889|103.105766084603|115.781092473492|600.000000000000
+        4|2.535065277778|20.621153216921|23.156218494698|120.000000000000
+        5|2.535065277778|0.000000000000|2.535065277778|120.000000000000
+        6|6.316537650463|41.242306433841|47.558844084304|299.000000000000
+        """
+        let rows = expected.split(separator: "\n").map { $0.split(separator: "|").dropFirst().map { Double($0)! } }
+        XCTAssertEqual(cases.count, rows.count)
+        for (samples, oracle) in zip(cases, rows) {
+            let value = Calories.estimateDayEnergy(samples, profile: profile, hrmax: 185, restingHR: 55)
+            for (actual, expected) in zip([value.restingKcal, value.activeKcal, value.totalKcal, value.observedSeconds], oracle) {
+                XCTAssertEqual(actual, expected, accuracy: 1e-9)
+            }
         }
+    }
+
+    func testAnalyzeDayPersistsActiveShareWithoutChangingTotal() throws {
+        let profile = UserProfile(weightKg: 80, heightCm: 180, age: 35, sex: "male")
+        let samples = (0..<600).map { hr($0, 130) }
+        let daily = AnalyticsEngine.analyzeDay(day: dayUtc, hr: samples, profile: profile).daily
+        let energy = Calories.estimateDayEnergy(samples, profile: profile,
+            hrmax: StrainScorer.tanakaHRmax(age: profile.age), restingHR: nil)
+        XCTAssertEqual(try XCTUnwrap(daily.activeKcalEst), energy.totalKcal, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(daily.activeEnergyKcalEst), energy.activeKcal, accuracy: 1e-9)
+        XCTAssertLessThan(try XCTUnwrap(daily.activeEnergyKcalEst), try XCTUnwrap(daily.activeKcalEst))
+        let resting = AnalyticsEngine.analyzeDay(day: dayUtc, hr: (0..<600).map { hr($0, 55) }, profile: profile).daily
+        XCTAssertEqual(resting.activeEnergyKcalEst, 0)
+        XCTAssertGreaterThan(try XCTUnwrap(resting.activeKcalEst), 0)
+        let empty = AnalyticsEngine.analyzeDay(day: dayUtc, hr: [], profile: profile).daily
+        XCTAssertNil(empty.activeKcalEst)
+        XCTAssertNil(empty.activeEnergyKcalEst)
     }
 
     func testWearGapIsCappedNotCreditedInFull() {

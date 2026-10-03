@@ -10,7 +10,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.noop.R
 import com.noop.ui.NoopPrefs
-import com.noop.ui.appLaunchIntent
 
 /**
  * Whether a strap NOBODY has heard from is worth warning about (#2556).
@@ -165,7 +164,7 @@ object BatteryAlertNotifier {
      * threshold gives the same warning lead time on a 4.0 and a 5.0/MG, which a fixed SoC line
      * can't) and post at most one notification per discharge cycle. The 15% SoC alert stays as the
      * safety net for straps with no usable estimate (null skips here). Same gating discipline as
-     * #368: persisted flag advances even when delivery is deferred; no-ops when battery alerts are
+     * #368: a firing flag waits for delivery eligibility; re-arming still persists. No-ops when battery alerts are
      * off. iOS/macOS twin: BatteryNotifier.onRuntimeEstimate.
      */
     @SuppressLint("MissingPermission") // guarded by areNotificationsEnabled() + runCatching
@@ -180,9 +179,11 @@ object BatteryAlertNotifier {
                 alerted = NoopPrefs.batteryRuntimeAlerted(context),
             )
             // ALWAYS persist the updated gate — re-arming must stick even when nothing fired.
-            NoopPrefs.setBatteryRuntimeAlerted(context, decision.newAlerted)
-            if (!decision.fire) return
-            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+            if (!decision.fire) {
+                NoopPrefs.setBatteryRuntimeAlerted(context, decision.newAlerted)
+                return
+            }
+            if (!deliveryAllowed(context)) return
             ensureChannel(context)
             val label = com.noop.analytics.BatteryEstimator.label(remainingHours)
             val n = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -195,6 +196,7 @@ object BatteryAlertNotifier {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .build()
             NotificationManagerCompat.from(context).notify(NOTIF_ID_RUNTIME, n)
+            NoopPrefs.setBatteryRuntimeAlerted(context, decision.newAlerted)
         }
     }
 
@@ -218,7 +220,7 @@ object BatteryAlertNotifier {
     ) {
         if (!NoopPrefs.batteryAlerts(context)) return
         runCatching {
-            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+            if (!deliveryAllowed(context)) return
             val decision = StaleBatteryAlertPolicy.evaluate(
                 lastSocPct = lastSocPct,
                 lastTsSec = lastTsSec,
@@ -256,14 +258,18 @@ object BatteryAlertNotifier {
         if (!NoopPrefs.batteryAlerts(context)) return
         // Defensive: never let a notify() throw (revoked POST_NOTIFICATIONS, OEM quirk) crash a collector.
         runCatching {
-            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
-            ensureChannel(context)
             val decision = BatteryAlertPolicy.evaluate(
                 pct = currPct,
                 charging = charging,
                 lowAlerted = NoopPrefs.batteryLowAlerted(context),
                 fullAlerted = NoopPrefs.batteryFullAlerted(context),
             )
+            if (!decision.fireLow) NoopPrefs.setBatteryLowAlerted(context, decision.newLowAlerted)
+            if (!decision.fireFull) NoopPrefs.setBatteryFullAlerted(context, decision.newFullAlerted)
+            if (decision.clearFull) NotificationManagerCompat.from(context).cancel(NOTIF_ID_FULL)
+            if (!decision.fireLow && !decision.fireFull) return
+            if (!deliveryAllowed(context)) return
+            ensureChannel(context)
             if (decision.fireLow) {
                 val n = NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_stat_heart)
@@ -275,6 +281,7 @@ object BatteryAlertNotifier {
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .build()
                 NotificationManagerCompat.from(context).notify(NOTIF_ID_LOW, n)
+                NoopPrefs.setBatteryLowAlerted(context, decision.newLowAlerted)
             }
             if (decision.fireFull) {
                 val n = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -287,16 +294,8 @@ object BatteryAlertNotifier {
                     .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                     .build()
                 NotificationManagerCompat.from(context).notify(NOTIF_ID_FULL, n)
+                NoopPrefs.setBatteryFullAlerted(context, decision.newFullAlerted)
             }
-            // #514: the strap has dropped below 100% — pull the stale "fully charged" note so it
-            // can't linger after the cell discharges. cancel() covers a posted notification; a
-            // not-yet-shown one simply no-ops.
-            if (decision.clearFull) {
-                NotificationManagerCompat.from(context).cancel(NOTIF_ID_FULL)
-            }
-            // ALWAYS persist the updated flags — re-arming must stick even when nothing fired.
-            NoopPrefs.setBatteryLowAlerted(context, decision.newLowAlerted)
-            NoopPrefs.setBatteryFullAlerted(context, decision.newFullAlerted)
         }
     }
 
@@ -327,9 +326,11 @@ object BatteryAlertNotifier {
                 alerted = NoopPrefs.batteryCriticalAlerted(context),
             )
             // ALWAYS persist the updated gate — re-arming must stick even when nothing fired.
-            NoopPrefs.setBatteryCriticalAlerted(context, decision.newAlerted)
-            if (!decision.fire) return
-            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+            if (!decision.fire) {
+                NoopPrefs.setBatteryCriticalAlerted(context, decision.newAlerted)
+                return
+            }
+            if (!deliveryAllowed(context)) return
             ensureChannel(context)
             val body = context.getString(R.string.battery_critical_body, currPct)
             val n = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -349,6 +350,7 @@ object BatteryAlertNotifier {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .build()
             NotificationManagerCompat.from(context).notify(NOTIF_ID_CRITICAL, n)
+            NoopPrefs.setBatteryCriticalAlerted(context, decision.newAlerted)
         }
     }
 
@@ -385,10 +387,13 @@ object BatteryAlertNotifier {
                 alerted = NoopPrefs.batteryBedtimeAlerted(context),
             )
             // ALWAYS persist the updated gate — the nightly re-arm must stick even when nothing fired.
-            NoopPrefs.setBatteryBedtimeAlerted(context, decision.newAlerted)
+            if (!decision.fire) {
+                NoopPrefs.setBatteryBedtimeAlerted(context, decision.newAlerted)
+                return
+            }
             val runway = decision.runway
-            if (!decision.fire || runway == null) return
-            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+            if (runway == null) return
+            if (!deliveryAllowed(context)) return
             ensureChannel(context)
             val body = context.getString(
                 R.string.battery_bedtime_body,
@@ -408,15 +413,27 @@ object BatteryAlertNotifier {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .build()
             NotificationManagerCompat.from(context).notify(NOTIF_ID_BEDTIME, n)
+            NoopPrefs.setBatteryBedtimeAlerted(context, decision.newAlerted)
         }
     }
 
     private fun openAppIntent(context: Context): PendingIntent =
         PendingIntent.getActivity(
-            context, 3,
-            appLaunchIntent(context),
+            context, 42,
+            localNotificationLaunchIntent(context, "devices"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+
+    private fun deliveryAllowed(context: Context): Boolean {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
+        val time = java.time.LocalTime.now()
+        if (LocalNotificationPrefs.quiet(context, time.hour * 60 + time.minute)) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (manager.getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE) return false
+        }
+        return true
+    }
 
     private fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

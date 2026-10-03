@@ -10,7 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.noop.R
 import com.noop.ui.NoopPrefs
-import com.noop.ui.appLaunchIntent
+import kotlin.math.roundToInt
 
 // MARK: - Target-strain notification (#593)
 //
@@ -81,8 +81,12 @@ object StrainTargetNotifier {
         val copy = StrainTargetPolicy.copy(target21!!)
         runCatching {
             if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+            val time = java.time.LocalTime.now()
+            if (LocalNotificationPrefs.quiet(context, time.hour * 60 + time.minute)) return
             ensureChannel(context)
-            post(context, STRAIN_TARGET_NOTIF_ID, copy.first, copy.second)
+            post(context, STRAIN_TARGET_NOTIF_ID, copy.first, copy.second,
+                LocalNotificationContext("local_briefing", "strainTarget:$day", "strainTarget", day, message = copy.second,
+                    report = LocalRecordedReport(day, null, null, dayStrain21?.let { (it * 10).roundToInt() }, 0)))
             // Mark fired only after a successful post, so a notifications-disabled day still notifies once
             // they're re-enabled while the same day still shows the reached target.
             NoopPrefs.setReportStrainTargetDay(context, day)
@@ -90,10 +94,10 @@ object StrainTargetNotifier {
     }
 
     @SuppressLint("MissingPermission")
-    private fun post(context: Context, id: Int, title: String, body: String) {
+    private fun post(context: Context, id: Int, title: String, body: String, notification: LocalNotificationContext) {
         val openApp = PendingIntent.getActivity(
-            context, 3,
-            appLaunchIntent(context),
+            context, id,
+            localNotificationLaunchIntent(context, notification),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -106,7 +110,7 @@ object StrainTargetNotifier {
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-        NotificationManagerCompat.from(context).notify(id, n)
+        NotificationManagerCompat.from(context).notify(notification.identity, id, n)
     }
 
     private fun ensureChannel(context: Context) {

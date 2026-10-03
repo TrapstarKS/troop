@@ -1365,7 +1365,7 @@ private struct LiveLogCard: View {
     // The strap-log text builder lives on LiveState (`exportableLogText()`) so the macOS Settings
     // shortcut shares the exact same output (#17 / #507). These stay as thin wrappers.
     private func copyStrapLog() {
-        PlatformPasteboard.copy(live.exportableLogText())
+        FileExport.copyDebugText(live.exportableLogText())
     }
 
     private func saveStrapLog() {
@@ -1374,7 +1374,7 @@ private struct LiveLogCard: View {
             // site wrote a same-named file silently missing the "Strap & data" + funnel sections, so
             // which button someone pressed changed what a triager received.
             let extra = await DebugDataDiagnostics.dynamicLines(repo: model.repo)
-            FileExport.exportText(live.exportableLogText(extraHeaderLines: extra),
+            FileExport.exportDebugText(live.exportableLogText(extraHeaderLines: extra),
                                   suggestedName: FileExport.timestampedName("noop-strap-log", ext: "txt"))
         }
     }

@@ -96,7 +96,7 @@ class AnalyticsTest {
     @Test
     fun illness_tooFewDaysReturnsNull() {
         val days = (0 until 10).map { day("2026-01-%02d".format(it + 1), restingHr = 50, avgHrv = 60.0) }
-        assertNull(IllnessWatch.evaluate(days))
+        assertNull(IllnessWatch.evaluateWindow(days).alert)
     }
 
     @Test
@@ -105,7 +105,7 @@ class AnalyticsTest {
         val days = (0 until 31).map {
             day("2026-01-%02d".format(it + 1), restingHr = 50, avgHrv = 60.0, skinTempDevC = 0.0, respRateBpm = 14.0)
         }
-        assertNull(IllnessWatch.evaluate(days))
+        assertNull(IllnessWatch.evaluateWindow(days).alert)
     }
 
     /**
@@ -136,7 +136,7 @@ class AnalyticsTest {
         )
         assertNull(
             "one flag is not a banner, and a calibrating HRV fold is not a baseline",
-            IllnessWatch.evaluate(baseline + recent),
+            IllnessWatch.evaluateWindow(baseline + recent).alert,
         )
     }
 
@@ -150,7 +150,7 @@ class AnalyticsTest {
             day("2026-02-01", restingHr = 58, avgHrv = 20.0, skinTempDevC = 0.0, respRateBpm = 14.0),
             day("2026-02-02", restingHr = 58, avgHrv = 20.0, skinTempDevC = 0.0, respRateBpm = 14.0),
         )
-        val msg = IllnessWatch.evaluate(baseline + recent)
+        val msg = IllnessWatch.evaluateWindow(baseline + recent).alert
         assertNotNull(msg)
         assertTrue("the HRV flag is what the unusable case withholds", msg!!.contains("HRV"))
     }
@@ -169,7 +169,7 @@ class AnalyticsTest {
             day("2026-02-02", restingHr = 58, avgHrv = 45.0, skinTempDevC = 0.8, respRateBpm = 14.0),
         )
         val days = baseline + recent
-        val msg = IllnessWatch.evaluate(days)
+        val msg = IllnessWatch.evaluateWindow(days).alert
         assertNotNull(msg)
         assertTrue(msg!!.contains("resting HR"))
         assertTrue(msg.contains("HRV"))
@@ -186,8 +186,8 @@ class AnalyticsTest {
         val strained = day("2026-02-01", restingHr = 71, avgHrv = 18.0)
         val recovered = day("2026-02-02", restingHr = 56, avgHrv = 49.0)
 
-        assertNotNull(IllnessWatch.evaluate(baseline + strained))
-        assertNull(IllnessWatch.evaluate(baseline + strained + recovered))
+        assertNotNull(IllnessWatch.evaluateWindow(baseline + strained).alert)
+        assertNull(IllnessWatch.evaluateWindow(baseline + strained + recovered).alert)
     }
 
     @Test
@@ -200,7 +200,7 @@ class AnalyticsTest {
             day("2026-02-01", restingHr = 60, avgHrv = 60.0, skinTempDevC = 0.0, respRateBpm = 14.0),
             day("2026-02-02", restingHr = 60, avgHrv = 60.0, skinTempDevC = 0.0, respRateBpm = 14.0),
         )
-        assertNull(IllnessWatch.evaluate(baseline + recent))
+        assertNull(IllnessWatch.evaluateWindow(baseline + recent).alert)
     }
 
     @Test
@@ -220,7 +220,7 @@ class AnalyticsTest {
             day("2026-02-01", restingHr = 50, avgHrv = 60.0, skinTempDevC = 0.0, respRateBpm = 15.0),
             day("2026-02-02", restingHr = 50, avgHrv = 60.0, skinTempDevC = 0.0, respRateBpm = 18.0),
         )
-        assertNull(IllnessWatch.evaluate(baseline + recent))
+        assertNull(IllnessWatch.evaluateWindow(baseline + recent).alert)
     }
 
     @Test
@@ -239,7 +239,7 @@ class AnalyticsTest {
             day("2026-02-01", restingHr = 58, avgHrv = 60.0, skinTempDevC = 0.0, respRateBpm = 18.0),
             day("2026-02-02", restingHr = 58, avgHrv = 60.0, skinTempDevC = 0.0, respRateBpm = 19.0),
         )
-        val msg = IllnessWatch.evaluate(baseline + recent)
+        val msg = IllnessWatch.evaluateWindow(baseline + recent).alert
         assertNotNull(msg)
         assertTrue(msg!!.contains("respiration"))
     }
@@ -259,7 +259,7 @@ class AnalyticsTest {
             day("2026-02-01", restingHr = 50, avgHrv = 60.0, skinTempDevC = 0.0, respRateBpm = 35.0),
             day("2026-02-02", restingHr = 50, avgHrv = 60.0, skinTempDevC = 0.0, respRateBpm = 35.0),
         )
-        assertNull(IllnessWatch.evaluate(baseline + recent))
+        assertNull(IllnessWatch.evaluateWindow(baseline + recent).alert)
     }
 
     // --- sessionAvgHRV ectopic cleaning (#262/#235) -------------------------

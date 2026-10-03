@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlin.math.roundToInt
 
 /**
@@ -457,6 +460,11 @@ class WhoopRepository(
      *  path banks v18 rows, so a plain map is enough. Swift twin: `WhoopStore.v18AuxRowsSincePrune`. */
     private val v18AuxRowsSincePrune = mutableMapOf<String, Int>()
 
+    private val _journalRevision = MutableStateFlow(0L)
+    val journalRevision: StateFlow<Long> = _journalRevision.asStateFlow()
+    // Swift twin: `Repository.noteJournalChanged`.
+    fun noteJournalChanged() { _journalRevision.update { it + 1 } }
+
     private val _sleepSampleRevision = MutableStateFlow(0L)
     val sleepSampleRevision: StateFlow<Long> = _sleepSampleRevision.asStateFlow()
     private val _batteryRevision = MutableStateFlow(0L)
@@ -800,12 +808,56 @@ class WhoopRepository(
         replaceMetricKeys, replaceMetricSourceIds,
     )
 
-    /** Computed-only daily rows; unlike daysMerged this can never substitute imported/calendar steps. */
-    suspend fun computedDailyUnion(activeStrapId: String, from: String, to: String): List<DailyMetric> =
-        unionByDay(computedSourceIds(activeStrapId).map { dao.dailyMetricsRange(it, from, to) })
+    /** Joins physical-source HRV and evidence before any per-field source coalescing. */
+    fun hrvProvenanceFlow(activeStrapId: String, from: String, to: String): Flow<List<HrvProvenanceRow>> =
+        dao.hrvProvenanceFlow(importedSourceIds(activeStrapId) + computedSourceIds(activeStrapId), from, to)
 
+    /** Computed-only daily rows; unlike daysMerged this can never substitute imported/calendar steps. */
     fun computedDailyUnionFlow(activeStrapId: String, from: String, to: String): Flow<List<DailyMetric>> =
         unionDaysFlow(computedSourceIds(activeStrapId).map { dao.dailyMetricsRangeFlow(it, from, to) })
+
+    /** Charge-only HRV eligibility; ordinary computed/display rows remain unchanged. */
+    suspend fun chargeComputedDailyUnion(
+        activeStrapId: String, from: String, to: String, requiredFreshDay: String? = null,
+    ): List<DailyMetric> {
+        val sources = computedSourceIds(activeStrapId)
+        val daily = sources.map { dao.dailyMetricsRange(it, from, to) }
+        val markers = sources.map { source ->
+            try {
+                dao.chargeHrvProof(source, from, to).associateBy { it.day }
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                null // A failed metadata read must not permit a preserved HRV.
+            }
+        }
+        return chargeUnionByDay(daily, markers, requiredFreshDay)
+    }
+
+    fun chargeComputedDailyUnionFlow(
+        activeStrapId: String, from: String, to: String, requiredFreshDay: String? = null,
+    ): Flow<List<DailyMetric>> {
+        val flows = computedSourceIds(activeStrapId).map { source ->
+            val markers = dao.chargeHrvProofFlow(source, from, to)
+                .map<List<ChargeHrvProof>, Map<String, ChargeHrvProof>?> { rows -> rows.associateBy { it.day } }
+                .catch { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    emit(null)
+                }
+            combine(dao.dailyMetricsRangeFlow(source, from, to), markers) { daily, marker -> daily to marker }
+        }
+        return combine(flows) { perSource ->
+            chargeUnionByDay(perSource.map { it.first }, perSource.map { it.second }, requiredFreshDay)
+        }
+    }
+
+    /** Imported-only daily rows over the same active-and-canonical union, the twin of
+     *  [computedDailyUnionFlow]. The Charge baselines (#2525) read the two buckets apart, because their rule
+     *  needs to know which nights are imported; [daysMergedFlow] has already blended them. */
+    suspend fun importedDailyUnion(activeStrapId: String, from: String, to: String): List<DailyMetric> =
+        unionByDay(importedSourceIds(activeStrapId).map { dao.dailyMetricsRange(it, from, to) })
+
+    fun importedDailyUnionFlow(activeStrapId: String, from: String, to: String): Flow<List<DailyMetric>> =
+        unionDaysFlow(importedSourceIds(activeStrapId).map { dao.dailyMetricsRangeFlow(it, from, to) })
 
     fun metricSeriesComputedUnionFlow(
         activeStrapId: String,
@@ -1378,6 +1430,15 @@ class WhoopRepository(
             if (active != null && active != deviceId) tagged = isWhoop5RrSource(active)
         }
         return com.noop.protocol.Whoop5RR.usesCanonicalSource(owner?.model, owner?.brand, tagged || unlabelledAliasOfWhoop5)
+    }
+
+    /** Same effective HRV era for the scorer, calibration counts and confidence readers. */
+    suspend fun effectiveHrvEpoch(activeOwner: String, importedAlias: String = "my-whoop",
+                                 manualEpoch: Double, offsetSec: Long): Double {
+        val isFive = isWhoop5RrSource(activeOwner)
+        val first = if (isFive) listOf(activeOwner, importedAlias, WHOOP_SOURCE).distinct()
+            .mapNotNull { firstScorableWhoop5RrTs(it) }.minOrNull() else null
+        return com.noop.analytics.Baselines.effectiveHrvEpoch(manualEpoch, first, isFive, offsetSec)
     }
 
     /** The earliest beat this device has banked that the unit policy can actually score, or null when
@@ -2736,7 +2797,8 @@ class WhoopRepository(
             "sleep_light_min", "core_min" -> d.lightMin
             "sleep_performance" -> com.noop.analytics.RestScorer.restFromDaily(d)
             "steps" -> d.steps?.toDouble()
-            "active_kcal", "energy_kcal" -> d.activeKcalEst
+            "active_kcal" -> d.activeEnergyKcalEst
+            "energy_kcal" -> d.activeKcalEst
             else -> null
         }
 
@@ -2805,6 +2867,24 @@ class WhoopRepository(
             return byDay.values.toList()
         }
 
+        internal fun chargeUnionByDay(
+            lists: List<List<DailyMetric>>, proofs: List<Map<String, ChargeHrvProof>?>, requiredFreshDay: String?,
+        ): List<DailyMetric> {
+            val firstHrv = LinkedHashMap<String, Pair<Double, Double?>>()
+            for ((index, rows) in lists.withIndex()) for (row in rows) {
+                val value = row.avgHrv ?: continue
+                val proof = proofs[index]?.get(row.day)
+                val marker = if (proof != null && proof.value == value) proof.freshScoringValid else Double.NaN
+                firstHrv.putIfAbsent(row.day, value to marker)
+            }
+            return unionByDay(lists).map { row ->
+                val witness = firstHrv[row.day]
+                row.copy(avgHrv = com.noop.analytics.ChargeBaselines.ownHrvValue(
+                    witness?.first, witness?.second, row.day == requiredFreshDay,
+                ))
+            }
+        }
+
         /**
          * One day held by two source ids in the SAME bucket, folded into [winner]'s row: [winner] keeps
          * every column it carries and [filler] supplies only the ones it left null. "Carries" is NON-NULL,
@@ -2851,6 +2931,7 @@ class WhoopRepository(
                 respRateBpm = winner.respRateBpm ?: filler.respRateBpm,
                 steps = winner.steps ?: filler.steps,
                 activeKcalEst = winner.activeKcalEst ?: filler.activeKcalEst,
+                activeEnergyKcalEst = winner.activeEnergyKcalEst ?: filler.activeEnergyKcalEst,
             )
         }
 
@@ -2988,6 +3069,7 @@ class WhoopRepository(
                     respRateBpm = d.respRateBpm ?: c.respRateBpm,
                     steps = d.steps ?: c.steps,
                     activeKcalEst = d.activeKcalEst ?: c.activeKcalEst,
+                    activeEnergyKcalEst = d.activeEnergyKcalEst ?: c.activeEnergyKcalEst,
                     // Raw SpO2 is on-device only (imports never carry it), so the imported row's null
                     // is backfilled from the computed row — otherwise the nightly means would be lost. (#93)
                     spo2Red = d.spo2Red ?: c.spo2Red,

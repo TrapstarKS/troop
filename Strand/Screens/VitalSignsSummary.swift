@@ -136,8 +136,9 @@ enum BodyVitalSigns {
                          hrvOverCountByDay: [String: Double] = [:],
                          // #1846: the Settings lead-with choice, so this tile agrees with Today and the
                          // detail screen. A setting that reaches two of three surfaces is worse than none.
-                         skinTempPreferred: SkinTempDisplay.Kind = .absolute) -> [BodyVitalReading] {
-        let logicalDay = logicalDayKey(now)
+                         skinTempPreferred: SkinTempDisplay.Kind = .absolute,
+                         todayKey: String? = nil) -> [BodyVitalReading] {
+        let logicalDay = todayKey ?? logicalDayKey(now)
 
         // Resolve one metric to a per-day series, taking the FIRST source (by precedence) that carries
         // a value for each day — imported wins over computed wins over Apple, per `vitalPrecedence`.
@@ -505,7 +506,7 @@ private struct VitalPoint: Equatable {
     let source: DailyMetricSource
 }
 
-private extension DailyMetricSource {
+extension DailyMetricSource {
     /// Source precedence for a vital, highest first. Skin temp deliberately omits Apple Health — it
     /// has no 1:1 Apple equivalent for the strap's ±deviation reading, so an Apple absolute value must
     /// not stand in for it. localCache is always last (previews/tests).

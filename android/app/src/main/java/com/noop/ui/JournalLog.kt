@@ -3,6 +3,12 @@ package com.noop.ui
 import com.noop.R
 import androidx.compose.ui.res.stringResource
 import android.content.Context
+import android.app.DatePickerDialog
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.launch
+import java.time.temporal.ChronoUnit
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,10 +33,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.noop.data.JournalEntry
@@ -48,18 +60,7 @@ const val JOURNAL_DEVICE_ID = "noop-journal"
  *  effects engine, so imported question strings always take precedence (mergeJournalCatalog).
  *  They are DATA, not UI literals, stored verbatim in the journal table and never localised.
  *  Mirrors macOS JournalCatalogStore.starterQuestions value-for-value. */
-val STARTER_JOURNAL_QUESTIONS: List<String> = listOf(
-    "Did you drink any alcohol?",
-    "Did you have caffeine late in the day?",
-    "Did you view a screen in bed?",
-    "Did you eat close to bedtime?",
-    "Did you feel stressed?",
-    "Did you use a sauna?",
-    "Did you share your bed?",
-    "Did you feel sick or ill?",
-    "Did you take magnesium?",
-    "Did you read before bed?",
-)
+val STARTER_JOURNAL_QUESTIONS: List<String> = JournalFactor.all.map { it.canonical }
 
 /** Dedup/identity key for a question. Normalises ALL whitespace, leading/trailing AND internal
  *  runs collapse to a single space, then lowercases. A WHOOP export commonly leaves a trailing
@@ -129,10 +130,7 @@ internal fun mergeJournalEntries(
 internal fun journalDayKey(daysBack: Long = 0L, today: LocalDate = LocalDate.now()): String =
     today.minusDays(daysBack).toString()
 
-/** How many days back the journal day picker can reach (#656): today (0) plus the 6 prior days = a
- *  7-day backfill window, plus Tomorrow (-1). Bounded on purpose — journal answers feed the
- *  correlation engine, so unbounded backfill of stale days would distort it (matches WHOOP's limited
- *  retroactive window and the strip the Today widget shows). */
+/** Recent-day shortcuts; the calendar can open older historical dates. */
 internal const val JOURNAL_BACKFILL_DAYS = 6
 
 /** Short chip label for a journal day-picker [offset] (daysBack; -1 = Tomorrow). Hardcoded English to
@@ -192,16 +190,63 @@ fun JournalLogCard(
     numericAnswers: Map<String, Double> = emptyMap(),
     dayOffset: Long,
     onDayOffset: (Long) -> Unit,
-    onAnswer: (String, Boolean) -> Unit,
-    onNumeric: (String, Double) -> Unit,
-    onClear: (String) -> Unit,
     onAddCustom: (String, JournalKind, JournalGroup) -> Unit,
     onRename: (String, String) -> Unit = { _, _ -> },
     onSetGroup: (String, JournalGroup) -> Unit = { _, _ -> },
     onSetKind: (String, JournalKind) -> Unit = { _, _ -> },
     onRemoveQuestion: (String) -> Unit = {},
     onRestoreQuestion: (String) -> Unit = {},
+    answersDayKey: String,
+    anchorDay: String,
+    onDirtyChanged: (Boolean) -> Unit,
+    morningPrompt: Boolean = false,
+    onSave: suspend (String, Map<String, Boolean>, Map<String, Double>, Set<String>) -> Boolean,
 ) {
+    val selectedDay = journalDayKey(dayOffset, LocalDate.parse(anchorDay))
+    var baselineAnswers by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var baselineNumeric by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var draftAnswers by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var draftNumeric by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var draftNumericText by rememberSaveable(selectedDay) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var saving by remember { mutableStateOf(false) }
+    var saveFailed by remember { mutableStateOf(false) }
+    var pendingOffset by remember { mutableStateOf<Long?>(null) }
+    val dirty = draftAnswers != baselineAnswers || draftNumeric != baselineNumeric || draftNumericText.any { (question, text) ->
+        text != (baselineNumeric[question]?.let(::formatNumeric) ?: "")
+    }
+    val invalidNumeric = draftNumericText.any { (question, text) ->
+        text.isNotBlank() && journalNumericValue(text, allowNegative = journalAllowsNegative(question)) == null
+    }
+    val answersReady = answersDayKey == selectedDay
+    LaunchedEffect(dirty) { onDirtyChanged(dirty) }
+    val liveAnchorDay by rememberUpdatedState(anchorDay)
+    val liveDayOffset by rememberUpdatedState(dayOffset)
+    val liveDirty by rememberUpdatedState(dirty)
+    val liveSaving by rememberUpdatedState(saving)
+    LaunchedEffect(dayOffset, answersDayKey, answers, numericAnswers) {
+        if (answersDayKey == journalDayKey(dayOffset, LocalDate.parse(anchorDay)) && !dirty) {
+            baselineAnswers = answers; baselineNumeric = numericAnswers
+            draftAnswers = answers; draftNumeric = numericAnswers
+            draftNumericText = emptyMap()
+        }
+    }
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun selectDay(offset: Long) {
+        if (liveSaving || offset == liveDayOffset) return
+        if (liveDirty) pendingOffset = offset else onDayOffset(offset)
+    }
+    // Swift twin: `JournalLogCard.editNumeric`.
+    fun editNumeric(question: String, text: String) {
+        if (saving || !answersReady) return
+        draftNumericText = draftNumericText + (question to text)
+        if (text.isBlank()) {
+            draftNumeric = draftNumeric - question; draftAnswers = draftAnswers - question
+        } else journalNumericValue(text, allowNegative = journalAllowsNegative(question))?.let { value ->
+            draftNumeric = draftNumeric + (question to value); draftAnswers = draftAnswers + (question to true)
+        }
+        saveFailed = false
+    }
     var editing by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<JournalCatalogItem?>(null) }
 
@@ -225,6 +270,25 @@ fun JournalLogCard(
                 JournalChip("Edit", selected = false) { editing = true }
             }
         }
+        if (!editing) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                val selected = LocalDate.parse(anchorDay).minusDays(dayOffset)
+                Text(selected.format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)),
+                    style = NoopType.body, color = Palette.textPrimary,
+                    modifier = Modifier.weight(1f).clickable(enabled = !saving && answersReady) {
+                        DatePickerDialog(context, { _, year, month, day ->
+                            selectDay(ChronoUnit.DAYS.between(LocalDate.of(year, month + 1, day), LocalDate.parse(liveAnchorDay)))
+                        }, selected.year, selected.monthValue - 1, selected.dayOfMonth).apply {
+                            datePicker.maxDate = java.time.ZonedDateTime.now().plusDays(1).toInstant().toEpochMilli()
+                        }.show()
+                    })
+                Text(uiString(if (dirty) R.string.plan_unsaved else if (baselineAnswers.isEmpty()) R.string.plan_not_started else R.string.plan_saved),
+                    style = NoopType.caption, color = if (dirty) Palette.statusWarning else Palette.textSecondary)
+            }
+            if (morningPrompt && dayOffset == 0L && baselineAnswers.isEmpty()) {
+                Text(uiString(R.string.plan_morning_journal), style = NoopType.footnote, color = Palette.textSecondary)
+            }
+        }
         // Day picker (#656): a bounded, scrollable range — Tomorrow back through the last 7 days — so any
         // recent day can be backfilled (was Yesterday/Today/Tomorrow only). Chronological left→right
         // (oldest → Tomorrow, #443); auto-scrolls to the selected day, so a deep-link from the Today
@@ -239,48 +303,44 @@ fun JournalLogCard(
             }
             LazyRow(
                 state = dayListState,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(Metrics.space6),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 items(dayOffsets) { off ->
-                    JournalChip(journalDayChipLabel(off), selected = dayOffset == off) { onDayOffset(off) }
+                    JournalChip(journalDayChipLabel(off), selected = dayOffset == off) { selectDay(off) }
                 }
             }
         }
         NoopCard {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(Metrics.space10)) {
                 Text(
                     when {
-                        editing ->
-                            "Rename, regroup, or remove an item to tidy your list. Renaming keeps the " +
-                                "original question behind the scenes, so a WHOOP import still lines up. " +
-                                "Custom items are deleted; built-in ones are hidden and can be restored below."
-                        dayOffset == -1L ->
-                            "Logging ahead for tomorrow: today's activities inform tomorrow's " +
-                                "recovery, just as yesterday's are reflected in today's. Tomorrow's " +
-                                "answers line up with tomorrow's morning."
-                        else ->
-                            "Answers are about the night and day leading into this morning, the " +
-                                "same attribution a WHOOP export uses, so logged and imported days " +
-                                "line up."
+                        editing -> uiString(R.string.plan_journal_edit_hint)
+                        dayOffset == -1L -> uiString(R.string.plan_journal_ahead)
+                        else -> uiString(R.string.plan_journal_instructions)
                     },
                     style = NoopType.footnote,
                     color = Palette.textTertiary,
                 )
                 // Grouped, collapsible blocks in the fixed display order. Empty groups hide outside edit.
                 JournalGroup.displayOrder.forEach { group ->
-                    val groupItems = items.filter { it.group == group }
+                    val groupItems = items.filter { it.group == group && (editing || !it.hidden) }
                         .sortedWith(compareBy({ it.sortIndex }, { it.display }))
                     if (groupItems.isNotEmpty() || editing) {
                         JournalGroupBlock(
                             group = group,
                             items = groupItems,
                             editing = editing,
-                            answers = answers,
-                            numericAnswers = numericAnswers,
-                            onAnswer = onAnswer,
-                            onNumeric = onNumeric,
-                            onClear = onClear,
+                            answers = draftAnswers,
+                            numericAnswers = draftNumeric,
+                            numericText = draftNumericText,
+                            onNumericText = ::editNumeric,
+                            onAnswer = { q, yes -> if (!saving && answersReady) { draftAnswers = draftAnswers + (q to yes); draftNumeric = draftNumeric - q; draftNumericText = draftNumericText - q } },
+                            onNumeric = { q, value -> if (!saving && answersReady && value.isFinite() && (value >= 0 || journalAllowsNegative(q))) {
+                                draftNumeric = draftNumeric + (q to value); draftAnswers = draftAnswers + (q to true)
+                                draftNumericText = draftNumericText - q
+                            } },
+                            onClear = { q -> if (!saving && answersReady) { draftAnswers = draftAnswers - q; draftNumeric = draftNumeric - q; draftNumericText = draftNumericText - q } },
                             onStartRename = { renaming = it },
                             onSetGroup = onSetGroup,
                             onSetKind = onSetKind,
@@ -290,11 +350,46 @@ fun JournalLogCard(
                     }
                 }
                 JournalDivider()
-                JournalAddRow(onAddCustom = onAddCustom)
+                if (editing) {
+                    JournalAddRow(onAddCustom = onAddCustom)
+                } else {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(uiString(R.string.plan_answered, items.count { !it.hidden && draftAnswers.containsKey(it.canonical) }, items.count { !it.hidden }),
+                            style = NoopType.captionNumber, color = Palette.textSecondary, modifier = Modifier.weight(1f))
+                        JournalChip(uiString(R.string.plan_discard), selected = false) {
+                            if (!saving && answersReady) { draftAnswers = baselineAnswers; draftNumeric = baselineNumeric; draftNumericText = emptyMap(); saveFailed = false }
+                        }
+                    }
+                    JournalChip(uiString(if (saving) R.string.plan_saving else R.string.plan_save_journal), selected = dirty && !invalidNumeric,
+                        enabled = dirty && !invalidNumeric && !saving && answersReady) {
+                        if (dirty && !invalidNumeric && !saving && answersReady) {
+                            val day = journalDayKey(dayOffset, LocalDate.parse(anchorDay))
+                            val nextAnswers = draftAnswers
+                            val nextNumeric = draftNumeric
+                            val questions = (baselineAnswers.keys + baselineNumeric.keys + nextAnswers.keys + nextNumeric.keys).filter {
+                                baselineAnswers[it] != nextAnswers[it] || baselineNumeric[it] != nextNumeric[it]
+                            }.toSet()
+                            saving = true
+                            scope.launch {
+                                saveFailed = !onSave(day, nextAnswers, nextNumeric, questions)
+                                if (!saveFailed) { baselineAnswers = nextAnswers; baselineNumeric = nextNumeric; draftNumericText = emptyMap() }
+                                saving = false
+                            }
+                        }
+                    }
+                    if (invalidNumeric) Text(uiString(R.string.plan_numeric_invalid), style = NoopType.footnote, color = Palette.statusWarning)
+                    if (saveFailed) Text(uiString(R.string.plan_save_failed), style = NoopType.footnote, color = Palette.statusWarning)
+                }
             }
         }
     }
 
+    pendingOffset?.let { offset ->
+        AlertDialog(onDismissRequest = { pendingOffset = null },
+            title = { Text(uiString(R.string.plan_discard_prompt)) },
+            confirmButton = { JournalChip(uiString(R.string.plan_discard), false) { pendingOffset = null; onDayOffset(offset) } },
+            dismissButton = { JournalChip(uiString(R.string.plan_cancel), false) { pendingOffset = null } })
+    }
     renaming?.let { item ->
         JournalRenameDialog(
             item = item,
@@ -312,6 +407,8 @@ private fun JournalGroupBlock(
     editing: Boolean,
     answers: Map<String, Boolean>,
     numericAnswers: Map<String, Double>,
+    numericText: Map<String, String>,
+    onNumericText: (String, String) -> Unit,
     onAnswer: (String, Boolean) -> Unit,
     onNumeric: (String, Double) -> Unit,
     onClear: (String) -> Unit,
@@ -322,16 +419,24 @@ private fun JournalGroupBlock(
     onRestoreQuestion: (String) -> Unit,
 ) {
     var collapsed by remember(group) { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val groupTitle = group.title
+    val groupCount = uiString(R.string.l10n_journal_log_items_size_f76ab912, items.size)
+    val groupState = uiString(if (collapsed) R.string.settings_disclosure_collapsed else R.string.settings_disclosure_expanded)
+    val groupDescription = uiString(R.string.l10n_fused_record_screen_contrib_source_displayname_fusionformat_value_contrib_d182dd7f, groupCount, groupState)
+    Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { collapsed = !collapsed },
+            modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { collapsed = !collapsed }
+                .semantics(mergeDescendants = true) {
+                    contentDescription = groupTitle
+                    stateDescription = groupDescription
+                },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(group.title.uppercase(), style = NoopType.overline, color = Palette.textTertiary)
-            Spacer(Modifier.width(6.dp))
-            Text(uiString(R.string.l10n_journal_log_items_size_f76ab912, items.size), style = NoopType.caption, color = Palette.textTertiary)
+            Text(groupTitle.uppercase(), style = NoopType.overline, color = Palette.textTertiary)
+            Spacer(Modifier.width(Metrics.space6))
+            Text(groupCount, style = NoopType.caption, color = Palette.textTertiary)
             Spacer(Modifier.weight(1f))
-            Text(if (collapsed) "▸" else "▾", style = NoopType.caption, color = Palette.textTertiary)
+            Text(if (collapsed) "▸" else "▾", style = NoopType.caption, color = Palette.textTertiary, modifier = Modifier.clearAndSetSemantics {})
         }
         if (!collapsed) {
             items.forEach { item ->
@@ -340,7 +445,7 @@ private fun JournalGroupBlock(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        item.display,   // display = rename ?? canonical; data, not a UI literal
+                        journalLocalizedLabel(item),
                         style = NoopType.body,
                         color = if (item.hidden) Palette.textTertiary else Palette.textPrimary,
                         modifier = Modifier.weight(1f),
@@ -357,6 +462,8 @@ private fun JournalGroupBlock(
                         item.kind.isNumeric -> JournalNumericField(
                             item = item,
                             value = numericAnswers[item.canonical],
+                            text = numericText[item.canonical] ?: numericAnswers[item.canonical]?.let(::formatNumeric) ?: "",
+                            onText = { onNumericText(item.canonical, it) },
                             onCommit = { onNumeric(item.canonical, it) },
                             onClear = { onClear(item.canonical) },
                         )
@@ -364,7 +471,7 @@ private fun JournalGroupBlock(
                             JournalChip("Yes", selected = answers[item.canonical] == true) {
                                 if (answers[item.canonical] == true) onClear(item.canonical) else onAnswer(item.canonical, true)
                             }
-                            Spacer(Modifier.width(6.dp))
+                            Spacer(Modifier.width(Metrics.space6))
                             JournalChip("No", selected = answers[item.canonical] == false) {
                                 if (answers[item.canonical] == false) onClear(item.canonical) else onAnswer(item.canonical, false)
                             }
@@ -381,41 +488,54 @@ private fun JournalGroupBlock(
 private fun JournalNumericField(
     item: JournalCatalogItem,
     value: Double?,
+    text: String,
+    onText: (String) -> Unit,
     onCommit: (Double) -> Unit,
     onClear: () -> Unit,
 ) {
-    var text by remember(value) { mutableStateOf(value?.let { formatNumeric(it) } ?: "") }
+    val fieldLabel = listOfNotNull(journalLocalizedLabel(item), item.kind.unitLabel).joinToString(" ")
     Row(verticalAlignment = Alignment.CenterVertically) {
-        JournalChip("−", selected = false) { onCommit(((value ?: 0.0) - 1).coerceAtLeast(0.0)) }
-        Spacer(Modifier.width(4.dp))
+        JournalChip("−", selected = false,
+            accessibilityLabel = uiString(R.string.l10n_components_decrease_accessibility_df5f1511, fieldLabel)) { onCommit(if (journalAllowsNegative(item.canonical)) (value ?: 0.0) - 1 else ((value ?: 0.0) - 1).coerceAtLeast(0.0)) }
+        Spacer(Modifier.width(Metrics.space4))
         OutlinedTextField(
             value = text,
-            onValueChange = { new ->
-                text = new
-                new.replace(',', '.').toDoubleOrNull()?.let { onCommit(it) }
-            },
+            onValueChange = onText,
             placeholder = { Text("—", style = NoopType.body, color = Palette.textTertiary) },
             singleLine = true,
             textStyle = NoopType.body,
             colors = journalFieldColors(),
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier.width(72.dp),
+            shape = RoundedCornerShape(Metrics.cornerSm),
+            modifier = Modifier.width((Metrics.iconButton * 2)).semantics { contentDescription = fieldLabel },
         )
         item.kind.unitLabel?.takeIf { it.isNotEmpty() }?.let { unit ->
-            Spacer(Modifier.width(4.dp))
-            Text(unit, style = NoopType.footnote, color = Palette.textTertiary)
+            Spacer(Modifier.width(Metrics.space4))
+            Text(unit, style = NoopType.footnote, color = Palette.textTertiary, maxLines = 1, softWrap = false)
         }
-        Spacer(Modifier.width(4.dp))
-        JournalChip("+", selected = false) { onCommit((value ?: 0.0) + 1) }
+        Spacer(Modifier.width(Metrics.space4))
+        JournalChip("+", selected = false,
+            accessibilityLabel = uiString(R.string.l10n_components_increase_accessibility_0949c0e9, fieldLabel)) { onCommit((value ?: 0.0) + 1) }
         if (value != null) {
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(Metrics.space4))
             Text("✕", style = NoopType.caption, color = Palette.textTertiary, modifier = Modifier.clickable { onClear() })
         }
     }
 }
 
-private fun formatNumeric(v: Double): String =
-    if (v == Math.floor(v) && !v.isInfinite()) v.toInt().toString() else String.format("%.1f", v)
+// Swift twin: `journalAllowsNegative`.
+private fun journalAllowsNegative(question: String): Boolean =
+    JournalFactor.find(question)?.unit.let { it == null || it == "°C" }
+
+// Swift twin: `journalNumericValue`.
+private fun journalNumericValue(text: String, allowNegative: Boolean): Double? =
+    text.replace(',', '.').trim().toDoubleOrNull()?.takeIf { it.isFinite() && (it >= 0 || allowNegative) }
+
+// Swift twin: `NumericLogField.format`.
+private fun formatNumeric(v: Double): String = when {
+    !v.isFinite() -> "—"
+    v == Math.floor(v) -> String.format(java.util.Locale.ROOT, "%.0f", v)
+    else -> String.format(java.util.Locale.ROOT, "%.1f", Math.rint(v * 10) / 10)
+}
 
 /** Edit-mode per-item controls: rename, change group, convert type, remove. */
 @Composable
@@ -431,7 +551,7 @@ private fun JournalItemEditControls(
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box {
             Text("⋯", style = NoopType.body, color = Palette.textSecondary,
-                modifier = Modifier.clickable { menuOpen = true }.padding(horizontal = 8.dp))
+                modifier = Modifier.clickable { menuOpen = true }.padding(horizontal = Metrics.space8))
             androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 androidx.compose.material3.DropdownMenuItem(
                     text = { Text(uiString(R.string.l10n_journal_log_rename_94ac9a58)) },
@@ -474,7 +594,7 @@ private fun JournalRenameDialog(
         onDismissRequest = onDismiss,
         title = { Text(uiString(R.string.l10n_journal_log_rename_item_3d21d6ca)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { draft = it },
@@ -489,8 +609,8 @@ private fun JournalRenameDialog(
                 )
             }
         },
-        confirmButton = { Text(uiString(R.string.l10n_journal_log_save_efc007a3), color = Palette.accent, modifier = Modifier.clickable { onSave(draft) }.padding(8.dp)) },
-        dismissButton = { Text(uiString(R.string.l10n_journal_log_cancel_77dfd213), color = Palette.textSecondary, modifier = Modifier.clickable { onDismiss() }.padding(8.dp)) },
+        confirmButton = { Text(uiString(R.string.l10n_journal_log_save_efc007a3), color = Palette.accent, modifier = Modifier.clickable { onSave(draft) }.padding(Metrics.space8)) },
+        dismissButton = { Text(uiString(R.string.l10n_journal_log_cancel_77dfd213), color = Palette.textSecondary, modifier = Modifier.clickable { onDismiss() }.padding(Metrics.space8)) },
     )
 }
 
@@ -501,7 +621,7 @@ private fun JournalAddRow(onAddCustom: (String, JournalKind, JournalGroup) -> Un
     var numeric by remember { mutableStateOf(false) }
     var group by remember { mutableStateOf(JournalGroup.Other) }
     var groupMenu by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = draft,
@@ -510,12 +630,12 @@ private fun JournalAddRow(onAddCustom: (String, JournalKind, JournalGroup) -> Un
                 singleLine = true,
                 textStyle = NoopType.body,
                 colors = journalFieldColors(),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(Metrics.space14),
                 modifier = Modifier.weight(1f),
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(Metrics.space8))
             JournalChip(if (numeric) "Number" else "Yes/No", selected = numeric) { numeric = !numeric }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(Metrics.space8))
             JournalChip("Add", selected = draft.isNotBlank()) {
                 val t = draft.trim()
                 if (t.isNotEmpty()) {
@@ -544,8 +664,8 @@ private fun JournalDivider() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .height(1.dp)
+            .padding(vertical = Metrics.space4)
+            .height(Metrics.divider)
             .background(Palette.hairline),
     )
 }
@@ -553,7 +673,7 @@ private fun JournalDivider() {
 /** A pill chip, filled with the accent when selected, hairline-bordered otherwise. Shared by the
  *  day toggle, the yes/no answers, and the "Add" action so they read identically. */
 @Composable
-private fun JournalChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun JournalChip(label: String, selected: Boolean, enabled: Boolean = true, accessibilityLabel: String? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
     Text(
         label,
@@ -562,9 +682,10 @@ private fun JournalChip(label: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .clip(shape)
             .background(if (selected) Palette.accent else Palette.surfaceInset)
-            .border(1.dp, if (selected) Palette.accent else Palette.hairline, shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .border(Metrics.divider, if (selected) Palette.accent else Palette.hairline, shape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { if (accessibilityLabel != null) contentDescription = accessibilityLabel }
+            .padding(horizontal = Metrics.space16, vertical = Metrics.space10),
     )
 }
 
@@ -580,9 +701,9 @@ private fun JournalRemoveButton(isCustom: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .clip(shape)
             .background(Palette.surfaceInset)
-            .border(1.dp, Palette.statusCritical.copy(alpha = 0.5f), shape)
+            .border(Metrics.divider, Palette.statusCritical.copy(alpha = 0.5f), shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = Metrics.space12, vertical = Metrics.space6),
     )
 }
 

@@ -11,12 +11,16 @@ enum TemporaryDatabase {
         return url
     }
 
-    static func seeded() throws -> URL {
+    static func seeded(activeEnergy: Double? = nil) throws -> URL {
         let url = try emptyFileURL()
         let dbQueue = try DatabaseQueue(path: url.path)
         try dbQueue.write { db in
             try createSchema(db)
             try seed(db)
+            if let activeEnergy {
+                try db.execute(sql: "ALTER TABLE dailyMetric ADD COLUMN activeEnergyKcalEst REAL")
+                try db.execute(sql: "UPDATE dailyMetric SET activeKcalEst = 2345, activeEnergyKcalEst = ? WHERE deviceId = 'my-whoop'", arguments: [activeEnergy])
+            }
         }
         return url
     }

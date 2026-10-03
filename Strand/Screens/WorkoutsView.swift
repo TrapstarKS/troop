@@ -239,7 +239,7 @@ struct WorkoutsView: View {
             let toDay = todayDayString()
             let fromDate = Calendar.current.date(byAdding: .day, value: -100, to: Date()) ?? Date()
             let metrics = await repo.dailyMetrics(fromDay: Self.dayFormatter.string(from: fromDate), toDay: toDay)
-            dailyKcal = Dictionary(metrics.compactMap { m in m.activeKcalEst.map { (m.day, $0) } },
+            dailyKcal = Dictionary(metrics.compactMap { m in m.activeEnergyKcalEst.map { (m.day, $0) } },
                                    uniquingKeysWith: max)
         }
         .onAppear {
@@ -277,7 +277,7 @@ struct WorkoutsView: View {
             }
         }
         .sheet(item: $detail) { target in
-            // These shared screens aren't hosted in a per-screen NavigationStack, so the read-only
+            // These shared screens aren't hosted in a per-screen NavigationStack, so the activity
             // detail rides its own NavigationStack inside the sheet (the Done toolbar item + iOS
             // grabber give the dismiss affordances). Mirrors HealthView presenting MetricDetailView.
             NavigationStack {
@@ -1435,7 +1435,7 @@ struct WorkoutsView: View {
             }
             .frame(width: ColWidth.sport, alignment: .leading)
 
-            cell(durationLabel(row.durationS), width: ColWidth.duration)
+            cell(durationLabel(row.durationS, fallbackSeconds: Double(row.endTs - row.startTs)), width: ColWidth.duration)
             cell(row.avgHr.map { "\($0)" } ?? "–", width: ColWidth.hr,
                  color: row.avgHr != nil ? StrandPalette.metricRose : nil)
             cell(row.energyKcal.map { grouped($0) } ?? "–", width: ColWidth.kcal,
@@ -1581,7 +1581,7 @@ struct WorkoutsView: View {
     /// The compact row's second line: "d MMM · HH:mm–HH:mm · 45m · 388 kcal · 118 bpm", nil fields omitted.
     private func compactRowSubtitle(_ row: WorkoutRow) -> String {
         var parts: [String] = [dateLabel(row.startTs), timeRangeLabel(row.startTs, row.endTs)]
-        if let d = durationLabelOrNil(row.durationS) { parts.append(d) }
+        if let d = durationLabelOrNil(row.durationS, fallbackSeconds: Double(row.endTs - row.startTs)) { parts.append(d) }
         if let k = row.energyKcal, k > 0 { parts.append(String(localized: "\(grouped(k)) kcal")) }
         if let d = row.distanceM, d > 0 { parts.append(distanceLabel(row.distanceM)) }
         if let hr = row.avgHr { parts.append(String(localized: "\(hr) bpm")) }
@@ -1806,20 +1806,19 @@ struct WorkoutsView: View {
         end > start ? "\(timeLabel(start))-\(timeLabel(end))" : timeLabel(start)
     }
 
-    private func durationLabel(_ s: Double?) -> String {
-        guard let s, s > 0 else { return "–" }
-        let total = Int(s.rounded())
-        let h = total / 3600
-        let m = (total % 3600) / 60
+    private func durationLabel(_ s: Double?, fallbackSeconds: Double? = nil) -> String {
+        guard let total = RecoveryStrainDetailLogic.durationMinutes(seconds: s, fallbackSeconds: fallbackSeconds) else { return "–" }
+        let h = total / 60
+        let m = total % 60
         if h > 0 { return String(localized: "\(h)h \(m)m") }
         return String(localized: "\(m)m")
     }
 
     /// #64: the duration label, or nil when there's no duration to show — so the compact row's summary
     /// line can omit the field entirely rather than printing a bare "–".
-    private func durationLabelOrNil(_ s: Double?) -> String? {
-        guard let s, s > 0 else { return nil }
-        return durationLabel(s)
+    private func durationLabelOrNil(_ s: Double?, fallbackSeconds: Double? = nil) -> String? {
+        guard RecoveryStrainDetailLogic.durationMinutes(seconds: s, fallbackSeconds: fallbackSeconds) != nil else { return nil }
+        return durationLabel(s, fallbackSeconds: fallbackSeconds)
     }
 
     private func distanceLabel(_ m: Double?) -> String {
@@ -1830,7 +1829,8 @@ struct WorkoutsView: View {
     private func oneDecimal(_ v: Double) -> String { String(format: "%.1f", v) }
 
     private func grouped(_ v: Double) -> String {
-        Self.intFmt.string(from: NSNumber(value: Int(v.rounded()))) ?? "\(Int(v.rounded()))"
+        guard let whole = RecoveryStrainDetailLogic.wholeNumber(v) else { return "–" }
+        return Self.intFmt.string(from: NSNumber(value: whole)) ?? String(whole)
     }
     private static let intFmt: NumberFormatter = {
         let f = NumberFormatter()

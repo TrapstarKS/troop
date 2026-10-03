@@ -1,5 +1,123 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="debug_export_failed">无法导出文件：%1$s</string>
+    <string name="plan_factor_0">酒精</string>
+    <string name="plan_factor_1">较晚摄入咖啡因</string>
+    <string name="plan_factor_2">在床上使用屏幕</string>
+    <string name="plan_factor_3">较晚进餐</string>
+    <string name="plan_factor_4">感到压力</string>
+    <string name="plan_factor_5">桑拿</string>
+    <string name="plan_factor_6">与他人同床</string>
+    <string name="plan_factor_7">感觉不适</string>
+    <string name="plan_factor_8">镁</string>
+    <string name="plan_factor_9">睡前阅读</string>
+    <string name="plan_factor_10">冥想</string>
+    <string name="plan_factor_11">呼吸练习</string>
+    <string name="plan_factor_12">户外时间</string>
+    <string name="plan_factor_13">旅行</string>
+    <string name="plan_factor_14">卧室噪声</string>
+    <string name="plan_factor_15">温暖的卧室</string>
+    <string name="plan_factor_16">遮光的卧室</string>
+    <string name="plan_factor_17">高海拔</string>
+    <string name="plan_factor_18">过敏症状</string>
+    <string name="plan_factor_19">处方药</string>
+    <string name="plan_factor_20">维生素 D</string>
+    <string name="plan_factor_21">咖啡因摄入量</string>
+    <string name="plan_factor_22">饮水量</string>
+    <string name="plan_factor_23">冥想时长</string>
+    <string name="plan_factor_24">卧室温度</string>
+    <string name="plan_factor_25">工作时长</string>
+    <string name="plan_unsaved">未保存</string>
+    <string name="plan_not_started">未开始</string>
+    <string name="plan_saved">已保存</string>
+    <string name="plan_discard">放弃</string>
+    <string name="plan_saving">保存中…</string>
+    <string name="plan_save_journal">保存日志</string>
+    <string name="plan_save_failed">无法保存日志。请重试。</string>
+    <string name="plan_answered">已回答 %1$d / %2$d</string>
+    <string name="plan_cancel">取消</string>
+    <string name="plan_discard_prompt">放弃未保存的日志更改？</string>
+    <string name="plan_morning_journal">睡眠数据已就绪。花点时间记录昨天的习惯吧。</string>
+    <string name="plan_journal_subtitle">在设备上记录你的日常习惯。</string>
+    <string name="plan_journal_date">日志日期</string>
+    <string name="plan_trends_recovery">恢复</string>
+    <string name="plan_trends_strain">强度</string>
+    <string name="plan_trends_sleep_performance">睡眠表现</string>
+    <string name="plan_trends_metric">指标</string>
+    <string name="plan_trends_previous_period">上一时段</string>
+    <string name="plan_trends_next_period">下一时段</string>
+    <string name="plan_trends_monthly_performance">月度表现</string>
+    <string name="plan_trends_local_report">本地报告</string>
+    <string name="plan_trends_recorded_days">已记录 %1$d / %2$d 天</string>
+    <string name="plan_trends_no_readings_month">本月没有读数</string>
+    <string name="plan_trends_report_note">平均值仅采用已记录的日期。缺失的读数仍显示为不可用。</string>
+    <string name="weekly_plan_title">每周计划</string>
+    <string name="weekly_plan_subtitle">选择保存在设备上的每周目标。</string>
+    <string name="weekly_plan_overall">总体进度</string>
+    <string name="weekly_plan_edit">编辑目标</string>
+    <string name="weekly_plan_sleep">睡眠目标</string>
+    <string name="weekly_plan_strain">强度目标</string>
+    <string name="weekly_plan_journal">日志习惯</string>
+    <string name="weekly_plan_days_progress">%1$d / %2$d 天</string>
+    <string name="weekly_plan_sleep_target">%1$d 小时 %2$d 分钟 · %3$d 天</string>
+    <string name="weekly_plan_strain_target">至少 %1$s %2$s · %3$d 天</string>
+    <string name="weekly_plan_missing">本周尚无读数</string>
+    <string name="weekly_plan_waiting">有睡眠、强度及所选日志数据时，将显示进度。</string>
+    <string name="weekly_plan_logged">任何已保存的日志</string>
+    <string name="weekly_plan_saved">已保存本周目标</string>
+    <string name="weekly_plan_unsaved">未保存的更改</string>
+    <string name="weekly_plan_save">保存目标</string>
+    <string name="weekly_plan_cancel">取消</string>
+    <string name="weekly_plan_sleep_minutes">睡眠分钟数</string>
+    <string name="weekly_plan_sleep_days">睡眠天数</string>
+    <string name="weekly_plan_strain_minimum">最低强度</string>
+    <string name="weekly_plan_strain_days">强度天数</string>
+    <string name="weekly_plan_journal_days">日志天数</string>
+    <string name="weekly_plan_behavior">跟踪的习惯</string>
+    <string name="weekly_plan_yes">是</string>
+    <string name="weekly_plan_no">否</string>
+    <string name="weekly_plan_check_in">周五回顾</string>
+    <string name="weekly_plan_check_in_body">查看进度并调整本周剩余时间的计划。</string>
+    <string name="weekly_plan_recap">周一总结</string>
+    <string name="weekly_plan_recap_body">回顾上周，选择要继续保持的内容。</string>
+    <string name="weekly_plan_keep">保留目标</string>
+    <string name="weekly_plan_dismiss">完成</string>
+    <string name="weekly_plan_local">目标和进度保存在此设备上。</string>
+    <string name="weekly_plan_week_format">%1$s – %2$s</string>
+    <string name="weekly_plan_percent">%1$d%%</string>
+    <string name="weekly_plan_habit_target">%1$s · %2$s · %3$d 天</string>
+    <string name="plan_group_behaviour">行为</string>
+    <string name="plan_group_other">其他</string>
+    <string name="plan_group_supplements">补充剂</string>
+    <string name="plan_group_nutrition">营养</string>
+    <string name="plan_group_lifestyle">生活方式</string>
+    <string name="plan_group_environment">环境</string>
+    <string name="plan_association_note">下方比较了有此习惯和无此习惯的已记录日期。关联并不代表因果关系。</string>
+    <string name="plan_comparison_window">比较使用最近 90 天的数据，且至少需要五个“是”和五个“否”的回答。未回答的日期不计入。</string>
+    <string name="weekly_plan_no_saved">本周尚未保存计划</string>
+    <string name="weekly_plan_habit_days">%1$s · %2$d 天</string>
+    <string name="weekly_plan_suggested">建议目标</string>
+    <string name="weekly_plan_create">创建计划</string>
+    <string name="weekly_plan_suggestion_body">建议目标依据最近 30 天的可用数据。保存后即可开始计划。</string>
+    <string name="weekly_plan_presets_heading">选择起始方案</string>
+    <string name="weekly_plan_rest_routine">休息方案</string>
+    <string name="weekly_plan_active_week">活力周</string>
+    <string name="weekly_plan_balanced_week">均衡周</string>
+    <string name="weekly_plan_custom">自定义目标</string>
+    <string name="plan_behavior_insights">习惯分析</string>
+    <string name="plan_recovery_trend">恢复趋势</string>
+    <string name="plan_recovery_full">打开完整的恢复指标。</string>
+    <string name="plan_journal_instructions">记录昨天和昨晚的习惯。</string>
+    <string name="plan_journal_ahead">记录要填写在明天日志中的习惯。</string>
+    <string name="plan_journal_edit_hint">选择你要跟踪的问题。</string>
+    <string name="whoop_nav_home">首页</string>
+    <string name="whoop_nav_plan">计划</string>
+    <string name="whoop_nav_healthspan">健康寿命</string>
+    <string name="whoop_nav_weekly_plan">每周计划</string>
+    <string name="whoop_plan_local_title">每周计划尚不可用</string>
+    <string name="whoop_plan_local_detail">日记和趋势仍可用于查看本地习惯和进度。</string>
+    <string name="plan_numeric_invalid">输入有效数字后即可保存。</string>
+    <string name="plan_behavior_comparison_summary">%1$s，%2$s，%3$s</string>
     <string name="app_name">NOOP</string>
     <string name="widget_description">今日的恢复、充能与负荷情况，以及实时心率和手环电量，一目了然。</string>
     <string name="widget_compact_name">NOOP 迷你组件</string>
@@ -1745,16 +1863,10 @@
     <string name="l10n_data_sources_screen_last_share_didn_t_finish_noop_0d6c27f0">上次分享未完成——NOOP 将自动重试。</string>
     <string name="settings_disclosure_expanded">已展开</string>
     <string name="settings_disclosure_collapsed">已收起</string>
-
-    <!-- 升级电量提醒（临界电量 + 睡前守护）。 -->
     <string name="battery_critical_title">请立即为 WHOOP 充电</string>
     <string name="battery_critical_body">剩余 %1$d%%。手环在约 10%% 时就会停止记录——不充电就无法记录今晚。</string>
     <string name="battery_bedtime_title">撑不过今晚</string>
     <string name="battery_bedtime_body">还能记录 %1$s，但今晚约需 %2$s。请在睡前充电。</string>
-
-    <!-- #867: the three older battery notifications, previously raw Kotlin literals in
-         BatteryAlertNotifier and therefore English in every locale. Wording and translations are the
-         Apple catalog's, moved across unchanged. -->
     <string name="battery_runtime_title">手环电量低</string>
     <string name="battery_runtime_body">你的 WHOOP 还剩 %1$s，今晚请充电。</string>
     <string name="battery_stale_title">WHOOP 上次电量偏低</string>
@@ -1763,12 +1875,6 @@
     <string name="battery_low_body">今晚之前给你的 WHOOP 充电。</string>
     <string name="battery_full_title">手环已充满电</string>
     <string name="battery_full_body">你的 WHOOP 电量为 100%。</string>
-
-    <!-- Foreground-service notification (WhoopConnectionService). Always on screen while the strap is
-         connected, and hardcoded English until now: com/noop/ble is outside i18n_audit.py's scan roots,
-         and a NotificationCompat builder chain matches none of its Compose patterns, so the gate could
-         not see it. postNotification's dedupe key now includes the locale — without that, these would
-         keep the previous language until the connection or battery state happened to change. -->
     <string name="fgs_title_reconnecting">正在重新连接你的 WHOOP…</string>
     <string name="fgs_title_syncing">正在同步手环历史…</string>
     <string name="fgs_title_connected">已连接到你的 WHOOP</string>
@@ -1779,9 +1885,6 @@
     <string name="fgs_action_disconnect">断开连接</string>
     <string name="fgs_channel_name">手环连接</string>
     <string name="fgs_channel_desc">当 NOOP 在后台保持你的 WHOOP 连接时显示。</string>
-
-    <!-- The remaining notifier titles/bodies, surfaced by extending i18n_audit.py to the
-         notification builders. Same defect as the block above: user-visible, never localised. -->
     <string name="illness_alert_title">早期预警：放轻松</string>
     <string name="illness_alert_window">夜晚：%1$s、%2$s</string>
     <string name="inactivity_title">活动提醒</string>
@@ -1789,7 +1892,6 @@
     <string name="smart_alarm_body">你的智能闹钟刚刚响了。</string>
     <string name="battery_channel_name">电量提醒</string>
     <string name="battery_channel_desc">当手环电量低或已充满时提醒。</string>
-    <!-- K5: scheduled Coach morning-brief notification. -->
     <string name="coach_brief_channel_name">教练晨间简报</string>
     <string name="coach_brief_channel_desc">今日教练简报，在设备上按您选择的时间生成。</string>
     <string name="coach_brief_title">今日教练简报</string>
@@ -1810,7 +1912,6 @@
     <string name="l10n_settings_screen_r22disable_confirm_action">清除手环上的标记</string>
     <string name="l10n_settings_screen_r22disable_confirm_cancel">仅停止发送</string>
     <string name="l10n_app_changelog_water_and_caffeine_from_apple_health_5123b6b0">从 Apple 健康导入饮水与咖啡因、更精确的 Effort 分数，以及 Oura 静息心率修复</string>
-    <!-- 首次设置文本。 -->
     <string name="onboarding_cta_begin">开始</string>
     <string name="onboarding_cta_continue">继续</string>
     <string name="onboarding_cta_save_continue">保存并继续</string>
@@ -1994,7 +2095,6 @@
     <string name="l10n_breathe_screen_session_length_a1b2c3d4">时长</string>
     <string name="l10n_breathe_screen_session_open_e5f6a7b8">不限</string>
     <string name="l10n_breathe_screen_elapsed_target_b1c2d3e4">%1$s / %2$s</string>
-    <!-- breath protocol catalog (generated) -->
     <string name="breath_presence_intro_title">Presence Process</string>
     <string name="breath_presence_intro_body">有意识连贯呼吸（CCB）：吸与呼连成一圈，顶底都不屏息。找一个舒服的节奏——连贯比强度更重要。常见做法是每天两次、每次约 15 分钟。Regular 是可持续的起步节奏；Mid 适合后续轮次更快起步；Punching Through 仅在需要突破困倦或卡住时使用（非初学者默认）。</string>
     <string name="breath_stage_belly_in">收腹吸</string>
@@ -2104,9 +2204,7 @@
     <string name="breath_proto_presence_punching_edu">Punching Through（约 1.9 秒 / 1.9 秒）用于困倦或卡住时——不是初学者默认。进入状态后，可回到更慢、更深的连贯呼吸。</string>
     <string name="breath_proto_presence_punching_session_hint">最长 15 分钟；勉强则放缓。</string>
     <string name="breath_proto_presence_punching_caution">除非目标是突破困倦，否则不建议作为初学者默认。</string>
-    <!-- /breath protocol catalog -->
     <string name="l10n_breathe_screen_calm_me_a1b2c3d4">让我平静</string>
-    <!-- Home/Today localization boundary: semantic helpers resolve these at the Compose edge. -->
     <string name="today_section_hero">充能 / 负荷 / 恢复</string>
     <string name="today_section_live_session">开始训练</string>
     <string name="today_section_synthesis">综合分析</string>
@@ -2638,8 +2736,6 @@
     <string name="l10n_settings_screen_bar_size_2304bfbb">栏大小</string>
     <string name="l10n_settings_screen_bar_transparency_3f648fbb">栏透明度</string>
     <string name="l10n_settings_screen_how_see_through_the_bar_is_ddb0c208">底部栏的透明程度。即使在最淡的一档也会保留边框，因此始终能找到它。</string>
-
-    <!-- Coach screen -->
     <string name="coach_clear_conversation_confirm">清除对话？</string>
     <string name="coach_clear_conversation_message">这会从此设备删除已保存的对话。教练记录是你自己的笔记，而非医疗建议。</string>
     <string name="coach_clear_action">清除</string>
@@ -2807,7 +2903,7 @@
     <string name="l10n_settings_screen_bold_19e07430">粗体</string>
     <string name="l10n_settings_screen_softer_9edfeba1">更柔和</string>
     <string name="oura_notify_mask_full_title">Oura 通知掩码 ff（实验性）</string>
-    <string name="oura_notify_mask_full_desc">下次连接时发送官方应用的 SetNotification 掩码（1c 01 ff），而不是 NOOP 的 3f。戒指为官方应用把约 10 个数据包打包进一条通知，为 NOOP 只发一个（读取慢 9 倍）；这是第一个候选开关。默认关闭；关闭后的下一次连接恢复为 3f。请在腕带日志中查看“-> notify_all(ff)”，并在原始捕获中比较通知大小。</string>
+    <string name="oura_notify_mask_full_desc">下次连接时发送官方应用的 SetNotification 掩码（1c 01 ff），而不是 NOOP 的 3f。戒指为官方应用把约 10 个数据包打包进一条通知，为 NOOP 只发一个（读取慢 9 倍）；这是第一个候选开关。默认关闭；关闭后的下一次连接恢复为 3f。请在腕带日志中查看“-&gt; notify_all(ff)”，并在原始捕获中比较通知大小。</string>
     <string name="data_sources_whoop_live_subtitle">通过 Bluetooth 直接连接手环：无需 WHOOP 应用，也无需云端。手环还可以将心率作为标准 Bluetooth 传感器进行广播。</string>
     <string name="data_sources_band_broadcast_description">通过 Bluetooth 将手环自身的实时心率广播给 Garmin、Zwift 或健身器材。</string>
     <string name="whoop4_direct_broadcast_explainer">WHOOP 4.0 可以直接广播心率。打开“数据来源”，启用“从手环广播心率”，即可连接 Zwift、Peloton、Garmin 或健身器材。需要时也可以使用“从此手机广播心率”。</string>
@@ -2826,10 +2922,4 @@
     <string name="raw_diag_ecg_probe_start">开始心电图采集</string>
     <string name="raw_diag_ecg_probe_stop">停止心电图采集</string>
     <string name="raw_diag_ecg_probe_running">此腕带上可能仍在采集。结论会写入 strap log。</string>
-    <string name="whoop_nav_home">首页</string>
-    <string name="whoop_nav_plan">计划</string>
-    <string name="whoop_nav_healthspan">健康寿命</string>
-    <string name="whoop_nav_weekly_plan">每周计划</string>
-    <string name="whoop_plan_local_title">每周计划尚不可用</string>
-    <string name="whoop_plan_local_detail">日记和趋势仍可用于查看本地习惯和进度。</string>
 </resources>
