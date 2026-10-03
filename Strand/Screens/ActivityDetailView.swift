@@ -90,6 +90,11 @@ struct ActivityDetailView: View {
                 Task {
                     await repo.saveManualWorkout(saved, replacing: replacingOriginal ? replacing : nil)
                     await repo.refresh()
+                    if let stored = await repo.workoutRows().first(where: {
+                        $0.startTs == saved.startTs && $0.sport == saved.sport && WorkoutSource.classify($0.source) == .manual
+                    }) {
+                        row = stored
+                    }
                     dismiss()
                 }
             }
