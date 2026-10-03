@@ -182,6 +182,11 @@ final class Repository: ObservableObject {
 
     /// Daily metrics (recovery/strain/sleep/HRV/RHR…) over the recent window, oldest→newest.
     @Published var days: [DailyMetric] = []
+    @Published private(set) var hrvRegimeEpoch: Double = 0
+    var effectiveHrvBaselineEpoch: Double { max(Baselines.hrvBaselineEpoch(), hrvRegimeEpoch) }
+    var hrvCalibrationDays: [DailyMetric] {
+        days.filter { Baselines.isInHrvEra(day: $0.day, epoch: effectiveHrvBaselineEpoch) }
+    }
     /// Cached sleep sessions over the recent window, oldest→newest.
     @Published var sleeps: [CachedSleepSession] = []
     /// Imported (export-verbatim) sleep figures by day. Empty until a WHOOP import lands.
@@ -950,6 +955,10 @@ final class Repository: ObservableObject {
         // a single id on a single-device install (byte-identical to before).
         let imported = await unionDailyMetrics(store: store, from: fromDay, to: toDay)
         let computed = await unionComputedDailyMetrics(store: store, from: fromDay, to: toDay)
+        let registry = DeviceRegistryStore(dbQueue: store.registryWriter)
+        let activeOwner = (try? registry.activeDeviceId()) ?? deviceId
+        let regimeEpoch = await effectiveHrvEpoch(store: store, activeOwner: activeOwner,
+            importedAlias: "my-whoop", manualEpoch: 0, offsetSec: TimeZone.current.secondsFromGMT(for: now))
         let apple = (try? await store.dailyMetrics(deviceId: Self.appleHealthSource, from: fromDay, to: toDay)) ?? []
         let activityFile = (try? await store.dailyMetrics(deviceId: Self.activityFileSource, from: fromDay, to: toDay)) ?? []
         let impSleep = await unionSleepSessions(store: store, from: lo, to: hi)
@@ -998,6 +1007,7 @@ final class Repository: ObservableObject {
         // is what stops the analyze-tail's burst of refresh() calls each re-firing TodayView.loadAll().
         let unchanged = loaded
             && merged.days == days
+            && regimeEpoch == hrvRegimeEpoch
             && merged.sleeps == sleeps
             && merged.importedSleep == importedSleep
             && merged.vitalRows == vitalRows
@@ -1008,6 +1018,7 @@ final class Repository: ObservableObject {
         // the intraday-updating views reload exactly once for this real change.
         self.importedSleep = merged.importedSleep
         self.days = merged.days
+        self.hrvRegimeEpoch = regimeEpoch
         self.sleeps = merged.sleeps
         self.vitalRows = merged.vitalRows
         self.freshness = merged.freshness
@@ -3540,5 +3551,22 @@ extension DailyMetric {
             // hypnogram with the import's staging — and an import's is always nil. (#1801)
             sleepHrOnly: source.sleepHrOnly
         )
+    }
+}
+
+extension Repository {
+    func effectiveHrvEpoch(store: WhoopStore, activeOwner: String, importedAlias: String,
+                           manualEpoch: Double, offsetSec: Int) async -> Double {
+        let isFive = (try? await store.isWhoop5RRSource(deviceId: activeOwner)) == true
+        var first: Int?
+        if isFive {
+            for source in Set([activeOwner, importedAlias, "my-whoop"]) {
+                if let ts = try? await store.firstScorableWhoop5RRTimestamp(deviceId: source) {
+                    first = min(first ?? ts, ts)
+                }
+            }
+        }
+        return Baselines.effectiveHrvEpoch(manualEpoch: manualEpoch, firstScorableTimestamp: first,
+            isWhoop5: isFive, offsetSec: offsetSec)
     }
 }

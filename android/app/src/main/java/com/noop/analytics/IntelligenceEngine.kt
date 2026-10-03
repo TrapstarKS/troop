@@ -531,8 +531,13 @@ object IntelligenceEngine {
                     stepsMotionCachePersisted = raw
                 }
             }
+            // Resolve the unit-regime boundary outside analyzeRecentOnCpu: that method is close to
+            // its JaCoCo bytecode budget, and both the initial and heal pass must fold the same era.
+            val offsetSec = java.util.TimeZone.getDefault().getOffset(nowSeconds * 1_000L) / 1_000L
+            val owner = ownerSource?.activeWriteId() ?: importedDeviceId
+            val hrvEpoch = repo.effectiveHrvEpoch(owner, importedDeviceId, baselineEpoch, offsetSec)
             val (out, healed) = analyzeRecentOnCpu(repo, profile, maxDays, importedDeviceId, maxHROverride,
-                nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, baselineEpoch,
+                nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, hrvEpoch,
                 recoveryEpoch, diag, useExperimentalSleepV2, useMotionAwareWake, sleepTraceSink, recoveryTraceSink,
                 stepsTraceSink, universalSink, workoutsTraceSink, hrvTraceSink, deepHrvWindow,
                 spo2CandidateDisplay, effortMethod, dayCycleMode)
@@ -543,7 +548,7 @@ object IntelligenceEngine {
             // re-scores the window against the cleaned store; its own heal then finds nothing (the duplicates
             // are gone), so this can never loop. Mirrors the Swift pendingForcedRescore re-arm.
             else analyzeRecentOnCpu(repo, profile, maxDays, importedDeviceId, maxHROverride,
-                nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, baselineEpoch,
+                nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, hrvEpoch,
                 recoveryEpoch, diag, useExperimentalSleepV2, useMotionAwareWake, sleepTraceSink, recoveryTraceSink,
                 stepsTraceSink, universalSink, workoutsTraceSink, hrvTraceSink, deepHrvWindow,
                 spo2CandidateDisplay, effortMethod, dayCycleMode).first
@@ -736,8 +741,7 @@ object IntelligenceEngine {
         // repository revision below handles step-only inserts even when the HR-keyed day cache is reused.
         // HRV baseline honours the manual "Recalibrate baseline" epoch (noop.hrvBaselineEpoch): pass the
         // per-value "yyyy-MM-dd" day keys (parallel to the values) so foldHistory drops every night before
-        // the epoch. baselineEpoch is threaded down from the Context-aware caller (0.0 = no recalibration).
-        // rhr/resp/skin stay on the 2-arg fold , recalibration is HRV-only.
+        // the later of the manual recalibration and WHOOP 5 unit-regime epochs.
         val hrvBase1 = Baselines.foldHistory(hist.map { it.avgHrv }, hist.map { it.day }, hrvCfg, baselineEpoch)
         val rhrBase1 = Baselines.foldHistory(hist.map { it.restingHr?.toDouble() }, hist.map { it.day }, rhrCfg, recoveryEpoch)
         val baselines1 = ProfileBaselines(hrv = hrvBase1, restingHR = rhrBase1)

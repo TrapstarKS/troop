@@ -59,8 +59,8 @@ struct CoupledView: View {
     /// Recovery cold-start: nights banked so far while the HRV baseline still seeds, nil once recovery
     /// exists. The SAME pure helper Today's ring reads, so the two screens can't disagree.
     private var calibrationNights: Int? {
-        RecoveryScorer.calibrationNights(nightlyHrv: repo.days.map(\.avgHrv),
-                                         dayKeys: repo.days.map(\.day),
+        RecoveryScorer.calibrationNights(nightlyHrv: repo.hrvCalibrationDays.map(\.avgHrv),
+                                         dayKeys: repo.hrvCalibrationDays.map(\.day),
                                          hasRecovery: day?.recovery != nil)
     }
 
@@ -536,7 +536,7 @@ struct CoupledView: View {
     private func chargeBreakdown() -> (drivers: [ChargeDriver], confidence: ScoreConfidence)? {
         guard let row = breakdownRow else { return nil }
         return ChargeBreakdownWiring.breakdown(days: repo.days, row: row, sleepPerfPercent: sleepPerformance,
-                                               hrvBaselineEpoch: Baselines.hrvBaselineEpoch())
+                                               hrvBaselineEpoch: repo.effectiveHrvBaselineEpoch)
     }
 
     @ViewBuilder

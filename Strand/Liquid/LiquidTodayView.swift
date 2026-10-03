@@ -1209,7 +1209,7 @@ struct LiquidTodayView: View {
                         // The reason the count is not moving, when nights are arriving empty. Sits under
                         // the progress rather than replacing it: the wearer needs both the number and why.
                         if let why = chargeDisplay.calibrationReason(
-                            dayKeys: repo.days.map(\.day), nightlyHrv: repo.days.map(\.avgHrv),
+                            dayKeys: repo.hrvCalibrationDays.map(\.day), nightlyHrv: repo.hrvCalibrationDays.map(\.avgHrv),
                             today: Repository.logicalDayKey(Date())) {
                             Text(why).font(StrandFont.caption)
                                 .foregroundStyle(StrandPalette.textSecondary)
@@ -1652,8 +1652,8 @@ struct LiquidTodayView: View {
         // classic Today reads, so the two screens agree on when a wearer is genuinely mid-calibration
         // rather than simply lacking a scored night.
         let calNights = (selectedDayOffset == 0)
-            ? RecoveryScorer.calibrationNights(nightlyHrv: repo.days.map(\.avgHrv),
-                                               dayKeys: repo.days.map(\.day),
+            ? RecoveryScorer.calibrationNights(nightlyHrv: repo.hrvCalibrationDays.map(\.avgHrv),
+                                               dayKeys: repo.hrvCalibrationDays.map(\.day),
                                                hasRecovery: day?.recovery != nil)
             : nil
         let priorScored = TodayView.lastScoredRecoveryDay(
@@ -1954,8 +1954,8 @@ struct LiquidTodayView: View {
         // night for > staleDays), say so directly instead of "still learning your baseline" — the honest
         // calibrating state with its reason attached. `stale` is always > staleDays (14), so always plural.
         if readiness.level == .insufficient,
-           let stale = Baselines.nightsSinceNewestValidNight(dayKeys: repo.days.map(\.day),
-                                                             nightlyHrv: repo.days.map(\.avgHrv),
+           let stale = Baselines.nightsSinceNewestValidNight(dayKeys: repo.hrvCalibrationDays.map(\.day),
+                                                             nightlyHrv: repo.hrvCalibrationDays.map(\.avgHrv),
                                                              today: Repository.logicalDayKey(Date())),
            stale > Baselines.staleDays {
             return String(localized: "No new nights from your strap for \(stale) days. Check it's connected and saving data.")

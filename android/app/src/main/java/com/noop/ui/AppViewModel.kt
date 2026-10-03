@@ -768,6 +768,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         repository.recentDaysMergedFlow(deviceId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Validated transport era; manual restart preferences remain separate for truthful copy. */
+    val hrvRegimeEpoch: StateFlow<Double> = combine(recentDays, activeStrapIdFlow) { _, active ->
+        val now = System.currentTimeMillis()
+        repository.effectiveHrvEpoch(active ?: deviceId, manualEpoch = 0.0,
+            offsetSec = java.util.TimeZone.getDefault().getOffset(now) / 1_000L)
+    }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
+
     /**
      * Today's measured steps follow the newest confirmed sleep-onset cycle, independently of the fixed
      * 04:00 presentation day used by the rest of the dashboard. The marker is persisted by the analytics

@@ -848,7 +848,7 @@ struct TodayView: View {
     private func chargeBreakdown() -> (drivers: [ChargeDriver], confidence: ScoreConfidence)? {
         guard let row = chargeBreakdownRow else { return nil }
         return ChargeBreakdownWiring.breakdown(days: repo.days, row: row, sleepPerfPercent: restScore,
-                                               hrvBaselineEpoch: Baselines.hrvBaselineEpoch())
+                                               hrvBaselineEpoch: repo.effectiveHrvBaselineEpoch)
     }
 
     /// The night's relative skin-temp marker for the displayed row (A5), or nil. Surfaced verbatim from
@@ -1055,7 +1055,7 @@ struct TodayView: View {
             // read solid off nights the ring is no longer using.
             let hrvBase = Baselines.foldHistory(repo.days.map(\.avgHrv), dayKeys: repo.days.map(\.day),
                                                 cfg: Baselines.hrvCfg,
-                                                baselineEpoch: Baselines.hrvBaselineEpoch())
+                                                baselineEpoch: repo.effectiveHrvBaselineEpoch)
             conf = ScoreConfidence.charge(recovery: displayDay?.recovery, hrvBaseline: hrvBase)
         case "sleep_performance":
             // A watch night with a Rest score reads as built; without one it's still calibrating.
@@ -1143,8 +1143,8 @@ struct TodayView: View {
 
     private func computeCalibration() -> Int? {
         guard selectedDayOffset == 0 else { return nil }
-        return RecoveryScorer.calibrationNights(nightlyHrv: repo.days.map(\.avgHrv),
-                                                dayKeys: repo.days.map(\.day),
+        return RecoveryScorer.calibrationNights(nightlyHrv: repo.hrvCalibrationDays.map(\.avgHrv),
+                                                dayKeys: repo.hrvCalibrationDays.map(\.day),
                                                 hasRecovery: repo.today?.recovery != nil)
     }
 
@@ -1162,8 +1162,8 @@ struct TodayView: View {
         // #612: if the baseline aged out silently — connected, but no new night for > staleDays — say WHY
         // it's calibrating instead of only "learning your baseline". The honest calibrating state is correct;
         // this attaches its reason. `stale` is always > staleDays (14) here, so the copy is always plural.
-        if let stale = Baselines.nightsSinceNewestValidNight(dayKeys: repo.days.map(\.day),
-                                                             nightlyHrv: repo.days.map(\.avgHrv),
+        if let stale = Baselines.nightsSinceNewestValidNight(dayKeys: repo.hrvCalibrationDays.map(\.day),
+                                                             nightlyHrv: repo.hrvCalibrationDays.map(\.avgHrv),
                                                              today: Repository.logicalDayKey(Date())),
            stale > Baselines.staleDays {
             return "No new nights from your strap for \(stale) days. Check it's connected and saving data."
@@ -1172,8 +1172,8 @@ struct TodayView: View {
         // nights arriving, most of them empty — five days in with three HRV-less nights sits at "2 of 4"
         // with no reason given, which reads as a stuck counter. Name the missing nights so the wearer has
         // something to act on instead of something to wait for.
-        let cov = Baselines.recentHrvCoverage(dayKeys: repo.days.map(\.day),
-                                              nightlyHrv: repo.days.map(\.avgHrv),
+        let cov = Baselines.recentHrvCoverage(dayKeys: repo.hrvCalibrationDays.map(\.day),
+                                              nightlyHrv: repo.hrvCalibrationDays.map(\.avgHrv),
                                               today: Repository.logicalDayKey(Date()))
         if cov.missing > 0, cov.observed > 0 {
             return "Learning your baseline, \(n) of \(Baselines.minNightsSeed) nights. \(cov.missing) of the last \(cov.observed) nights recorded no HRV. Check the strap is worn overnight and syncing."
@@ -3121,7 +3121,7 @@ struct TodayView: View {
         // day) so a carried prior-day synthesis (#543) isn't compared against a baseline that includes
         // itself. Needs the same seed depth recovery uses to be honest.
         let excludeDay = d?.day ?? selectedDayKey
-        let prior = repo.days
+        let prior = repo.hrvCalibrationDays
             .filter { $0.day != excludeDay }
             .compactMap(\.avgHrv)
             .filter { $0 > 0 }

@@ -239,6 +239,18 @@ object Baselines {
      *  reader and invisible to a compiler. Mirrors the Swift twin's `(observed:missing:)` labels. */
     data class HrvCoverage(val observed: Int, val missing: Int)
 
+    /** Local labelled R-R day encoded as UTC midnight, with the later manual cut retained. */
+    fun effectiveHrvEpoch(manualEpoch: Double, firstScorableTimestamp: Long?,
+                          isWhoop5: Boolean, offsetSec: Long): Double {
+        if (!isWhoop5 || firstScorableTimestamp == null) return manualEpoch
+        val regime = kotlin.math.floor((firstScorableTimestamp + offsetSec).toDouble() / 86_400.0) * 86_400.0
+        return maxOf(manualEpoch, regime)
+    }
+
+    /** Calendar keys use the same UTC-midnight convention as the baseline fold. */
+    fun isInHrvEra(day: String, epoch: Double): Boolean =
+        isoEpochDay(day)?.let { it.toDouble() * 86_400 >= epoch } ?: false
+
     /**
      * Nights the app OBSERVED in the recent window, and how many carried no usable HRV. Swift twin:
      * `Baselines.recentHrvCoverage`.

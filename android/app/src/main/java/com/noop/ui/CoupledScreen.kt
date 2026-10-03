@@ -139,7 +139,8 @@ fun CoupledScreen(
     // Materialized from the same all-source physiological cycle as Effort, calories, HR, and steps.
     val workoutsToday = todayRow?.exerciseCount ?: 0
     val context = LocalContext.current
-    val hrvEpoch = remember { NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble() }
+    val hrvRegimeEpoch by vm.hrvRegimeEpoch.collectAsStateWithLifecycle()
+    val hrvEpoch = maxOf(NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(), hrvRegimeEpoch)
     // #1458: carry through the SAME helper Today uses, not a local re-derivation. The local copy was
     // `days.lastOrNull { it.recovery != null && it.day < todayKey }`, which has no `todayScored` guard —
     // so on a day that HAS a score it still returned a prior day, and the hero's Charge sheet opened that
@@ -254,6 +255,7 @@ fun CoupledScreen(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             ChargeBreakdownSheet(
+                hrvEpoch = hrvEpoch,
                 days = days,
                 displayDay = todayRow,
                 carriedDay = carriedRecoveryDay,

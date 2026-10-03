@@ -1380,6 +1380,15 @@ class WhoopRepository(
         return com.noop.protocol.Whoop5RR.usesCanonicalSource(owner?.model, owner?.brand, tagged || unlabelledAliasOfWhoop5)
     }
 
+    /** Same effective HRV era for the scorer, calibration counts and confidence readers. */
+    suspend fun effectiveHrvEpoch(activeOwner: String, importedAlias: String = "my-whoop",
+                                 manualEpoch: Double, offsetSec: Long): Double {
+        val isFive = isWhoop5RrSource(activeOwner)
+        val first = if (isFive) listOf(activeOwner, importedAlias, WHOOP_SOURCE).distinct()
+            .mapNotNull { firstScorableWhoop5RrTs(it) }.minOrNull() else null
+        return com.noop.analytics.Baselines.effectiveHrvEpoch(manualEpoch, first, isFive, offsetSec)
+    }
+
     /** The earliest beat this device has banked that the unit policy can actually score, or null when
      *  it has none. See [FIRST_SCORABLE_WHOOP5_RR_SQL]; the caller turns it into a local day key, since
      *  the calendar is the app's policy and not the store's. Twin of Swift

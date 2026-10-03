@@ -45,6 +45,36 @@ final class IntelligenceRRSourceTests: XCTestCase {
             sourceKind: .liveBLE, capabilities: [.hr, .hrv], status: .active, addedAt: 2, lastSeenAt: 2))
     }
 
+    func testEffectiveHrvEpochUsesValidatedCanonicalBeatsAndLaterManualCut() async throws {
+        let store = try await WhoopStore.inMemory()
+        let registry = DeviceRegistryStore(dbQueue: store.registryWriter)
+        try register(registry, canonicalModel: "WHOOP")
+        let repo = Repository(deviceId: active)
+        repo.setStoreForTesting(store)
+        _ = try await store.insert(Streams(rr: [
+            RRInterval(ts: 100, rrMs: 1000),
+            RRInterval(ts: 200, rrMs: 1000, srcChannel: .whoop5Realtime),
+            RRInterval(ts: 86_500, rrMs: 1000, srcChannel: .whoop5Historical),
+        ]), deviceId: canonical)
+        _ = try await store.insert(Streams(rr: [
+            RRInterval(ts: 172_900, rrMs: 1000, srcChannel: .whoop5Standard),
+        ]), deviceId: active)
+        let alias = await repo.effectiveHrvEpoch(store: store, activeOwner: active,
+            importedAlias: active, manualEpoch: 0, offsetSec: 0)
+        XCTAssertEqual(alias, 86_400, "validated canonical history survives physical-ID adoption")
+        let manual = await repo.effectiveHrvEpoch(store: store, activeOwner: active,
+            importedAlias: canonical, manualEpoch: 259_200, offsetSec: 0)
+        XCTAssertEqual(manual, 259_200)
+        let shifted = await repo.effectiveHrvEpoch(store: store, activeOwner: active,
+            importedAlias: canonical, manualEpoch: 0, offsetSec: -3_600)
+        XCTAssertEqual(shifted, 0, "local day, encoded as UTC midnight")
+        try registry.add(PairedDevice(id: "four", brand: "WHOOP", model: "4.0",
+            sourceKind: .liveBLE, capabilities: [.hr, .hrv], status: .paired, addedAt: 3, lastSeenAt: 3))
+        let four = await repo.effectiveHrvEpoch(store: store, activeOwner: "four",
+            importedAlias: canonical, manualEpoch: 12_345, offsetSec: 0)
+        XCTAssertEqual(four, 12_345, "WHOOP 4 does not inherit WHOOP 5's measurement boundary")
+    }
+
     private func seedBaseline(_ store: WhoopStore, before day: String) async throws {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -162,12 +192,14 @@ final class IntelligenceRRSourceTests: XCTestCase {
             let restored = try await score()
             XCTAssertGreaterThan(try XCTUnwrap(restored.avgHrv), 0)
             XCTAssertNotEqual(restored.avgHrv, legacySnapshot.avgHrv)
-            XCTAssertNotNil(restored.recovery)
+            // #2126: the first labelled night restores HRV, but Charge recalibrates against
+            // labelled nights rather than scoring against the eight pre-label seed nights.
+            XCTAssertNil(restored.recovery)
             XCTAssertNotEqual(restored.respRateBpm, legacySnapshot.respRateBpm)
             XCTAssertNotEqual(restored.avgSdnn, legacySnapshot.avgSdnn)
             let promotedSource = try await store.scoreInputSource(deviceId: canonical + "-noop",
                 day: input.day, key: "recovery")
-            XCTAssertEqual(promotedSource, active, "freshly scored provenance replaces the snapshot")
+            XCTAssertNil(promotedSource, "a calibrating Charge has no scoring provenance")
             let restoredGap = try await showsLegacyGap(restored, store: store, owner: active)
             XCTAssertFalse(restoredGap)
             let idle = try await score()
