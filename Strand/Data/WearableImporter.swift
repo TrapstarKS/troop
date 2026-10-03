@@ -42,7 +42,7 @@ enum WearableImporter {
                 exerciseCount: nil,
                 spo2Pct: d.spo2Pct,
                 skinTempDevC: d.skinTempDevC,
-                respRateBpm: d.respRateBpm))   // imported night resp now reaches the day rollup (#17)
+                respRateBpm: d.respRateBpm, activeKcalEst: d.totalKcal, activeEnergyKcalEst: d.activeKcal))   // imported night resp now reaches the day rollup (#17)
         }
         // Capture the rows the store actually wrote (summed SQLite changes) for the Import test mode.
         let metricsWritten = try await store.upsertDailyMetrics(metrics, deviceId: deviceId)
@@ -81,7 +81,8 @@ enum WearableImporter {
         for d in result.days {
             add(d.day, "steps", d.steps.map(Double.init))
             add(d.day, "distance_m", d.distanceM)
-            add(d.day, "energy_kcal", d.activeKcal)
+            add(d.day, "energy_kcal", d.totalKcal)
+            add(d.day, "active_kcal", d.activeKcal)
             add(d.day, "total_kcal", d.totalKcal)
             add(d.day, "rhr", d.restingHr.map(Double.init))
             add(d.day, "hrv", d.avgHrvMs)

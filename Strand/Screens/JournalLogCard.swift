@@ -1,8 +1,8 @@
 import SwiftUI
 import StrandDesign
 
-/// Native journal logging, yes/no chips and numeric fields for the merged behaviour catalog plus a
-/// custom-question field, hosted at the top of Insights. Answers write under
+/// Journal drafts with explicit Save, grouped yes/no and numeric factors, and historical dates.
+/// Answers write under
 /// `Repository.journalDeviceId` ("noop-journal"), NEVER the imported source, so a CSV re-import can't
 /// clobber them and clearing is safe (imported rows are never touched). Tri-state: tapping the selected
 /// chip again clears the answer. Day attribution follows the importer's wake-day convention, answers
@@ -15,9 +15,7 @@ import StrandDesign
 /// history, logged and imported, stays joined under the original question.
 struct JournalLogCard: View {
     @EnvironmentObject var repo: Repository
-    /// The journal catalog is single-user state owned here (UserDefaults-backed), so hosting the card
-    /// needs no app-level injection.
-    @StateObject private var catalog = JournalCatalogStore()
+    @ObservedObject private var catalog: JournalCatalogStore
 
     /// Distinct imported question strings (from InsightsView's load), adopted into the catalog so
     /// logged answers and imported history group under the same behaviour.
@@ -27,16 +25,49 @@ struct JournalLogCard: View {
     /// question → numeric value for the selected day, native rows only (drives the numeric fields).
     let numericAnswers: [String: Double]
     @Binding var dayOffset: Int            // -1 = tomorrow, 0 = today, 1 = yesterday
+    let anchorDay: String
+    let answersDayKey: String
+    let onDirtyChanged: (Bool) -> Void
     let onChanged: () -> Void              // parent re-runs load() after a write
 
-    init(importedQuestions: [String], answers: [String: Bool],
-         numericAnswers: [String: Double] = [:], dayOffset: Binding<Int>,
-         onChanged: @escaping () -> Void) {
+    init(catalog: JournalCatalogStore, importedQuestions: [String], answers: [String: Bool],
+         numericAnswers: [String: Double] = [:], dayOffset: Binding<Int>, answersDayKey: String, anchorDay: String,
+         onDirtyChanged: @escaping (Bool) -> Void, onChanged: @escaping () -> Void) {
+        _catalog = ObservedObject(wrappedValue: catalog)
         self.importedQuestions = importedQuestions
         self.answers = answers
         self.numericAnswers = numericAnswers
         self._dayOffset = dayOffset
+        self.anchorDay = anchorDay
+        self.answersDayKey = answersDayKey
+        self.onDirtyChanged = onDirtyChanged
         self.onChanged = onChanged
+    }
+
+    @State private var draftAnswers: [String: Bool] = [:]
+    @State private var draftNumeric: [String: Double] = [:]
+    @State private var draftNumericText: [String: String] = [:]
+    @State private var baselineAnswers: [String: Bool] = [:]
+    @State private var baselineNumeric: [String: Double] = [:]
+    @State private var saving = false
+    @State private var saveFailed = false
+    @State private var showingCalendar = false
+    @State private var calendarDate = Date()
+    @State private var pendingOffset: Int?
+
+    private var dirty: Bool {
+        draftAnswers != baselineAnswers || draftNumeric != baselineNumeric || draftNumericText.contains {
+            $0.value != (baselineNumeric[$0.key].map(NumericLogField.format) ?? "")
+        }
+    }
+    private var invalidNumeric: Bool {
+        draftNumericText.contains { question, text in
+            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                journalNumericValue(text, allowNegative: journalAllowsNegative(question)) == nil
+        }
+    }
+    private var selectedDate: Date {
+        JournalCalendar.date(dayKey) ?? Date()
     }
 
     @State private var customDraft = ""
@@ -51,8 +82,7 @@ struct JournalLogCard: View {
     @State private var renameDraft = ""
 
     private var dayKey: String {
-        Repository.localDayKey(
-            Calendar.current.date(byAdding: .day, value: -dayOffset, to: Date()) ?? Date())
+        WeeklyPlanCalendar.adding(days: -dayOffset, to: anchorDay) ?? anchorDay
     }
 
     /// The resolved, grouped catalog for the current imported set. Hidden items included only while
@@ -66,6 +96,8 @@ struct JournalLogCard: View {
         resolved.filter { $0.group == group }
             .sorted { ($0.sortIndex, $0.display) < ($1.sortIndex, $1.display) }
     }
+
+    private var answeredCount: Int { resolved.filter { draftAnswers[$0.canonical] != nil }.count }
 
     private var collapsedGroups: Set<String> {
         Set(collapsedGroupsRaw.split(separator: ",").map(String.init))
@@ -88,6 +120,29 @@ struct JournalLogCard: View {
                     pillButton("Edit", selected: false) { editing = true }
                 }
             }
+            if !editing {
+                HStack(spacing: NoopMetrics.space2) {
+                    Button {
+                        calendarDate = selectedDate
+                        showingCalendar = true
+                    } label: {
+                        Label(selectedDate.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
+                            .font(StrandFont.body)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                    Text(dirty ? String(localized: "Unsaved") : baselineAnswers.isEmpty ? String(localized: "Not started") : String(localized: "Saved"))
+                        .font(StrandFont.caption)
+                        .foregroundStyle(dirty ? StrandPalette.statusWarning : StrandPalette.textSecondary)
+                }
+                .disabled(saving)
+            }
+            if !editing, dayOffset == 0, baselineAnswers.isEmpty,
+               repo.days.contains(where: { $0.day == dayKey && $0.totalSleepMin != nil }) {
+                Text("Sleep is ready. Take a moment to record yesterday’s habits.")
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textSecondary)
+            }
             // Day picker (#656): a bounded, scrollable range — Tomorrow back through the last 7 days — so
             // any recent day can be backfilled (was Yesterday/Today/Tomorrow only). Chronological
             // left→right; snaps to the selected day, so a deep-link from the Today journal widget lands on
@@ -95,12 +150,12 @@ struct JournalLogCard: View {
             if !editing {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: NoopMetrics.space2) {
                             ForEach(Self.journalDayOffsets, id: \.self) { off in
                                 dayPill(journalDayLabel(off), offset: off).id(off)
                             }
                         }
-                        .padding(.horizontal, 1)   // don't clip the selected pill's ring
+                        .padding(.horizontal, NoopMetrics.spaceHalf)   // don't clip the selected pill's ring
                     }
                     // Defer the initial scroll a tick: scrollTo in onAppear can no-op before the pills lay
                     // out, which would leave the picker on the oldest day instead of the selected one.
@@ -111,12 +166,12 @@ struct JournalLogCard: View {
                 }
             }
             NoopCard(tint: StrandPalette.restColor) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                     Text(editing
-                         ? "Rename, regroup, or remove an item to tidy your list. Renaming keeps the original question behind the scenes, so a WHOOP import still lines up. Custom items are deleted; built-in ones are hidden and can be restored below."
+                         ? "Choose the questions you want to track."
                          : dayOffset == -1
-                         ? "Logging ahead for tomorrow: today's activities inform tomorrow's recovery, just as yesterday's are reflected in today's. Tomorrow's answers line up with tomorrow's morning."
-                         : "Answers are about the night and day leading into this morning, the same attribution a WHOOP export uses, so logged and imported days line up.")
+                         ? "Record habits for tomorrow’s entry."
+                         : "Record habits from yesterday and last night.")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -125,24 +180,137 @@ struct JournalLogCard: View {
                         groupBlock(group)
                     }
 
-                    Divider().overlay(StrandPalette.hairline)
-                    addRow
+                    if !editing {
+                        Divider().overlay(StrandPalette.hairline)
+                        HStack {
+                            Text("\(answeredCount) of \(resolved.count) answered")
+                                .font(StrandFont.captionNumber)
+                                .foregroundStyle(StrandPalette.textSecondary)
+                            Spacer()
+                            Button("Discard") { resetDraft() }
+                                .disabled(!dirty || saving)
+                            Button(action: saveDraft) { Text(saving ? String(localized: "Saving…") : String(localized: "Save journal")) }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(!dirty || saving || invalidNumeric)
+                        }
+                        if invalidNumeric {
+                            Text("Enter a valid number to save.")
+                                .font(StrandFont.footnote)
+                                .foregroundStyle(StrandPalette.statusWarning)
+                        }
+                        if saveFailed {
+                            Text("Journal could not be saved. Try again.")
+                                .font(StrandFont.footnote)
+                                .foregroundStyle(StrandPalette.statusWarning)
+                        }
+                    } else {
+                        Divider().overlay(StrandPalette.hairline)
+                        addRow
+                    }
                 }
             }
         }
+        .disabled(saving || answersDayKey != dayKey)
+        .onAppear {
+            if answersDayKey == dayKey && !dirty { resetDraft() }
+            onDirtyChanged(dirty)
+        }
+        .onChangeCompat(of: dirty) { onDirtyChanged($0) }
+        .onChangeCompat(of: answers) { _ in if answersDayKey == dayKey && !dirty { resetDraft() } }
+        .onChangeCompat(of: numericAnswers) { _ in if answersDayKey == dayKey && !dirty { resetDraft() } }
+        .onChangeCompat(of: answersDayKey) { _ in if answersDayKey == dayKey && !dirty { resetDraft() } }
         .sheet(item: $renaming) { item in renameSheet(item) }
+        .sheet(isPresented: $showingCalendar) {
+            VStack(spacing: NoopMetrics.gap) {
+                DatePicker("Journal date", selection: $calendarDate,
+                           in: ...Calendar.current.date(byAdding: .day, value: 1, to: Date())!,
+                           displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                Button("Done") {
+                    let offset = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: calendarDate),
+                                                                  to: JournalCalendar.date(anchorDay) ?? Date()).day ?? 0
+                    showingCalendar = false
+                    selectDay(offset)
+                }
+            }
+            .padding(NoopMetrics.cardPadding)
+        }
+        .confirmationDialog("Discard unsaved journal changes?", isPresented: Binding(
+            get: { pendingOffset != nil }, set: { if !$0 { pendingOffset = nil } })) {
+            Button("Discard", role: .destructive) {
+                if let offset = pendingOffset { changeDay(offset) }
+                pendingOffset = nil
+            }
+            Button("Cancel", role: .cancel) { pendingOffset = nil }
+        }
+    }
+
+    private func resetDraft() {
+        baselineAnswers = answers
+        baselineNumeric = numericAnswers
+        draftAnswers = answers
+        draftNumeric = numericAnswers
+        draftNumericText = [:]
+        saveFailed = false
+    }
+
+    private func selectDay(_ offset: Int) {
+        guard offset != dayOffset, !saving else { return }
+        if dirty { pendingOffset = offset } else { changeDay(offset) }
+    }
+
+    private func changeDay(_ offset: Int) {
+        baselineAnswers = [:]
+        baselineNumeric = [:]
+        draftAnswers = [:]
+        draftNumeric = [:]
+        draftNumericText = [:]
+        dayOffset = offset
+        onChanged()
+    }
+
+    private func saveDraft() {
+        guard dirty, !saving, !invalidNumeric else { return }
+        let day = dayKey
+        let nextAnswers = draftAnswers
+        let nextNumeric = draftNumeric
+        let questions = Set(baselineAnswers.keys).union(baselineNumeric.keys).union(nextAnswers.keys).union(nextNumeric.keys)
+            .filter { baselineAnswers[$0] != nextAnswers[$0] || baselineNumeric[$0] != nextNumeric[$0] }
+        saving = true
+        Task {
+            for question in questions {
+                if let value = nextNumeric[question] {
+                    await repo.saveJournalNumeric(day: day, question: question, value: value)
+                } else if let yes = nextAnswers[question] {
+                    await repo.saveJournalAnswer(day: day, question: question, answeredYes: yes)
+                } else {
+                    await repo.clearJournalAnswer(day: day, question: question)
+                }
+            }
+            let savedAnswers = await repo.nativeJournalAnswers(day: day)
+            let savedNumeric = await repo.nativeJournalNumeric(day: day)
+            saveFailed = savedAnswers != nextAnswers || savedNumeric != nextNumeric
+            if !saveFailed {
+                baselineAnswers = nextAnswers
+                baselineNumeric = nextNumeric
+                draftNumericText = [:]
+                repo.noteJournalChanged()
+            }
+            onChanged()
+            saving = false
+        }
     }
 
     // MARK: - Group block
 
     @ViewBuilder private func groupBlock(_ group: JournalGroup) -> some View {
         let groupItems = items(in: group)
-        // Empty groups hidden outside edit mode; in edit mode all six show so items can be moved in.
+        // Empty groups hide outside edit mode; all groups remain available while editing.
         if !groupItems.isEmpty || editing {
             let collapsed = collapsedGroups.contains(group.rawValue)
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: NoopMetrics.space2) {
                 Button { toggleCollapsed(group) } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: NoopMetrics.space2) {
                         Text(group.title.uppercased())
                             .font(StrandFont.overline)
                             .tracking(StrandFont.overlineTracking)
@@ -152,12 +320,16 @@ struct JournalLogCard: View {
                             .foregroundStyle(StrandPalette.textTertiary)
                         Spacer()
                         Image(systemName: collapsed ? "chevron.right" : "chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(StrandFont.caption)
                             .foregroundStyle(StrandPalette.textTertiary)
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(group.title), \(groupItems.count) items, \(collapsed ? "collapsed" : "expanded")")
+                .accessibilityLabel(Text(verbatim: group.title))
+                .accessibilityValue(Text(verbatim: String(format: String(localized: "%@, %@"),
+                    String(format: String(localized: "%lld"), groupItems.count),
+                    collapsed ? String(localized: "Collapsed") : String(localized: "Expanded"))))
 
                 if !collapsed {
                     ForEach(groupItems) { item in itemRow(item) }
@@ -170,7 +342,7 @@ struct JournalLogCard: View {
 
     @ViewBuilder private func itemRow(_ item: JournalCatalogItem) -> some View {
         HStack {
-            Text(verbatim: item.display)   // display = rename ?? canonical; data, not a UI literal
+            Text(verbatim: item.localizedDisplay)   // display = rename ?? canonical; data, not a UI literal
                 .font(StrandFont.body)
                 .foregroundStyle(item.hidden ? StrandPalette.textTertiary : StrandPalette.textPrimary)
             Spacer()
@@ -188,30 +360,36 @@ struct JournalLogCard: View {
     // MARK: - Numeric field
 
     private func numericField(_ item: JournalCatalogItem) -> some View {
-        let current = numericAnswers[item.canonical]
-        return HStack(spacing: 6) {
+        let current = draftNumeric[item.canonical]
+        return HStack(spacing: NoopMetrics.space2) {
             stepperButton("minus", q: item.canonical, current: current)
             NumericLogField(
-                value: current,
+                text: Binding(get: { draftNumericText[item.canonical] ?? draftNumeric[item.canonical].map(NumericLogField.format) ?? "" },
+                              set: { editNumeric(item.canonical, text: $0) }),
                 placeholder: "—",
-                onCommit: { v in commitNumeric(item.canonical, value: v) })
-            .frame(width: 64)
+                label: [item.localizedDisplay, item.kind.unitLabel].compactMap { $0 }.joined(separator: " "),
+                allowsNegative: journalAllowsNegative(item.canonical))
+            .frame(width: NoopMetrics.space4 * 4)
             if let unit = item.kind.unitLabel, !unit.isEmpty {
                 Text(verbatim: unit)
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             stepperButton("plus", q: item.canonical, current: current)
             if current != nil {
                 Button {
-                    Task { await repo.clearJournalAnswer(day: dayKey, question: item.canonical); onChanged() }
+                    draftNumeric.removeValue(forKey: item.canonical)
+                    draftAnswers.removeValue(forKey: item.canonical)
+                    draftNumericText.removeValue(forKey: item.canonical)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textTertiary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear \(item.display)")
+                .accessibilityLabel(Text(verbatim: String(format: String(localized: "Clear %@"), item.localizedDisplay)))
             }
         }
     }
@@ -219,7 +397,7 @@ struct JournalLogCard: View {
     private func stepperButton(_ symbol: String, q: String, current: Double?) -> some View {
         Button {
             let base = current ?? 0
-            let next = max(0, symbol == "plus" ? base + 1 : base - 1)
+            let next = symbol == "plus" ? base + 1 : (journalAllowsNegative(q) ? base - 1 : max(0, base - 1))
             commitNumeric(q, value: next)
         } label: {
             Image(systemName: "\(symbol).circle")
@@ -227,20 +405,34 @@ struct JournalLogCard: View {
                 .foregroundStyle(StrandPalette.textSecondary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(symbol == "plus" ? "Increase" : "Decrease")
+        .accessibilityLabel(Text(verbatim: symbol == "plus" ? String(localized: "Increase") : String(localized: "Decrease")))
     }
 
     private func commitNumeric(_ q: String, value: Double) {
-        Task {
-            await repo.saveJournalNumeric(day: dayKey, question: q, value: value)
-            onChanged()
+        guard value.isFinite, value >= 0 || journalAllowsNegative(q) else { return }
+        draftNumericText.removeValue(forKey: q)
+        draftNumeric[q] = value
+        draftAnswers[q] = true
+        saveFailed = false
+    }
+
+    private func editNumeric(_ q: String, text: String) {
+        guard !saving, answersDayKey == dayKey else { return }
+        draftNumericText[q] = text
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draftNumeric.removeValue(forKey: q)
+            draftAnswers.removeValue(forKey: q)
+        } else if let value = journalNumericValue(text, allowNegative: journalAllowsNegative(q)) {
+            draftNumeric[q] = value
+            draftAnswers[q] = true
         }
+        saveFailed = false
     }
 
     // MARK: - Edit-mode controls
 
     private func editControls(_ item: JournalCatalogItem) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: NoopMetrics.space3) {
             if item.hidden {
                 pillButton("Restore", selected: false) { catalog.restore(item.canonical) }
             } else {
@@ -310,13 +502,15 @@ struct JournalLogCard: View {
             }
         }
         .padding(NoopMetrics.space4)
-        .frame(minWidth: 320)
+        #if os(macOS)
+        .frame(minWidth: NoopMetrics.editorSheetMinWidth)
+        #endif
     }
 
     // MARK: - Add row
 
     private var addRow: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: NoopMetrics.space2) {
             HStack {
                 TextField("Add a custom item…", text: $customDraft)
                     .textFieldStyle(.roundedBorder)
@@ -349,14 +543,11 @@ struct JournalLogCard: View {
 
     private func dayPill(_ label: LocalizedStringKey, offset: Int) -> some View {
         pillButton(label, selected: dayOffset == offset) {
-            dayOffset = offset
-            onChanged()   // reload the selected day's answers
+            selectDay(offset)
         }
     }
 
-    /// The bounded day-picker range (#656): Tomorrow (-1) plus today and the 6 prior days, chronological
-    /// oldest → newest left-to-right. Bounded on purpose — journal answers feed the correlation engine, so
-    /// unbounded backfill of stale days would distort it (matches WHOOP's limited retroactive window).
+    /// Recent-day shortcuts stay chronological; the calendar opens older recorded dates.
     private static let journalDayOffsets: [Int] = Array((-1...6).reversed())
 
     /// Short pill label for a day-picker offset (daysBack; -1 = Tomorrow). "%lld days ago" is a String
@@ -371,18 +562,17 @@ struct JournalLogCard: View {
     }
 
     private func answerPill(_ label: LocalizedStringKey, q: String, value: Bool) -> some View {
-        let selected = answers[q] == value
+        let selected = draftAnswers[q] == value
         return pillButton(label, selected: selected) {
-            Task {
-                // Tri-state: re-tapping the filled chip clears the answer (natural-key delete,
-                // scoped to "noop-journal", imported rows can never be removed this way).
-                if selected {
-                    await repo.clearJournalAnswer(day: dayKey, question: q)
-                } else {
-                    await repo.saveJournalAnswer(day: dayKey, question: q, answeredYes: value)
-                }
-                onChanged()
+            draftNumericText.removeValue(forKey: q)
+            if selected {
+                draftAnswers.removeValue(forKey: q)
+                draftNumeric.removeValue(forKey: q)
+            } else {
+                draftAnswers[q] = value
+                draftNumeric.removeValue(forKey: q)
             }
+            saveFailed = false
         }
     }
 
@@ -392,45 +582,50 @@ struct JournalLogCard: View {
             Text(label)
                 .font(StrandFont.footnote)
                 .foregroundStyle(selected ? StrandPalette.surfaceBase : StrandPalette.textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
+                .padding(.horizontal, NoopMetrics.space3)
+                .padding(.vertical, NoopMetrics.space2)
                 .background(selected ? StrandPalette.restColor : StrandPalette.surfaceInset,
                             in: Capsule())
                 .overlay(Capsule().stroke(selected ? StrandPalette.restColor : StrandPalette.hairline,
-                                          lineWidth: 1))
+                                          lineWidth: NoopMetrics.hairlineWidth))
         }
         .buttonStyle(.plain)
     }
 }
 
-/// A compact numeric log field: shows the current value or a ghost placeholder, commits a Double on
-/// return / focus-out. Kept small so the numeric row reads like the yes/no pills.
-private struct NumericLogField: View {
-    let value: Double?
-    let placeholder: String
-    let onCommit: (Double) -> Void
+private func journalAllowsNegative(_ question: String) -> Bool {
+    let unit = JournalFactor.find(question)?.unit
+    return unit == nil || unit == "°C"
+}
 
-    @State private var text = ""
+private func journalNumericValue(_ text: String, allowNegative: Bool) -> Double? {
+    let cleaned = text.replacingOccurrences(of: ",", with: ".").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let value = Double(cleaned), value.isFinite, value >= 0 || allowNegative else { return nil }
+    return value
+}
+
+/// A compact numeric log field whose text stays in the parent draft, including incomplete numbers.
+private struct NumericLogField: View {
+    @Binding var text: String
+    let placeholder: String
+    let label: String
+    let allowsNegative: Bool
 
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.roundedBorder)
             .multilineTextAlignment(.center)
-            .font(StrandFont.number(15))
-            .onAppear { text = value.map(Self.format) ?? "" }
-            .onChangeCompat(of: value) { v in text = v.map(Self.format) ?? "" }
-            .onSubmit { commit() }
+            .font(StrandFont.bodyNumber)
+            .accessibilityLabel(Text(verbatim: label))
         #if os(iOS)
-            .keyboardType(.decimalPad)
+            .keyboardType(allowsNegative ? .numbersAndPunctuation : .decimalPad)
         #endif
     }
 
-    private func commit() {
-        let cleaned = text.replacingOccurrences(of: ",", with: ".")
-        if let v = Double(cleaned) { onCommit(v) }
-    }
-
-    private static func format(_ v: Double) -> String {
-        v == v.rounded() ? String(Int(v)) : String(format: "%.1f", v)
+    static func format(_ v: Double) -> String {
+        guard v.isFinite else { return "—" }
+        let integral = v == v.rounded()
+        let rounded = integral ? v : (v * 10).rounded(.toNearestOrEven) / 10
+        return String(format: integral ? "%.0f" : "%.1f", locale: Locale(identifier: "en_US_POSIX"), rounded)
     }
 }

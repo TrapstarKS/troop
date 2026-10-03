@@ -259,10 +259,14 @@ object Palette {
     }
 
     /** Sample the recovery gradient at a recovery score 0..100. */
-    fun recoveryColor(score: Double): Color = when {
-        score < 34 -> recoveryLow
-        score < 67 -> recoveryMedium
-        else -> recoveryHigh
+    fun recoveryColor(score: Double): Color {
+        if (!score.isFinite()) return textTertiary
+        if (isClassic) return sample(recoveryStops, (score / 100.0).toFloat())
+        return when {
+            score < 34 -> recoveryLow
+            score < 67 -> recoveryMedium
+            else -> recoveryHigh
+        }
     }
 
     /** Sample the strain gradient at an Effort value on the 0..100 scale. */
@@ -463,6 +467,7 @@ object Metrics {
     val progressHeight = 10.dp
     val editorListMaxHeight = 390.dp
     val detailDial = 260.dp
+    const val fullScoreDialWidthFraction = 0.662f
     val compactDial = 90.dp
     val detailDialStroke = 15.dp
     val compactDialStroke = 5.dp
@@ -549,14 +554,16 @@ object NoopType {
 
 /** Build the Material3 colour scheme from a token set. Dark/light differ only in the builder used
  *  (which sets sensible defaults for the slots we don't override); the NOOP surfaces are all driven
- *  by `Palette.*` directly, so this only feeds Material components (text fields, switches, etc.). */
-private fun noopColorScheme(t: PaletteTokens, dark: Boolean): ColorScheme {
+ *  by `Palette.*` directly, so this only feeds Material components (text fields, switches, etc.).
+ *  Resolve chrome accents through Palette too, so these controls honor the live accent preference.
+ *  NoopTheme installs [t] as Palette.active before building this scheme. */
+internal fun noopColorScheme(t: PaletteTokens, dark: Boolean): ColorScheme {
     val base = if (dark) darkColorScheme() else lightColorScheme()
     return base.copy(
-        primary = t.accent,
+        primary = Palette.accent,
         onPrimary = if (dark) t.surfaceBase else t.goldDeepText,
-        primaryContainer = t.accentMuted,
-        onPrimaryContainer = if (dark) t.accentHover else t.accent,
+        primaryContainer = Palette.accentMuted,
+        onPrimaryContainer = if (dark) Palette.accentHover else Palette.accent,
         secondary = t.metricPurple,
         onSecondary = if (dark) t.surfaceBase else Color(0xFFFFFFFF),
         background = t.surfaceBase,

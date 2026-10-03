@@ -588,4 +588,16 @@ final class WorkoutSourceTests: XCTestCase {
         XCTAssertEqual(newEnd.timeIntervalSince(newStart), end.timeIntervalSince(start))
     }
 
+
+    func testEnergyValidationMatchesTheStandaloneSwiftOracle() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let start = now.addingTimeInterval(-7_200)
+        let end = now.addingTimeInterval(-3_600)
+        let values: [Double?] = [nil, -1, 0, 20_000, 20_000.01, .nan, .infinity, -.infinity, 1e300]
+        let accepted = values.map { value in
+            String(WorkoutSource.buildManualRowFromSpan(start: start, end: end, sport: "Run",
+                                                        avgHr: nil, energyKcal: value, now: now) != nil)
+        }.joined(separator: ",")
+        XCTAssertEqual(accepted, "true,false,true,true,false,false,false,false,false")
+    }
 }

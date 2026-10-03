@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_previous_day">Previous day</string>
+    <string name="home_next_day">Next day</string>
+    <string name="home_profile">Open profile</string>
+    <string name="home_device_connected">Device connected</string>
+    <string name="home_device_disconnected">Device disconnected</string>
+    <string name="home_sleep">Sleep</string>
+    <string name="home_recovery">Recovery</string>
+    <string name="home_strain">Strain</string>
+    <string name="home_status_disconnected">Disconnected</string>
+    <string name="home_status_scanning">Searching for device</string>
+    <string name="home_status_backfill">Syncing history</string>
+    <string name="home_status_capture">Live capture</string>
+    <string name="home_status_connected_no_data">Connected · no data yet</string>
+    <string name="home_status_idle">Connected · idle</string>
+    <string name="home_health_monitor">Health Monitor</string>
+    <string name="home_stress_monitor">Stress Monitor</string>
+    <string name="home_metrics_available">Metrics available</string>
+    <string name="home_stress_unavailable">No reading for this day</string>
+    <string name="home_stress_local">Local daily estimate</string>
+    <string name="home_my_day">My Day</string>
+    <string name="home_add_activity">Add activity</string>
+    <string name="home_sleep_duration">%1$dh %2$dm</string>
+    <string name="home_no_sleep_yet">No sleep recorded yet</string>
+    <string name="home_activity_time">%1$s – %2$s</string>
+    <string name="home_no_activities">No activities recorded for this day</string>
+    <string name="home_my_plan">My Plan</string>
+    <string name="home_weekly_plan">Weekly Plan</string>
+    <string name="home_plan_summary">View local goals, habits and progress.</string>
+    <string name="home_my_dashboard">My Dashboard</string>
+    <string name="home_save">Save</string>
+    <string name="home_sleep_pending_sync">Sleep score pending sync</string>
+    <string name="home_daily_guidance">Daily guidance</string>
+    <string name="home_avatar" translatable="false">N</string>
+    <string name="home_no_value" translatable="false">—</string>
+    <string name="home_metrics_count" translatable="false">%1$d/5</string>
+    <string name="home_dial_label" translatable="false">%1$s ›</string>
+    <string name="home_status_capture_experimental">Live capture · history experimental</string>
+</resources>

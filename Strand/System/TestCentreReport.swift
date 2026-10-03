@@ -31,6 +31,8 @@ final class TestCentreReport: ObservableObject {
 
     /// Non-nil while a report is awaiting review. Drive a `.sheet(item:)` off this.
     @Published var pending: Pending?
+    private var generation = 0
+    private var confirmed: Pending?
 
     /// A one-line status banner the screen can show after a share fires (the app has no global toast).
     @Published var lastStatus: String?
@@ -46,17 +48,34 @@ final class TestCentreReport: ObservableObject {
     /// beat after the tap; the sheet presents off `pending` exactly as before. `repo` is the live
     /// Repository for the row-count probe - nil (tests/previews) skips the store read and the meta keeps
     /// the honest zeroed block.
-    func start(mode: TestMode, live: LiveState, repo: Repository? = nil) {
-        Task { @MainActor [weak self] in
-            let storage = await TestCentreReport.storageProbe(repo: repo, live: live)
-            // #1002: the connected model. BLEManager persists the DETECTED family to this key on every
-            // connect, so it reflects the strap that actually linked - nil before any strap ever did.
-            // Read, never guessed.
-            let model = UserDefaults.standard.string(forKey: "selectedWhoopModel")
-            let entries = TestBundleAssembler.assemble(profile: mode.domain, live: live,
+    @discardableResult
+    func start(mode: TestMode, live: LiveState, repo: Repository? = nil,
+               gather: (() async -> [FileExport.BundleEntry])? = nil) -> Task<Void, Never> {
+        guard !Task.isCancelled else { return Task {} }
+        generation += 1
+        let ticket = generation
+        pending = nil
+        confirmed = nil
+        return Task { @MainActor [weak self] in
+            let entries: [FileExport.BundleEntry]
+            if let gather {
+                entries = await gather()
+            } else {
+                let storage = await TestCentreReport.storageProbe(repo: repo, live: live)
+                let model = UserDefaults.standard.string(forKey: "selectedWhoopModel")
+                entries = TestBundleAssembler.assemble(profile: mode.domain, live: live,
                                                        storage: storage, strapModel: model)
+            }
+            let prepared = await Task.detached(priority: .userInitiated) {
+                try? DebugExportReview.prepare(entries)
+            }.value
+            guard !Task.isCancelled, self?.generation == ticket else { return }
+            guard let prepared else {
+                self?.lastStatus = String(localized: "The export file could not be created or shared.")
+                return
+            }
             self?.pending = Pending(profile: mode.domain, title: mode.title,
-                                    gate: ReportReviewGate(entries: entries),
+                                    gate: ReportReviewGate(entries: prepared),
                                     modeInactive: mode.domain != .master && !TestCentre.active(mode.domain))
         }
     }
@@ -105,10 +124,20 @@ final class TestCentreReport: ObservableObject {
                                       rowBytes: rowBytes)
     }
 
-    /// The user read the report and confirmed: clear the gate and run the shipped share + deep-link flow.
+    /// Confirm the reviewed snapshot and close its sheet before sharing.
     func confirm() {
         guard var p = pending else { return }
         p.gate.confirm()
+        generation += 1
+        confirmed = p
+        pending = nil
+    }
+
+    // SwiftUI invokes this after the review sheet has finished closing.
+    @discardableResult
+    func reviewDismissed(output: ((Pending) async -> Void)? = nil) -> Task<Void, Never>? {
+        guard let p = confirmed else { return nil }
+        confirmed = nil
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         #if os(iOS)
         let platform = "iOS"
@@ -118,7 +147,8 @@ final class TestCentreReport: ObservableObject {
         let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
         // Launched (#646/#651): TestReportFlow.run is now async since it awaits FileExport.exportBundle's
         // off-main zip build.
-        Task {
+        return Task {
+            if let output { await output(p); return }
             await TestReportFlow.run(
                 profile: p.profile, title: p.title,
                 version: version, platform: platform, osVersion: osVersion,
@@ -129,9 +159,8 @@ final class TestCentreReport: ObservableObject {
                 // the documented mobile fallback is reachable, not just silently on the pasteboard.
                 copyToPasteboard: { [weak self] text in PlatformPasteboard.copy(text); self?.copyableReport = text })
         }
-        pending = nil
     }
 
     /// The user cancelled the review: nothing is shared.
-    func cancel() { pending = nil }
+    func cancel() { generation += 1; confirmed = nil; pending = nil }
 }

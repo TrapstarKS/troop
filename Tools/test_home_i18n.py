@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # AppRoot is deliberately handled separately below: most of that file is the unrelated
 # More/navigation UI, while only its Today tab and quick-action resources belong here.
 ANDROID_HOME_FILES = {
+    "android/app/src/main/java/com/noop/ui/HomePresentation.kt",
     "android/app/src/main/java/com/noop/ui/TodayScreen.kt",
     "android/app/src/main/java/com/noop/ui/TodayDayNav.kt",
     "android/app/src/main/java/com/noop/ui/TodayLayoutPrefs.kt",
@@ -44,6 +45,9 @@ ANDROID_SHELL_FILE = "android/app/src/main/java/com/noop/ui/AppRoot.kt"
 # Both selectable Today implementations, their Today-only editor/metadata, the shared
 # day picker that they render, and the iPhone shell/icon actions that enter Home.
 APPLE_HOME_FILES = {
+    "Strand/Screens/HomeDashboardContent.swift",
+    "Strand/Screens/HomeWeeklyPlanSummary.swift",
+    "Strand/Data/KeyMetricPrefs.swift",
     "Strand/Screens/TodayView.swift",
     "Strand/Liquid/LiquidTodayView.swift",
     "Strand/Screens/TodayCustomizationSheet.swift",

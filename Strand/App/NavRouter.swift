@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import StrandAnalytics
 
 // MARK: - NavRouter
 //
@@ -35,6 +36,9 @@ final class NavRouter: ObservableObject {
         /// Also the K5 scheduled morning-brief notification's tap-through target.
         case coach
         case alarms
+        case workouts
+        case weeklyPlan = "weekly_plan"
+        case localBriefing = "local_briefing"
 
         var id: String { rawValue }
 
@@ -49,6 +53,14 @@ final class NavRouter: ObservableObject {
     /// The destination a screen has asked the shell to open, or nil once handled. Published so the
     /// active shell (macOS sidebar / iOS tab) reacts and routes itself, then resets this to nil.
     @Published var requestedDestination: Destination?
+    @Published var requestedLocalNotificationContext: LocalNotificationContext?
+
+    func openLocalNotification(context: LocalNotificationContext) {
+        guard ["devices", "workouts", "weekly_plan", "local_briefing"].contains(context.route),
+              let destination = Destination(rawValue: context.route) else { return }
+        requestedLocalNotificationContext = context
+        requestedDestination = destination
+    }
 
     /// Set when a screen's top-bar "+" asks the shell to open the quick-action sheet (the sheet lives
     /// in the iOS shell). The shell presents it, then resets this to false.
@@ -63,6 +75,19 @@ final class NavRouter: ObservableObject {
 
     /// Ask the shell to open the quick-action sheet (Live HR · workout · journal · breathe).
     func requestQuickActions() { quickActionsRequested = true }
+
+    /// Keep local notification destinations pending until a shell can consume them.
+    func openLocalNotification(route: String) {
+        guard ["devices", "workouts", "weekly_plan", "local_briefing"].contains(route) else { return }
+        requestedLocalNotificationContext = nil
+        switch route {
+        case "devices": requestedDestination = .devices
+        case "workouts": requestedDestination = .workouts
+        case "weekly_plan": requestedDestination = .weeklyPlan
+        case "local_briefing": requestedDestination = .localBriefing
+        default: break
+        }
+    }
 
     /// Ask the shell to open the Devices manager (pair / switch bands). The shell decides how.
     func openDevices() { requestedDestination = .devices }

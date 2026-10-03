@@ -29,11 +29,13 @@ public struct ScoreDial: View {
     public var target: Double?
     public var targetRange: ClosedRange<Double>?
     public var accessibilityLabel: String?
+    public var viewportWidth: CGFloat?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     public init(label: String, value: String, unit: String = "", progress: Double?, color: Color,
                 size: ScoreDialSize = .full, target: Double? = nil,
-                targetRange: ClosedRange<Double>? = nil, accessibilityLabel: String? = nil) {
+                targetRange: ClosedRange<Double>? = nil, accessibilityLabel: String? = nil,
+                viewportWidth: CGFloat? = nil) {
         self.label = label
         self.value = value
         self.unit = unit
@@ -43,6 +45,7 @@ public struct ScoreDial: View {
         self.target = target
         self.targetRange = targetRange
         self.accessibilityLabel = accessibilityLabel
+        self.viewportWidth = viewportWidth
     }
 
     static func bounded(_ value: Double?) -> Double? {
@@ -51,32 +54,38 @@ public struct ScoreDial: View {
     }
 
     public var body: some View {
-        VStack(spacing: NoopMetrics.space2) {
+        let diameter = size == .full ? viewportWidth.flatMap {
+            $0.isFinite && $0 > 0 ? $0 * NoopMetrics.fullScoreDialWidthFraction : nil
+        } ?? size.diameter : size.diameter
+        let scale = diameter / size.diameter
+        let stroke = size.stroke * scale
+        let fontSize = size.fontSize * scale
+        return VStack(spacing: NoopMetrics.space2) {
             ZStack {
-                Circle().stroke(StrandPalette.ringTrack, lineWidth: size.stroke)
+                Circle().stroke(StrandPalette.ringTrack, lineWidth: stroke)
                 if let targetRange,
                    let lower = Self.bounded(targetRange.lowerBound),
                    let upper = Self.bounded(targetRange.upperBound) {
                     Circle().trim(from: lower, to: upper)
-                        .stroke(StrandPalette.targetBand, lineWidth: size.stroke)
+                        .stroke(StrandPalette.targetBand, lineWidth: stroke)
                         .rotationEffect(.degrees(-90))
                 }
                 if let fraction = Self.bounded(progress), fraction > 0 {
                     Circle().trim(from: 0, to: fraction)
-                        .stroke(color, style: StrokeStyle(lineWidth: size.stroke, lineCap: fraction == 1 ? .butt : .round))
+                        .stroke(color, style: StrokeStyle(lineWidth: stroke, lineCap: fraction == 1 ? .butt : .round))
                         .rotationEffect(.degrees(-90))
                 }
                 if let target = Self.bounded(target) {
                     Rectangle().fill(StrandPalette.textPrimary)
-                        .frame(width: NoopMetrics.scoreTargetWidth, height: size.stroke + NoopMetrics.space1)
-                        .offset(y: -(size.diameter - size.stroke) / 2)
+                        .frame(width: NoopMetrics.scoreTargetWidth, height: stroke + NoopMetrics.space1)
+                        .offset(y: -(diameter - stroke) / 2)
                         .rotationEffect(.degrees(target * 360))
                 }
                 VStack(spacing: NoopMetrics.space2) {
                     HStack(alignment: .firstTextBaseline, spacing: NoopMetrics.spaceHalf) {
-                        Text(value).font(StrandFont.display(size.fontSize))
+                        Text(value).font(StrandFont.display(fontSize))
                         if !unit.isEmpty {
-                            Text(unit).font(StrandFont.number(size.fontSize * 0.5, weight: .bold))
+                            Text(unit).font(StrandFont.number(fontSize * 0.5, weight: .bold))
                         }
                     }
                     .foregroundStyle(StrandPalette.textPrimary)
@@ -84,10 +93,10 @@ public struct ScoreDial: View {
                         Text(label).strandOverline().multilineTextAlignment(.center)
                     }
                 }
-                .padding(size.stroke + NoopMetrics.space2)
+                .padding(stroke + NoopMetrics.space2)
             }
-            .frame(width: size.diameter - size.stroke, height: size.diameter - size.stroke)
-            .padding(size.stroke / 2)
+            .frame(width: diameter - stroke, height: diameter - stroke)
+            .padding(stroke / 2)
             if size == .compact || dynamicTypeSize.isAccessibilitySize {
                 Text(label).strandOverline().multilineTextAlignment(.center)
             }

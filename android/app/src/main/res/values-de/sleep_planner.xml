@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sleep_planner_title">Schlafplaner</string>
+    <string name="sleep_planner_subtitle">Schlaf planen. Weckfrist festlegen.</string>
+    <string name="sleep_planner_next_plan">Nächster Schlafplan</string>
+    <string name="sleep_planner_peak" formatted="false">100%\nHöchstform</string>
+    <string name="sleep_planner_perform" formatted="false">85%\nLeistung</string>
+    <string name="sleep_planner_get_by" formatted="false">70%\nAuskommen</string>
+    <string name="sleep_planner_bedtime">Empfohlene Schlafenszeit</string>
+    <string name="sleep_planner_sleep_target">Schlafziel</string>
+    <string name="sleep_planner_need">Schlafbedarf mit Defizit</string>
+    <string name="sleep_planner_debt">Zusätzliches Schlafdefizit</string>
+    <string name="sleep_planner_ready">Lokale Schätzung aus deinem Schlafverlauf.</string>
+    <string name="sleep_planner_learning">Die Schätzung benötigt mindestens 3 aufgezeichnete Nächte.</string>
+    <string name="sleep_planner_haptic">Haptischer Wecker</string>
+    <string name="sleep_planner_enable">Armbandwecker aktivieren</string>
+    <string name="sleep_planner_exact">Genaue Zeit</string>
+    <string name="sleep_planner_goal_mode">Schlafziel</string>
+    <string name="sleep_planner_recovery_mode">Erholung</string>
+    <string name="sleep_planner_adaptive_unavailable">Früheres Wecken ist in dieser Version nicht verfügbar. Das Armband nutzt die späteste Weckzeit; nur aktuelle Schlaf- oder Erholungsdaten dieser Nacht dürfen sie vorziehen. Die Erholung von gestern wird nie verwendet.</string>
+    <string name="sleep_planner_exact_time">Standard-Weckzeit</string>
+    <string name="sleep_planner_latest_time">Standard-Weckzeit</string>
+    <string name="sleep_planner_wake">Standard-Weckzeit</string>
+    <string name="sleep_planner_day_plan">Tagesziele und Wochenendzeiten</string>
+    <string name="sleep_planner_default_goal">Standard-Schlafziel</string>
+    <string name="sleep_planner_use_default">Standard verwenden</string>
+    <string name="sleep_planner_save">Wecker speichern</string>
+    <string name="sleep_planner_reported">Das Armband meldet diese Weckfrist. Die Rückmeldung ist diagnostisch und garantiert kein Wecken.</string>
+    <string name="sleep_planner_sent">Weckbefehl erfasst; Bestätigung des Bands steht aus.</string>
+    <string name="sleep_planner_off">Armbandwecker in NOOP deaktiviert.</string>
+    <string name="sleep_planner_local">Lokal gespeichert; Weckfrist nicht bestätigt.</string>
+    <string name="sleep_planner_saved_deadline">Gespeicherte Weckfrist</string>
+    <string name="sleep_planner_countdown">Wecker in %1$s</string>
+    <string name="sleep_planner_reconnect_error">Speichern nicht möglich. Erneut verbinden und versuchen; der bisherige Wecker wurde nicht geändert.</string>
+    <string name="sleep_planner_unsupported">Dieser Wecker benötigt eine unterstützte WHOOP-Verbindung. WHOOP 5/MG benötigt auch experimentelle Protokolltests.</string>
+    <string name="sleep_planner_permission">Benachrichtigungen sind blockiert. Für Erinnerungen in den Systemeinstellungen aktivieren.</string>
+    <string name="sleep_planner_send_error">Das Senden des Befehls wurde nicht aufgezeichnet. Erneut verbinden und versuchen.</string>
+    <string name="sleep_planner_reconnect">Armband verbinden</string>
+    <string name="sleep_planner_skip">Nächsten Wecker überspringen</string>
+    <string name="sleep_planner_awake">Ich bin wach — nächsten Wecker auslassen</string>
+    <string name="sleep_planner_skipped">%1$s übersprungen. Künftige Wecktage bleiben aktiv.</string>
+    <string name="sleep_planner_restore">Übersprungenen Wecker wiederherstellen</string>
+    <string name="sleep_planner_skip_saved">Der nächste Termin wurde bereits übersprungen.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">Der zuletzt gemeldete Akkustand des Bands lag unter 20%. Vor Nutzung des Weckers aufladen.</string>
+    <string name="sleep_planner_phone_battery" formatted="false">Handyakku bei 20% oder weniger. Dies ist die lokale Warnschwelle von NOOP.</string>
+    <string name="sleep_planner_backup">Für wichtige Weckzeiten einen separaten Wecker nutzen. Wiederholte Armbandwecker benötigen an späteren Tagen eine aktive App-Verbindung.</string>
+    <string name="sleep_planner_reminders">Abenderinnerungen</string>
+    <string name="sleep_planner_wind_down">An das Zur-Ruhe-Kommen erinnern</string>
+    <string name="sleep_planner_reminder_time">Empfohlene Erinnerung</string>
+    <string name="sleep_planner_debt_reminder">Hinweis zum Schlafdefizit einschließen</string>
+    <string name="sleep_planner_reminder_help">Optionale Erinnerungen folgen diesem Plan und den Tageszielen. Die Hinweise zum Schlafdefizit wurden für NOOP neu verfasst und sind standardmäßig aus.</string>
+    <string name="sleep_planner_phone_alarm">Telefon-Weckfenster und Ersatzwecker</string>
+    <string name="sleep_planner_previous_day">Vortag</string>
+    <string name="sleep_planner_back">Zurück zum Schlafplaner</string>
+    <string name="sleep_planner_reminder_title">Zeit, zur Ruhe zu kommen</string>
+    <string name="sleep_planner_reminder_notification">Dein Schlafplan empfiehlt, dich für eine Schlafenszeit um %1$s zu entspannen.</string>
+    <string name="sleep_planner_debt_notification">Plane heute Nacht Zeit zum Schlafen ein. Dein lokaler Plan empfiehlt eine Schlafenszeit um %1$s und berücksichtigt das letzte Schlafdefizit im Bedarf.</string>
+    <string name="sleep_planner_cancel_requested">Abbruch angefordert; vom Armband noch nicht bestätigt.</string>
+    <string name="sleep_planner_notification_settings">Benachrichtigungseinstellungen</string>
+    <string name="sleep_planner_phone_help">Leichtschlaf-Erkennung des Telefons mit genauer Weckfrist.</string>
+    <string name="sleep_planner_update_requested">Weckeränderung angefordert; Bestätigung des Armbands steht noch aus.</string>
+</resources>

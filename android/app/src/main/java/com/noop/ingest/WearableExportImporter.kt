@@ -731,7 +731,7 @@ object WearableExportImporter {
                 recovery = null,          // NEVER the brand's readiness score
                 strain = null,
                 spo2Pct = d.spo2Pct, skinTempDevC = d.skinTempDevC,
-                steps = d.steps, activeKcalEst = d.activeKcal,
+                steps = d.steps, activeKcalEst = d.totalKcal, activeEnergyKcalEst = d.activeKcal,
             )
         }
         if (dailyMetrics.isNotEmpty()) repo.upsertDailyMetrics(dailyMetrics)
@@ -749,7 +749,7 @@ object WearableExportImporter {
         fun add(day: String, key: String, v: Double?) { if (v != null) series.add(MetricSeriesRow(deviceId, day, key, v)) }
         for (d in parsed.days) {
             add(d.day, "steps", d.steps?.toDouble()); add(d.day, "distance_m", d.distanceM)
-            add(d.day, "energy_kcal", d.activeKcal); add(d.day, "total_kcal", d.totalKcal)
+            add(d.day, "active_kcal", d.activeKcal); add(d.day, "energy_kcal", d.totalKcal); add(d.day, "total_kcal", d.totalKcal)
             add(d.day, "rhr", d.restingHr?.toDouble()); add(d.day, "hrv", d.avgHrvMs)
             add(d.day, "skin_temp_dev_c", d.skinTempDevC); add(d.day, "spo2", d.spo2Pct)
             add(d.day, "vo2max", d.vo2max)

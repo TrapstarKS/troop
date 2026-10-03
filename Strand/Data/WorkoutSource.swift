@@ -394,7 +394,7 @@ enum WorkoutSource: Equatable {
         guard spanSeconds <= maxManualSpanSeconds else { return nil }
         guard e <= Int(now.timeIntervalSince1970) else { return nil }
         if let hr = avgHr, !(25...250).contains(hr) { return nil }
-        if let k = energyKcal, k < 0 || k > 20_000 { return nil }
+        if let k = energyKcal, !k.isFinite || k < 0 || k > 20_000 { return nil }
         // Distance 0-1000 km (#1195): rejects a negative or absurd manual entry. 1000 km comfortably
         // covers any single session (an Ironman bike is 180 km, an ultra 160 km).
         if let d = distanceM, d < 0 || d > 1_000_000 { return nil }
