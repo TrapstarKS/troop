@@ -221942,6 +221942,64 @@
         }
       }
     },
+    "The saved average differs from this recording. The graph uses recorded heart rate; saved strain and zone data are preserved.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der gespeicherte Durchschnitt weicht von dieser Aufzeichnung ab. Das Diagramm verwendet die aufgezeichnete Herzfrequenz; gespeicherte Belastungs- und Zonendaten bleiben erhalten."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La media guardada difiere de este registro. El gráfico usa la frecuencia cardíaca registrada; se conservan los datos guardados de esfuerzo y zonas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La moyenne enregistrée diffère de cet enregistrement. Le graphique utilise la fréquence cardiaque enregistrée ; les données d’effort et de zones sauvegardées sont préservées."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A média guardada difere deste registo. O gráfico utiliza a frequência cardíaca registada; os dados guardados de esforço e zonas são preservados."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La media salvata differisce da questa registrazione. Il grafico usa la frequenza cardiaca registrata; i dati salvati di carico e zone vengono mantenuti."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zapisana średnia różni się od tego nagrania. Wykres wykorzystuje zarejestrowane tętno; zapisane dane obciążenia i stref zostają zachowane."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранённое среднее отличается от этой записи. График использует записанный пульс; сохранённые данные нагрузки и зон остаются прежними."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存的平均值与此记录不同。图表使用记录的心率；已保存的强度和区间数据保持不变。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存的平均值與此記錄不同。圖表使用記錄的心率；已儲存的強度和區間資料保持不變。"
+          }
+        }
+      }
+    },
     "The scatter looked rounder and more spread out than a tight, steady beat. This has many ordinary causes and is not a diagnosis.": {
       "localizations": {
         "de": {
