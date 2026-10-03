@@ -45,10 +45,11 @@ object DemoSeeder {
         "Running", "Cycling", "Strength", "HIIT", "Swimming", "Yoga", "Walking", "Rowing"
     )
 
-    /** Seed only if the demo (and the user) has no daily history yet. Safe to call on every launch. */
+    /** Seed daily history only when empty, then add the raw demo fixture once. Safe on every launch. */
     suspend fun seedIfEmpty(repo: WhoopRepository) {
-        if (repo.days(WHOOP).isNotEmpty()) return
-        seed(repo)
+        val seededNow = repo.days(WHOOP).isEmpty()
+        if (seededNow) seed(repo)
+        HealthspanStressDemoSeed.seedIfDemo(repo, seededNow)
     }
 
     /**
