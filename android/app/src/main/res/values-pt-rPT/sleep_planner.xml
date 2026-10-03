@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sleep_planner_title">Planeador do sono</string>
+    <string name="sleep_planner_subtitle">Planeia o sono. Define a hora limite.</string>
+    <string name="sleep_planner_next_plan">Próximo plano de sono</string>
+    <string name="sleep_planner_peak" formatted="false">100%\nMáximo</string>
+    <string name="sleep_planner_perform" formatted="false">85%\nDesempenho</string>
+    <string name="sleep_planner_get_by" formatted="false">70%\nMínimo</string>
+    <string name="sleep_planner_bedtime">Hora de deitar sugerida</string>
+    <string name="sleep_planner_sleep_target">Objetivo de sono</string>
+    <string name="sleep_planner_need">Sono necessário, incluindo dívida</string>
+    <string name="sleep_planner_debt">Dívida de sono adicionada</string>
+    <string name="sleep_planner_ready">Estimativa local do teu histórico de sono.</string>
+    <string name="sleep_planner_learning">A estimativa precisa de pelo menos 3 noites registadas.</string>
+    <string name="sleep_planner_haptic">Alarme háptico</string>
+    <string name="sleep_planner_enable">Ativar alarme da pulseira</string>
+    <string name="sleep_planner_exact">Hora exata</string>
+    <string name="sleep_planner_goal_mode">Objetivo de sono</string>
+    <string name="sleep_planner_recovery_mode">Recuperação</string>
+    <string name="sleep_planner_adaptive_unavailable">O despertar antecipado não está disponível nesta versão. A pulseira usa a hora limite; apenas dados recentes do sono ou recuperação desta noite podem antecipá-la. Nunca se usa a recuperação de ontem.</string>
+    <string name="sleep_planner_exact_time">Hora limite predefinida</string>
+    <string name="sleep_planner_latest_time">Hora limite predefinida</string>
+    <string name="sleep_planner_wake">Hora limite predefinida</string>
+    <string name="sleep_planner_day_plan">Objetivos diários e fins de semana</string>
+    <string name="sleep_planner_default_goal">Objetivo predefinido</string>
+    <string name="sleep_planner_use_default">Usar predefinição</string>
+    <string name="sleep_planner_save">Guardar alarme</string>
+    <string name="sleep_planner_reported">A pulseira comunica esta hora limite. A leitura é de diagnóstico e não garante o despertar.</string>
+    <string name="sleep_planner_sent">Comando de despertar registado; a aguardar confirmação da pulseira.</string>
+    <string name="sleep_planner_off">Alarme da pulseira desligado no NOOP.</string>
+    <string name="sleep_planner_local">Guardado localmente; hora limite não confirmada.</string>
+    <string name="sleep_planner_saved_deadline">Hora limite guardada</string>
+    <string name="sleep_planner_countdown">Alarme daqui a %1$s</string>
+    <string name="sleep_planner_reconnect_error">Não foi possível guardar. Volta a ligar e tenta novamente; o alarme anterior não mudou.</string>
+    <string name="sleep_planner_unsupported">Este alarme requer uma ligação WHOOP suportada. WHOOP 5/MG também requer testes de protocolo experimentais.</string>
+    <string name="sleep_planner_permission">Notificações bloqueadas. Ativa-as nas definições do sistema para receber lembretes.</string>
+    <string name="sleep_planner_send_error">O envio do comando não foi registado. Volta a ligar e tenta novamente.</string>
+    <string name="sleep_planner_reconnect">Voltar a ligar pulseira</string>
+    <string name="sleep_planner_skip">Ignorar próximo alarme</string>
+    <string name="sleep_planner_awake">Estou acordado — cancelar próximo alarme</string>
+    <string name="sleep_planner_skipped">%1$s ignorado. Os dias futuros continuam ativos.</string>
+    <string name="sleep_planner_restore">Repor alarme ignorado</string>
+    <string name="sleep_planner_skip_saved">A próxima ocorrência já foi ignorada.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">A última carga comunicada pela pulseira era inferior a 20%. Carregue-a antes de confiar no alarme.</string>
+    <string name="sleep_planner_phone_battery" formatted="false">Bateria do telefone a 20% ou menos. Este é o limiar de aviso local do NOOP.</string>
+    <string name="sleep_planner_backup">Mantém um alarme independente para despertares importantes. A pulseira precisa de uma ligação ativa à aplicação para repetir o alarme nos dias seguintes.</string>
+    <string name="sleep_planner_reminders">Lembretes noturnos</string>
+    <string name="sleep_planner_wind_down">Lembrar-me de relaxar</string>
+    <string name="sleep_planner_reminder_time">Lembrete sugerido</string>
+    <string name="sleep_planner_debt_reminder">Incluir aviso de dívida de sono</string>
+    <string name="sleep_planner_reminder_help">Os lembretes opcionais seguem este plano e os objetivos diários. Os conselhos sobre a dívida são novos textos do NOOP e estão desligados por predefinição.</string>
+    <string name="sleep_planner_phone_alarm">Janela de despertar e reserva do telefone</string>
+    <string name="sleep_planner_previous_day">Dia anterior</string>
+    <string name="sleep_planner_back">Voltar ao planeador</string>
+    <string name="sleep_planner_reminder_title">Hora de relaxar</string>
+    <string name="sleep_planner_reminder_notification">O plano sugere relaxar para te deitares às %1$s.</string>
+    <string name="sleep_planner_debt_notification">Reserva tempo para dormir esta noite. O plano local sugere deitar às %1$s e inclui a dívida de sono recente nas tuas necessidades.</string>
+    <string name="sleep_planner_cancel_requested">Cancelamento pedido; a pulseira ainda não confirmou.</string>
+    <string name="sleep_planner_notification_settings">Definições de notificações</string>
+    <string name="sleep_planner_phone_help">Deteção de sono leve no telefone com hora limite exata.</string>
+    <string name="sleep_planner_update_requested">Atualização do alarme pedida; aguarda confirmação da pulseira.</string>
+</resources>

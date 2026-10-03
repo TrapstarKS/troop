@@ -14,7 +14,7 @@ final class OuraSyncWriterTests: XCTestCase {
         let store = try await WhoopStore.inMemory()
 
         var day = WearableDailyRow(day: "2026-01-02")
-        day.restingHr = 50; day.steps = 9000; day.totalSleepMin = 400
+        day.restingHr = 50; day.steps = 9000; day.totalSleepMin = 400; day.activeKcal = 520; day.totalKcal = 2450
 
         let session = WearableSleepSession(
             start: iso("2026-01-01T23:00:00Z"), end: iso("2026-01-02T06:00:00Z"),
@@ -65,6 +65,8 @@ final class OuraSyncWriterTests: XCTestCase {
         let days = try await store.dailyMetrics(deviceId: "oura-api", from: "2026-01-01", to: "2026-01-03")
         XCTAssertNil(days.first?.recovery)
         XCTAssertNil(days.first?.strain)
+        XCTAssertEqual(days.first?.activeEnergyKcalEst, 520)
+        XCTAssertEqual(days.first?.activeKcalEst, 2450)
     }
 }
 #endif // OURA_CLOUD_IMPORT

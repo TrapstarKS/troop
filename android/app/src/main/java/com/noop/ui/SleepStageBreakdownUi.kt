@@ -3,7 +3,9 @@ package com.noop.ui
 import android.text.format.DateFormat
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -29,11 +32,21 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,12 +72,38 @@ internal fun StageBreakdownRows(s: Stages, palette: SleepStagePalette = SleepSta
     }
 }
 
+@Composable
+internal fun localizedSleepStage(stage: String): String = stringResource(when (canonicalStage(stage)) {
+    "awake" -> R.string.whoop_sleep_awake
+    "rem" -> R.string.whoop_sleep_rem
+    "light" -> R.string.whoop_sleep_light
+    "deep" -> R.string.whoop_sleep_deep
+    else -> R.string.whoop_sleep_stage_unrecorded
+})
+
+@Composable
+internal fun SleepStageTotalsBar(stages: Stages) {
+    Canvas(Modifier.fillMaxWidth().height(Metrics.stageStripHeight)) {
+        val totals = listOf(stages.awake to Palette.sleepAwake, stages.rem to Palette.sleepREM,
+            stages.light to Palette.sleepLight, stages.deep to Palette.sleepDeep)
+        val total = totals.sumOf { it.first.coerceAtLeast(0.0) }
+        if (total <= 0.0) return@Canvas
+        var x = 0f
+        totals.forEach { (minutes, color) ->
+            val width = (minutes.coerceAtLeast(0.0) / total * size.width).toFloat()
+            drawRect(color, Offset(x, 0f), Size(width, size.height))
+            x += width
+        }
+    }
+}
+
 /**
  * One WHOOP-style stage row. `fraction = minutes / total` sets the PipBar fill; `percent` is the night's
  * apportioned share (so the four rows sum to 100). Mirrors the macOS SleepView.stageBreakdownRow.
  */
 @Composable
 private fun StageBreakdownRow(stage: String, minutes: Double, total: Double, color: Color, percent: Int) {
+    val label = localizedSleepStage(stage)
     val fraction = if (total > 0.0) (minutes / total).coerceIn(0.0, 1.0) else 0.0
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -73,39 +112,34 @@ private fun StageBreakdownRow(stage: String, minutes: Double, total: Double, col
             .fillMaxWidth()
             .semantics {
                 contentDescription =
-                    uiString(R.string.l10n_sleep_screen_stage_durationtext_minutes_percent_percent_of_477dbf14, stage, durationText(minutes), percent)
+                    uiString(R.string.l10n_sleep_screen_stage_durationtext_minutes_percent_percent_of_477dbf14, label, durationText(minutes), percent)
             },
     ) {
         Box(
             modifier = Modifier
-                .size(12.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .size(Metrics.space12)
+                .clip(RoundedCornerShape(Metrics.cornerXs))
                 .background(color),
         )
         Text(
-            stage.uppercase(Locale.getDefault()),
+            label.uppercase(Locale.getDefault()),
             style = NoopType.overline,
             color = Palette.textPrimary,
             maxLines = 1,
-            modifier = Modifier.width(56.dp),
+            modifier = Modifier.width(Metrics.space24 + Metrics.space24 + Metrics.space8),
         )
         Text(
             uiString(R.string.l10n_sleep_screen_percent_2281d326, percent),
             style = NoopType.captionNumber,
             color = color,
             maxLines = 1,
-            modifier = Modifier.width(38.dp),
+            modifier = Modifier.width(Metrics.space24 + Metrics.space14),
         )
-        // The stage's share-of-night as a liquid TUBE tinted in the stage colour — a genuine single-value
-        // progress bar (minutes / total), so it liquid-ifies cleanly. Posed static (animated = false): a
-        // hero card carries many stage rows, so a per-frame slosh per row isn't worth the cost — the tube
-        // reads as a filled liquid level, matching the pilot's non-hero tubes. Same fraction the % + the
-        // duration carry, so all three agree.
-        LiquidTube(
-            frac = fraction,
+        PipBar(
+            value = (fraction * 100).toFloat(),
+            segments = 20,
             tint = color,
-            animated = false,
-            height = 8.dp,
+            height = Metrics.space8,
             modifier = Modifier.weight(1f),
         )
         Text(
@@ -114,7 +148,7 @@ private fun StageBreakdownRow(stage: String, minutes: Double, total: Double, col
             color = Palette.textPrimary,
             textAlign = TextAlign.End,
             maxLines = 1,
-            modifier = Modifier.width(60.dp),
+            modifier = Modifier.width(Metrics.space24 + Metrics.space24 + Metrics.space12),
         )
     }
 }
@@ -198,17 +232,8 @@ internal fun HypnogramWithAxis(
     }
 }
 
-/**
- * #sleep-chart-style — the opt-in FILLED stepped hypnogram (the WHOOP-style single chart): stages stacked
- * by depth (Awake top → REM → Light → Deep bottom), each stage's column FILLED from its level down to the
- * baseline, with thin vertical risers tracing the transitions and an onset · midpoint · wake time axis.
- *
- * Unlike the classic proportional views this plots the night's REAL timestamps, so [segments] must be the
- * timestamped `PersistedSegment` array (`SleepModel.hypnogramSegments`); the caller only routes here when
- * the pref is FILLED and that array is present. Sub-90s fragments are display-smoothed (shared
- * [displaySmoothed], render-only — totals/percentages are untouched) so the night reads as a clean
- * staircase rather than a comb. One collapsed a11y node.
- */
+/** Recorded sleep stages at their actual timestamps. Unknown intervals remain gaps; the inspector
+ * reports half-open source intervals without smoothing brief stages into another classification. */
 @Composable
 internal fun FilledHypnogram(
     segments: List<PersistedSegment>,
@@ -225,18 +250,16 @@ internal fun FilledHypnogram(
     val endSec = (wakeTs?.toDouble()) ?: segments.maxOf { it.end }.toDouble()
     val spanSec = (endSec - originSec).coerceAtLeast(1.0)
     val intervals = remember(segments, originSec, spanSec) {
-        // Sort by start BEFORE smoothing: displaySmoothed's coalesce assumes chronological order (it
-        // bridges seams via startSec − last.endSec), exactly like the Swift Hypnogram sorts before
-        // displaySmoothed. Group segments are normally already ordered, but a fragmented-night
-        // concatenation must not be trusted to be.
-        displaySmoothed(
-            segments.sortedBy { it.start }
-                .map { StageInterval(it.stage, it.start - originSec, it.end - originSec) },
-            FILLED_HYPNOGRAM_SMOOTH_SEC,
-        )
+        segments.sortedBy { it.start }.mapNotNull { segment ->
+            val start = (segment.start - originSec).coerceIn(0.0, spanSec)
+            val end = (segment.end - originSec).coerceIn(0.0, spanSec)
+            val stage = canonicalStage(segment.stage)
+            if (end > start && stage in listOf("awake", "rem", "light", "deep")) StageInterval(stage, start, end)
+            else null
+        }
     }
     val showsAxis = onsetTs != null && wakeTs != null
-    val axSummary = hypnogramSummaryFor(intervals)
+    val axSummary = stringResource(R.string.whoop_sleep_stage_timeline)
     // Responsive time axis: exact onset/wake at the edges + round-hour marks between, MORE marks on a wider
     // screen. Empty when the night has no clock window (no axis then).
     // ~60dp per label so a phone (~360dp) budgets ~6 -> fills the interior with round-hour marks instead of
@@ -247,39 +270,75 @@ internal fun FilledHypnogram(
     // left the hypnogram axis in 24h while the sleep card above it changed - the setting half-applied.
     val is24h = ClockPrefs.uses24Hour(LocalContext.current)
     val axisTicks = if (showsAxis) hypnogramAxisTicks(onsetTs!!, wakeTs!!, maxAxisLabels, is24h) else emptyList()
-    var scrub by remember(intervals) { mutableStateOf<ScrubHit?>(null) }
+    var selectionFraction by remember(originSec) { mutableStateOf<Float?>(null) }
+    val scrub = selectionFraction?.let { scrubHitAt(it, 1f, intervals, originSec, spanSec) }
     // The crosshair tracks the FINGER. Snapping it to the resolved segment would put the line up to
     // half a segment from the touch while the readout named the time where the finger actually was.
-    var scrubX by remember(intervals) { mutableStateOf(0f) }
+    val currentStageLabel = localizedSleepStage(scrub?.stage.orEmpty())
+    val scrubState = scrub?.let { "${clockTimeLabel(it.timestamp, is24h)}, $currentStageLabel" }
+    fun inspectFraction(fraction: Float) {
+        selectionFraction = fraction.coerceIn(0f, 1f)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space6)) {
+        Text(stringResource(R.string.whoop_sleep_scrub_hint), style = NoopType.footnote, color = Palette.textSecondary)
+        Row(Modifier.fillMaxWidth()) {
+            Column(Modifier.width(Metrics.sparkWidth).height(Metrics.compactChartHeight),
+                verticalArrangement = Arrangement.SpaceAround) {
+                listOf("awake", "rem", "light", "deep").forEach { stage ->
+                    Text(localizedSleepStage(stage), style = NoopType.footnote, color = Palette.textSecondary,
+                        maxLines = 2)
+                }
+            }
         Canvas(
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .height(Metrics.compactChartHeight)
-                .semantics { contentDescription = axSummary }
+                .semantics {
+                    contentDescription = axSummary
+                    if (scrubState != null) stateDescription = scrubState
+                    if (showsAxis) {
+                        progressBarRangeInfo = ProgressBarRangeInfo(
+                            selectionFraction ?: 0f,
+                            0f..1f,
+                        )
+                        setProgress { inspectFraction(it); true }
+                    }
+                }
+                .onKeyEvent { event ->
+                    if (!showsAxis || event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    val fraction = selectionFraction ?: 0f
+                    when (event.key) {
+                        Key.DirectionLeft -> inspectFraction(fraction - (60.0 / spanSec).toFloat())
+                        Key.DirectionRight -> inspectFraction(fraction + (60.0 / spanSec).toFloat())
+                        Key.MoveHome -> inspectFraction(0f)
+                        Key.MoveEnd -> inspectFraction(1f)
+                        else -> return@onKeyEvent false
+                    }
+                    true
+                }
+                .focusable()
                 .then(
-                    // #1855: drag to read the clock time under your finger. Offered only when the
+                    // #1855: tap or drag to read the clock time under your finger. Offered only when the
                     // night supplies a clock window, because without one there is no real time to
                     // report and a number would have to be invented.
                     if (showsAxis) {
                         Modifier.pointerInput(intervals, originSec, spanSec) {
-                            fun hit(x: Float) = scrubHitAt(
-                                xPx = x,
-                                widthPx = size.width.toFloat(),
-                                intervals = intervals,
-                                originSec = originSec,
-                                spanSec = spanSec,
-                            )
+                            fun inspect(x: Float) {
+                                if (size.width > 0) inspectFraction(x / size.width.toFloat())
+                            }
                             detectHorizontalDragGestures(
-                                onDragStart = { scrubX = it.x; scrub = hit(it.x) },
-                                onDragEnd = { scrub = null },
-                                onDragCancel = { scrub = null },
+                                onDragStart = { inspect(it.x) },
+                                onDragEnd = {},
+                                onDragCancel = {},
                                 onHorizontalDrag = { change, _ ->
-                                    scrubX = change.position.x
-                                    scrub = hit(change.position.x)
+                                    inspect(change.position.x)
                                     change.consume()
                                 },
                             )
+                        }.pointerInput(intervals, originSec, spanSec) {
+                            detectTapGestures(onTap = { position ->
+                                if (size.width > 0) inspectFraction(position.x / size.width.toFloat())
+                            })
                         }
                     } else {
                         Modifier
@@ -304,21 +363,21 @@ internal fun FilledHypnogram(
             for (rank in 0 until 4) {
                 val y = levelY(rank)
                 drawLine(
-                    color = Palette.hairline.copy(alpha = 0.25f),
+                    color = Palette.hairline.copy(alpha = StrandAlpha.chartMarker),
                     start = Offset(0f, y),
                     end = Offset(w, y),
-                    strokeWidth = 1f,
+                    strokeWidth = Metrics.chartGridWidth.toPx(),
                 )
             }
             // FILLED: each stage from its level DOWN to the baseline (sharp rects tile seamlessly into one
             // continuous staircase). RIBBON: a slim uniform band centred at the stage level — the WHOOP-style
             // stepped line, lighter on a fragmented night where full columns amplify the noise.
-            val ribbonThickness = 10.dp.toPx()
+            val ribbonThickness = Metrics.progressHeight.toPx()
             intervals.forEach { iv ->
                 val x0 = xOf(iv.startSec)
                 val x1 = xOf(iv.endSec)
                 val y = levelY(rankOf(iv.stage))
-                val segW = (x1 - x0).coerceAtLeast(1.5f).coerceAtMost(w - x0)
+                val segW = (x1 - x0).coerceAtLeast(0f).coerceAtMost(w - x0)
                 if (filled) {
                     drawRect(
                         color = stageColorForRamp(iv.stage, palette),
@@ -337,12 +396,13 @@ internal fun FilledHypnogram(
             for (i in 0 until intervals.size - 1) {
                 val a = intervals[i]
                 val b = intervals[i + 1]
+                if (b.startSec - a.endSec > 1.0) continue
                 val x = xOf(b.startSec)
                 drawLine(
-                    color = Palette.textTertiary.copy(alpha = 0.5f),
+                    color = Palette.textTertiary.copy(alpha = StrandAlpha.chartMarker),
                     start = Offset(x, levelY(rankOf(a.stage))),
                     end = Offset(x, levelY(rankOf(b.stage))),
-                    strokeWidth = 1.5f,
+                    strokeWidth = Metrics.chartLineWidth.toPx(),
                     cap = StrokeCap.Round,
                 )
             }
@@ -361,14 +421,15 @@ internal fun FilledHypnogram(
             // paints from its level down to the baseline, so a crosshair drawn earlier is covered by
             // the next rect and effectively invisible across most of the chart.
             if (scrub != null) {
-                val cx = scrubX.coerceIn(0f, w)
+                val cx = ((selectionFraction ?: 0f) * w).coerceIn(0f, w)
                 drawLine(
                     color = Palette.textPrimary,
                     start = Offset(cx, 0f),
                     end = Offset(cx, h),
-                    strokeWidth = 2f,
+                    strokeWidth = Metrics.chartLineWidth.toPx(),
                 )
             }
+        }
         }
         val hit = scrub
         if (hit != null) {
@@ -385,7 +446,7 @@ internal fun FilledHypnogram(
                 ),
             ) {
                 Text(
-                    hit.stage.uppercase(),
+                    localizedSleepStage(hit.stage).uppercase(Locale.getDefault()),
                     style = NoopType.footnote,
                     color = Palette.textSecondary,
                     maxLines = 1,
@@ -398,7 +459,7 @@ internal fun FilledHypnogram(
                 )
             }
         } else if (axisTicks.isNotEmpty()) {
-            HypnogramTimeAxis(axisTicks)
+            HypnogramTimeAxis(axisTicks, Modifier.padding(start = Metrics.sparkWidth))
         }
     }
 }
@@ -431,18 +492,12 @@ internal fun SleepStageLegend(palette: SleepStagePalette) {
     }
 }
 
-/** Display-smoothing floor for [FilledHypnogram] — 5 min, matching the WHOOP-style Swift `Hypnogram`
- *  default (not the classic rows' 90s). The stepped single-chart view reads as a comb of thin spikes on a
- *  fragmented / under-detected night unless brief fragments coalesce into legible blocks; render-only, so
- *  totals/percentages are untouched. */
-private const val FILLED_HYPNOGRAM_SMOOTH_SEC = 300.0
-
 /**
  * Time-axis ticks for the stepped hypnogram: the EXACT onset (frac 0) and wake (frac 1) at the edges
  * (minute precision, [axisEdgeLabel]), plus round-hour marks between at a "nice" step chosen so the interior
  * count is ≤ [maxLabels]−2 — so a WIDER screen (larger [maxLabels]) shows MORE marks. Interior marks read as
  * the hour only ([axisHourLabel] — "06:00" / "6 AM"), which is shorter than an edge label, so more fit. Marks
- * within ~18% of either edge are dropped so a round-hour label can't collide with the onset/wake label.
+ * within ~18% of either edge are dropped as an initial budget; the layout checks measured label widths.
  * [is24h] (from `DateFormat.is24HourFormat`) picks 12/24h formatting. Pure/unit-testable.
  */
 internal fun hypnogramAxisTicks(
@@ -467,13 +522,37 @@ internal fun hypnogramAxisTicks(
     var t = (((onsetTs + offset) / stepSec) + 1L) * stepSec - offset // first LOCAL hour boundary after onset
     while (t < wakeTs) {
         val frac = ((t - onsetTs).toDouble() / span).toFloat()
-        // Drop marks within ~18% of an edge so a round-hour label can't overlap the onset/wake label — sized
-        // for the WIDER 12h edge ("10:25 AM"), plus half the mark's own width, on a phone.
+        // Initial edge budget; the layout removes any remaining collision using measured widths.
         if (frac > 0.18f && frac < 0.82f) out.add(frac to axisHourLabel(t, is24h))
         t += stepSec
     }
     out.add(1f to axisEdgeLabel(wakeTs, is24h))
     return out
+}
+
+internal fun hypnogramAxisLabelPositions(
+    fractions: List<Float>, widths: List<Int>, width: Int, gap: Int,
+): List<Pair<Int, Int>?> {
+    if (widths.isEmpty()) return emptyList()
+    val x = widths.mapIndexed { index, labelWidth ->
+        (fractions[index] * width - labelWidth / 2f).roundToInt()
+            .coerceIn(0, (width - labelWidth).coerceAtLeast(0))
+    }
+    val positions = MutableList<Pair<Int, Int>?>(widths.size) { null }
+    positions[0] = x[0] to 0
+    if (widths.size == 1) return positions
+    val last = widths.lastIndex
+    val endpointsOverlap = x[0] + widths[0] + gap > x[last]
+    positions[last] = x[last] to if (endpointsOverlap) 1 else 0
+    if (endpointsOverlap) return positions
+    var previousEnd = x[0] + widths[0]
+    for (index in 1 until last) {
+        if (x[index] >= previousEnd + gap && x[index] + widths[index] + gap <= x[last]) {
+            positions[index] = x[index] to 0
+            previousEnd = x[index] + widths[index]
+        }
+    }
+    return positions
 }
 
 /**
@@ -483,9 +562,9 @@ internal fun hypnogramAxisTicks(
  * the same fractions in the chart above.
  */
 @Composable
-private fun HypnogramTimeAxis(ticks: List<Pair<Float, String>>) {
+private fun HypnogramTimeAxis(ticks: List<Pair<Float, String>>, modifier: Modifier = Modifier) {
     Layout(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         content = {
             ticks.forEach { (_, label) ->
                 Text(label, style = NoopType.footnote, color = Palette.textTertiary, maxLines = 1)
@@ -495,19 +574,16 @@ private fun HypnogramTimeAxis(ticks: List<Pair<Float, String>>) {
         val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0)) }
         val wpx = constraints.maxWidth
         val hpx = placeables.maxOfOrNull { it.height } ?: 0
-        layout(wpx, hpx) {
-            placeables.forEachIndexed { i, p ->
-                val centerX = ticks[i].first * wpx
-                val x = (centerX - p.width / 2f).roundToInt().coerceIn(0, (wpx - p.width).coerceAtLeast(0))
-                p.place(x, 0)
+        val gap = Metrics.space8.roundToPx()
+        val positions = hypnogramAxisLabelPositions(ticks.map { it.first }, placeables.map { it.width }, wpx, gap)
+        val lastRow = positions.mapNotNull { it?.second }.maxOrNull() ?: 0
+        layout(wpx, hpx * (lastRow + 1) + gap * lastRow) {
+            placeables.forEachIndexed { index, placeable ->
+                positions[index]?.let { (x, row) -> placeable.place(x, row * (hpx + gap)) }
             }
         }
     }
 }
-
-/** One-line a11y summary of the smoothed hypnogram (stage count) — the collapsed node for [FilledHypnogram]. */
-private fun hypnogramSummaryFor(intervals: List<StageInterval>): String =
-    if (intervals.isEmpty()) "Sleep stages, no data" else "Sleep stage timeline, ${intervals.size} segments"
 
 /**
  * The onset · midpoint · wake clock-label row under a night timeline. Extracted from

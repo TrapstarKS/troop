@@ -362,6 +362,7 @@ public enum StrandPalette {
 
     /// Recovery category tint for the default appearance; Classic retains its continuous ramp.
     public static func recoveryColor(_ score: Double) -> Color {
+        guard score.isFinite else { return textTertiary }
         if isClassic { return sample(stops: recoveryStops, at: score / 100.0) }
         return recoveryBandColor(score)
     }

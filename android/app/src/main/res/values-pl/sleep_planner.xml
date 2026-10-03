@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sleep_planner_title">Planer snu</string>
+    <string name="sleep_planner_subtitle">Zaplanuj sen. Ustaw graniczną godzinę pobudki.</string>
+    <string name="sleep_planner_next_plan">Następny plan snu</string>
+    <string name="sleep_planner_peak" formatted="false">100%\nPełnia sił</string>
+    <string name="sleep_planner_perform" formatted="false">85%\nWydajność</string>
+    <string name="sleep_planner_get_by" formatted="false">70%\nMinimum</string>
+    <string name="sleep_planner_bedtime">Sugerowana pora snu</string>
+    <string name="sleep_planner_sleep_target">Cel snu</string>
+    <string name="sleep_planner_need">Potrzeba snu z długiem</string>
+    <string name="sleep_planner_debt">Dodany dług snu</string>
+    <string name="sleep_planner_ready">Lokalne oszacowanie na podstawie historii snu.</string>
+    <string name="sleep_planner_learning">Oszacowanie wymaga co najmniej 3 zapisanych nocy.</string>
+    <string name="sleep_planner_haptic">Alarm haptyczny</string>
+    <string name="sleep_planner_enable">Włącz alarm opaski</string>
+    <string name="sleep_planner_exact">Dokładna godzina</string>
+    <string name="sleep_planner_goal_mode">Cel snu</string>
+    <string name="sleep_planner_recovery_mode">Regeneracja</string>
+    <string name="sleep_planner_adaptive_unavailable">Wcześniejsza pobudka jest niedostępna w tej wersji. Opaska używa granicznej godziny; tylko świeże dane snu lub regeneracji z bieżącej nocy mogą ją przyspieszyć. Wczorajsza regeneracja nigdy nie jest używana.</string>
+    <string name="sleep_planner_exact_time">Domyślny termin pobudki</string>
+    <string name="sleep_planner_latest_time">Domyślny termin pobudki</string>
+    <string name="sleep_planner_wake">Domyślny termin pobudki</string>
+    <string name="sleep_planner_day_plan">Cele dzienne i weekendy</string>
+    <string name="sleep_planner_default_goal">Domyślny cel snu</string>
+    <string name="sleep_planner_use_default">Użyj domyślnych</string>
+    <string name="sleep_planner_save">Zapisz alarm</string>
+    <string name="sleep_planner_reported">Opaska zgłasza tę godzinę graniczną. Odczyt ma charakter diagnostyczny i nie gwarantuje pobudki.</string>
+    <string name="sleep_planner_sent">Zarejestrowano polecenie budzenia; oczekiwanie na potwierdzenie opaski.</string>
+    <string name="sleep_planner_off">Alarm opaski wyłączony w NOOP.</string>
+    <string name="sleep_planner_local">Zapisano lokalnie; godzina niepotwierdzona.</string>
+    <string name="sleep_planner_saved_deadline">Zapisana godzina pobudki</string>
+    <string name="sleep_planner_countdown">Alarm za %1$s</string>
+    <string name="sleep_planner_reconnect_error">Nie udało się zapisać. Połącz ponownie i spróbuj jeszcze raz; poprzedni alarm nie zmienił się.</string>
+    <string name="sleep_planner_unsupported">Ten alarm wymaga obsługiwanej łączności WHOOP. WHOOP 5/MG wymaga też eksperymentalnych testów protokołu.</string>
+    <string name="sleep_planner_permission">Powiadomienia zablokowane. Włącz je w ustawieniach systemu, aby otrzymywać przypomnienia.</string>
+    <string name="sleep_planner_send_error">Nie zapisano wysłania polecenia. Połącz ponownie i spróbuj jeszcze raz.</string>
+    <string name="sleep_planner_reconnect">Połącz opaskę ponownie</string>
+    <string name="sleep_planner_skip">Pomiń następny alarm</string>
+    <string name="sleep_planner_awake">Już nie śpię — anuluj następny alarm</string>
+    <string name="sleep_planner_skipped">Pominięto %1$s. Przyszłe dni alarmu pozostają włączone.</string>
+    <string name="sleep_planner_restore">Przywróć pominięty alarm</string>
+    <string name="sleep_planner_skip_saved">Następne wystąpienie jest już pominięte.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">Ostatnio zgłoszony poziom baterii opaski wynosił poniżej 20%. Naładuj ją przed użyciem alarmu.</string>
+    <string name="sleep_planner_phone_battery" formatted="false">Bateria telefonu ma 20% lub mniej. To lokalny próg ostrzeżenia NOOP.</string>
+    <string name="sleep_planner_backup">Na ważną pobudkę ustaw osobny alarm. Opaska wymaga aktywnej łączności z aplikacją, aby powtarzać alarm w kolejnych dniach.</string>
+    <string name="sleep_planner_reminders">Wieczorne przypomnienia</string>
+    <string name="sleep_planner_wind_down">Przypomnij mi o wyciszeniu</string>
+    <string name="sleep_planner_reminder_time">Sugerowane przypomnienie</string>
+    <string name="sleep_planner_debt_reminder">Uwzględnij dług snu</string>
+    <string name="sleep_planner_reminder_help">Opcjonalne przypomnienia używają tego planu i celów dziennych. Porady dotyczące długu napisano specjalnie dla NOOP i są domyślnie wyłączone.</string>
+    <string name="sleep_planner_phone_alarm">Okno pobudki i alarm zapasowy telefonu</string>
+    <string name="sleep_planner_previous_day">Poprzedni dzień</string>
+    <string name="sleep_planner_back">Wróć do planera snu</string>
+    <string name="sleep_planner_reminder_title">Czas się wyciszyć</string>
+    <string name="sleep_planner_reminder_notification">Plan sugeruje wyciszenie przed snem o %1$s.</string>
+    <string name="sleep_planner_debt_notification">Zarezerwuj czas na sen tej nocy. Lokalny plan sugeruje sen o %1$s i uwzględnia niedawny dług snu w potrzebach.</string>
+    <string name="sleep_planner_cancel_requested">Zażądano anulowania; opaska go nie potwierdziła.</string>
+    <string name="sleep_planner_notification_settings">Ustawienia powiadomień</string>
+    <string name="sleep_planner_phone_help">Wykrywanie lekkiego snu w telefonie z dokładną granicą pobudki.</string>
+    <string name="sleep_planner_update_requested">Zażądano aktualizacji alarmu; potwierdzenie opaski jest nadal oczekiwane.</string>
+</resources>

@@ -613,6 +613,12 @@ public enum Baselines {
         return Deviation(z: z, delta: delta, ratio: ratio, inNormalRange: abs(z) <= 1.0)
     }
 
+    /// Stored skin-temperature delta, rounded to two decimals with ties away from zero.
+    /// Kotlin twin: `Baselines.roundedDelta2dp`.
+    public static func roundedDelta2dp(_ value: Double, state: BaselineState) -> Double {
+        (deviation(value, state: state).delta * 100.0).rounded() / 100.0
+    }
+
     // MARK: - Trailing-window mean/SD (simple, auditable)
 
     /// Rolling personal baseline from the trailing `window` valid nights, as a
@@ -659,5 +665,23 @@ public enum Baselines {
         return BaselineState(baseline: mean, spread: spreadInternal, nValid: n,
                              nightsSinceUpdate: 0,
                              status: computeStatus(nValid: n, nightsSinceUpdate: 0))
+    }
+}
+
+public extension Baselines {
+    /// Local labelled R-R day encoded as UTC midnight, with the later manual cut retained.
+    /// Kotlin twin: `Baselines.effectiveHrvEpoch`.
+    static func effectiveHrvEpoch(manualEpoch: Double, firstScorableTimestamp: Int?,
+                                   isWhoop5: Bool, offsetSec: Int) -> Double {
+        guard isWhoop5, let firstScorableTimestamp else { return manualEpoch }
+        let regime = floor(Double(firstScorableTimestamp + offsetSec) / 86_400) * 86_400
+        return max(manualEpoch, regime)
+    }
+
+    /// Calendar keys use the same UTC-midnight convention as the baseline fold.
+    /// Kotlin twin: `Baselines.isInHrvEra`.
+    static func isInHrvEra(day: String, epoch: Double) -> Bool {
+        guard let epochDay = isoEpochDay(day) else { return false }
+        return Double(epochDay) * 86_400 >= epoch
     }
 }

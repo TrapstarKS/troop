@@ -1108,7 +1108,7 @@ internal fun emitImportTrace(
     if (summary.totalRows <= 0) return   // a failed/empty import already logged its reason above
     val kind = com.noop.analytics.ImportTrace.kindWire(summary.source)
     vm.ble.externalLog(
-        com.noop.analytics.ImportTrace.parserVersionLine(kind, importerVersion = 1),
+        com.noop.analytics.ImportTrace.parserVersionLine(kind, importerVersion = if (kind == "whoopExport") com.noop.ingest.WhoopCsvImporter.importerVersion else 1),
         com.noop.testcentre.TestDomain.IMPORT,
     )
     // Reject keys are NOT writes: they are rows/spans the import dropped (the opposite of "written"), so

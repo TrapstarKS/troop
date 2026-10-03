@@ -36,4 +36,30 @@ class BaselinesSigmaDaytimeTest {
         assertNotEquals(Baselines.daytimeHRCfg, Baselines.restingHRCfg)
         assertNotEquals(Baselines.daytimeRMSSDCfg, Baselines.hrvCfg)
     }
+    @Test
+    fun roundedDelta2dpMatchesStandaloneSwiftOracle() {
+        val state = Baselines.foldHistory(List(14) { 34.0 }, Baselines.metricCfg.getValue("skin_temp"))
+        val offsets = listOf(-8.0, -1.0, -0.505, -0.5, -0.125, -0.005, 0.0, 0.005, 0.125, 0.5, 0.505, 1.0, 8.0)
+        val output = offsets.joinToString("\n") { offset ->
+            val value = 34.0 + offset
+            "%016x:%016x".format(java.lang.Double.doubleToRawLongBits(value),
+                java.lang.Double.doubleToRawLongBits(Baselines.roundedDelta2dp(value, state)))
+        }
+        // Verbatim stdout from swiftc -O Baselines.swift main.swift, pinned by the Swift twin test.
+        assertEquals("""
+            403a000000000000:c020000000000000
+            4040800000000000:bff0000000000000
+            4040bf5c28f5c28f:bfe051eb851eb852
+            4040c00000000000:bfe0000000000000
+            4040f00000000000:bfc0a3d70a3d70a4
+            4040ff5c28f5c28f:bf847ae147ae147b
+            4041000000000000:0000000000000000
+            404100a3d70a3d71:3f847ae147ae147b
+            4041100000000000:3fc0a3d70a3d70a4
+            4041400000000000:3fe0000000000000
+            404140a3d70a3d71:3fe051eb851eb852
+            4041800000000000:3ff0000000000000
+            4045000000000000:4020000000000000
+        """.trimIndent(), output)
+    }
 }

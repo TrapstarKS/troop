@@ -21,6 +21,17 @@ final class ReadonlyNoopStoreTests: XCTestCase {
         XCTAssertEqual(stats.rawBytes, 12)
     }
 
+    func testActiveShareIsOptionalOnOldSchemasAndIndependentOnNewSchemas() throws {
+        let url = try TemporaryDatabase.seeded()
+        let old = try ReadonlyNoopStore(path: url.path)
+        XCTAssertNil(try old.dailyMetrics(deviceId: "my-whoop", from: "2026-06-01", to: "2026-06-30").first?.activeEnergyKcalEst)
+        let newURL = try TemporaryDatabase.seeded(activeEnergy: 456)
+        let row = try XCTUnwrap(try ReadonlyNoopStore(path: newURL.path)
+            .dailyMetrics(deviceId: "my-whoop", from: "2026-06-01", to: "2026-06-30").first)
+        XCTAssertEqual(row.activeKcalEst, 2345)
+        XCTAssertEqual(row.activeEnergyKcalEst, 456)
+    }
+
     func testForeignNoopLikeDatabaseIsRejectedWithoutQuarantine() throws {
         let url = try TemporaryDatabase.foreignNoopLike()
 

@@ -1,5 +1,4 @@
 import Foundation
-import WhoopProtocol
 
 public enum PhysiologicalSteps {
     public enum SleepKind: Sendable { case mainSleep, nap, unclassified }
@@ -56,10 +55,7 @@ public enum PhysiologicalSteps {
             let eligible = SleepStageTotals.bridgedNightGroups(nightBlocks, offsetSec: offsetSec)
                 .filter { group in
                     let total = group.indices.reduce(0) { $0 + max(0, nightBlocks[$1].durationS) }
-                    let onset = group.indices.map { nightBlocks[$0].start }.min()
-                    return total >= minMainSleepSeconds && onset.map {
-                        SleepStageTotals.isOvernightOnset($0, offsetSec: offsetSec)
-                    } == true
+                    return total >= minMainSleepSeconds
                 }
                 .flatMap { $0.indices }
             let candidates = eligible.map { index in
@@ -76,6 +72,18 @@ public enum PhysiologicalSteps {
                               editedOnset: block.editedOnset,
                               kind: selected.contains(index) ? .mainSleep : .nap)
         }
+    }
+
+    /// Kotlin twin: `PhysiologicalSteps.mainSleepOnset`.
+    public static func mainSleepOnset(_ blocks: [SleepBlock], offsetSec: Int,
+                                      habitualMidsleepSec: Int?) -> Int? {
+        let eligible = classifyForCycle(blocks, offsetSec: offsetSec,
+                                        habitualMidsleepSec: habitualMidsleepSec)
+            .filter { $0.kind == .mainSleep }
+        guard let indices = SleepStageTotals.mainNightGroupIndices(
+            eligible.map { .init(start: $0.effectiveOnset, end: $0.end) },
+            offsetSec: offsetSec, habitualMidsleepSec: habitualMidsleepSec) else { return nil }
+        return indices.map { eligible[$0].effectiveOnset }.min()
     }
 
     /// Kotlin twin: `PhysiologicalSteps.cycleWindows`.

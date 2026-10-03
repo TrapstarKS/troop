@@ -93,7 +93,8 @@ fun InsightsHubScreen(vm: AppViewModel) {
     val registryActiveId by vm.activeStrapIdFlow.collectAsState()
     val activeStrapId = registryActiveId ?: vm.activeStrapId
     val journalSeq by vm.repo.journalRevision.collectAsState()
-    val hub = remember { InsightsHubViewModel() }
+    val publishedStrapId by vm.activeStrapIdFlow.collectAsState()
+    val hub = remember(publishedStrapId) { InsightsHubViewModel() }
     val state by hub.state.collectAsState()
 
     // Re-derive whenever the cached days change underneath (journal + dose are read via repo).
@@ -635,6 +636,7 @@ internal class InsightsHubViewModel {
             doseCards.add(DoseCardData(behavior, response, latest))
         }
 
+        if (activeStrapId != vm.activeStrapId) return
         _state.value = Snapshot(
             loaded = true,
             behaviours = behaviours,

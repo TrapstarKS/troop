@@ -171,11 +171,13 @@ fun GroundTruthCollectorScreen(vm: AppViewModel) {
                     },
                     onExport = {
                         exportingSessionId = session.id
-                        scope.launch {
+                        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
                             try {
-                                collector.share(collector.export(vm.repo, session.id))
-                                vm.ble.finishGroundTruthImuCapture(session.id)
-                                sessions = collector.sessions()
+                                val ticket = DebugExportReview.shared.beginPreparation()
+                                collector.share(collector.export(vm.repo, session.id), session.id, onExported = {
+                                    vm.ble.finishGroundTruthImuCapture(session.id)
+                                    sessions = collector.sessions()
+                                }, preparationTicket = ticket)
                             } catch (failure: Throwable) {
                                 if (failure is kotlinx.coroutines.CancellationException) throw failure
                                 Toast.makeText(context, context.getString(R.string.ground_truth_export_failed,
