@@ -904,9 +904,9 @@ fun TodayScreen(
         // stale, fall through to null so the Rest ring shows its needs-a-tracked-night state instead of a
         // frozen number. `selectedDayKey` is today's key at offset 0, so it anchors the freshness check.
         val latest = byDay.entries.maxByOrNull { it.key }
-        restScoreForDay = freshRestScore(
+        restScoreForDay = homeScoreValue(freshRestScore(
             todayValue = byDay[selectedDayKey], lastDay = latest?.key, lastValue = latest?.value,
-            isTodaySelected = selectedDayOffset == 0, today = selectedDayKey)
+            isTodaySelected = selectedDayOffset == 0, today = selectedDayKey))
     }
 
     // Provenance (COMPONENT 4): the REAL per-metric merge winner for the selected day's three hero scores,
@@ -978,10 +978,10 @@ fun TodayScreen(
     // badge show what the hero ring shows. Both used to read `displayMetric.strain` straight off the daily
     // row, which only refreshes when the heavy daily pass runs — so an active morning read 2.3 on the ring
     // and 0.5 in the other two. The ring resolves the same way from the same rule (see ScoreHeroRow).
-    val effortForDay = StrainScorer.effectiveEffort(
+    val effortForDay = homeScoreValue(StrainScorer.effectiveEffort(
         live = if (selectedDayOffset == 0) liveTodayStrain else null,
         stored = displayMetric?.strain,
-    )
+    ))
 
     // Recovery cold-start: recovery is null until the HRV baseline crosses the seed gate
     // (Baselines.minNightsSeed valid nights). Show honest "calibrating, N of 4 nights" progress
@@ -5565,13 +5565,12 @@ private fun MetricGrid(
     // editor + enabled-order + collapse expander are all preserved; only the tile look changes.
     val descriptors: Map<KeyMetric, KeyTileData> = mapOf(
         KeyMetric.CHARGE to run {
-            val v = d?.recovery ?: lastScoredCharge?.value
+            val v = homeScoreValue(d?.recovery ?: lastScoredCharge?.value)
             KeyTileData(
                 label = uiString(R.string.l10n_today_screen_recovery_ea924f72),
-                value = d?.recovery?.let { "${it.roundToInt()}" }
-                    ?: recoveryCalibration?.let { "$it/${Baselines.minNightsSeed}" }
-                    ?: lastScoredCharge?.let { "${it.value.roundToInt()}" } ?: NO_DATA,
-                unit = if (d?.recovery != null || lastScoredCharge != null) "%" else "",
+                value = v?.let { "${it.roundToInt()}" }
+                    ?: recoveryCalibration?.let { "$it/${Baselines.minNightsSeed}" } ?: NO_DATA,
+                unit = if (v != null) "%" else "",
                 tint = v?.let { Palette.recoveryColor(it) } ?: Palette.chargeColor,
                 frac = v?.let { (it / 100.0).coerceIn(0.0, 1.0) },
                 spark = w.recovery,

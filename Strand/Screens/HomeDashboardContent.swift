@@ -84,20 +84,24 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
         .padding(.vertical, NoopMetrics.space4)
     }
 
+    private var sleepValue: Double? { HomeScoreValue.resolve(sleepScore) }
+    private var recoveryValue: Double? { HomeScoreValue.resolve(recovery) }
+    private var strainValue: Double? { HomeScoreValue.resolve(strain) }
+
     private var sleepDial: some View {
         NavigationLink {
             SleepView(initialDayKey: dayKey)
         } label: {
-            dial(label: String(localized: "Sleep"), value: sleepScore,
-                 display: sleepScore.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
+            dial(label: String(localized: "Sleep"), value: sleepValue,
+                 display: sleepValue.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
                  color: StrandPalette.sleepPrimary,
-                 caption: sleepScore == nil ? String(localized: isToday ? "No sleep yet" : "No data for this day") : nil)
+                 caption: sleepValue == nil ? String(localized: isToday ? "No sleep yet" : "No data for this day") : nil)
         }
         .buttonStyle(.plain)
     }
 
     private var recoveryDial: some View {
-        let availableRecovery = recovery.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }
+        let availableRecovery = recoveryValue.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }
         return NavigationLink {
             RecoveryDetailView(dayKey: recoveryDayKey)
         } label: {
@@ -110,9 +114,9 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     }
 
     private var strainDial: some View {
-        let availableStrain = strain.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }
+        let availableStrain = strainValue.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }
         return NavigationLink {
-            StrainDetailView(dayKey: dayKey, effortOverride: strain)
+            StrainDetailView(dayKey: dayKey, effortOverride: strainValue)
         } label: {
             dial(label: String(localized: "Strain"), value: availableStrain,
                  display: availableStrain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", unit: "",
@@ -138,7 +142,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
 
     private var guidance: String {
         if !isToday && day == nil { return String(localized: "No data for this day") }
-        guard let recovery else {
+        guard let recovery = recoveryValue else {
             return String(localized: "Still learning your baseline. A few more nights and this fills in.")
         }
         if recovery >= 67 { return String(localized: "You're primed. A hard session should land well today.") }

@@ -1339,11 +1339,12 @@ struct LiquidTodayView: View {
     private func ktileFor(_ metric: KeyMetric, hrv: Double?, rhr: Double?) -> some View {
         switch metric {
         case .charge:
+            let recovery = HomeScoreValue.resolve(chargeDisplay.pct)
             // Reads the SAME resolved Charge the hero draws, not `displayDay?.recovery` raw — the tile and the
             // hero are the same number, so a carry that reached only one of them would put two answers for
             // Charge on one screen. (#543: one prior row feeds every recovery-derived read-out.) Strain below
             // stays raw, matching the Effort hero, which correctly does not carry.
-            ktile(String(localized: "Recovery"), icon: keyMetricIcon(metric), intText(chargeDisplay.pct), "%", chargeDisplay.pct.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack, frac(chargeDisplay.pct), key: HeroRingMetric.charge)
+            ktile(String(localized: "Recovery"), icon: keyMetricIcon(metric), intText(recovery), "%", recovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack, frac(recovery), key: HeroRingMetric.charge)
         case .effort:
             // #492: Effort is a load index (0–100 NOOP / 0–21 WHOOP), NOT a percentage, and the unit was
             // wrong on either axis. Fixed on Android and in `TodayView` at the time; THIS view kept the old
@@ -1352,7 +1353,7 @@ struct LiquidTodayView: View {
             // rows use, so all three now agree by construction.
             ktile(String(localized: "Strain"), icon: keyMetricIcon(metric), effortStrain(displayDay).map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", "", StrandPalette.strainPrimary, frac(effortStrain(displayDay)), key: HeroRingMetric.effort)
         case .rest:
-            ktile(String(localized: "Sleep"), icon: keyMetricIcon(metric), intText(restScore), "%", StrandPalette.sleepPrimary, frac(restScore), key: HeroRingMetric.rest)
+            ktile(String(localized: "Sleep"), icon: keyMetricIcon(metric), intText(HomeScoreValue.resolve(restScore)), "%", StrandPalette.sleepPrimary, frac(HomeScoreValue.resolve(restScore)), key: HeroRingMetric.rest)
         case .hrv:
             ktile("HRV", icon: keyMetricIcon(metric), intText(hrv), "ms", StrandPalette.metricCyan, fracOver(hrv, 120), key: "hrv")
         case .restingHr:
@@ -2078,7 +2079,7 @@ struct LiquidTodayView: View {
     /// differently. `d` for today is always today's row or nil, never a prior day, so the floor cannot
     /// resurrect a stale day — it only stops a read-out dropping below what today has already earned.
     private func effortStrain(_ d: DailyMetric?) -> Double? {
-        StrainScorer.effectiveEffort(live: selectedDayOffset == 0 ? liveTodayStrain : nil, stored: d?.strain)
+        HomeScoreValue.resolve(StrainScorer.effectiveEffort(live: selectedDayOffset == 0 ? liveTodayStrain : nil, stored: d?.strain))
     }
 
     private func effortText(_ s: Double?) -> String {

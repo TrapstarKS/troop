@@ -3502,8 +3502,8 @@ struct TodayView: View {
         // (#1001), shared with the Kotlin twin so the two platforms cannot resolve Effort differently.
         // `d` (displayDay) for today is ALWAYS today's row or nil, never a prior day, so the floor cannot
         // resurrect a stale day; it only stops a read-out dropping below what today has already earned.
-        return StrainScorer.effectiveEffort(live: selectedDayOffset == 0 ? liveTodayStrain : nil,
-                                            stored: d?.strain)
+        return HomeScoreValue.resolve(StrainScorer.effectiveEffort(live: selectedDayOffset == 0 ? liveTodayStrain : nil,
+                                            stored: d?.strain))
     }
 
     /// When TODAY's Effort scores a genuine near-zero, there's enough HR to score, but it never
@@ -3912,19 +3912,22 @@ struct TodayView: View {
             // isn't scored yet keeps a real Charge instead of a bare "No Data" while live HR ticks →
             // ", " only when there is genuinely nothing banked anywhere. The carry-over shows the PRIOR
             // value labelled as prior, it never fabricates a number for the new day.
-            let carried = lastScoredCharge
+            let recovery = HomeScoreValue.resolve(d?.recovery)
+            let carried = lastScoredCharge.flatMap { carried in
+                HomeScoreValue.resolve(carried.value).map { (value: $0, caption: carried.caption) }
+            }
             StatTile(
                 label: "Recovery",
-                value: d?.recovery.map { "\(Int($0.rounded()))%" }
+                value: recovery.map { "\(Int($0.rounded()))%" }
                     ?? recoveryCalibration.map { "\($0)/\(Baselines.minNightsSeed)" }
                     ?? carried.map { "\(Int($0.value.rounded()))%" } ?? "—",
                 // Component 2: never a bare blank, when there's no number, no calibration count and
                 // nothing to carry, the caption states the honest "Needs the strap" rather than nothing.
-                caption: d?.recovery.map { StrandPalette.recoveryState($0).capitalized }
+                caption: recovery.map { StrandPalette.recoveryState($0).capitalized }
                     ?? recoveryCalibration.map { _ in String(localized: "Calibrating") }
                     ?? carried.map { $0.caption }
                     ?? Self.needsStrapCaption,
-                accent: d?.recovery.map { StrandPalette.recoveryColor($0) }
+                accent: recovery.map { StrandPalette.recoveryColor($0) }
                     ?? carried.map { StrandPalette.recoveryColor($0.value) } ?? StrandPalette.textPrimary,
                 sparkline: sparks["recovery"],
                 sparkColor: StrandPalette.accent
@@ -4859,7 +4862,7 @@ struct TodayView: View {
     /// load, which on the fresh-mount hit path is the nil → nil no-op (a re-mount resets `@State`).
     private func restoreDayScoped(_ c: TodayDayScopedCache) {
         sparks["sleep_performance"] = c.restSpark
-        restScore = c.restScore
+        restScore = HomeScoreValue.resolve(c.restScore)
         provenanceByMetric = c.provenanceByMetric
         providerByMetric = c.providerByMetric
         hrPoints = c.hrPoints
@@ -4967,7 +4970,7 @@ struct TodayView: View {
             todayValue: restByDay[selectedDayKey], lastDay: restSeries.last?.day,
             lastValue: restSeries.last?.value, isTodaySelected: selectedDayOffset == 0,
             todayKey: selectedDayKey)
-        restScore = restScoreLocal
+        restScore = HomeScoreValue.resolve(restScoreLocal)
 
         // Resolve the displayed score row, then map computed rows through durable input provenance so the
         // badge names the sensor/import provider rather than the device that ran NOOP's math.

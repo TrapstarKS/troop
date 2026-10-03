@@ -139,9 +139,12 @@ internal fun HomeDials(
 ) {
     val availableRecovery = recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }
     val availableStrain = strain?.takeIf { it.isFinite() && it in 0.0..100.0 }
+    val sleepValue = homeScoreValue(sleep)
+    val recoveryValue = homeScoreValue(recovery)
+    val strainValue = homeScoreValue(strain)
     Row(Modifier.fillMaxWidth().padding(vertical = Metrics.space16),
         horizontalArrangement = Arrangement.spacedBy(Metrics.space8), verticalAlignment = Alignment.Top) {
-        HomeDial(uiString(R.string.home_sleep), sleep?.roundToInt()?.toString(), "%", sleep,
+        HomeDial(uiString(R.string.home_sleep), sleepValue?.roundToInt()?.toString(), "%", sleepValue,
             Palette.sleepPrimary, Modifier.weight(1f), onSleep)
         HomeDial(uiString(R.string.home_recovery), RecoveryStrainDetailLogic.recoveryPercent(availableRecovery)?.toString(), "%", availableRecovery,
             availableRecovery?.let { Palette.recoveryColor(it) } ?: Palette.ringTrack, Modifier.weight(1f), onRecovery)
@@ -153,10 +156,13 @@ internal fun HomeDials(
 @Composable
 private fun HomeDial(label: String, value: String?, unit: String, progress: Double?, color: Color,
     modifier: Modifier, onClick: () -> Unit) {
+    val displayValue = value ?: uiString(R.string.home_no_value)
+    val displayUnit = if (value != null) unit else ""
     Column(modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
-        ScoreDial(label = uiString(R.string.home_dial_label, label), value = value ?: uiString(R.string.home_no_value),
-            unit = if (value != null) unit else "", progress = progress?.div(100)?.toFloat(),
-            color = color, size = ScoreDialSize.Compact)
+        ScoreDial(label = uiString(R.string.home_dial_label, label), value = displayValue,
+            unit = displayUnit, progress = progress?.div(100)?.toFloat(),
+            color = color, size = ScoreDialSize.Compact,
+            accessibilityLabel = listOf(label, displayValue + displayUnit).joinToString(", "))
     }
 }
 
