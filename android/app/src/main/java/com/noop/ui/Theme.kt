@@ -469,6 +469,7 @@ object Metrics {
     val detailDial = 260.dp
     const val fullScoreDialWidthFraction = 0.662f
     val compactDial = 90.dp
+    const val compactScoreDialWidthFraction = 0.232f
     val detailDialStroke = 15.dp
     val compactDialStroke = 5.dp
     val chromeAvatar = 36.dp
