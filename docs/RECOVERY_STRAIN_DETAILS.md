@@ -12,6 +12,8 @@ Day HR, zones and activity membership use Home's configured calendar or sleep-on
 
 Activity HR and derived zones use existing source-aware workout reads. Imported zone distributions take precedence. Imported rows are edited through the existing manual-copy flow; local rows use the existing editor. Further details keep the existing GPS, steps and post-exercise HR recovery surfaces reachable.
 
+The expanded activity drill-down omits its former Effort summary. Activity's shared score dial is the single score readout in this flow, so opening further details cannot switch that score to a different preferred axis or legacy gauge.
+
 Android detail reads collect the registry's active strap and reset the day/HR read state when it changes. Workout curves, zones and HR recovery accept that snapshot instead of the startup-only device ID; workout-list loads discard results after a source switch. Swift's repository already updates its read device ID from the registry.
 
 `WorkoutRow.energyKcal` does not persist an active/total discriminator. Its display is therefore “Recorded energy”, with an explicit explanation. No resting energy is added and no stored row is reinterpreted.

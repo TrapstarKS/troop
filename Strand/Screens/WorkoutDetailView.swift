@@ -20,7 +20,6 @@ import MapKit
 //   • an HR-curve ChartCard fed the workout's 5-min-ish HR buckets over [startTs, endTs],
 //   • an HR-zones bar — imported per-workout zones when the row carries them, else the window's raw
 //     HR samples binned into age-derived %HRmax zone-minutes (honestly labelled as approximate),
-//   • the session's Effort/strain contribution when one was captured.
 //
 // Presented as a `.sheet` wrapped in a NavigationStack by WorkoutsView — these screens aren't hosted in
 // a per-screen NavigationStack, so a sheet is the in-app drill-down idiom (mirrors HealthView opening
@@ -41,9 +40,6 @@ struct WorkoutDetailView: View {
             system: UnitSystem(rawValue: unitSystemRaw) ?? .metric,
             override: distanceSystemRaw)
     }
-
-    @AppStorage(UnitPrefs.effortScaleKey) private var effortScaleRaw = EffortScale.hundred.rawValue
-    private var effortScale: EffortScale { UnitPrefs.resolveEffortScale(effortScaleRaw) }
 
     /// Loaded HR curve over the session window (5-min-ish bucket means). Empty until loaded.
     @State private var hrPoints: [TrendPoint] = []
@@ -87,7 +83,7 @@ struct WorkoutDetailView: View {
         ScreenScaffold(title: "\(WorkoutSource.displaySport(row.sport))",
                        subtitle: "\(dateLabel(row.startTs))",
                        // PERF: chart/map-heavy column (a MapKit route map, the session HR curve, the
-                       // zone-split chart and the effort card). The LazyVStack path builds the off-screen
+                       // zone-split chart). The LazyVStack path builds the off-screen
                        // ones on demand — byte-identical layout — so a tall detail doesn't materialise the
                        // map + both charts before the header is even on screen.
                        lazy: true,
@@ -102,9 +98,6 @@ struct WorkoutDetailView: View {
             hrCurveCard
             zonesCard
             heartRateRecoveryCard
-            if let strain = row.strain {
-                effortCard(strain: strain)
-            }
         }
         .toolbar {
             // A Done affordance for the sheet on both platforms (iOS gets the grabber too).
@@ -547,51 +540,6 @@ struct WorkoutDetailView: View {
                 .foregroundStyle(StrandPalette.textTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    // MARK: - Effort contribution
-
-    private func effortCard(strain: Double) -> some View {
-        // The session's Effort as the signature liquid gauge: a `LiquidVessel` tinted Effort, filled to the
-        // session's contribution on the user's selected scale, with the value counting up over it — the
-        // same hero language as the Workouts list's Typical Effort gauge and the Sleep Rest hero. The
-        // explanatory sentence keeps its place beside the gauge.
-        let displayValue = UnitFormatter.effortValue(strain, scale: effortScale)
-        let scaleMax: Double = effortScale == .whoop ? 21 : 100
-        let fraction = max(0, min(1, displayValue / scaleMax))
-        return VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Effort", overline: "This session")
-            NoopCard(tint: StrandPalette.effortColor) {
-                HStack(alignment: .center, spacing: 18) {
-                    ZStack {
-                        // Static (posed) vessel — a compact liquid gauge inside a card, so it costs a single
-                        // cached frame rather than a live canvas (same call as Trends' pip vessels).
-                        LiquidVessel(value: fraction, tint: StrandPalette.effortColor, animated: false)
-                            .frame(width: 88, height: 88)
-                        VStack(spacing: 0) {
-                            // The session's Effort contribution ticks up to its value — the NOOP signature.
-                            CountUpText(value: displayValue,
-                                        format: { String(format: "%.1f", $0) },
-                                        font: StrandFont.rounded(28),
-                                        color: StrandPalette.textPrimary)
-                                .shadow(color: .black.opacity(0.5), radius: 5, y: 1)
-                            Text(effortScale == .whoop ? "of 21" : "of 100")
-                                .font(StrandFont.caption)
-                                .foregroundStyle(StrandPalette.textSecondary)
-                        }
-                        .allowsHitTesting(false)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(String(localized: "Effort \(UnitFormatter.effortDisplay(strain, scale: effortScale)) \(effortScale == .whoop ? "of 21" : "of 100")"))
-                    Spacer(minLength: 0)
-                    Text("This session's contribution to the day's Effort, as captured during the workout.")
-                        .font(StrandFont.subhead)
-                        .foregroundStyle(StrandPalette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 240, alignment: .leading)
-                }
-            }
-        }
     }
 
     // MARK: - Bits
