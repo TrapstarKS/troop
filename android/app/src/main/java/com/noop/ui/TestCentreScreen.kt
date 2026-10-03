@@ -549,7 +549,7 @@ private suspend fun buildPending(
     // joined text. Its two callers are user taps, not the 250 ms refresh.
     logText: String,
     vm: AppViewModel,
-): PendingReport {
+): PendingReport? {
     // #1002 REAL storage probe, replacing the Phase-1 zeros in meta.json:
     //  - db_bytes: the Room store's on-disk footprint (noop_whoop.db + its -wal/-shm sidecars);
     //  - rows: per-table row counts via the store (WhoopRepository.storageRowCounts);
@@ -589,7 +589,14 @@ private suspend fun buildPending(
     // it reflects the strap that actually linked; the display name matches the Swift wire value.
     val strapModel = NoopPrefs.of(context).getString("noop.selectedWhoopModel", null)
         ?.let { name -> runCatching { WhoopModel.valueOf(name).displayName }.getOrNull() }
-    val entries = TestBundleAssembler.assemble(context, mode.domain, logText, storage, strapModel)
+    val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching { DebugExportReview.prepare(TestBundleAssembler.assemble(context, mode.domain, logText, storage, strapModel)) }
+    }
+    val entries = prepared.getOrElse {
+        android.widget.Toast.makeText(context, context.getString(R.string.ground_truth_export_failed, it.message),
+            android.widget.Toast.LENGTH_LONG).show()
+        return null
+    }
     val modeInactive = mode.domain != TestDomain.MASTER && !TestCentre.from(context).active(mode.domain)
     return PendingReport(mode.domain, mode.title, entries, ReportReviewGate(entries), modeInactive)
 }
@@ -1254,7 +1261,7 @@ private fun ToggleRowTC(
 }
 
 @Composable
-private fun ReportReviewDialog(
+internal fun ReportReviewDialog(
     previewText: String,
     modeInactive: Boolean,
     onCancel: () -> Unit,

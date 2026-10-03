@@ -1667,6 +1667,16 @@ fun NoopRoot() {
     // (stored version behind current), show "What's New" once over the top.
     AppRoot(viewModel = appViewModel)
 
+    val reviewScope = androidx.compose.runtime.rememberCoroutineScope()
+    DebugExportReview.shared.pending?.let { pending ->
+        ReportReviewDialog(
+            previewText = pending.gate.previewText,
+            modeInactive = false,
+            onCancel = { DebugExportReview.shared.cancel() },
+            onShare = { reviewScope.launch { DebugExportReview.shared.confirm(pending.id) } },
+        )
+    }
+
     if (lastSeenChangelog != AppChangelog.CURRENT_VERSION) {
         Dialog(
             onDismissRequest = {
