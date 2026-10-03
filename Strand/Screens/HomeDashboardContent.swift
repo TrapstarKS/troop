@@ -10,6 +10,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     let day: DailyMetric?
     let sleepScore: Double?
     let recovery: Double?
+    let recoveryDayKey: String
     let recoveryCaption: String?
     let strain: Double?
     let stress: Double?
@@ -69,41 +70,51 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     }
 
     private var sleepDial: some View {
-        dial(route: .sleepDetail, label: String(localized: "Sleep"), value: sleepScore,
-             display: sleepScore.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
-             color: StrandPalette.sleepPrimary,
-             caption: sleepScore == nil ? String(localized: isToday ? "No sleep yet" : "No data for this day") : nil)
+        NavigationLink(value: TabRoute.sleepDetail) {
+            dial(label: String(localized: "Sleep"), value: sleepScore,
+                 display: sleepScore.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
+                 color: StrandPalette.sleepPrimary,
+                 caption: sleepScore == nil ? String(localized: isToday ? "No sleep yet" : "No data for this day") : nil)
+        }
+        .buttonStyle(.plain)
     }
 
     private var recoveryDial: some View {
-        dial(route: .recoveryDetail, label: String(localized: "Recovery"), value: recovery,
-             display: recovery.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
-             color: recovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack,
-             caption: recoveryCaption)
+        NavigationLink {
+            RecoveryDetailView(dayKey: recoveryDayKey)
+        } label: {
+            dial(label: String(localized: "Recovery"), value: recovery,
+                 display: recovery.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
+                 color: recovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack,
+                 caption: recoveryCaption)
+        }
+        .buttonStyle(.plain)
     }
 
     private var strainDial: some View {
-        dial(route: .strainDetail, label: String(localized: "Strain"), value: strain,
-             display: strain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", unit: "",
-             color: StrandPalette.strainPrimary, caption: nil)
-    }
-
-    private func dial(route: TabRoute, label: String, value: Double?, display: String,
-                      unit: String, color: Color, caption: String?) -> some View {
-        NavigationLink(value: route) {
-            VStack(spacing: NoopMetrics.space1) {
-                ScoreDial(label: "\(label) ›", value: display, unit: value == nil ? "" : unit,
-                          progress: value.map { $0 / 100 }, color: color, size: .compact,
-                          accessibilityLabel: "\(label), \(display)\(value == nil ? "" : unit)")
-                if let caption {
-                    Text(caption).font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
-                        .multilineTextAlignment(.center)
-                }
-            }
-            .frame(minWidth: columnWidth)
-            .frame(maxWidth: .infinity, alignment: .top)
+        NavigationLink {
+            StrainDetailView(dayKey: dayKey, effortOverride: strain)
+        } label: {
+            dial(label: String(localized: "Strain"), value: strain,
+                 display: strain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", unit: "",
+                 color: StrandPalette.strainPrimary, caption: nil)
         }
         .buttonStyle(.plain)
+    }
+
+    private func dial(label: String, value: Double?, display: String,
+                      unit: String, color: Color, caption: String?) -> some View {
+        VStack(spacing: NoopMetrics.space1) {
+            ScoreDial(label: "\(label) ›", value: display, unit: value == nil ? "" : unit,
+                      progress: value.map { $0 / 100 }, color: color, size: .compact,
+                      accessibilityLabel: "\(label), \(display)\(value == nil ? "" : unit)")
+            if let caption {
+                Text(caption).font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(minWidth: columnWidth)
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     private var guidance: String {

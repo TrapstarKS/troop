@@ -1580,9 +1580,8 @@ struct TodayView: View {
                 hostedCardsRaw: $hostedCardsRaw
             )
         }
-        // #1694: the same read-only WorkoutDetailView the Workouts list opens. Nothing here can edit or
-        // delete, so a tap from Today carries no risk that list does not already carry. Rides its own
-        // NavigationStack because these shared screens are not in a per-screen one — mirrors WorkoutsView.
+        // Opens the shared activity detail in its own NavigationStack. Local activity edits and
+        // imported-copy creation remain explicit actions in that detail.
         .sheet(item: $workoutDetail) { target in
             NavigationStack {
                 WorkoutDetailView(row: target.row)
@@ -1622,6 +1621,7 @@ struct TodayView: View {
         HomeDashboardContent(dayKey: selectedDayKey, dayOffset: selectedDayOffset,
             day: displayDay, sleepScore: restScore,
             recovery: displayDay?.recovery ?? lastScoredCharge?.value,
+            recoveryDayKey: chargeBreakdownRow?.day ?? selectedDayKey,
             recoveryCaption: displayDay?.recovery == nil ? lastScoredCharge?.caption : nil,
             strain: effortStrain(displayDay), stress: selectedDayOffset == 0 ? stressToday : homeStressByDay[selectedDayKey],
             workouts: workouts, onEdit: { customizationDestination = .keyMetrics },
@@ -1630,10 +1630,20 @@ struct TodayView: View {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: NoopMetrics.gap),
                                     GridItem(.flexible(), spacing: NoopMetrics.gap)], spacing: NoopMetrics.gap) {
                     ForEach(enabledKeyMetrics) { metric in
-                        NavigationLink(value: HomeMetricRoute.route(metric)) {
-                            keyMetricTile(metric)
+                        if metric == .charge {
+                            NavigationLink {
+                                RecoveryDetailView(dayKey: chargeBreakdownRow?.day ?? selectedDayKey)
+                            } label: { keyMetricTile(metric) }
+                            .buttonStyle(.plain)
+                        } else if metric == .effort {
+                            NavigationLink {
+                                StrainDetailView(dayKey: selectedDayKey, effortOverride: effortStrain(displayDay))
+                            } label: { keyMetricTile(metric) }
+                            .buttonStyle(.plain)
+                        } else {
+                            NavigationLink(value: HomeMetricRoute.route(metric)) { keyMetricTile(metric) }
+                                .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             } extras: {

@@ -332,6 +332,8 @@ fun TodayScreen(
     onOpenRecovery: () -> Unit = { onOpenMetric(HERO_CHARGE_METRIC_KEY) },
     onOpenStrain: () -> Unit = { onOpenMetric(HERO_EFFORT_METRIC_KEY) },
     onOpenPlan: () -> Unit = onOpenJournal,
+    onOpenRecoveryForDay: ((String) -> Unit)? = null,
+    onOpenStrainForDay: ((String, Double?) -> Unit)? = null,
 ) {
     val today by viewModel.today.collectAsStateWithLifecycle()
     val alert by viewModel.healthAlert.collectAsStateWithLifecycle()
@@ -1067,6 +1069,26 @@ fun TodayScreen(
             prior.recovery?.let { LastCharge(it, carriedChargeCaption.orEmpty()) }
         }
     }
+    var recoveryDetailDayKey by remember { mutableStateOf<String?>(null) }
+    var strainDetailRequest by remember { mutableStateOf<Pair<String, Double?>?>(null) }
+    val openRecoveryForDisplayedDay: () -> Unit = {
+        val dayKey = displayMetric?.takeIf { it.recovery != null }?.day
+            ?: lastScoredRecoveryDay?.takeIf { selectedDayOffset == 0 }?.day
+            ?: selectedDayKey
+        if (onOpenRecoveryForDay != null) onOpenRecoveryForDay(dayKey)
+        else recoveryDetailDayKey = dayKey
+    }
+    val openStrainForDisplayedDay: () -> Unit = {
+        if (onOpenStrainForDay != null) onOpenStrainForDay(selectedDayKey, effortForDay)
+        else strainDetailRequest = selectedDayKey to effortForDay
+    }
+    val openDashboardMetric: (String) -> Unit = { key ->
+        when (key) {
+            HERO_CHARGE_METRIC_KEY -> openRecoveryForDisplayedDay()
+            HERO_EFFORT_METRIC_KEY -> openStrainForDisplayedDay()
+            else -> onOpenMetric(key)
+        }
+    }
     var carriedRecoveryProvider by remember { mutableStateOf<ScoreInputProvider?>(null) }
     LaunchedEffect(lastScoredRecoveryDay?.day, viewModel.activeStrapId) {
         val carriedDay = lastScoredRecoveryDay?.day
@@ -1272,7 +1294,8 @@ fun TodayScreen(
                     sleep = restScoreForDay,
                     recovery = displayMetric?.recovery ?: lastScoredCharge?.value,
                     strain = effortForDay,
-                    onSleep = onOpenSleep, onRecovery = onOpenRecovery, onStrain = onOpenStrain,
+                    onSleep = onOpenSleep,
+                    onRecovery = openRecoveryForDisplayedDay, onStrain = openStrainForDisplayedDay,
                 )
                 heroSourceLabel?.let { Text(it, style = NoopType.caption, color = Palette.textSecondary) }
                 if (selectedDayOffset == 0) HomeRecordingStatus(homeRecordingState(
@@ -1346,7 +1369,7 @@ fun TodayScreen(
                         live.historyPendingSync, selectedDayOffset == 0),
                     onScoreInfo = openGuide, metricsExpanded = true,
                     detailed = keyMetricsDetailed, windowDays = keyMetricsWindowDays,
-                    onOpenMetric = onOpenMetric, onOpenStepsCalibration = onOpenStepsCalibration,
+                    onOpenMetric = openDashboardMetric, onOpenStepsCalibration = onOpenStepsCalibration,
                 )
             }
         }
@@ -1425,6 +1448,28 @@ fun TodayScreen(
                 onDeleteAll = viewModel::deleteAllPeriodStarts,
                 onDismiss = { showCycleTracker = false },
             )
+        }
+    }
+
+    recoveryDetailDayKey?.let { dayKey ->
+        Dialog(
+            onDismissRequest = { recoveryDetailDayKey = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
+                RecoveryDetailScreen(vm = viewModel, dayKey = dayKey, onBack = { recoveryDetailDayKey = null })
+            }
+        }
+    }
+    strainDetailRequest?.let { request ->
+        Dialog(
+            onDismissRequest = { strainDetailRequest = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
+                StrainDetailScreen(vm = viewModel, dayKey = request.first, effortOverride = request.second,
+                    onBack = { strainDetailRequest = null })
+            }
         }
     }
 

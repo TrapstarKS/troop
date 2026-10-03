@@ -153,6 +153,7 @@ struct LiquidTodayView: View {
     /// the other caches. It composes `TodayView.lastScoredRecoveryDay`, which is O(days) — exactly the scan
     /// this cache exists to keep out of body. Never resolved in body.
     @State private var cachedChargeDisplay: ChargeDisplay = .noData
+    @State private var cachedRecoveryDayKey: String?
     /// Active WHOOP 5 R-R policy bounds for the selected night's missing Charge explanation.
     @State private var whoop5StrictRR = false
     @State private var firstRecordedRRDay: String?
@@ -403,6 +404,7 @@ struct LiquidTodayView: View {
             liveEffortRequest = UUID()
             cachedDisplayDay = nil
             cachedChargeDisplay = .noData
+            cachedRecoveryDayKey = nil
             liveTodayStrain = nil
             restScore = nil
             workouts = []
@@ -1413,62 +1415,33 @@ struct LiquidTodayView: View {
     private func ktile(_ label: String, icon: String, _ value: String, _ unit: String, _ tint: Color, _ frac: Double?,
                        key: String? = nil, detailMetric: MetricDescriptor? = nil, caption: String? = nil) -> some View {
         let displayValue = Self.tileDisplayValue(value, unit: unit)
-        let tile = VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(tint.opacity(0.72))
-                    .frame(width: 14)
-                Text(label.uppercased())
-                    .font(StrandFont.overlineScaled(10))
-                    .tracking(1.0)
-                    .foregroundStyle(StrandPalette.textTertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-            }
-            Text(verbatim: displayValue)
-                .font(StrandFont.number(24))
-                .foregroundStyle(StrandPalette.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            // Optional sub-value caveat (queue 11a): only ever set for an unvalidated candidate fallback
-            // (e.g. the SpO₂ strap estimate), so every other `ktile` call site — no `caption` argument —
-            // renders byte-identical to before this parameter existed.
-            if let caption {
-                Text(caption)
-                    .font(StrandFont.footnote)
-                    .foregroundStyle(StrandPalette.textTertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            LiquidTube(frac: frac ?? 0, tint: tint, height: 9, animated: false,
-                       showsHighlight: false, usesCleanFill: true)
-            // #430 parity: DETAILED tiles grow the trend graph under the bar, tinted to the metric and
-            // windowed to the editor's 1-week / 2-week / 1-month choice (the Android twin). A metric with no
-            // windowed series keeps a clear placeholder of the same height so every tile in a detailed row
-            // stays equal-height with its bars aligned.
+        let tile = VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+            MetricCard(label: label, value: displayValue, detail: caption, systemImage: icon, color: tint)
             if keyMetricsDetailed {
                 let spark = key.map { windowedSpark($0) } ?? []
                 if spark.count >= 2 {
-                    Sparkline(values: spark,
-                              gradient: Gradient(colors: [tint.opacity(0.5), tint]))
-                        .frame(height: 22)
-                        .padding(.top, 6)
+                    Sparkline(values: spark, gradient: Gradient(colors: [tint.opacity(0.5), tint]))
+                        .frame(height: NoopMetrics.space6)
                         .accessibilityHidden(true)
-                } else {
-                    Color.clear.frame(height: 22).padding(.top, 6)
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: keyMetricsDetailed ? 154 : 116, alignment: .topLeading)
-        .background(NoopPanelSurface(tint: tint, cornerRadius: 18, surfaceOpacity: cardOpacity))
         // #430 parity: tap -> the metric's trend detail (the same Explore dossier its MetricRow pushes,
         // closure-based NavigationLink per #38). A metric with no catalog entry stays inert.
         return Group {
-            if let metric = detailMetric ?? key.flatMap({ key in
+            if key == HeroRingMetric.charge {
+                NavigationLink {
+                    RecoveryDetailView(dayKey: cachedRecoveryDayKey ?? selectedDayKey)
+                } label: { tile }
+                .buttonStyle(.plain)
+            } else if key == HeroRingMetric.effort {
+                NavigationLink {
+                    StrainDetailView(dayKey: selectedDayKey, effortOverride: effortStrain(displayDay))
+                } label: { tile }
+                .buttonStyle(.plain)
+            } else if key == HeroRingMetric.rest {
+                NavigationLink(value: TabRoute.sleepDetail) { tile }.buttonStyle(.plain)
+            } else if let metric = detailMetric ?? key.flatMap({ key in
                 MetricCatalog.all.first(where: { $0.key == key })
             }) {
                 NavigationLink { MetricDetailView(metric: metric) } label: { tile }
@@ -1575,6 +1548,7 @@ struct LiquidTodayView: View {
     private var homeDashboard: some View {
         HomeDashboardContent(dayKey: selectedDayKey, dayOffset: selectedDayOffset,
             day: displayDay, sleepScore: restScore, recovery: cachedChargeDisplay.pct,
+            recoveryDayKey: cachedRecoveryDayKey ?? selectedDayKey,
             recoveryCaption: chargeCarryCaption, strain: effortStrain(displayDay),
             stress: selectedDayOffset == 0 ? stress : homeStressByDay[selectedDayKey], workouts: workouts,
             onEdit: { customizationDestination = .keyMetrics },
@@ -1660,6 +1634,7 @@ struct LiquidTodayView: View {
             todayScored: day?.recovery != nil,
             isCalibrating: calNights != nil
         )
+        cachedRecoveryDayKey = priorScored?.day ?? tkey
         cachedChargeDisplay = ChargeDisplay.resolve(
             todayRecovery: day?.recovery,
             priorScored: priorScored,
