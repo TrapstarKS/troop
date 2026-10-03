@@ -61,6 +61,8 @@ import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
 import kotlin.math.roundToInt
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -246,11 +248,20 @@ private fun HealthspanHalo(value: String, state: String, chronologicalAge: Doubl
     Box(Modifier.fillMaxWidth().height(Metrics.detailDial + Metrics.space24), contentAlignment = Alignment.Center) {
         Box(Modifier.size(Metrics.detailDial).clearAndSetSemantics { contentDescription = description }, contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
-                val radius = size.minDimension / 2
+                val diameter = size.minDimension
+                val radius = diameter / 2
                 drawCircle(Brush.radialGradient(listOf(Palette.surfaceBase, Palette.positive.copy(alpha = StrandAlpha.chartFillSoft),
                     Palette.positive.copy(alpha = StrandAlpha.chartMarker)), radius = radius), radius)
                 drawCircle(Palette.positive.copy(alpha = StrandAlpha.selectedBorder), radius - Metrics.chartLineWidth.toPx(),
                     style = Stroke(Metrics.chartLineWidth.toPx()))
+                for (i in 0 until 160) {
+                    val angle = i * 2.3999632297
+                    val particleRadius = diameter * (0.27f + 0.22f * ((i * 37) % 101) / 100f)
+                    val dot = diameter * (0.003f + 0.006f * (i % 5) / 4f)
+                    val point = center + Offset(cos(angle).toFloat(), sin(angle).toFloat()) * particleRadius
+                    val alpha = StrandAlpha.chartMarker + (StrandAlpha.selectedBorder - StrandAlpha.chartMarker) * (i % 4) / 3f
+                    drawCircle(Palette.positive.copy(alpha = alpha), dot / 2, point + Offset(dot / 2, dot / 2))
+                }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
                 Text(value, style = NoopType.dialValueFull, color = Palette.textPrimary)
