@@ -26,8 +26,11 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     @EnvironmentObject private var router: NavRouter
     @EnvironmentObject private var repo: Repository
     @EnvironmentObject private var intelligence: IntelligenceEngine
-    @State private var showManualActivity = false
-    @State private var manualEndDate = Date()
+    private struct ManualActivityTarget: Identifiable {
+        let id = UUID()
+        let endDate: Date
+    }
+    @State private var manualActivity: ManualActivityTarget?
     @State private var startWorkoutRequested = false
     @ScaledMetric private var columnWidth = NoopMetrics.compactScoreDialDiameter
 
@@ -58,8 +61,8 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 Text("Your Cards").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
             }
         }
-        .sheet(isPresented: $showManualActivity) {
-            ManualWorkoutSheet(initialEndDate: manualEndDate) { row, _ in
+        .sheet(item: $manualActivity) { target in
+            ManualWorkoutSheet(initialEndDate: target.endDate) { row, _ in
                 Task {
                     await repo.saveManualWorkout(row)
                     await intelligence.analyzeRecent()
@@ -175,8 +178,8 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 TrackedSectionHeader(title: String(localized: "My Day"))
                 Menu {
                     Button {
-                        manualEndDate = HomeDayActivities.manualEnd(dayKey: activityDayKey)
-                        showManualActivity = true
+                        manualActivity = ManualActivityTarget(
+                            endDate: HomeDayActivities.manualEnd(dayKey: activityDayKey))
                     } label: {
                         Label("Add activity", systemImage: "plus")
                     }
