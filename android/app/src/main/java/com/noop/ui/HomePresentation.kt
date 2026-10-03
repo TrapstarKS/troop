@@ -1,6 +1,7 @@
 package com.noop.ui
 
 import android.app.DatePickerDialog
+import android.content.SharedPreferences
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,13 +21,35 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.noop.R
 import com.noop.data.DailyMetric
 import com.noop.data.WorkoutRow
+import com.noop.data.WeeklyPlanCalendar
+import com.noop.data.WeeklyPlanDay
+import com.noop.data.WeeklyPlanEngine
+import com.noop.data.WeeklyPlanJournalDay
+import com.noop.data.WeeklyPlanPreferences
+import com.noop.data.WeeklyPlanProgress
+import com.noop.data.WeeklyPlanSnapshot
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -230,18 +253,95 @@ internal fun HomeDayEvents(day: DailyMetric?, workouts: List<WorkoutRow>, onSlee
 }
 
 @Composable
-internal fun HomePlanSummary(onOpen: () -> Unit) {
+internal fun HomePlanSummary(vm: AppViewModel, onOpen: () -> Unit) {
+    val context = LocalContext.current
+    val preferences = remember(context) { WeeklyPlanPreferences(context) }
+    val nativePreferences = remember(context) { NoopPrefs.of(context) }
+    val daysRevision by vm.recentDays.collectAsStateWithLifecycle()
+    val journalRevision by vm.repo.journalRevision.collectAsStateWithLifecycle()
+    val activeStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeStrapId = effectiveActiveStrapId(activeStrap, vm.deviceId)
+    var preferencesRevision by remember { mutableIntStateOf(0) }
+    var resumeRevision by remember { mutableIntStateOf(0) }
+    var today by remember { mutableStateOf(LocalDate.now().toString()) }
+    var snapshot by remember { mutableStateOf<WeeklyPlanSnapshot?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(nativePreferences) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key?.startsWith("noop.weeklyPlan.") == true) preferencesRevision++
+        }
+        nativePreferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { nativePreferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            resumeRevision++
+            while (true) {
+                today = LocalDate.now().toString()
+                delay(60_000)
+            }
+        }
+    }
+    val weekStart = WeeklyPlanCalendar.weekStart(today) ?: today
+    val hasPlan = preferences.hasPlan(weekStart)
+    LaunchedEffect(daysRevision, journalRevision, activeStrapId, preferencesRevision, resumeRevision, today, weekStart) {
+        val requestToday = today
+        val requestWeek = weekStart
+        val requestStrap = activeStrapId
+        snapshot = null
+        if (!preferences.hasPlan(requestWeek)) return@LaunchedEffect
+        val loaded = runCatching {
+            val days = vm.repo.daysMerged(requestStrap).map { WeeklyPlanDay(it.day, it.totalSleepMin, it.strain) }
+            currentCoroutineContext().ensureActive()
+            val imported = vm.repo.importedSourceIds(requestStrap).flatMap { vm.repo.journal(it, requestWeek, requestToday) }
+            currentCoroutineContext().ensureActive()
+            val native = vm.repo.journal(JOURNAL_DEVICE_ID, requestWeek, requestToday)
+            currentCoroutineContext().ensureActive()
+            val journal = mergeJournalEntries(imported, native).map { WeeklyPlanJournalDay(it.day, it.question, it.answeredYes) }
+            WeeklyPlanEngine.snapshot(preferences.goals(requestWeek), requestWeek, requestToday, days, journal)
+        }.getOrElse {
+            if (it is CancellationException) throw it
+            null
+        }
+        currentCoroutineContext().ensureActive()
+        snapshot = loaded
+    }
+    val current = snapshot?.takeIf { hasPlan && it.weekStart == weekStart }
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
         TrackedSectionHeader(uiString(R.string.home_my_plan))
         NoopCard(Modifier.clickable(onClick = onOpen)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
-                    Text(uiString(R.string.home_weekly_plan), style = NoopType.headline, color = Palette.textPrimary)
-                    Text(uiString(R.string.home_plan_summary), style = NoopType.body, color = Palette.textSecondary)
+            Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+                        Text(uiString(R.string.weekly_plan_title), style = NoopType.headline, color = Palette.textPrimary)
+                        Text(uiString(R.string.weekly_plan_week_format, weekStart, WeeklyPlanCalendar.adding(6, weekStart) ?: weekStart),
+                            style = NoopType.captionNumber, color = Palette.textSecondary)
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Palette.textPrimary,
+                        modifier = Modifier.size(Metrics.iconSmall))
                 }
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Palette.textPrimary,
-                    modifier = Modifier.size(Metrics.iconSmall))
+                if (hasPlan) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(uiString(R.string.weekly_plan_overall), style = NoopType.body, color = Palette.textSecondary)
+                        Text(current?.overallPercent?.let { uiString(R.string.weekly_plan_percent, it) } ?: "—",
+                            style = NoopType.headline, color = Palette.textPrimary)
+                    }
+                    HomePlanProgress(R.string.weekly_plan_sleep, current?.sleep)
+                    HomePlanProgress(R.string.weekly_plan_strain, current?.strain)
+                    HomePlanProgress(R.string.weekly_plan_journal, current?.journal)
+                } else {
+                    Text(uiString(R.string.weekly_plan_no_saved), style = NoopType.body, color = Palette.textSecondary)
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun HomePlanProgress(label: Int, progress: WeeklyPlanProgress?) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(uiString(label), style = NoopType.caption, color = Palette.textSecondary)
+        Text(if (progress?.percent != null) uiString(R.string.weekly_plan_days_progress, progress.completedDays, progress.targetDays) else "—",
+            style = NoopType.captionNumber, color = Palette.textPrimary)
     }
 }

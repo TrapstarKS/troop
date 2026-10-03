@@ -46,6 +46,7 @@ ANDROID_SHELL_FILE = "android/app/src/main/java/com/noop/ui/AppRoot.kt"
 # day picker that they render, and the iPhone shell/icon actions that enter Home.
 APPLE_HOME_FILES = {
     "Strand/Screens/HomeDashboardContent.swift",
+    "Strand/Screens/HomeWeeklyPlanSummary.swift",
     "Strand/Data/KeyMetricPrefs.swift",
     "Strand/Screens/TodayView.swift",
     "Strand/Liquid/LiquidTodayView.swift",

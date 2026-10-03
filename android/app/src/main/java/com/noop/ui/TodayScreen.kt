@@ -1,5 +1,6 @@
 package com.noop.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -331,7 +332,7 @@ fun TodayScreen(
     onOpenJournal: () -> Unit = {},
     onOpenRecovery: () -> Unit = { onOpenMetric(HERO_CHARGE_METRIC_KEY) },
     onOpenStrain: () -> Unit = { onOpenMetric(HERO_EFFORT_METRIC_KEY) },
-    onOpenPlan: () -> Unit = onOpenJournal,
+    onOpenPlan: (() -> Unit)? = null,
     onOpenRecoveryForDay: ((String) -> Unit)? = null,
     onOpenStrainForDay: ((String, Double?) -> Unit)? = null,
 ) {
@@ -1071,6 +1072,11 @@ fun TodayScreen(
     }
     var recoveryDetailDayKey by remember { mutableStateOf<String?>(null) }
     var strainDetailRequest by remember { mutableStateOf<Pair<String, Double?>?>(null) }
+    var showWeeklyPlan by remember { mutableStateOf(false) }
+    val openWeeklyPlan: () -> Unit = {
+        if (onOpenPlan != null) onOpenPlan()
+        else showWeeklyPlan = true
+    }
     val openRecoveryForDisplayedDay: () -> Unit = {
         val dayKey = displayMetric?.takeIf { it.recovery != null }?.day
             ?: lastScoredRecoveryDay?.takeIf { selectedDayOffset == 0 }?.day
@@ -1192,8 +1198,11 @@ fun TodayScreen(
 
     var homeDayWorkouts by remember { mutableStateOf<List<WorkoutRow>>(emptyList()) }
     var homeDayStress by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(days, selectedDayKey) {
+    val publishedHomeStrap by viewModel.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val homeStrapId = effectiveActiveStrapId(publishedHomeStrap, viewModel.deviceId)
+    LaunchedEffect(days, selectedDayKey, homeStrapId) {
         val effectDayKey = selectedDayKey
+        val effectStrapId = homeStrapId
         homeDayWorkouts = emptyList()
         homeDayStress = null
         val date = LocalDate.parse(effectDayKey)
@@ -1201,7 +1210,7 @@ fun TodayScreen(
         val start = date.atStartOfDay(zone).toEpochSecond()
         val end = date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1
         val workouts = runCatching {
-            viewModel.repo.workoutsAllSources(viewModel.activeStrapId, start, end)
+            viewModel.repo.workoutsAllSources(effectStrapId, start, end)
                 .sortedBy { it.startTs }
         }.getOrElse {
             if (it is CancellationException) throw it
@@ -1209,8 +1218,8 @@ fun TodayScreen(
         }
         currentCoroutineContext().ensureActive()
         val stress = runCatching {
-            viewModel.repo.metricSeries("my-whoop", "stress", effectDayKey, effectDayKey)
-                .lastOrNull()?.value?.coerceIn(0.0, 3.0)
+            viewModel.repo.resolvedSeries("stress", "my-whoop", effectDayKey, effectDayKey,
+                strapDeviceId = effectStrapId).points.lastOrNull()?.value?.coerceIn(0.0, 3.0)
         }.getOrElse {
             if (it is CancellationException) throw it
             null
@@ -1342,7 +1351,7 @@ fun TodayScreen(
                 HomeDayEvents(displayMetric, homeDayWorkouts, onOpenSleep) { selectedWorkoutRow = it }
             }
         }
-        item(key = "home-plan") { HomePlanSummary(onOpenPlan) }
+        item(key = "home-plan") { HomePlanSummary(viewModel, openWeeklyPlan) }
         item(key = "home-dashboard") {
             Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1448,6 +1457,25 @@ fun TodayScreen(
                 onDeleteAll = viewModel::deleteAllPeriodStarts,
                 onDismiss = { showCycleTracker = false },
             )
+        }
+    }
+
+    if (showWeeklyPlan) {
+        Dialog(
+            onDismissRequest = { showWeeklyPlan = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            BackHandler { showWeeklyPlan = false }
+            Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
+                Column {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showWeeklyPlan = false }) {
+                            Text(uiString(R.string.weekly_plan_dismiss), style = NoopType.headline, color = Palette.textPrimary)
+                        }
+                    }
+                    Box(Modifier.weight(1f)) { WeeklyPlanScreen(viewModel) }
+                }
+            }
         }
     }
 

@@ -215,14 +215,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     private var myPlan: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.space3) {
             TrackedSectionHeader(title: String(localized: "My Plan"))
-            NavigationLink(value: TabRoute.weeklyPlan) {
-                NoopCard {
-                    eventRow(title: String(localized: "Weekly Plan"),
-                             subtitle: String(localized: "Review your goals and journal"), value: "",
-                             icon: "calendar", color: StrandPalette.textPrimary)
-                }
-            }
-            .buttonStyle(.plain)
+            HomeWeeklyPlanSummary()
             Button { router.openJournal(day: dayOffset) } label: {
                 Label(String(localized: "Journal"), systemImage: "checklist")
                     .font(StrandFont.headline)
