@@ -62,4 +62,33 @@ final class ReadSpineUnionTests: XCTestCase {
         XCTAssertNil(merged.remMin)
         XCTAssertNil(merged.lightMin)
     }
+
+    func testSdnnCoalesceMatchesStandaloneSwiftBitOracle() {
+        let values: [Double?] = [nil, -0.0, 0.0, 1.0, 40.0, 40.125,
+                                Double.leastNonzeroMagnitude, Double.greatestFiniteMagnitude, Double.infinity]
+        func metric(_ sdnn: Double?) -> DailyMetric {
+            DailyMetric(day: "2026-10-03", totalSleepMin: nil, efficiency: nil, deepMin: nil,
+                        remMin: nil, lightMin: nil, disturbances: nil, restingHr: nil,
+                        avgHrv: nil, recovery: nil, strain: nil, exerciseCount: nil, avgSdnn: sdnn)
+        }
+        let expected = """
+        - 8000000000000000 0000000000000000 3ff0000000000000 4044000000000000 4044100000000000 0000000000000001 7fefffffffffffff 7ff0000000000000
+        8000000000000000 8000000000000000 8000000000000000 8000000000000000 8000000000000000 8000000000000000 8000000000000000 8000000000000000 8000000000000000
+        0000000000000000 0000000000000000 0000000000000000 0000000000000000 0000000000000000 0000000000000000 0000000000000000 0000000000000000 0000000000000000
+        3ff0000000000000 3ff0000000000000 3ff0000000000000 3ff0000000000000 3ff0000000000000 3ff0000000000000 3ff0000000000000 3ff0000000000000 3ff0000000000000
+        4044000000000000 4044000000000000 4044000000000000 4044000000000000 4044000000000000 4044000000000000 4044000000000000 4044000000000000 4044000000000000
+        4044100000000000 4044100000000000 4044100000000000 4044100000000000 4044100000000000 4044100000000000 4044100000000000 4044100000000000 4044100000000000
+        0000000000000001 0000000000000001 0000000000000001 0000000000000001 0000000000000001 0000000000000001 0000000000000001 0000000000000001 0000000000000001
+        7fefffffffffffff 7fefffffffffffff 7fefffffffffffff 7fefffffffffffff 7fefffffffffffff 7fefffffffffffff 7fefffffffffffff 7fefffffffffffff 7fefffffffffffff
+        7ff0000000000000 7ff0000000000000 7ff0000000000000 7ff0000000000000 7ff0000000000000 7ff0000000000000 7ff0000000000000 7ff0000000000000 7ff0000000000000
+        """ + "\n"
+        let actual = values.map { winner in
+            values.map { filler in
+                Repository.coalesceDay(metric(winner), metric(filler)).avgSdnn
+                    .map { String(format: "%016llx", $0.bitPattern) } ?? "-"
+            }.joined(separator: " ")
+        }.joined(separator: "\n") + "\n"
+        XCTAssertEqual(actual, expected)
+    }
+
 }
