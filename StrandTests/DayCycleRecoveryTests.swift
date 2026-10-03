@@ -7,6 +7,31 @@ import WhoopStore
 final class DayCycleRecoveryTests: XCTestCase {
     private enum ReadFailure: Error { case injected }
 
+    func testMidnightCycleKeepsCalendarMetricsAndDoesNotReadCycles() async throws {
+        let store = try await WhoopStore.inMemory()
+        let reader = DayCycleIntelligenceIntegration.BoundaryRecoveryReader(
+            sleepSessions: { _, _, _ in XCTFail("midnight mode must not read cycles"); return [] },
+            markers: { _, _, _ in XCTFail("midnight mode must not read markers"); return [] })
+        let result = await DayCycleIntelligenceIntegration.compute(
+            nights: [], editedRows: [], store: store, candidates: [], physiologyOwners: [],
+            workouts: [], windowStart: 1_700_000_000, now: 1_700_086_400, offsetSec: 0,
+            habitualMidsleepSec: nil, ticksPerStep: 1, mode: .midnight,
+            cache: DayCycleIntelligenceIntegration.Cache(), profile: UserProfile(),
+            maxHROverride: nil, effortMethod: .edwards, recoveryReader: reader)
+        XCTAssertTrue(result.stepsByWakeDay.isEmpty)
+        XCTAssertTrue(result.strainByWakeDay.isEmpty)
+        XCTAssertTrue(result.caloriesByWakeDay.isEmpty)
+        XCTAssertTrue(result.activeCaloriesByWakeDay.isEmpty)
+        XCTAssertTrue(result.workoutCountByWakeDay.isEmpty)
+        XCTAssertTrue(result.onsetByWakeDay.isEmpty)
+        XCTAssertNil(result.firstWakeDay)
+        let daily = DailyMetric(day: "2026-09-04", totalSleepMin: nil, efficiency: nil,
+            deepMin: nil, remMin: nil, lightMin: nil, disturbances: nil, restingHr: nil,
+            avgHrv: nil, recovery: nil, strain: 61, exerciseCount: 2,
+            steps: 42, activeKcalEst: 1840, activeEnergyKcalEst: 420)
+        XCTAssertEqual(DayCycleIntelligenceIntegration.applying(result, to: daily), daily)
+    }
+
     func testApplyingCycleStepsPreservesUnrelatedDailyColumns() {
         let daily = DailyMetric(
             day: "2026-09-04", totalSleepMin: nil, efficiency: nil, deepMin: nil, remMin: nil,

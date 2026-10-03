@@ -34,6 +34,31 @@ class Whoop5RRSqliteTest {
     private val gravity = mutableListOf<GravitySample>()
     private val id = "my-whoop"
 
+    @Test fun midnightCycleKeepsCalendarMetricsAndDoesNotReadCycles() = runBlocking {
+        val result = com.noop.analytics.PhysiologicalStepCycleEngine.compute(
+            scoredNights = emptyList(), editedRows = emptyList(),
+            resolvedScoreOwnerByDay = emptyMap(), candidatePriorities = emptyList(),
+            stepWitnessByDay = emptyMap(), repo = repo, tzOffsetSeconds = 0,
+            habitualMidsleepSec = null, windowStart = 1_700_000_000,
+            nowSeconds = 1_700_086_400, stepTicksPerStep = 1.0, stepsTraceSink = null,
+            dayCycleMode = DayCycleMode.MIDNIGHT, profile = com.noop.analytics.UserProfile(),
+            maxHROverride = null, effortMethod = com.noop.analytics.StrainScorer.Method.EDWARDS,
+        )
+        assertTrue(result.cycleStepsByWakeDay.isEmpty())
+        assertTrue(result.cycleStrainByWakeDay.isEmpty())
+        assertTrue(result.cycleCaloriesByWakeDay.isEmpty())
+        assertTrue(result.cycleActiveCaloriesByWakeDay.isEmpty())
+        assertTrue(result.cycleWorkoutCountByWakeDay.isEmpty())
+        assertTrue(result.boundaryOnsetByWakeDay.isEmpty())
+        assertNull(result.firstCycleWakeDay)
+        assertTrue(result.recoveredOwnerMarkerRows.isEmpty())
+        val daily = DailyMetric(deviceId = "$id-noop", day = "2026-09-04",
+            steps = 42, strain = 61.0, activeKcalEst = 1840.0,
+            activeEnergyKcalEst = 420.0, exerciseCount = 2)
+        assertEquals(daily, com.noop.analytics.DayCycleIntelligenceIntegration.apply(
+            daily, result, daily.deviceId, mutableListOf()))
+    }
+
     @Before fun open() {
         db = DriverManager.getConnection("jdbc:sqlite::memory:")
         sql("CREATE TABLE rrInterval(deviceId TEXT NOT NULL, ts INTEGER NOT NULL, rrMs INTEGER NOT NULL, " +
