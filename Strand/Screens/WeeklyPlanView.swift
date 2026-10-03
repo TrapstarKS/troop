@@ -300,7 +300,18 @@ private struct WeeklyPlanEditor: View {
                             Text(WeeklyPlanPreset.allCases.first { $0.goals == draft.normalized }.map(presetLabel) ?? String(localized: "Custom goals"))
                                 .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                             ForEach(WeeklyPlanPreset.allCases) { preset in
-                                NoopButton(LocalizedStringKey(presetLabel(preset)), kind: .secondary, fullWidth: true) { draft = preset.goals }
+                                Button { draft = preset.goals } label: {
+                                    Text(presetLabel(preset))
+                                        .font(StrandFont.headline.weight(.semibold))
+                                        .foregroundStyle(StrandPalette.textPrimary)
+                                        .multilineTextAlignment(.center)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.horizontal, NoopButtonMetrics.hPadding)
+                                        .padding(.vertical, NoopMetrics.space2)
+                                        .frame(minHeight: NoopButtonMetrics.height)
+                                        .background(NoopPanelSurface(cornerRadius: NoopButtonMetrics.cornerRadius))
+                                }.buttonStyle(.plain)
                             }
                         }
                     }

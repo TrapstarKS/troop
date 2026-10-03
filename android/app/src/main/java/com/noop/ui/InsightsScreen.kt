@@ -827,7 +827,7 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome, displayName: String,
         false -> if (e.significant) StrandTone.Critical else StrandTone.Warning
     }
     val tintColor = when (movedGood) { true -> Palette.statusPositive; false -> Palette.statusWarning; null -> Palette.textSecondary }
-    val deltaText = e.pctChange?.let { "${if (it > 0) "+" else if (it < 0) "−" else ""}${abs(it).roundToInt()}%" } ?: outcome.format(e.delta)
+    val deltaText = e.pctChange?.let(InsightsImpactFormatting::percentage) ?: outcome.format(e.delta)
     val sentence = uiString(R.string.plan_association_note)
     val summaryLabel = uiString(R.string.plan_behavior_comparison_summary, displayName, deltaText, outcome.label)
 

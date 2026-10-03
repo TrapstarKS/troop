@@ -1124,9 +1124,7 @@ struct InsightsView: View {
 
     private func effectRow(_ e: BehaviorEffect, outcome: Outcome) -> some View {
         let displayName = catalog.localizedDisplayName(for: e.behavior)
-        let deltaText = e.pctChange.map { percent in
-            "\(percent > 0 ? "+" : percent < 0 ? "−" : "")\(Int(abs(percent).rounded()))%"
-        } ?? formatOutcome(e.delta, as: outcome)
+        let deltaText = e.pctChange.map(InsightsImpactFormatting.percentage) ?? formatOutcome(e.delta, as: outcome)
         return Button {
             selectedEffect = EffectSelection(effect: e, outcome: outcome, displayName: displayName)
         } label: {
@@ -1154,9 +1152,7 @@ struct InsightsView: View {
             return good ? .positive : .warning
         }()
         let tintColor = movedGood == nil ? StrandPalette.textSecondary : movedGood == true ? StrandPalette.statusPositive : StrandPalette.statusWarning
-        let deltaText = e.pctChange.map { percent in
-            "\(percent > 0 ? "+" : percent < 0 ? "−" : "")\(Int(abs(percent).rounded()))%"
-        } ?? formatOutcome(e.delta, as: outcome)
+        let deltaText = e.pctChange.map(InsightsImpactFormatting.percentage) ?? formatOutcome(e.delta, as: outcome)
         // The detail explains the limits of this observed comparison.
         let sentence = String(localized: "Recorded days with and without this habit are compared below. An association does not establish cause.")
 

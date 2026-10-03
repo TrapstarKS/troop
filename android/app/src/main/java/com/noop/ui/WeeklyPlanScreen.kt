@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -266,8 +269,12 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
                     val selectedPreset = WeeklyPlanPreset.entries.firstOrNull { it.goals == draft.normalized }
                     Text(stringResource(selectedPreset?.let(::weeklyPlanPresetLabel) ?: R.string.weekly_plan_custom), style = NoopType.caption)
                     WeeklyPlanPreset.entries.forEach { preset ->
-                        NoopButton(stringResource(weeklyPlanPresetLabel(preset)), kind = NoopButtonKind.Secondary, fullWidth = true,
-                            onClick = { draft = preset.goals })
+                        NoopCard(modifier = Modifier.heightIn(min = Metrics.iconButton)
+                            .clickable(role = Role.Button) { draft = preset.goals }, padding = Metrics.space12) {
+                            Text(stringResource(weeklyPlanPresetLabel(preset)), style = NoopType.headline,
+                                color = Palette.textPrimary, textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth())
+                        }
                     }
                     WeeklyPlanTargetEditor(stringResource(R.string.weekly_plan_sleep_minutes), draft.sleepMinutes, 240..720, 15) { draft = draft.copy(sleepMinutes = it) }
                     WeeklyPlanTargetEditor(stringResource(R.string.weekly_plan_sleep_days), draft.sleepDays, 1..7) { draft = draft.copy(sleepDays = it) }
