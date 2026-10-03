@@ -142,7 +142,7 @@ struct StressMonitorView: View {
                         .gesture(DragGesture(minimumDistance: 0).onChanged { event in
                             let x = event.location.x - geometry[proxy.plotAreaFrame].origin.x
                             guard let timestamp: Date = proxy.value(atX: x) else { return }
-                            selectedTs = result.timeline.filter { $0.level != nil }.min { abs(Double($0.startTs) - timestamp.timeIntervalSince1970) < abs(Double($1.startTs) - timestamp.timeIntervalSince1970) }?.startTs
+                            selectedTs = result.timeline.min { abs(Double($0.startTs) - timestamp.timeIntervalSince1970) < abs(Double($1.startTs) - timestamp.timeIntervalSince1970) }?.startTs
                         })
                 }
             }

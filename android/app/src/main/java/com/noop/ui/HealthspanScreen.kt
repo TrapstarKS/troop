@@ -279,12 +279,13 @@ private fun HealthspanHalo(value: String, state: String, chronologicalAge: Doubl
 @Composable
 private fun HealthspanAgeTrend(rows: List<MetricSeriesRow>, reference: LocalDate) {
     val firstDay = reference.minusDays(179)
+    val spanDays = ChronoUnit.DAYS.between(firstDay, reference).toFloat()
     val points = remember(rows, reference) {
         rows.filter { it.day in firstDay.toString()..reference.toString() && it.value.isFinite() && it.value in 20.0..90.0 }
             .mapNotNull { row -> runCatching { LocalDate.parse(row.day) to row.value }.getOrNull() }
             .sortedBy { it.first }
     }
-    var selected by remember(points) { mutableStateOf<Pair<LocalDate, Double>?>(null) }
+    var selected by remember(points, reference) { mutableStateOf<Pair<LocalDate, Double>?>(null) }
     val reading = selected ?: points.lastOrNull()
     val description = reading?.let { stringResource(R.string.healthspan_trend_reading, healthDateLabel(it.first), healthspanNumber(it.second)) }
         ?: stringResource(R.string.healthspan_age_unavailable)
@@ -295,19 +296,19 @@ private fun HealthspanAgeTrend(rows: List<MetricSeriesRow>, reference: LocalDate
                 InsetChartPlaceholder(stringResource(R.string.healthspan_age_unavailable))
             } else {
                 fun select(x: Float, width: Float) {
-                    val day = firstDay.toEpochDay() + (167 * (x / width).coerceIn(0f, 1f)).roundToInt()
+                    val day = firstDay.toEpochDay() + (spanDays * (x / width).coerceIn(0f, 1f)).roundToInt()
                     selected = points.minByOrNull { abs(it.first.toEpochDay() - day) }
                 }
                 Canvas(Modifier.fillMaxWidth().height(Metrics.compactChartHeight).clearAndSetSemantics { contentDescription = description }
-                    .pointerInput(points) { detectTapGestures { select(it.x, size.width.toFloat()) } }
-                    .pointerInput(points) { detectDragGestures(onDragStart = { select(it.x, size.width.toFloat()) }) { change, _ ->
+                    .pointerInput(points, reference) { detectTapGestures { select(it.x, size.width.toFloat()) } }
+                    .pointerInput(points, reference) { detectDragGestures(onDragStart = { select(it.x, size.width.toFloat()) }) { change, _ ->
                         change.consume()
                         select(change.position.x, size.width.toFloat())
                     } }) {
                     val lower = points.minOf { it.second } - 5
                     val upper = points.maxOf { it.second } + 5
                     fun position(point: Pair<LocalDate, Double>): Offset = Offset(
-                        (ChronoUnit.DAYS.between(firstDay, point.first) / 167f) * size.width,
+                        (ChronoUnit.DAYS.between(firstDay, point.first) / spanDays) * size.width,
                         ((upper - point.second) / (upper - lower)).toFloat() * size.height)
                     for (fraction in listOf(0f, 0.5f, 1f)) {
                         drawLine(Palette.hairline, Offset(0f, fraction * size.height), Offset(size.width, fraction * size.height), Metrics.chartGridWidth.toPx())
