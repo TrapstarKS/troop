@@ -10,6 +10,10 @@ import UIKit
 // MARK: - Sleep detail
 
 struct SleepView: View {
+    let initialDayKey: String?
+    @State private var initialSelectionApplied: Bool
+    @State private var consumedInitialDayKey: String?
+    @State private var unavailableRequestedDay: String?
     @EnvironmentObject var repo: Repository
     @EnvironmentObject private var router: NavRouter
     // NOTE: SleepView itself deliberately does NOT observe `LiveState` OR `AppModel`. A connected strap
@@ -119,9 +123,18 @@ struct SleepView: View {
     @AppStorage(SleepLayoutPrefs.hiddenKey) private var sleepHiddenSectionsRaw = ""
     @State private var showSleepCustomize = false
 
+    init(initialDayKey: String? = nil) {
+        self.initialDayKey = initialDayKey
+        _initialSelectionApplied = State(initialValue: initialDayKey == nil)
+    }
+
     /// The analytical cards to render, in saved order minus the hidden set.
     private var sleepVisibleSections: [SleepSection] {
         SleepLayoutPrefs.visibleOrder(orderRaw: sleepSectionOrderRaw, hiddenRaw: sleepHiddenSectionsRaw)
+    }
+
+    private var requestedSelectionReady: Bool {
+        initialDayKey == nil || (initialSelectionApplied && consumedInitialDayKey == initialDayKey)
     }
 
     var body: some View {
@@ -131,7 +144,8 @@ struct SleepView: View {
         // 1Hz HR ticks pay nothing. When it differs (or on first render) we build once, here,
         // synchronously, so the very first frame already shows content (no empty-state flash).
         let key = dataKey
-        let resolved: SleepModel? = (key == modelKey) ? model : buildModel()
+        let resolved: SleepModel? = requestedSelectionReady && unavailableRequestedDay == nil
+            ? ((key == modelKey) ? model : buildModel()) : nil
         let detail = resolved.flatMap { detailModel(for: displayedNight($0)) }
         ScreenScaffold(title: resolved == nil ? "Sleep" : nil,
                        subtitle: nil,
@@ -172,6 +186,7 @@ struct SleepView: View {
             // the cache. Writing State during body is not allowed, so commit it after layout;
             // `resolved` already drives THIS frame, so there is no flash and no extra rebuild.
             .onChangeCompat(of: key) { newKey in
+                guard modelKey != newKey else { return }
                 modelKey = newKey
                 navDaysCache = SleepModel.navDays(navSessions: navSessions)
                 model = buildModel()
@@ -179,6 +194,14 @@ struct SleepView: View {
                 // point at a different session. Snap back to last night. (#160)
                 nightOffset = 0
                 navNight = nil
+            }
+            .onChangeCompat(of: initialDayKey) { day in
+                initialSelectionApplied = day == nil
+                consumedInitialDayKey = nil
+                unavailableRequestedDay = nil
+                nightOffset = 0
+                navNight = nil
+                applyRequestedDaySelection()
             }
             // The navigated night is decoded once per ◀/▶ press, never per body pass —
             // `decodedNight` JSON-decodes and body re-evaluates at 1Hz while HR streams. (#160)
@@ -190,7 +213,7 @@ struct SleepView: View {
             .onAppear {
                 if modelKey != key {
                     modelKey = key
-                    model = resolved
+                    model = buildModel()
                     nightOffset = 0
                     navNight = nil
                 }
@@ -223,10 +246,11 @@ struct SleepView: View {
                 motionByStart = motions
                 nightOffset = 0
                 navNight = nil
-                modelKey = dataKey
-                navDaysCache = SleepModel.navDays(navSessions: navSessions)
-                model = buildModel()
                 loadedSleepRefresh = refresh
+                modelKey = dataKey
+                navDaysCache = SleepModel.navDays(navSessions: sessions)
+                model = buildModel()
+                applyRequestedDaySelection()
                 observeResultChange()
             }
             .sheet(item: $wakeEdit) { edit in
@@ -413,14 +437,6 @@ struct SleepView: View {
             offset: offset,
             today: Repository.logicalDay(now)
         )
-    }
-
-    /// The night the Rest hero reflects: the ◀/▶-navigated night while browsing (falling back to
-    /// last night only if that navigated night hasn't decoded yet), else last night. Keeps the
-    /// hero's score, vessel fill, state word, provenance badge and overline on the SAME night the
-    /// hypnogram shows — the fix for the score freezing on last night's value during navigation.
-    private func heroNight(_ model: SleepModel) -> Night {
-        (nightOffset == 0 ? model.night : navNight) ?? model.night
     }
 
     /// The sleep-performance score (0–100) for a SPECIFIC night: the imported WHOOP figure for that
@@ -1869,9 +1885,10 @@ struct SleepView: View {
     /// Compare only after the screen has loaded the refreshed blocks and scoring has settled.
     /// The observer lives on the screen, so a hidden notice cannot stop change observation.
     private func observeResultChange() {
-        guard loadedSleepRefresh == repo.refreshSeq, !intelligence.computing else { return }
+        guard loadedSleepRefresh == repo.refreshSeq, !intelligence.computing,
+              requestedSelectionReady, unavailableRequestedDay == nil else { return }
         guard let model else { resetResultNotice(); return }
-        let snapshot = resultSnapshot(heroNight(model))
+        let snapshot = resultSnapshot(displayedNight(model))
         if resultNoticeScope != snapshot.scope { resultNoticeVisible = false }
         resultNoticeScope = snapshot.scope
         if resultTracker.observe(snapshot, ready: true) {
@@ -1935,7 +1952,7 @@ struct SleepView: View {
     /// sleep). Falls back to `repo.sleeps` (one-per-night) until the fuller list loads, so the hero
     /// is never empty during the first frame. (#170)
     private var navSessions: [CachedSleepSession] {
-        allSessions.isEmpty ? repo.sleeps : allSessions
+        loadedSleepRefresh == nil ? repo.sleeps : allSessions
     }
 
     /// The browsable DAY list — a thin wrapper over the shared `SleepModel.navDays`, which is the
@@ -2117,6 +2134,18 @@ struct SleepView: View {
                                 habitualMidsleepSec: habitualMidsleepSec, motionByStart: motionByStart)
     }
 
+    private func applyRequestedDaySelection() {
+        guard !initialSelectionApplied, loadedSleepRefresh == repo.refreshSeq,
+              let initialDayKey else { return }
+        let offset = SleepModel.requestedNightOffset(navDays: navDays, dayKey: initialDayKey)
+        unavailableRequestedDay = offset == nil ? initialDayKey : nil
+        nightOffset = offset ?? 0
+        navNight = offset.flatMap { $0 == 0 ? nil : decodedNight(at: $0) }
+        consumedInitialDayKey = initialDayKey
+        initialSelectionApplied = true
+        resetResultNotice()
+    }
+
     /// A synthetic session for the DAY `offset` stops back, spanning the MAIN block's window (not the
     /// whole day), for the honest no-stage-data header when the day's blocks don't decode to usable
     /// stages. Using the main block (#518) keeps the stub header on the real night rather than a
@@ -2192,7 +2221,21 @@ struct SleepView: View {
     @ViewBuilder
     private var emptyState: some View {
         SleepFreshnessNote(latestWakeTs: nil)
-        if repo.loaded {
+        if let unavailableRequestedDay {
+            Text(unavailableRequestedDay).font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+            ComingSoon(what: "No sleep data for this day.")
+            Button("Last night") {
+                self.unavailableRequestedDay = nil
+                nightOffset = 0
+                navNight = nil
+            }
+            .buttonStyle(LiquidPressStyle())
+            .font(StrandFont.subhead)
+            .foregroundStyle(StrandPalette.sleepPrimary)
+            .frame(minHeight: NoopMetrics.touchTarget)
+        } else if initialDayKey != nil && (!initialSelectionApplied || consumedInitialDayKey != initialDayKey) {
+            ComingSoon(what: "Loading your sleep history…")
+        } else if repo.loaded {
             ComingSoon(what: "No nights here yet. Import your WHOOP export in Data Sources to see every night, your sleep stages and trends straight away. Or open Intelligence to see last night computed from the strap after you wear it to bed.")
         } else {
             ComingSoon(what: "Loading your sleep history…")

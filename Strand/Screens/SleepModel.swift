@@ -263,6 +263,14 @@ extension SleepModel {
         }
     }
 
+    static func requestedNightOffset(navDays: [[CachedSleepSession]], dayKey: String) -> Int? {
+        navDays.firstIndex { blocks in
+            blocks.contains {
+                Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval($0.endTs))) == dayKey
+            }
+        }
+    }
+
     /// The night's DISPLAYED onset (bedtime): the first fragment that is NOT a spurious leading
     /// pre-onset awake stub, falling back to the earliest onset when the whole group is stub-like.
     /// Mirrors the former `SleepView.nightOnsetTs`. (#736, #259)

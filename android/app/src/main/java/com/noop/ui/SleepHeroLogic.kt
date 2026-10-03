@@ -4,6 +4,12 @@ import com.noop.analytics.RestScorer
 import com.noop.data.DailyMetric
 import com.noop.data.SleepSession
 
+internal fun requestedSleepNightOffset(navDays: List<List<SleepSession>>, dayKey: String?): Int? {
+    if (dayKey == null) return null
+    return navDays.indexOfFirst { blocks -> blocks.any { localDayString(it.endTs) == dayKey } }
+        .takeIf { it >= 0 }
+}
+
 internal fun sleepEditGroupFor(session: SleepSession, heroGroup: List<SleepSession>): List<SleepSession> =
     if (heroGroup.any { it.deviceId == session.deviceId && it.startTs == session.startTs }) heroGroup
     else listOf(session)

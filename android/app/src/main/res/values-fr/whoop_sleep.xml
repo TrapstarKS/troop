@@ -26,4 +26,5 @@
     <string name="whoop_sleep_stage_subtitle">%1$s au lit · %2$s d’efficacité</string>
     <string name="whoop_sleep_raw_stages">Phases brutes sur l’appareil</string>
     <string name="whoop_sleep_estimated_stages">Phases estimées sur l’appareil</string>
+    <string name="whoop_sleep_requested_missing">Aucune donnée de sommeil pour ce jour.</string>
 </resources>

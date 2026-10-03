@@ -5,8 +5,27 @@ import com.noop.data.SleepSession
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.Instant
+import java.util.TimeZone
 
 class SleepSelectedDetailTest {
+    @Test fun requestedDaySelectsTheExactLocalWakeDayWithoutCarryingANearbyNight() {
+        val defaultZone = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("GMT-03:00"))
+            val newestWake = Instant.parse("2026-10-03T10:00:00Z").epochSecond
+            val earlierWake = Instant.parse("2026-10-02T01:00:00Z").epochSecond
+            val navDays = listOf(newestWake, earlierWake).map { wake ->
+                listOf(SleepSession(deviceId = "test", startTs = wake - 6 * 3600, endTs = wake))
+            }
+            assertEquals(1, requestedSleepNightOffset(navDays, "2026-10-01"))
+            assertNull(requestedSleepNightOffset(navDays, "2026-10-02"))
+            assertNull(requestedSleepNightOffset(navDays, "2026-10-04"))
+        } finally {
+            TimeZone.setDefault(defaultZone)
+        }
+    }
+
     @Test fun consistencyUsesTheMainNightAndNotAnAfternoonNap() {
         val zone = java.time.ZoneId.systemDefault()
         fun timestamp(value: String) = java.time.LocalDateTime.parse(value).atZone(zone).toEpochSecond()

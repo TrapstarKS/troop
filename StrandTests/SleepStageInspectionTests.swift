@@ -12,6 +12,17 @@ final class SleepStageInspectionTests: XCTestCase {
         return Int(formatter.date(from: value)!.timeIntervalSince1970)
     }
 
+    func testRequestedDaySelectsExactlyAndDoesNotCarryNearbyNights() {
+        let sessions = ["2026-10-03", "2026-10-01"].map { day in
+            CachedSleepSession(startTs: timestamp("\(day) 00:00"), endTs: timestamp("\(day) 07:00"),
+                               efficiency: nil, restingHr: nil, avgHrv: nil, stagesJSON: nil)
+        }
+        let days = SleepModel.navDays(navSessions: sessions)
+        XCTAssertEqual(SleepModel.requestedNightOffset(navDays: days, dayKey: "2026-10-01"), 1)
+        XCTAssertNil(SleepModel.requestedNightOffset(navDays: days, dayKey: "2026-10-02"))
+        XCTAssertNil(SleepModel.requestedNightOffset(navDays: days, dayKey: "2026-10-04"))
+    }
+
     func testConsistencyUsesOneMainNightPerDayAndExcludesNaps() {
         let sessions = (1...3).flatMap { day -> [CachedSleepSession] in
             let date = String(format: "2026-09-%02d", day)
