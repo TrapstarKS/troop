@@ -27,3 +27,5 @@ Local calendar boundaries bound every raw-data read; inclusive SQL ends before t
 ## Validation contract
 
 The pure Swift helper is compiled standalone and its stdout is copied verbatim into the Kotlin oracle test and a matching Swift test. Cases cover varying rising/flat/falling age inputs, insufficient calibration, minors, stale/invalid samples and stress threshold boundaries. Required application compiles cover shared Swift on both macOS and iOS, plus Android; demo captures are supplemental layout evidence. No physical strap verification is claimed.
+
+Healthspan's week selector stays within the loaded daily-metric history and requires a complete 31-day lookback boundary before walking backward. A short new history still shows today's calibration. Stress Monitor exposes up to 4,000 local days; overlays read the selected range (including two preceding local days for cross-midnight sessions), preserve the existing imported/computed sleep richness precedence, and include both recorded and detected workouts. The open current-day monitor reloads every 15 minutes, with a one-minute freshness clock; raw HR writes do not require a day-cache refresh to become visible.

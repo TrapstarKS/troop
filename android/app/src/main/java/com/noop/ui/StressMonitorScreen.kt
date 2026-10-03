@@ -47,7 +47,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.noop.R
 import com.noop.analytics.DaytimeStress
 import com.noop.analytics.HealthspanPresentation
-import com.noop.data.WorkoutRow
+import com.noop.data.WhoopRepository
 import com.noop.widget.StressWidgetProducer
 import java.time.Instant
 import java.time.LocalDate
@@ -89,23 +89,21 @@ fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
     var nowSeconds by remember { mutableLongStateOf(System.currentTimeMillis() / 1000L) }
     var selectedTimestamp by remember(selectedDay, strapId) { mutableStateOf<Long?>(null) }
 
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                nowSeconds = System.currentTimeMillis() / 1000L
+                delay(60_000)
+            }
+        }
+    }
     LaunchedEffect(vm, strapId, selectedDay, days, workouts, personalBaseline, lifecycleOwner) {
-        var lastFingerprint: String? = null
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             do {
                 val now = System.currentTimeMillis() / 1000L
-                nowSeconds = now
                 val window = stressLocalDayWindow(selectedDay, ZoneId.systemDefault())
-                val end = minOf(now, window.toEpochSecondInclusive)
                 try {
-                    val fingerprint = vm.repo.hrUnionFingerprint(strapId, window.fromEpochSecond, end)
-                    if (data == null || fingerprint != lastFingerprint) {
-                        data = loadStressMonitorData(vm, strapId, selectedDay, workouts, personalBaseline, now)
-                        lastFingerprint = fingerprint
-                    } else {
-                        val daily = readStoredStress(vm, strapId, selectedDay, selectedDay)[selectedDay.toString()]
-                        data = data?.copy(dailyScore = daily)
-                    }
+                    data = loadStressMonitorData(vm, strapId, selectedDay, personalBaseline, now)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -176,7 +174,6 @@ private suspend fun loadStressMonitorData(
     vm: AppViewModel,
     strapId: String,
     selectedDay: LocalDate,
-    workouts: List<WorkoutRow>,
     personalBaseline: Boolean,
     now: Long,
 ): StressMonitorData = withContext(Dispatchers.Default) {
@@ -193,12 +190,15 @@ private suspend fun loadStressMonitorData(
     val daytime = if (hr.size >= DaytimeStress.minHourHrSamples) {
         DaytimeStress.analyze(hr, rr, gravity, window.offsetSeconds.toLong(), mode, includeTimeline = true)
     } else DaytimeStress.Result.EMPTY
-    val importedSleep = vm.repo.sleepSessionsUnion(strapId, window.fromEpochSecond - 86_400, end)
-    val computedSleep = vm.repo.computedSleepSessionsUnion(strapId, window.fromEpochSecond - 86_400, end)
-    val importedWakeDays = importedSleep.map { Instant.ofEpochSecond(it.endTs).atZone(zone).toLocalDate() }.toSet()
-    val sleep = importedSleep + computedSleep.filter { Instant.ofEpochSecond(it.endTs).atZone(zone).toLocalDate() !in importedWakeDays }
+    val sleepFrom = selectedDay.minusDays(2).atStartOfDay(zone).toEpochSecond()
+    val importedSleep = vm.repo.sleepSessionsUnion(strapId, sleepFrom, end)
+    val computedSleep = vm.repo.computedSleepSessionsUnion(strapId, sleepFrom, end)
+    val sleep = WhoopRepository.mergeSleep(importedSleep, computedSleep)
+    val recordedWorkouts = vm.repo.workoutsUnion(strapId, sleepFrom, end)
+    val detectedWorkouts = vm.repo.detectedWorkoutsUnion(strapId, sleepFrom, end)
+    val allWorkouts = (recordedWorkouts + detectedWorkouts).distinctBy { it.startTs to it.sport }
     val events = (sleep.map { StressRecordedEvent(it.effectiveStartTs, it.endTs, true) } +
-        workouts.map { StressRecordedEvent(it.startTs, it.endTs, false) })
+        allWorkouts.map { StressRecordedEvent(it.startTs, it.endTs, false) })
         .filter { it.start < end && it.end > window.fromEpochSecond && it.end > it.start }
     val stored = readStoredStress(vm, strapId, selectedDay, selectedDay)
     val dailyScore = stored[selectedDay.toString()]

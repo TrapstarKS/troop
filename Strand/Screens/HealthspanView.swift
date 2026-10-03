@@ -12,6 +12,12 @@ struct HealthspanView: View {
     @State private var reference = Calendar.current.startOfDay(for: Date())
     @State private var showMethod = false
 
+    private var earliestReference: Date {
+        let today = Calendar.current.startOfDay(for: Date())
+        guard let first = repo.days.compactMap({ healthspanDate($0.day) }).min(),
+              let completeWindow = Calendar.current.date(byAdding: .day, value: 30, to: first) else { return today }
+        return min(today, completeWindow)
+    }
     private var chronologicalAge: Int { Calendar.current.dateComponents([.year], from: Calendar.current.startOfDay(for: profile.dateOfBirth), to: reference).year ?? profile.age }
     private var snapshot: HealthspanPresentation.Snapshot {
         healthspanSnapshot(series: series, days: repo.days, age: chronologicalAge, reference: reference)
@@ -23,7 +29,7 @@ struct HealthspanView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: NoopMetrics.sectionSpacing) {
-                healthspanDateSelector(reference: reference, days: 7, previous: { reference = Calendar.current.date(byAdding: .day, value: -7, to: reference)! }, next: { reference = min(Calendar.current.startOfDay(for: Date()), Calendar.current.date(byAdding: .day, value: 7, to: reference)!) }, canAdvance: reference < Calendar.current.startOfDay(for: Date()))
+                healthspanDateSelector(reference: reference, days: 7, previous: { reference = max(earliestReference, Calendar.current.date(byAdding: .day, value: -7, to: reference)!) }, next: { reference = min(Calendar.current.startOfDay(for: Date()), Calendar.current.date(byAdding: .day, value: 7, to: reference)!) }, canAdvance: reference < Calendar.current.startOfDay(for: Date()), canGoBack: reference > earliestReference)
                 HealthspanOrb(age: snapshot.age, chronologicalAge: chronologicalAge)
                 VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                     Text("Pace of Aging").strandOverline()
@@ -63,8 +69,9 @@ struct HealthspanView: View {
         .background(StrandPalette.surfaceBase)
         .navigationTitle(String(localized: "Healthspan"))
         .task(id: repo.refreshSeq) {
-            series = await repo.exploreSeries(key: "body_age", source: "my-whoop", days: 400)
-            fitness = await repo.exploreSeries(key: "fitness_age", source: "my-whoop", days: 400)
+            series = await repo.exploreSeries(key: "body_age", source: "my-whoop", days: 4000)
+            fitness = await repo.exploreSeries(key: "fitness_age", source: "my-whoop", days: 4000)
+            reference = max(reference, earliestReference)
         }
         .sheet(isPresented: $showMethod) {
             ScrollView {
@@ -85,7 +92,7 @@ struct HealthspanView: View {
             VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                 TrackedSectionHeader(title: String(localized: "NOOP Age trend"))
                 Chart {
-                    ForEach(series.filter { $0.value.isFinite && (20...90).contains($0.value) && (healthspanDaysAgo($0.day, reference: reference).map { (0..<180).contains($0) } ?? false) }, id: \.day) { point in
+                    ForEach(series.filter { $0.value.isFinite && (20...90).contains($0.value) && (healthspanDaysAgo($0.day, reference: reference).map { (0..<180).contains($0) } ?? false) }.map { HealthspanTrendPoint(day: $0.day, value: $0.value) }) { point in
                         if let date = healthspanDate(point.day) {
                             LineMark(x: .value("Date", date), y: .value("Age", point.value))
                                 .foregroundStyle(StrandPalette.positive)
@@ -159,6 +166,12 @@ struct HealthSupportingMetricCards: View {
             }
         }
     }
+}
+
+private struct HealthspanTrendPoint: Identifiable {
+    let day: String
+    let value: Double
+    var id: String { day }
 }
 
 private struct HealthspanOrb: View {
@@ -240,9 +253,9 @@ func healthspanSnapshot(series: [(day: String, value: Double)], days: [DailyMetr
 
 private func average(_ values: [Double]) -> Double? { values.isEmpty ? nil : values.reduce(0, +) / Double(values.count) }
 
-func healthspanDateSelector(reference: Date, days: Int = 1, previous: @escaping () -> Void, next: @escaping () -> Void, canAdvance: Bool) -> some View {
+func healthspanDateSelector(reference: Date, days: Int = 1, previous: @escaping () -> Void, next: @escaping () -> Void, canAdvance: Bool, canGoBack: Bool = true) -> some View {
     HStack {
-        Button(action: previous) { Image(systemName: "chevron.left").frame(width: NoopMetrics.touchTarget, height: NoopMetrics.touchTarget) }.accessibilityLabel(String(localized: "Previous"))
+        Button(action: previous) { Image(systemName: "chevron.left").frame(width: NoopMetrics.touchTarget, height: NoopMetrics.touchTarget) }.disabled(!canGoBack).accessibilityLabel(String(localized: "Previous"))
         Spacer()
         Text(healthspanDateLabel(reference: reference, days: days)).font(StrandFont.headline)
         Spacer()

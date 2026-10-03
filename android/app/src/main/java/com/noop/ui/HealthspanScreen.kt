@@ -70,6 +70,9 @@ fun HealthspanScreen(vm: AppViewModel) {
     val days by vm.recentDays.collectAsStateWithLifecycle()
     val bodyAge = healthspanSeries(vm, "body_age")
     var referenceDay by remember { mutableStateOf(LocalDate.now()) }
+    val today = LocalDate.now()
+    val earliestDay = days.minOfOrNull { it.day }?.let { LocalDate.parse(it).plusDays(30) }?.let { minOf(it, today) } ?: today
+    LaunchedEffect(earliestDay) { referenceDay = maxOf(referenceDay, earliestDay) }
     val profile = ProfileStore.from(LocalContext.current.applicationContext)
     val dateOfBirth = Instant.ofEpochMilli(profile.dateOfBirthMillis).atZone(ZoneId.systemDefault()).toLocalDate()
     val chronologicalAge = Period.between(dateOfBirth, referenceDay).years.toDouble().coerceAtLeast(0.0)
@@ -98,7 +101,7 @@ fun HealthspanScreen(vm: AppViewModel) {
 
     LazyScreenScaffold(title = stringResource(R.string.healthspan_title), subtitle = stringResource(R.string.healthspan_subtitle)) {
         item {
-            HealthDateNavigation(referenceDay, 7, true) { referenceDay = it }
+            HealthDateNavigation(referenceDay, 7, true, earliestDay) { referenceDay = it }
         }
         item {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
@@ -363,13 +366,13 @@ private fun HealthspanPace(pace: Double?) {
 }
 
 @Composable
-internal fun HealthDateNavigation(day: LocalDate, stepDays: Long = 1, weekly: Boolean = false, onSelect: (LocalDate) -> Unit) {
+internal fun HealthDateNavigation(day: LocalDate, stepDays: Long = 1, weekly: Boolean = false, earliestDay: LocalDate = LocalDate.now().minusDays(3999), onSelect: (LocalDate) -> Unit) {
     val context = LocalContext.current
     val today = LocalDate.now()
     val label = if (weekly) stringResource(R.string.healthspan_week_range, healthDateLabel(day.minusDays(6)), healthDateLabel(day))
         else healthDateLabel(day)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = { onSelect(day.minusDays(stepDays)) }) {
+        IconButton(onClick = { onSelect(maxOf(earliestDay, day.minusDays(stepDays))) }, enabled = day > earliestDay) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, stringResource(R.string.healthspan_previous), tint = Palette.textPrimary)
         }
         Text(label, style = NoopType.headline, color = Palette.textPrimary, textAlign = TextAlign.Center,
@@ -377,6 +380,7 @@ internal fun HealthDateNavigation(day: LocalDate, stepDays: Long = 1, weekly: Bo
                 DatePickerDialog(context, { _, year, month, date -> onSelect(LocalDate.of(year, month + 1, date)) },
                     day.year, day.monthValue - 1, day.dayOfMonth).apply {
                     datePicker.maxDate = System.currentTimeMillis()
+                    datePicker.minDate = earliestDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 }.show()
             }.padding(vertical = Metrics.space12))
         IconButton(onClick = { onSelect(minOf(day.plusDays(stepDays), today)) }, enabled = day < today) {

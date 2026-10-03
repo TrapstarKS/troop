@@ -18,13 +18,17 @@ struct StressMonitorView: View {
     @State private var showBreathing = false
     @State private var selectedTs: Int?
     @State private var observedEnd = 0
+    @State private var loadedDay: Int?
+    @State private var sleeps: [CachedSleepSession] = []
 
     private var date: Date { selectedDate }
+    private var earliestDate: Date { Calendar.current.date(byAdding: .day, value: -3999, to: Calendar.current.startOfDay(for: clock))! }
     private var startTs: Int { Int(Calendar.current.startOfDay(for: date).timeIntervalSince1970) }
     private var endTs: Int { Int(Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: date)!).timeIntervalSince1970) }
     private var selected: DaytimeStress.HourPoint? { selectedTs.flatMap { ts in result.timeline.first { $0.startTs == ts } } }
     private var latest: DaytimeStress.HourPoint? { result.timeline.last { $0.level != nil } }
     private var current: DaytimeStress.HourPoint? {
+        guard loadedDay == startTs else { return nil }
         if let selected { return selected }
         guard let latest, let latestSampleTs else { return nil }
         let windowEnd = min(latest.startTs + DaytimeStress.bucketSeconds, latestSampleTs)
@@ -32,7 +36,8 @@ struct StressMonitorView: View {
     }
     private var daily: (day: String, value: Double)? { stored.first { $0.value.isFinite && (0...3).contains($0.value) && healthspanDaysAgo($0.day, reference: date) == 0 } }
     private var minutes: [Int] {
-        HealthspanPresentation.zoneMinutes(hours: result.hours.map { point in
+        guard loadedDay == startTs else { return [0, 0, 0] }
+        return HealthspanPresentation.zoneMinutes(hours: result.hours.map { point in
             (level: point.level, minutes: max(0, min(point.startTs + DaytimeStress.bucketSeconds, observedEnd) - max(point.startTs, firstSampleTs ?? point.startTs)) / 60)
         })
     }
@@ -40,7 +45,7 @@ struct StressMonitorView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: NoopMetrics.sectionSpacing) {
-                healthspanDateSelector(reference: date, previous: { selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate)!; selectedTs = nil }, next: { selectedDate = min(Calendar.current.startOfDay(for: clock), Calendar.current.date(byAdding: .day, value: 1, to: selectedDate)!); selectedTs = nil }, canAdvance: selectedDate < Calendar.current.startOfDay(for: clock))
+                healthspanDateSelector(reference: date, previous: { selectedDate = max(earliestDate, Calendar.current.date(byAdding: .day, value: -1, to: selectedDate)!); selectedTs = nil }, next: { selectedDate = min(Calendar.current.startOfDay(for: clock), Calendar.current.date(byAdding: .day, value: 1, to: selectedDate)!); selectedTs = nil }, canAdvance: selectedDate < Calendar.current.startOfDay(for: clock), canGoBack: selectedDate > earliestDate)
                 StressMonitorGauge(value: current?.level)
                 VStack(spacing: NoopMetrics.space2) {
                     Text(current == nil ? (loading ? String(localized: "Loading…") : String(localized: "No current reading")) : (selected == nil ? String(localized: "Latest recorded window") : String(localized: "Selected window")))
@@ -49,7 +54,7 @@ struct StressMonitorView: View {
                         Text(Date(timeIntervalSince1970: Double(point.startTs)), style: .time).font(StrandFont.captionNumber)
                     }
                 }
-                if !result.timeline.isEmpty { timeline }
+                if loadedDay == startTs && !result.timeline.isEmpty { timeline }
                 NoopCard {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                         Text("Physiological stress estimate").font(StrandFont.headline)
@@ -88,7 +93,7 @@ struct StressMonitorView: View {
         .background(StrandPalette.surfaceBase)
         .navigationTitle(String(localized: "Stress Monitor"))
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { clock = $0 }
-        .task(id: "\(repo.refreshSeq)|\(startTs)") { await load() }
+        .task(id: "\(repo.refreshSeq)|\(startTs)|\(Int(clock.timeIntervalSince1970) / 900)") { await load() }
         .sheet(isPresented: $showBreathing) {
             NavigationStack { BreathingView().toolbar { Button("Done") { showBreathing = false } } }
         }
@@ -98,7 +103,7 @@ struct StressMonitorView: View {
         VStack(alignment: .leading, spacing: NoopMetrics.space3) {
             Text("Stress timeline").font(StrandFont.headline)
             Chart {
-                ForEach(repo.sleeps.filter { $0.endTs > startTs && $0.effectiveStartTs < endTs }, id: \.startTs) { sleep in
+                ForEach(sleeps.filter { $0.endTs > startTs && $0.effectiveStartTs < endTs }, id: \.startTs) { sleep in
                     RectangleMark(xStart: .value("Start", Date(timeIntervalSince1970: Double(max(startTs, sleep.effectiveStartTs)))), xEnd: .value("End", Date(timeIntervalSince1970: Double(min(endTs, sleep.endTs)))), yStart: .value("Low", 0), yEnd: .value("High", 3))
                         .foregroundStyle(StrandPalette.sleepPrimary.opacity(0.13))
                 }
@@ -153,27 +158,42 @@ struct StressMonitorView: View {
     }
 
     @MainActor private func load() async {
-        loading = true; result = .empty; latestSampleTs = nil; selectedTs = nil
+        loading = true
         let selectedDate = date
         let from = startTs
         let to = min(Int(Date().timeIntervalSince1970), endTs - 1)
-        stored = await repo.series(key: "stress", source: "my-whoop")
+        if loadedDay != from {
+            result = .empty; latestSampleTs = nil; firstSampleTs = nil; selectedTs = nil; stored = []
+        }
+        let dailyValues = await repo.series(key: "stress", source: "my-whoop")
         let hr = await repo.hrSamples(from: from, to: to, limit: 200_000)
         guard !Task.isCancelled else { return }
-        guard hr.count >= DaytimeStress.minHourHRSamples else { loading = false; return }
+        guard hr.count >= DaytimeStress.minHourHRSamples else {
+            result = .empty; latestSampleTs = nil; firstSampleTs = nil; selectedTs = nil
+            workouts = []; sleeps = []; observedEnd = 0; stored = dailyValues; loadedDay = from; loading = false
+            return
+        }
         let rr = await repo.rrIntervals(from: from, to: to, limit: 200_000)
         let gravity = await repo.gravitySamplesUnion(from: from, to: to, limit: 200_000)
         let mode = await DaytimeStressMode.selected(repo: repo, startOfToday: selectedDate, personalBaseline: PuffinExperiment.stressPersonalBaselineEnabled)
         let noon = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: selectedDate) ?? selectedDate
         let offset = TimeZone.current.secondsFromGMT(for: noon)
         let resolved = await runUnescalated(priority: .userInitiated) { DaytimeStress.analyze(hr: hr, rr: rr, gravity: gravity, tzOffsetSeconds: offset, mode: mode, includeTimeline: true) }
-        let events = await repo.workoutRows(days: 400)
+        let sleepFrom = Int(Calendar.current.date(byAdding: .day, value: -2, to: selectedDate)!.timeIntervalSince1970)
+        let importedSleep = await repo.sleepSessions(from: sleepFrom, to: to)
+        let computedSleep = await repo.computedSleepSessions(from: sleepFrom, to: to)
+        let resolvedSleep = SleepMerge.merge(imported: importedSleep, computed: computedSleep) { session in
+            let end = Date(timeIntervalSince1970: Double(session.endTs))
+            return AnalyticsEngine.dayString(session.endTs, offsetSec: TimeZone.current.secondsFromGMT(for: end))
+        }
+        let events = await repo.workoutRows(days: 4000)
         guard !Task.isCancelled else { return }
         firstSampleTs = hr.map(\.ts).min()
         latestSampleTs = hr.map(\.ts).max()
         observedEnd = min(to + 1, (latestSampleTs ?? from) + 1)
-        result = resolved; workouts = events; loading = false
+        result = resolved; workouts = events; sleeps = resolvedSleep; stored = dailyValues; loadedDay = from; loading = false
     }
+
 }
 
 private struct StressMonitorTracePoint: Identifiable {
