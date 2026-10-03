@@ -15,9 +15,7 @@ import StrandDesign
 /// history, logged and imported, stays joined under the original question.
 struct JournalLogCard: View {
     @EnvironmentObject var repo: Repository
-    /// The journal catalog is single-user state owned here (UserDefaults-backed), so hosting the card
-    /// needs no app-level injection.
-    @StateObject private var catalog = JournalCatalogStore()
+    @ObservedObject private var catalog: JournalCatalogStore
 
     /// Distinct imported question strings (from InsightsView's load), adopted into the catalog so
     /// logged answers and imported history group under the same behaviour.
@@ -32,9 +30,10 @@ struct JournalLogCard: View {
     let onDirtyChanged: (Bool) -> Void
     let onChanged: () -> Void              // parent re-runs load() after a write
 
-    init(importedQuestions: [String], answers: [String: Bool],
+    init(catalog: JournalCatalogStore, importedQuestions: [String], answers: [String: Bool],
          numericAnswers: [String: Double] = [:], dayOffset: Binding<Int>, answersDayKey: String, anchorDay: String,
          onDirtyChanged: @escaping (Bool) -> Void, onChanged: @escaping () -> Void) {
+        _catalog = ObservedObject(wrappedValue: catalog)
         self.importedQuestions = importedQuestions
         self.answers = answers
         self.numericAnswers = numericAnswers

@@ -240,7 +240,7 @@ struct InsightsView: View {
             } else {
                 VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
                     // Native logging, always reachable: the account-free way into Insights.
-                    JournalLogCard(importedQuestions: importedQuestions,
+                    JournalLogCard(catalog: catalog, importedQuestions: importedQuestions,
                                    answers: dayAnswers,
                                    numericAnswers: dayNumeric,
                                    dayOffset: $journalDayOffset,
