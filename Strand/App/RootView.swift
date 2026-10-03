@@ -442,7 +442,10 @@ struct RootView: View {
         case .explore: MetricExplorerView()
         case .compare: CompareView()
         case .insights: InsightsView()
-        case .sleep: SleepView()
+        case .sleep:
+            NavigationStack {
+                SleepView().tabRouteDestinations()
+            }
         case .trends: TrendsView()
         case .workouts: WorkoutsView()
         case .health: HealthView()

@@ -959,12 +959,11 @@ object NoopPrefs {
         of(context).edit().putBoolean(KEY_ZONE_COACH_RECOVERY, enabled).apply()
     }
 
-    /** Illness early-warning (banner + notification). Default ON, the watch has always run on
-     *  Android, so this is an opt-OUT; macOS is opt-in (behavior.illnessWatch, default off). */
+    /** Illness early-warning (banner + notification). Opt-in and default OFF on both platforms. */
     const val KEY_ILLNESS_WATCH = "noop.illnessWatch"
 
     fun illnessWatch(context: Context): Boolean =
-        of(context).getBoolean(KEY_ILLNESS_WATCH, true)
+        of(context).getBoolean(KEY_ILLNESS_WATCH, false)
 
     fun setIllnessWatch(context: Context, enabled: Boolean) {
         of(context).edit().putBoolean(KEY_ILLNESS_WATCH, enabled).apply()

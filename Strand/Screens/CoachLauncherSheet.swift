@@ -3,8 +3,8 @@ import StrandDesign
 
 /// The compact Coach launcher opened from the optional Today card (#1862).
 ///
-/// Coach is otherwise reachable only through More/Insights, which makes it easy to miss and means
-/// leaving Today to try it. This is the shortcut — and deliberately ONLY a shortcut.
+/// The optional Today card offers a compact entry before handing off to the full Coach surface.
+/// The app shell also provides a direct Coach entry.
 ///
 /// It owns no send, stream, error or consent surface of its own. Picking a suggestion or submitting the
 /// composer hands the question to `AICoachEngine.pendingPrompt` and routes to `CoachView`, which already
@@ -15,8 +15,9 @@ import StrandDesign
 /// stored key, and the prompts are static copy. The first network call still happens where it always
 /// did — inside `AICoachEngine.send`, after an explicit user action.
 struct CoachLauncherSheet: View {
+    let onCoachRequested: () -> Void
+
     @EnvironmentObject var coach: AICoachEngine
-    @EnvironmentObject var router: NavRouter
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft = ""
@@ -108,8 +109,8 @@ struct CoachLauncherSheet: View {
             .foregroundStyle(StrandPalette.textTertiary)
 
         Button {
+            onCoachRequested()
             dismiss()
-            router.openCoach()
         } label: {
             Text("Connect a provider")
                 .font(StrandFont.caption)
@@ -134,13 +135,13 @@ struct CoachLauncherSheet: View {
         hand(off: text)
     }
 
-    /// Dismiss, park the question, and open Coach. Deliberately NOT `coach.send` from here: the launcher
+    /// Park the question and request the owner's post-dismiss Coach handoff. The launcher
     /// never performs a provider request, so a user who opens this sheet and changes their mind has cost
     /// nothing and sent nothing.
     private func hand(off prompt: String) {
         coach.pendingPrompt = prompt
         draft = ""
+        onCoachRequested()
         dismiss()
-        router.openCoach()
     }
 }
