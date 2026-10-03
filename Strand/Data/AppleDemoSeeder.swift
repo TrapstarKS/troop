@@ -233,8 +233,9 @@ enum AppleDemoSeeder {
     }
 
     private static func sleepDetailExamples(calendar: Calendar) -> [CachedSleepSession] {
-        let day = calendar.startOfDay(for: Date())
-        guard let onset = calendar.date(bySettingHour: 14, minute: 15, second: 0, of: day) else { return [] }
+        let today = calendar.startOfDay(for: Date())
+        guard let day = calendar.date(byAdding: .day, value: -1, to: today),
+              let onset = calendar.date(bySettingHour: 14, minute: 15, second: 0, of: day) else { return [] }
         let start = Int(onset.timeIntervalSince1970)
         return [CachedSleepSession(startTs: start, endTs: start + 30 * 60, efficiency: 100,
                                    restingHr: nil, avgHrv: nil,

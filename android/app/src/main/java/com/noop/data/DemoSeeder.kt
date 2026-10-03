@@ -320,7 +320,7 @@ object DemoSeeder {
         segment("wake", awakeSec)
         val index = sleeps.indexOf(latest)
         sleeps[index] = latest.copy(stagesJSON = timeline.toString())
-        val napStart = LocalDate.now().atTime(14, 15).atZone(zone).toEpochSecond()
+        val napStart = LocalDate.now().minusDays(1).atTime(14, 15).atZone(zone).toEpochSecond()
         val napTimeline = JSONArray().put(JSONObject().put("start", napStart).put("end", napStart + 30 * 60)
             .put("stage", "light"))
         sleeps.add(SleepSession(deviceId = WHOOP, startTs = napStart, endTs = napStart + 30 * 60,
