@@ -65,12 +65,13 @@ internal fun Metric?.selectedValue(): Double? =
 internal fun SleepPerformanceSummary(
     score: Double?,
     efficiencyPct: Double?,
+    sufficiencyPct: Double?,
     detail: SleepModel?,
     source: String,
     importedScore: Boolean,
     onMetricClick: (String) -> Unit,
 ) {
-    val sufficiency = detail?.hoursVsNeeded.selectedValue()
+    val sufficiency = sufficiencyPct
     val consistency = detail?.consistency.selectedValue()
     val efficiency = efficiencyPct
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space16)) {
@@ -178,7 +179,7 @@ internal fun SleepSupportingMetrics(
         Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
             MetricCard(label = stringResource(R.string.whoop_sleep_restorative),
                 value = stages?.let { durationText(it.deep + it.rem) } ?: "—",
-                detail = detail?.restorative.selectedValue()?.let {
+                detail = stages?.takeIf { it.asleep > 0.0 }?.let { (it.deep + it.rem) / it.asleep * 100.0 }?.let {
                     uiString(R.string.l10n_sleep_screen_percent_2281d326, it.roundToInt())
                 },
                 color = Palette.sleepREM, modifier = Modifier.weight(1f).clickable { onMetricClick("restorative") })

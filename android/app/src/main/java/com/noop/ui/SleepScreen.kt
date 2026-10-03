@@ -534,7 +534,8 @@ fun SleepScreen(
                 napSleepMinByDay = napSleepMinByDay, sessions = sleeps, is24h = is24h)
         }
     }
-    val display = remember(model, night) { heroDisplay(model, night) }
+    val recordedStages = remember(night) { selectedNightStages(night) }
+    val display = remember(model, night, recordedStages) { heroDisplay(model, night, recordedStages) }
 
     val resultSnapshot = if (night != null && display != null) SleepResultSnapshot(
         scope = "${vm.activeStrapId}:${(night.heroGroup.ifEmpty { listOf(night.session) }).map { it.deviceId }.distinct().sorted().joinToString(",")}:${night.dayKey}",
@@ -591,12 +592,9 @@ fun SleepScreen(
     val selectedDetailModel = remember(days, night, imported, napSleepMinByDay, sleeps, is24h, habitualMidsleep) {
         selectedSleepDetailModel(days, night, imported, napSleepMinByDay, sleeps, is24h, habitualMidsleep)
     }
-    val selectedEfficiencyPct = selectedSleepEfficiency(night, days)
-    val selectedAsleepMin = days.lastOrNull { it.day == night?.dayKey }?.totalSleepMin
-        ?.takeIf { it > 0.0 } ?: display?.stages?.asleep
-    val selectedNeedMin = night?.dayKey?.let { imported.needMin[it] }?.takeIf { it > 0.0 }
-        ?: selectedDetailModel?.hoursVsNeeded.selectedValue()?.takeIf { it > 0.0 }
-            ?.let { ratio -> selectedAsleepMin?.let { it / ratio * 100.0 } }
+    val selectedEfficiencyPct = selectedSleepEfficiency(night, days, recordedStages)
+    val selectedAmounts = selectedSleepAmounts(recordedStages, days.lastOrNull { it.day == night?.dayKey },
+        selectedDetailModel?.hoursVsNeeded.selectedValue(), night?.dayKey?.let { imported.needMin[it] })
 
     // Jump straight to a night by its (local) wake-day — the center date block opens a picker.
     // navDays is newest-day-first, so the day's index IS its offset (0 = last night). (#160, #59)
@@ -813,6 +811,7 @@ fun SleepScreen(
                 SleepPerformanceSummary(
                     score = heroPerformanceScore(night, days, imported),
                     efficiencyPct = selectedEfficiencyPct,
+                    sufficiencyPct = selectedAmounts.sufficiencyPct,
                     detail = selectedDetailModel,
                     source = restHeroSource(imported, night?.dayKey, activeIsOura),
                     importedScore = night?.dayKey?.let { imported.performance[it] != null } == true,
@@ -839,6 +838,7 @@ fun SleepScreen(
                     Hero(
                         display = display,
                         efficiencyPct = selectedEfficiencyPct,
+                        asleepMin = selectedAmounts.asleepMin,
                         activeIsOura = activeIsOura,
                         nightHr = nightHr,
                         session = night?.session,
@@ -848,7 +848,6 @@ fun SleepScreen(
                         napBlocks = night?.napBlocks ?: emptyList(),
                         habitualMidsleepSec = habitualMidsleep,
                         motionEpochs = night?.groupMotion ?: emptyList(),
-                        groupStages = night?.groupStages,
                         groupInBedMin = night?.groupInBedMin,
                         windowOnsetTs = night?.heroOnsetTs,
                         windowWakeTs = night?.heroWakeTs,
@@ -857,7 +856,7 @@ fun SleepScreen(
             }
             item {
                 SleepSupportingMetrics(selectedDetailModel, display?.stages, selectedEfficiencyPct,
-                    selectedAsleepMin, selectedNeedMin) { detailMetricKey = it }
+                    selectedAmounts.asleepMin, selectedAmounts.needMin) { detailMetricKey = it }
             }
             item { SleepAlarmsEntry(onOpenAlarms) }
             // #sleep-layout: a compact "Arrange" affordance (the same Tune entry Today uses) opens the
@@ -961,7 +960,7 @@ fun SleepScreen(
                         SleepReorderableSection(k, sleepListState, sleepSectionDrag, persistSleepOrder) {
                             Column {
                                 Spacer(Modifier.height(Metrics.selectorTopUp))
-                                StagesVsTypicalHostCard(selectedModel)
+                                StagesVsTypicalHostCard(selectedModel.copy(stages = display?.stages ?: selectedModel.stages))
                             }
                         }
                     }
@@ -1229,6 +1228,7 @@ private fun DeletedSleepWindowsCard(
 private fun Hero(
     display: HeroDisplay?,
     efficiencyPct: Double?,
+    asleepMin: Double?,
     activeIsOura: Boolean = false,
     session: SleepSession? = null,
     nightHr: List<HrBucket> = emptyList(),
@@ -1238,7 +1238,6 @@ private fun Hero(
     napBlocks: List<SleepSession> = emptyList(),
     habitualMidsleepSec: Long? = null,
     motionEpochs: List<Double> = emptyList(),
-    groupStages: StageMins? = null,
     groupInBedMin: Double? = null,
     windowOnsetTs: Long? = null,
     windowWakeTs: Long? = null,
@@ -1279,13 +1278,15 @@ private fun Hero(
             val efficiencyText = efficiencyPct?.let {
                 uiString(R.string.l10n_sleep_screen_percent_2281d326, it.roundToInt())
             } ?: "—"
-            val subtitle = stringResource(R.string.whoop_sleep_stage_subtitle, durationText(inBedMin), efficiencyText)
             val stageCaption = if (activeIsOura) stringResource(R.string.whoop_sleep_raw_stages)
                 else stringResource(R.string.whoop_sleep_estimated_stages)
             // iOS #988 port: true per-epoch segments (≥ 2 — a single run has no transitions to lay
             // out) get the per-stage timeline rows; the rows ARE the legend, so no footer. Anything
             // else keeps the honest proportional strip + StageBreakdownRows footer.
             val real = display.realSegments?.takeIf { it.size >= 2 }
+            val subtitle = if (real != null) {
+                stringResource(R.string.whoop_sleep_recorded_subtitle, durationText(s.total), efficiencyText)
+            } else stringResource(R.string.whoop_sleep_stage_subtitle, durationText(inBedMin), efficiencyText)
             if (real != null) {
                 Text(stageCaption, style = NoopType.caption, color = Palette.textSecondary)
                 // #sleep-chart-style: the opt-in FILLED stepped hypnogram when the user selected it AND the
@@ -1428,20 +1429,9 @@ private fun Hero(
         // with the SAME mechanism main sleep uses, plus a Main / Nap(s) / Total split so what drives the
         // day's Rest total is explainable. Mirrors iOS SleepView.napSection.
         if (session != null) {
-            // Main = the WHOLE main-night's summed DECODED stage minutes (awake+light+deep+rem), NOT the
-            // winning fragment's window — a biphasic/bridged night has sibling fragments that are part of
-            // the main sleep, not naps, and the old single-block window undercounted the Main / Total
-            // split on a fragmented night. Byte-for-byte twin of iOS SleepView.napSection (`night.stages
-            // .total`): the bridged group's `sumGroupStages` (gaps excluded, mirrors iOS mergeDay), or the
-            // single block's own decoded stages, both clamped to onset. NOT `display.stages`, whose awake
-            // is efficiency-derived. Window fallback only for a stage-less stub day, unchanged from before.
-            val mainStages = groupStages
-                ?: parseSessionStages(SleepStageTotals.clampStagesToOnset(session.stagesJSON, session.effectiveStartTs))
-            val mainMin = mainStages?.let { it.awake + it.light + it.deep + it.rem }
-                ?: (session.endTs - session.effectiveStartTs) / 60.0
             NapsCard(
                 main = session,
-                mainMin = mainMin,
+                mainMin = asleepMin,
                 naps = napBlocks,
                 onEditNapTimes = onUpdateTimes,
                 onDeleteNap = onDeleteSession,
@@ -1463,10 +1453,8 @@ private fun Hero(
 @Composable
 private fun NapsCard(
     main: SleepSession,
-    // The day's MAIN-sleep minutes = the whole main-night's summed DECODED stage minutes (iOS
-    // `night.stages.total`): the bridged group's `sumGroupStages` or the single block's own decoded
-    // stages. Computed by the caller. NOT `main`'s own window — that undercounts a bridged night.
-    mainMin: Double,
+    // Same selected-night asleep value as the supporting metric; never the elapsed bed window.
+    mainMin: Double?,
     naps: List<SleepSession>,
     onEditNapTimes: (SleepSession, Long, Long) -> Unit,
     onDeleteNap: (SleepSession) -> Unit,
@@ -1476,7 +1464,8 @@ private fun NapsCard(
     // Active strap is an Oura ring → a computed night's provenance reads "Oura" not "On-device" (C4).
     activeIsOura: Boolean = false,
 ) {
-    val napMin = naps.sumOf { (it.endTs - it.effectiveStartTs) / 60.0 }
+    val napMin = napAsleepMinutes(naps)
+    val totalMin = mainMin?.let { mainAsleep -> napMin?.let { mainAsleep + it } }
     NoopCard(padding = Metrics.space14, tint = Palette.restColor) {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
             Text(uiString(R.string.l10n_sleep_screen_daytime_sleep_871c03ca), style = NoopType.overline, color = Palette.textTertiary)
@@ -1484,9 +1473,9 @@ private fun NapsCard(
             if (naps.isNotEmpty()) {
                 // Main / Nap(s) / Total split — only meaningful once a nap exists. Total = main + naps.
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    NapSummaryCell("Main sleep", durationText(mainMin), Modifier.weight(1f))
-                    NapSummaryCell("Nap(s)", durationText(napMin), Modifier.weight(1f))
-                    NapSummaryCell("Total", durationText(mainMin + napMin), Modifier.weight(1f))
+                    NapSummaryCell("Main sleep", mainMin?.let(::durationText) ?: "—", Modifier.weight(1f))
+                    NapSummaryCell("Nap(s)", napMin?.let(::durationText) ?: "—", Modifier.weight(1f))
+                    NapSummaryCell("Total", totalMin?.let(::durationText) ?: "—", Modifier.weight(1f))
                 }
             }
             if (naps.isEmpty()) {
@@ -1818,6 +1807,7 @@ private fun NapRow(
     val napIs24h = ClockPrefs.uses24Hour(LocalContext.current)   // #1821
     val window = "${clockTimeLabel(nap.effectiveStartTs, napIs24h)} - ${clockTimeLabel(nap.endTs, napIs24h)}"
     val durMin = (nap.endTs - nap.effectiveStartTs) / 60.0
+    val durationLabel = stringResource(R.string.whoop_sleep_in_bed_duration, durationText(durMin))
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space10)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1830,7 +1820,7 @@ private fun NapRow(
                 modifier = Modifier
                     .weight(1f)
                     .semantics(mergeDescendants = true) {
-                        contentDescription = uiString(R.string.l10n_sleep_screen_nap_window_durationtext_durmin_bbc35167, window, durationText(durMin))
+                        contentDescription = uiString(R.string.l10n_sleep_screen_nap_window_durationtext_durmin_bbc35167, window, durationLabel)
                     },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1838,7 +1828,7 @@ private fun NapRow(
                 Spacer(Modifier.width(Metrics.space10))
                 Column {
                     Text(window, style = NoopType.body, color = Palette.textPrimary)
-                    Text(durationText(durMin), style = NoopType.overline, color = Palette.textTertiary)
+                    Text(durationLabel, style = NoopType.overline, color = Palette.textTertiary)
                 }
             }
             // Each action gets a 48dp IconButton touch target and keeps its own contentDescription.

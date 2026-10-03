@@ -27,4 +27,6 @@
     <string name="whoop_sleep_raw_stages">设备原始睡眠阶段</string>
     <string name="whoop_sleep_estimated_stages">设备估算睡眠阶段</string>
     <string name="whoop_sleep_requested_missing">这一天没有睡眠数据。</string>
+    <string name="whoop_sleep_recorded_subtitle">已记录 %1$s · 效率 %2$s</string>
+    <string name="whoop_sleep_in_bed_duration">卧床 %1$s</string>
 </resources>

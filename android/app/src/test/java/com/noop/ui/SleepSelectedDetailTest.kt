@@ -89,4 +89,56 @@ class SleepSelectedDetailTest {
             emptyMap(), emptyList(), true)!!
         assertEquals(80.0, withDebt.sleepDebt.selectedValue()!!, 0.0)
     }
+
+    @Test fun recordedFragmentStagesOwnAllNightDurationsWithoutChangingTheExistingNeed() {
+        val zone = java.time.ZoneId.systemDefault()
+        fun session(start: String, end: String, stages: String?) = SleepSession(deviceId = "test",
+            startTs = java.time.LocalDateTime.parse(start).atZone(zone).toEpochSecond(),
+            endTs = java.time.LocalDateTime.parse(end).atZone(zone).toEpochSecond(), stagesJSON = stages)
+        val first = session("2026-10-02T00:00", "2026-10-02T02:00",
+            """{"awake":10,"light":60,"deep":20,"rem":10}""")
+        val second = session("2026-10-02T02:20", "2026-10-02T05:20",
+            """{"awake":5,"light":90,"deep":30,"rem":30}""")
+        val nap = session("2026-10-02T14:15", "2026-10-02T15:00",
+            """{"awake":5,"light":25,"deep":0,"rem":10}""")
+        val daily = day("2026-10-02")
+        val selected = selectNight(listOf(listOf(first, second, nap)), listOf(daily), 0)!!
+        val stages = selectedNightStages(selected)!!
+        val detail = selectedSleepDetailModel(listOf(daily), selected, ImportedSleepSeries(),
+            emptyMap(), listOf(first, second, nap), true)!!
+        val display = heroDisplay(detail, selected, stages)!!
+        val amounts = selectedSleepAmounts(stages, daily, detail.hoursVsNeeded.selectedValue(), null)
+        assertEquals(15.0, display.stages.awake, 0.0)
+        assertEquals(255.0, display.stages.total, 0.0)
+        assertEquals(240.0, display.stages.asleep, 0.0)
+        assertEquals(display.stages.asleep, amounts.asleepMin!!, 0.0)
+        assertEquals(240.0 / 255.0 * 100.0, selectedSleepEfficiency(selected, listOf(daily), stages)!!, 1e-9)
+        assertEquals(450.0, amounts.needMin!!, 1e-9)
+        assertEquals(240.0 / 450.0 * 100.0, amounts.sufficiencyPct!!, 1e-9)
+        val imported = selectedSleepAmounts(stages, daily, detail.hoursVsNeeded.selectedValue(), 480.0)
+        assertEquals(480.0, imported.needMin!!, 0.0)
+        assertEquals(50.0, imported.sufficiencyPct!!, 0.0)
+        assertEquals(35.0, napAsleepMinutes(selected.napBlocks)!!, 0.0)
+        assertEquals(45.0, (nap.endTs - nap.effectiveStartTs) / 60.0, 0.0)
+        assertNull(napAsleepMinutes(listOf(nap, nap.copy(stagesJSON = null))))
+    }
+
+    @Test fun missingStagesUseOnlyTheExactDailyFallbackAndMissingDailyDataDoesNotInventSufficiency() {
+        val daily = day("2026-10-02")
+        val selected = night(daily.day).copy(session = night(daily.day).session.copy(efficiency = 0.88))
+        val detail = selectedSleepDetailModel(listOf(daily), selected, ImportedSleepSeries(),
+            emptyMap(), emptyList(), true)!!
+        assertNull(selectedNightStages(selected))
+        assertEquals(detail.stages, heroDisplay(detail, selected)!!.stages)
+        val amounts = selectedSleepAmounts(null, daily, detail.hoursVsNeeded.selectedValue(), null)
+        assertEquals(420.0, amounts.asleepMin!!, 0.0)
+        assertEquals(450.0, amounts.needMin!!, 1e-9)
+        assertEquals(88.0, selectedSleepEfficiency(selected, listOf(daily))!!, 0.0)
+        val recorded = Stages(10.0, 300.0, 50.0, 40.0)
+        val withoutDay = selectedSleepAmounts(recorded, null, null, 450.0)
+        assertEquals(390.0, withoutDay.asleepMin!!, 0.0)
+        assertEquals(450.0, withoutDay.needMin!!, 0.0)
+        assertNull(withoutDay.sufficiencyPct)
+        assertNull(napAsleepMinutes(listOf(selected.session)))
+    }
 }

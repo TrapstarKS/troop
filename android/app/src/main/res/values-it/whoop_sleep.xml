@@ -27,4 +27,6 @@
     <string name="whoop_sleep_raw_stages">Fasi grezze sul dispositivo</string>
     <string name="whoop_sleep_estimated_stages">Fasi stimate sul dispositivo</string>
     <string name="whoop_sleep_requested_missing">Nessun dato sul sonno per questo giorno.</string>
+    <string name="whoop_sleep_recorded_subtitle">%1$s registrati · %2$s di efficienza</string>
+    <string name="whoop_sleep_in_bed_duration">%1$s a letto</string>
 </resources>

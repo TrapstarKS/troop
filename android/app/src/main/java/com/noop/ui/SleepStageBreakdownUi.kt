@@ -497,7 +497,7 @@ internal fun SleepStageLegend(palette: SleepStagePalette) {
  * (minute precision, [axisEdgeLabel]), plus round-hour marks between at a "nice" step chosen so the interior
  * count is ≤ [maxLabels]−2 — so a WIDER screen (larger [maxLabels]) shows MORE marks. Interior marks read as
  * the hour only ([axisHourLabel] — "06:00" / "6 AM"), which is shorter than an edge label, so more fit. Marks
- * within ~18% of either edge are dropped so a round-hour label can't collide with the onset/wake label.
+ * within ~18% of either edge are dropped as an initial budget; the layout checks measured label widths.
  * [is24h] (from `DateFormat.is24HourFormat`) picks 12/24h formatting. Pure/unit-testable.
  */
 internal fun hypnogramAxisTicks(
@@ -522,13 +522,37 @@ internal fun hypnogramAxisTicks(
     var t = (((onsetTs + offset) / stepSec) + 1L) * stepSec - offset // first LOCAL hour boundary after onset
     while (t < wakeTs) {
         val frac = ((t - onsetTs).toDouble() / span).toFloat()
-        // Drop marks within ~18% of an edge so a round-hour label can't overlap the onset/wake label — sized
-        // for the WIDER 12h edge ("10:25 AM"), plus half the mark's own width, on a phone.
+        // Initial edge budget; the layout removes any remaining collision using measured widths.
         if (frac > 0.18f && frac < 0.82f) out.add(frac to axisHourLabel(t, is24h))
         t += stepSec
     }
     out.add(1f to axisEdgeLabel(wakeTs, is24h))
     return out
+}
+
+internal fun hypnogramAxisLabelPositions(
+    fractions: List<Float>, widths: List<Int>, width: Int, gap: Int,
+): List<Pair<Int, Int>?> {
+    if (widths.isEmpty()) return emptyList()
+    val x = widths.mapIndexed { index, labelWidth ->
+        (fractions[index] * width - labelWidth / 2f).roundToInt()
+            .coerceIn(0, (width - labelWidth).coerceAtLeast(0))
+    }
+    val positions = MutableList<Pair<Int, Int>?>(widths.size) { null }
+    positions[0] = x[0] to 0
+    if (widths.size == 1) return positions
+    val last = widths.lastIndex
+    val endpointsOverlap = x[0] + widths[0] + gap > x[last]
+    positions[last] = x[last] to if (endpointsOverlap) 1 else 0
+    if (endpointsOverlap) return positions
+    var previousEnd = x[0] + widths[0]
+    for (index in 1 until last) {
+        if (x[index] >= previousEnd + gap && x[index] + widths[index] + gap <= x[last]) {
+            positions[index] = x[index] to 0
+            previousEnd = x[index] + widths[index]
+        }
+    }
+    return positions
 }
 
 /**
@@ -550,11 +574,12 @@ private fun HypnogramTimeAxis(ticks: List<Pair<Float, String>>, modifier: Modifi
         val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0)) }
         val wpx = constraints.maxWidth
         val hpx = placeables.maxOfOrNull { it.height } ?: 0
-        layout(wpx, hpx) {
-            placeables.forEachIndexed { i, p ->
-                val centerX = ticks[i].first * wpx
-                val x = (centerX - p.width / 2f).roundToInt().coerceIn(0, (wpx - p.width).coerceAtLeast(0))
-                p.place(x, 0)
+        val gap = Metrics.space8.roundToPx()
+        val positions = hypnogramAxisLabelPositions(ticks.map { it.first }, placeables.map { it.width }, wpx, gap)
+        val lastRow = positions.mapNotNull { it?.second }.maxOrNull() ?: 0
+        layout(wpx, hpx * (lastRow + 1) + gap * lastRow) {
+            placeables.forEachIndexed { index, placeable ->
+                positions[index]?.let { (x, row) -> placeable.place(x, row * (hpx + gap)) }
             }
         }
     }
