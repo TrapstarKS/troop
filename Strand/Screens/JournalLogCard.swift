@@ -323,6 +323,7 @@ struct JournalLogCard: View {
                             .font(StrandFont.caption)
                             .foregroundStyle(StrandPalette.textTertiary)
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(group.title), \(groupItems.count) items, \(collapsed ? "collapsed" : "expanded")")
@@ -362,12 +363,16 @@ struct JournalLogCard: View {
             NumericLogField(
                 text: Binding(get: { draftNumericText[item.canonical] ?? draftNumeric[item.canonical].map(NumericLogField.format) ?? "" },
                               set: { editNumeric(item.canonical, text: $0) }),
-                placeholder: "—")
+                placeholder: "—",
+                label: [item.localizedDisplay, item.kind.unitLabel].compactMap { $0 }.joined(separator: " "),
+                allowsNegative: journalAllowsNegative(item.canonical))
             .frame(width: NoopMetrics.space4 * 4)
             if let unit = item.kind.unitLabel, !unit.isEmpty {
                 Text(verbatim: unit)
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             stepperButton("plus", q: item.canonical, current: current, unitLabel: item.kind.unitLabel)
             if current != nil {
@@ -381,7 +386,7 @@ struct JournalLogCard: View {
                         .foregroundStyle(StrandPalette.textTertiary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear \(item.display)")
+                .accessibilityLabel("Clear \(item.localizedDisplay)")
             }
         }
     }
@@ -600,14 +605,17 @@ private func journalNumericValue(_ text: String, allowNegative: Bool) -> Double?
 private struct NumericLogField: View {
     @Binding var text: String
     let placeholder: String
+    let label: String
+    let allowsNegative: Bool
 
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.roundedBorder)
             .multilineTextAlignment(.center)
             .font(StrandFont.bodyNumber)
+            .accessibilityLabel(Text(verbatim: label))
         #if os(iOS)
-            .keyboardType(.decimalPad)
+            .keyboardType(allowsNegative ? .numbersAndPunctuation : .decimalPad)
         #endif
     }
 

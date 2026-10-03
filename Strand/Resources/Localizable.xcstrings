@@ -2883,7 +2883,7 @@
       "zh-Hant": { "stringUnit": { "state": "translated", "value": "三溫暖" } }
     } },
     "Travel": { "localizations": {
-      "de": { "stringUnit": { "state": "translated", "value": "Reise" } }, "en": { "stringUnit": { "state": "translated", "value": "travel" } }, "es": { "stringUnit": { "state": "translated", "value": "viaje" } }, "fr": { "stringUnit": { "state": "translated", "value": "voyage" } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "viagem" } },
+      "de": { "stringUnit": { "state": "translated", "value": "Reise" } }, "en": { "stringUnit": { "state": "translated", "value": "Travel" } }, "es": { "stringUnit": { "state": "translated", "value": "viaje" } }, "fr": { "stringUnit": { "state": "translated", "value": "voyage" } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "viagem" } },
       "it": { "stringUnit": { "state": "translated", "value": "Viaggi" } },
       "pl": { "stringUnit": { "state": "translated", "value": "Podróże" } },
       "ru": { "stringUnit": { "state": "translated", "value": "Поездки" } },

@@ -38,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.noop.data.JournalEntry
@@ -480,6 +482,7 @@ private fun JournalNumericField(
     onCommit: (Double) -> Unit,
     onClear: () -> Unit,
 ) {
+    val fieldLabel = listOfNotNull(journalLocalizedLabel(item), item.kind.unitLabel).joinToString(" ")
     Row(verticalAlignment = Alignment.CenterVertically) {
         JournalChip("−", selected = false) { onCommit(if (item.kind.unitLabel == "°C") (value ?: 0.0) - 1 else ((value ?: 0.0) - 1).coerceAtLeast(0.0)) }
         Spacer(Modifier.width(Metrics.space4))
@@ -491,11 +494,11 @@ private fun JournalNumericField(
             textStyle = NoopType.body,
             colors = journalFieldColors(),
             shape = RoundedCornerShape(Metrics.cornerSm),
-            modifier = Modifier.width((Metrics.iconButton * 2)),
+            modifier = Modifier.width((Metrics.iconButton * 2)).semantics { contentDescription = fieldLabel },
         )
         item.kind.unitLabel?.takeIf { it.isNotEmpty() }?.let { unit ->
             Spacer(Modifier.width(Metrics.space4))
-            Text(unit, style = NoopType.footnote, color = Palette.textTertiary)
+            Text(unit, style = NoopType.footnote, color = Palette.textTertiary, maxLines = 1, softWrap = false)
         }
         Spacer(Modifier.width(Metrics.space4))
         JournalChip("+", selected = false) { onCommit((value ?: 0.0) + 1) }
