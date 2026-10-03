@@ -3,7 +3,7 @@ package com.noop.ui
 import android.app.DatePickerDialog
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -312,7 +312,7 @@ private fun HealthspanAgeTrend(rows: List<MetricSeriesRow>, reference: LocalDate
                 }
                 Canvas(Modifier.fillMaxWidth().height(Metrics.compactChartHeight).clearAndSetSemantics { contentDescription = description }
                     .pointerInput(points, reference) { detectTapGestures { select(it.x, size.width.toFloat()) } }
-                    .pointerInput(points, reference) { detectDragGestures(onDragStart = { select(it.x, size.width.toFloat()) }) { change, _ ->
+                    .pointerInput(points, reference) { detectHorizontalDragGestures(onDragStart = { select(it.x, size.width.toFloat()) }) { change, _ ->
                         change.consume()
                         select(change.position.x, size.width.toFloat())
                     } }) {
