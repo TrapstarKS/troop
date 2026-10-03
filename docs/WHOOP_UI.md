@@ -65,7 +65,7 @@ Apple implementations are in `Packages/StrandDesign/Sources/StrandDesign/WhoopCo
 
 | Component | Inputs / behavior |
 |---|---|
-| `ScoreDial` | `label`, formatted `value`, separate `unit`, nullable normalized `progress`, domain `color`, full/compact `size`; optional normalized `target` and `targetRange`. Null/nonfinite progress shows an empty track. Supply already-resolved values; this component does not compute physiology. |
+| `ScoreDial` | `label`, formatted `value`, separate `unit`, nullable normalized `progress`, domain `color`, full/compact `size`; optional normalized `target`, `targetRange` and `accessibilityLabel`. Null/nonfinite progress shows an empty track. The whole dial is one accessible element; supply a clean custom label when the visible label contains decorative symbols. Supply already-resolved values; this component does not compute physiology. |
 | `MetricCard` | Label, value, unit, optional detail, icon and color. Existing `NoopCard` / `StatTile` remain available. |
 | `TrackedSectionHeader` | Title, optional uppercase micro-label and optional action label/callback. |
 | `ContributorRow` | Label, value, unit, optional icon, comparison text/icon/color. Direction and favorability are supplied independently. |
