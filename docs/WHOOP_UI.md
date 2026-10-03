@@ -111,3 +111,7 @@ Old `TabRoute.sleep`, `.health`, `.stress`, metric routes and all Android route 
 ## Verification boundaries
 
 The first milestone establishes the API and shell, while the subsequent screen tracks replace screen contents. Pixel fidelity is not claimed for unobserved Health, planner, Journal-entry or hypnogram layouts. No BLE commands, schema, analytic formulas, medical classifications or remote service behavior are introduced by this foundation. Build/test results and screenshots are recorded in the external D1 verification log and track status files.
+
+For pure macOS hosted unit tests, an opt-in Debug condition `NOOP_PURE_TEST_HOST` selects `StrandPureTestHost`, an empty SwiftUI App that does not construct `AppModel` or its production services. `StrandApp` remains typechecked. Normal Debug builds and all Release builds keep the production entry. Use the existing Strand scheme with `SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG NOOP_PURE_TEST_HOST'` and separate DerivedData for the test command, through the orchestration heavy wrapper. This removes implicit app startup; selected tests must also avoid constructing production BLE services themselves.
+
+The macOS Sleep sidebar pane and iOS Debug direct-screen host each register `.tabRouteDestinations()` once in their own navigation stack, so Sleep Planner value links remain usable outside the four-tab shell.
