@@ -9,7 +9,8 @@ class WhoopRoutesTest {
     fun `every public detail hook resolves to a registered destination`() {
         val hooks = listOf(WhoopRoute.recoveryDetail, WhoopRoute.strainDetail, WhoopRoute.sleepDetail,
             WhoopRoute.sleepPlanner, WhoopRoute.healthMonitor, WhoopRoute.healthspan,
-            WhoopRoute.stressMonitor, WhoopRoute.weeklyPlan, WhoopRoute.journal)
+            WhoopRoute.stressMonitor, WhoopRoute.weeklyPlan, WhoopRoute.journal,
+            WhoopRoute.localBriefing, WhoopRoute.localNotifications)
         assertEquals(hooks.size, hooks.distinct().size)
         hooks.forEach { route -> assertEquals(route, Destination.forRoute(route).route) }
     }
@@ -18,6 +19,6 @@ class WhoopRoutesTest {
     fun `sleep trends devices and settings stay in More`() {
         val entries = drawerGroups.flatMap { it.items }
         assertTrue(entries.containsAll(listOf(Destination.Sleep, Destination.Trends, Destination.Devices,
-            Destination.Settings, Destination.Insights, Destination.WeeklyPlan)))
+            Destination.Settings, Destination.Insights, Destination.WeeklyPlan, Destination.Healthspan)))
     }
 }

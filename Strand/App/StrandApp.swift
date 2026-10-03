@@ -29,6 +29,9 @@ struct StrandApp: App {
         let router = NavRouter()
         _router = StateObject(wrappedValue: router)
         NotificationPresenter.shared.onCoachBriefTapped = { [weak router] in router?.openCoach() }
+        NotificationPresenter.shared.onLocalNotificationTapped = { [weak router] route in
+            router?.openLocalNotification(route: route)
+        }
     }
 
     @StateObject private var model = AppModel()

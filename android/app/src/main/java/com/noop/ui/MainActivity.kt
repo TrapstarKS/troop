@@ -42,6 +42,7 @@ import com.noop.R
 import com.noop.ble.WhoopModel
 import com.noop.data.DemoSeeder
 import com.noop.data.WhoopRepository
+import com.noop.notif.LOCAL_NOTIFICATION_ROUTE
 import com.noop.push.SelfHostedPushScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,6 +57,17 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * dark-only, so we draw edge-to-edge over the near-black [Palette.surfaceBase].
  */
 class MainActivity : ComponentActivity() {
+    private var pendingLocalNotificationRoute by mutableStateOf<String?>(null)
+
+    private fun stageLocalNotification(intent: Intent?) {
+        intent?.getStringExtra(LOCAL_NOTIFICATION_ROUTE)?.let { pendingLocalNotificationRoute = it }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        stageLocalNotification(intent)
+    }
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguagePrefs.wrap(newBase))
@@ -69,6 +81,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        stageLocalNotification(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         // NOTE: `crash` stays RAW here on purpose. acknowledge() fingerprints what it is given, and
         // pendingCrash() fingerprints the stored file — hand it redacted text and the two hashes never
@@ -153,7 +166,15 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             NoopTheme {
-                NoopRoot()
+                NoopRoot(
+                    localNotificationRoute = pendingLocalNotificationRoute,
+                    onLocalNotificationRouteConsumed = { route ->
+                        if (pendingLocalNotificationRoute == route) {
+                            pendingLocalNotificationRoute = null
+                            intent.removeExtra(LOCAL_NOTIFICATION_ROUTE)
+                        }
+                    },
+                )
             }
         }
     }
@@ -1598,7 +1619,10 @@ object NoopPrefs {
  * state on each transition.
  */
 @Composable
-fun NoopRoot() {
+fun NoopRoot(
+    localNotificationRoute: String? = null,
+    onLocalNotificationRouteConsumed: (String) -> Unit = {},
+) {
     val context = LocalContext.current
     val prefs = remember { NoopPrefs.of(context) }
     val appViewModel: AppViewModel = viewModel()
@@ -1685,7 +1709,11 @@ fun NoopRoot() {
 
     // Existing, onboarded user: render the app, and if they've updated since last launch
     // (stored version behind current), show "What's New" once over the top.
-    AppRoot(viewModel = appViewModel)
+    AppRoot(
+        viewModel = appViewModel,
+        localNotificationRoute = localNotificationRoute,
+        onLocalNotificationRouteConsumed = onLocalNotificationRouteConsumed,
+    )
 
     DebugExportReviewHost()
 

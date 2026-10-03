@@ -34,6 +34,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
 }
 
 struct MoreHubView: View {
+    var onVerticalScroll: ((CGFloat, CGFloat) -> Void)? = nil
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var repo: Repository
     @EnvironmentObject private var profile: ProfileStore
@@ -93,7 +94,9 @@ struct MoreHubView: View {
                 }
             }
         }
-        .navigationDestination(for: MoreHubRoute.self) { $0.destination }
+        .navigationDestination(for: MoreHubRoute.self) { route in
+            route.destination.tabChromeScrollObserver(onVerticalScroll)
+        }
     }
 
     private var streak: Int {
@@ -129,13 +132,13 @@ struct MoreHubView: View {
 private enum MoreHubRoute: Hashable {
     case settings(SettingsCategory?), devices, powerSaving, alarms, notifications, automations
     case appleHealth, dataSources, coachSettings, briefing, backupSync, fusedRecord, miBand, limitations, testCentre
-    case insightsHub, intelligence, insights, explore, compare, live, workouts, liftLog, health, labBook, stress, breathe, intervals, rhythm, sleep, trends
+    case insightsHub, intelligence, insights, explore, compare, live, workouts, liftLog, health, healthMonitor, healthspan, weeklyPlan, labBook, stress, breathe, intervals, rhythm, sleep, trends
     #if os(iOS)
     case shortcutsExport, siriShortcuts
     #endif
 
     static let legacy: [Self] = [.insightsHub, .intelligence, .insights, .explore, .compare, .trends,
-        .sleep, .live, .workouts, .liftLog, .health, .labBook, .stress, .breathe, .intervals, .rhythm]
+        .sleep, .live, .workouts, .liftLog, .health, .healthMonitor, .healthspan, .weeklyPlan, .labBook, .stress, .breathe, .intervals, .rhythm]
 
     var title: LocalizedStringKey {
         switch self {
@@ -150,6 +153,9 @@ private enum MoreHubRoute: Hashable {
         case .workouts: return "Workouts"
         case .liftLog: return "Lift Log"
         case .health: return "Health"
+        case .healthMonitor: return "Health Monitor"
+        case .healthspan: return "Healthspan"
+        case .weeklyPlan: return "Weekly Plan"
         case .labBook: return "Lab Book"
         case .stress: return "Stress"
         case .breathe: return "Breathe"
@@ -163,7 +169,8 @@ private enum MoreHubRoute: Hashable {
         case .live: return "waveform.path.ecg"
         case .sleep: return "moon"
         case .workouts, .liftLog: return "figure.run"
-        case .health, .stress, .rhythm: return "heart"
+        case .health, .healthMonitor, .healthspan, .stress, .rhythm: return "heart"
+        case .weeklyPlan: return "calendar"
         case .breathe: return "wind"
         case .intervals: return "timer"
         default: return "chart.xyaxis.line"
@@ -198,8 +205,11 @@ private enum MoreHubRoute: Hashable {
         case .workouts: WorkoutsView()
         case .liftLog: LiftLogView()
         case .health: HealthView()
+        case .healthMonitor: HealthMonitorView()
+        case .healthspan: HealthspanView()
+        case .weeklyPlan: WeeklyPlanView()
         case .labBook: LabBookView()
-        case .stress: StressView()
+        case .stress: StressMonitorView()
         case .breathe: BreathingView()
         case .intervals: IntervalTimerView()
         case .rhythm: RhythmHost()

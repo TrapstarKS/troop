@@ -73,20 +73,20 @@ Apple implementations are in `Packages/StrandDesign/Sources/StrandDesign/WhoopCo
 | `InsightCallout` | Local explanation and optional action. Decoration does not imply a cloud service or initiate a provider request. |
 | `TopChrome` | Date label, previous/next/profile/strap accessibility labels, initials, nullable battery percentage, connection state, next-date gate and five callbacks. Use the screen's existing date resolver. Never create a second date state in the shell. Apple hosts should use the existing `LiveConsoleReadout.batteryPercent` or `StrapBatteryDisplay.resolve` path, including active-device/connection gates and the `--demo-sync` override, rather than reading a raw cached WHOOP battery field. |
 | `TabCapsule` | Items with stable `id`, localized `label`, platform icon; `selectedID`, selection callback. |
-| `CoachOrb` | Localized accessibility label and tap callback; opens the existing Coach surface. Respects the existing master switch and consent. |
+| `CoachOrb` | Localized accessibility label and tap callback; opens saved-key Coach or offline Daily Outlook. Respects the existing master switch and consent. |
 | Chart styling | Apple `ChartTokens` / Android `WhoopChartStyle` plus shared domain/stage tokens and existing `TrendChart`, `Hypnogram`, sparklines and bar components. Preserve real timestamps, gaps and discrete sleep stages. |
 
 Apple capsule item initializer: `TabCapsuleItem(id:label:systemImage:)`. Android uses `TabCapsuleItem(id,label,icon)`. Apple uses `ScoreDialSize.full` / `.compact`; Android uses `ScoreDialSize.Full` / `.Compact`. Percent progress is displayed score / 100. Any Strain normalization belongs to the caller's presentation layer, never storage or scoring.
 
 ## Shell map
 
-| Tab | Initial host | Preserved routes |
+| Tab | Current host | Preserved routes |
 |---|---|---|
 | Home | Existing Today; Apple retains Liquid/classic preference | Existing cards, quick actions, date navigation, avatar/settings and device controls |
-| Health | Existing Health hub | Live HR, vital signs and local fitness/vitality features |
-| Plan | Local navigation landing | Journal/Insights, What Moves You, Trends, Intelligence, Weekly Plan hook |
-| More | Existing grouped index | All prior insights/body/data/app destinations plus explicit Sleep, Sleep Planner and Devices access |
-| Coach orb | Existing Coach | Existing offline/BYOK configuration, consent, conversation and feature switch |
+| Health | Health landing | Health Monitor, Healthspan, Stress Monitor, Live HR and vital details |
+| Plan | Local navigation landing | Weekly Plan, Journal/Insights, What Moves You, Trends, Intelligence and Sleep Planner |
+| More | MoreHub profile/settings directory and expandable feature index | All prior insights/body/data/app destinations plus explicit Sleep, Sleep Planner and Devices access |
+| Coach orb | CoachDestinationView / saved-key chooser | Saved-key Coach or offline Daily Outlook; configuration and consent remain explicit |
 
 Apple retains a `TabView` with four stable tags (Home 0, Health 1, Plan 2, More 3), independent navigation paths and scroll-to-top tokens. Its native tab bar is hidden in favor of the shared capsule. Re-tapping a selected tab refreshes and pops its path, or scrolls its root to the top. Home retains its day swipe; pushed screens retain native back gestures. Quick-action, active-workout, devices and pillar sheets stay available. `NavRouter.openTrends()` opens Trends inside Plan; `openCoach()` presents Coach; journal requests retain their day-offset handoff. Coach requests dismiss an ordinary quick-action/device sheet or minimize an open Lift Session before presenting, so a notification request cannot compete with that presentation. Minimizing preserves the running session. The routed sheet remains occupied through its closing animation; a competing Home Screen shortcut or Coach request is delivered from the dismissal callback, with the latest request winning.
 
@@ -94,17 +94,23 @@ Apple retains a `TabView` with four stable tags (Home 0, Health 1, Plan 2, More 
 
 Swift `TabRoute` and `tabRouteDestinations()` are internal to the app module and available to its screen files; they are not exports of the `StrandDesign` package. Android `WhoopRoute` is public. Apple screens push `NavigationLink(value: TabRoute.<case>)` and rely on **one** `.tabRouteDestinations()` registration per stack. Do not register the same enum twice. The shell owns destination wiring; new screens can replace the existing host for their case without renaming it.
 
-| Purpose | Apple `TabRoute` | Android `WhoopRoute` | Initial content |
+| Purpose | Apple `TabRoute` | Android `WhoopRoute` | Current content |
 |---|---|---|---|
-| Recovery detail | `.recoveryDetail` | `recoveryDetail` (`recovery_detail`) | Apple metric detail; Android coupled recovery/effort view |
-| Strain detail | `.strainDetail` | `strainDetail` (`strain_detail`) | Apple metric detail; Android workouts |
+| Recovery detail | `.recoveryDetail` | `recoveryDetail` (`recovery_detail`) | RecoveryDetailView / RecoveryDetailScreen |
+| Strain detail | `.strainDetail` | `strainDetail` (`strain_detail`) | StrainDetailView / StrainDetailScreen |
 | Sleep detail | `.sleepDetail` | `sleepDetail` (`sleep`) | Existing Sleep |
 | Sleep Planner | `.sleepPlanner` | `sleepPlanner` (`smart_alarm`) | Existing alarm settings; not a claim of WHOOP planner parity |
-| Health Monitor | `.healthMonitor` | `healthMonitor` (`vital_signs`) | Existing local health/vitals |
-| Healthspan | `.healthspan` | `healthspan` (`healthspan`) | Existing local fitness/health content; no official WHOOP Age calculation |
-| Stress Monitor | `.stressMonitor` | `stressMonitor` (`stress`) | Existing local Stress |
-| Weekly Plan | `.weeklyPlan` | `weeklyPlan` (`weekly_plan`) | Explicit planning placeholder; no fabricated saved plan |
+| Health Monitor | `.healthMonitor` | `healthMonitor` (`vital_signs`) | HealthMonitorView / HealthMonitorScreen |
+| Healthspan | `.healthspan` | `healthspan` (`healthspan`) | HealthspanView / HealthspanScreen; local estimates retain their provenance |
+| Stress Monitor | `.stressMonitor` | `stressMonitor` (`stress`) | StressMonitorView / StressMonitorScreen |
+| Weekly Plan | `.weeklyPlan` | `weeklyPlan` (`weekly_plan`) | WeeklyPlanView / WeeklyPlanScreen; saved plans remain local |
 | Journal | `.journal` | `journal` (`insights`) | Existing Journal/Insights |
+
+Day-aware Apple first hops use `.recoveryDetailForDay(dayKey:)`, `.strainDetailForDay(dayKey:effortOverride:)` and `.sleepDetailForDay(dayKey:)`. Recovery carries the resolved scored day; Strain carries the selected day and only a finite stored 0…100 Effort override. Bare cases remain compatible. Their destinations share the shell's scroll observer and bound path, so a selected-tab re-tap pops the detail.
+
+`NavRouter.openLocalNotification(route:)` accepts `devices`, `workouts`, `weekly_plan` and `local_briefing`. Both Apple apps attach the buffered presenter callback; shells consume on appearance and later changes only after mandatory gates. iOS waits for an ordinary sheet dismissal before delivering those requests. Local reports always open LocalBriefingView, even with Coach disabled or a configured provider. macOS adds More, Weekly Plan and Daily Outlook sidebar entries.
+
+Android `WhoopRoute.localBriefing` and `.localNotifications` expose `local_briefing` and `local_notifications`. MoreHubScreen supplies category routes `settings/{category}` with the existing SettingsCategory names; plain `settings` opens the directory. MainActivity retains LOCAL_NOTIFICATION_ROUTE through crash recovery, terms and onboarding, forwards warm intents, and removes the extra after AppRoot consumes it. Known external details install their owning tab first: Weekly Plan and Updates → Trends use Plan; device/workout/report taps use More. A re-tap pops to that root. Stress breathwork pushes Breathe so Back retains Stress. Coach Settings shares an existing conversation view model when present and is also safe to open directly from More.
 
 Old `TabRoute.sleep`, `.health`, `.stress`, metric routes and all Android route strings remain supported. Android top-level `Destination.Plan` uses `plan`. Screen tracks should consume these components/tokens and request shell wiring changes through D1, keeping the route names stable.
 

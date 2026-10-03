@@ -85,7 +85,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     }
 
     private var sleepDial: some View {
-        NavigationLink(value: TabRoute.sleepDetail) {
+        NavigationLink(value: TabRoute.sleepDetailForDay(dayKey: dayKey)) {
             dial(label: String(localized: "Sleep"), value: sleepScore,
                  display: sleepScore.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
                  color: StrandPalette.sleepPrimary,
@@ -96,9 +96,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
 
     private var recoveryDial: some View {
         let availableRecovery = recovery.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }
-        return NavigationLink {
-            RecoveryDetailView(dayKey: recoveryDayKey)
-        } label: {
+        return NavigationLink(value: TabRoute.recoveryDetailForDay(dayKey: recoveryDayKey)) {
             dial(label: String(localized: "Recovery"), value: availableRecovery,
                  display: RecoveryStrainDetailLogic.recoveryPercent(availableRecovery).map(String.init) ?? "—", unit: "%",
                  color: availableRecovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack,
@@ -109,9 +107,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
 
     private var strainDial: some View {
         let availableStrain = strain.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }
-        return NavigationLink {
-            StrainDetailView(dayKey: dayKey, effortOverride: strain)
-        } label: {
+        return NavigationLink(value: TabRoute.strainDetailForDay(dayKey: dayKey, effortOverride: availableStrain)) {
             dial(label: String(localized: "Strain"), value: availableStrain,
                  display: availableStrain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", unit: "",
                  color: StrandPalette.strainPrimary, caption: nil)
@@ -197,7 +193,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
             if isToday { ActiveWorkoutIndicatorSection(onOpen: { startWorkoutRequested = true }) }
             NoopCard {
                 VStack(spacing: NoopMetrics.space3) {
-                    NavigationLink(value: TabRoute.sleepDetail) {
+                    NavigationLink(value: TabRoute.sleepDetailForDay(dayKey: dayKey)) {
                         eventRow(title: String(localized: "Sleep"),
                                  subtitle: String(localized: day?.totalSleepMin == nil
                                     ? (isToday ? "No sleep yet" : "No data for this day") : "Recorded sleep"),

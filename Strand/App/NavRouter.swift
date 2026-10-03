@@ -35,6 +35,9 @@ final class NavRouter: ObservableObject {
         /// Also the K5 scheduled morning-brief notification's tap-through target.
         case coach
         case alarms
+        case workouts
+        case weeklyPlan = "weekly_plan"
+        case localBriefing = "local_briefing"
 
         var id: String { rawValue }
 
@@ -63,6 +66,17 @@ final class NavRouter: ObservableObject {
 
     /// Ask the shell to open the quick-action sheet (Live HR · workout · journal · breathe).
     func requestQuickActions() { quickActionsRequested = true }
+
+    /// Keep local notification destinations pending until a shell can consume them.
+    func openLocalNotification(route: String) {
+        switch route {
+        case "devices": requestedDestination = .devices
+        case "workouts": requestedDestination = .workouts
+        case "weekly_plan": requestedDestination = .weeklyPlan
+        case "local_briefing": requestedDestination = .localBriefing
+        default: break
+        }
+    }
 
     /// Ask the shell to open the Devices manager (pair / switch bands). The shell decides how.
     func openDevices() { requestedDestination = .devices }

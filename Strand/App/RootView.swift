@@ -32,6 +32,9 @@ enum NavItem: String, CaseIterable, Identifiable, Hashable {
     case powerSaving = "Power saving"
     case settings = "Settings"
     case testCentre = "Test Centre"
+    case more = "More"
+    case weeklyPlan = "Weekly Plan"
+    case localBriefing = "Daily Outlook"
 
     var id: String { rawValue }
 
@@ -72,6 +75,9 @@ enum NavItem: String, CaseIterable, Identifiable, Hashable {
         case .powerSaving: return "Power saving"
         case .settings: return "Settings"
         case .testCentre: return "Test Centre"
+        case .more: return "More"
+        case .weeklyPlan: return "Weekly Plan"
+        case .localBriefing: return "Daily Outlook"
         }
     }
 
@@ -114,6 +120,9 @@ enum NavItem: String, CaseIterable, Identifiable, Hashable {
         case .powerSaving: return String(localized: "Power saving")
         case .settings: return String(localized: "Settings")
         case .testCentre: return String(localized: "Test Centre")
+        case .more: return String(localized: "More")
+        case .weeklyPlan: return String(localized: "Weekly Plan")
+        case .localBriefing: return String(localized: "Daily Outlook")
         }
     }
 
@@ -149,13 +158,14 @@ enum NavItem: String, CaseIterable, Identifiable, Hashable {
         case .powerSaving: return "battery.25"
         case .settings: return "gearshape.fill"
         case .testCentre: return "stethoscope"
+        case .more: return "line.3.horizontal"
+        case .weeklyPlan: return "calendar"
+        case .localBriefing: return "sparkles"
         }
     }
 }
 
-/// One collapsible sidebar section (S1, #805): the 27 flat `NavItem` cases are grouped into ~5
-/// labelled sections so the macOS sidebar stops being a 28-item flat wall. The enum cases are NOT
-/// touched (M5 gate): only the layout that consumes them changes. `NavGroup.all` is the single source
+/// Collapsible sidebar sections keep every feature reachable. `NavGroup.all` is the single source
 /// of truth for what each section holds, so the M5 routability test can assert every `NavItem` case is
 /// still present across the groups (nothing vanished the way the iPhone Smart-Alarm row did).
 struct NavGroup: Identifiable {
@@ -167,7 +177,7 @@ struct NavGroup: Identifiable {
     /// The 5 sidebar sections, in order, mirroring the iOS More-tab grouping idiom (Insights / Body /
     /// Data & App) plus Today + Sleep as their own top sections. Devices/pairing sits at the TOP of the
     /// Data & App group so the first thing a new user reaches for stays near the surface. Every one of the
-    /// 27 `NavItem` cases appears exactly once across these groups (asserted by the M5 routability test).
+    /// `NavItem` cases appears exactly once across these groups (asserted by the M5 routability test).
     static let all: [NavGroup] = [
         NavGroup(title: "Today", id: "today", items: [.today]),
         NavGroup(title: "Sleep", id: "sleep", items: [.sleep]),
@@ -178,10 +188,10 @@ struct NavGroup: Identifiable {
         // all collapse under this single Insights group rather than scattering across the flat list.
         NavGroup(title: "Insights", id: "insights", items: [
             .intelligence, .insightsHub, .coach, .explore, .compare, .insights,
-            .labBook, .rhythm, .trends,
+            .labBook, .rhythm, .trends, .weeklyPlan, .localBriefing,
         ]),
         NavGroup(title: "Data & App", id: "data_app", items: [
-            .devices, .noopLimitations, .dataSources, .appleHealth, .xiaomi, .backupSync, .fusedRecord,
+            .more, .devices, .noopLimitations, .dataSources, .appleHealth, .xiaomi, .backupSync, .fusedRecord,
             .notifications, .automation, .smartAlarm, .powerSaving, .settings, .testCentre,
         ]),
     ]
@@ -193,6 +203,7 @@ struct NavGroup: Identifiable {
 }
 
 struct RootView: View {
+    var externalNavigationEnabled = true
     // Observe only Repository (changes on data refresh, not the ~1 Hz HR/frame stream). The live
     // status pill is isolated into SidebarStatus so HR/frame ticks don't re-render the whole
     // NavigationSplitView shell + sidebar list.
@@ -315,30 +326,9 @@ struct RootView: View {
         }
         // Honour a cross-screen request to open a top-level destination (e.g. Live's "Manage devices"),
         // then clear it so the same tap can fire again later. Devices maps to the `.devices` sidebar item.
-        .onChangeCompat(of: router.requestedDestination) { dest in
-            switch dest {
-            case .devices: selection = .devices
-            case .insightsHub: selection = .insightsHub
-            case .labBook: selection = .labBook
-            case .fusedRecord: selection = .fusedRecord
-            case .rhythm: selection = .rhythm
-            case .trends: selection = .trends
-            // The Today active-workout indicator routes to the Live surface; LiveView then consumes the
-            // one-shot `presentActiveWorkout` flag on appear to open the in-exercise screen.
-            case .activeWorkout: selection = .live
-            // Live Sessions is presented from Today's own Start entry (a cover, not a sidebar item), so a
-            // deep-link lands the user on Today where that entry lives.
-            case .liveSession: selection = .today
-            // The #627 Today journal widget routes to the Insights sidebar row (which hosts the journal card).
-            case .journal: selection = .insights
-            // #1862: the Today Coach card's launcher hands off here, so the send/stream/consent surface
-            // stays in exactly one place.
-            case .coach: selection = .coach
-            case .alarms: selection = .smartAlarm
-            case nil: break
-            }
-            if dest != nil { router.requestedDestination = nil }
-        }
+        .onAppear { consumeRouterRequest() }
+        .onChangeCompat(of: router.requestedDestination) { _ in consumeRouterRequest() }
+        .onChangeCompat(of: externalNavigationEnabled) { _ in consumeRouterRequest() }
         // Whenever the selection moves (a cross-screen route, or restoring a deep destination), make sure
         // the group that owns it is expanded so the selected row is actually visible, not hidden inside a
         // collapsed section (S1). User-driven collapses of OTHER groups are preserved.
@@ -435,7 +425,7 @@ struct RootView: View {
         case .today: todayDetail
         case .intelligence: IntelligenceView()
         case .insightsHub: InsightsHubView()
-        case .coach: CoachView()
+        case .coach: NavigationStack { CoachDestinationView() }
         case .live: liveDetail
         case .breathe: BreathingView()
         case .intervals: IntervalTimerView()
@@ -452,7 +442,7 @@ struct RootView: View {
             NavigationStack {
                 HealthView().tabRouteDestinations()
             }
-        case .stress: StressView()
+        case .stress: StressMonitorView()
         case .labBook: LabBookView()
         case .rhythm: RhythmHost()
         case .appleHealth: AppleHealthView()
@@ -462,13 +452,45 @@ struct RootView: View {
         case .fusedRecord: FusedRecordHost()
         case .devices: DevicesView()
         case .noopLimitations: NoopLimitationsView()
-        case .notifications: NotificationSettingsView()
+        case .notifications: NavigationStack { LocalNotificationsView() }
         case .automation: AutomationsView()
         case .smartAlarm: SmartAlarmView()
         case .powerSaving: PowerSavingView()
         case .settings: settingsDetail
         case .testCentre: TestCentreView()
+        case .more: NavigationStack { MoreHubView().tabRouteDestinations() }
+        case .weeklyPlan: NavigationStack { WeeklyPlanView() }
+        case .localBriefing: NavigationStack { LocalBriefingView() }
         }
+    }
+
+    private func consumeRouterRequest() {
+        guard externalNavigationEnabled, router.requestedDestination != nil else { return }
+        switch router.requestedDestination {
+        case .devices: selection = .devices
+        case .insightsHub: selection = .insightsHub
+        case .labBook: selection = .labBook
+        case .fusedRecord: selection = .fusedRecord
+        case .rhythm: selection = .rhythm
+        case .trends: selection = .trends
+        // The Today active-workout indicator routes to the Live surface; LiveView then consumes the
+        // one-shot `presentActiveWorkout` flag on appear to open the in-exercise screen.
+        case .activeWorkout: selection = .live
+        // Live Sessions is presented from Today's own Start entry (a cover, not a sidebar item), so a
+        // deep-link lands the user on Today where that entry lives.
+        case .liveSession: selection = .today
+        // The #627 Today journal widget routes to the Insights sidebar row (which hosts the journal card).
+        case .journal: selection = .insights
+        // #1862: the Today Coach card's launcher hands off here, so the send/stream/consent surface
+        // stays in exactly one place.
+        case .coach: selection = .coach
+        case .alarms: selection = .smartAlarm
+        case .workouts: selection = .workouts
+        case .weeklyPlan: selection = .weeklyPlan
+        case .localBriefing: selection = .localBriefing
+        case nil: break
+        }
+        router.requestedDestination = nil
     }
 
     // Today's "Your Cards" rows push Stress/Health/Hydration detail pages via NavigationLink. On macOS
