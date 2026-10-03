@@ -225,8 +225,8 @@ fun StrainDetailScreen(
                     color = Palette.textSecondary)
             }
         }
-        item { InsightCallout(if (effort == null) uiString(R.string.d2b_missing_strain) else uiString(R.string.d2b_effort_explanation, detailNumber(effort))) }
-        item { InsightCallout(uiString(if (band == null) R.string.d2b_missing_target else R.string.d2b_target_note)) }
+        if (effort == null) item { InsightCallout(uiString(R.string.d2b_missing_strain)) }
+        if (band == null) item { InsightCallout(uiString(R.string.d2b_missing_target)) }
         item { DetailHrChart(hr, uiString(R.string.d2b_day_heart_rate), 300) }
         item { DetailZones(zones, uiString(R.string.d2b_strap_zones_note), belowZone1) }
         item { TrackedSectionHeader(uiString(R.string.d2b_activities)) }
@@ -246,6 +246,13 @@ fun StrainDetailScreen(
                     }
                 }
             }
+        }
+        if (effort != null) item {
+            Text(uiString(R.string.d2b_effort_explanation, detailNumber(effort)),
+                style = NoopType.footnote, color = Palette.textTertiary)
+        }
+        if (band != null) item {
+            Text(uiString(R.string.d2b_target_note), style = NoopType.footnote, color = Palette.textTertiary)
         }
     }
 }

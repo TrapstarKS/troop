@@ -38,7 +38,6 @@ struct StrainDetailView: View {
                       targetRange: band.map { Double($0.lowerBound) / 21...Double($0.upperBound) / 21 })
                 .frame(maxWidth: .infinity)
             target
-            InsightCallout(text: String(localized: "Strain here presents NOOP’s local Effort on a 0–21 axis. It is a change of display units, not the official WHOOP scoring model. Stored Effort and your history stay unchanged."))
             DetailHeartRateChart(points: points, loaded: loaded)
             DetailZoneBars(minutes: zoneMinutes, zoneSet: profile.hrZoneSet, belowZoneMinutes: belowZoneMinutes)
             TrackedSectionHeader(title: String(localized: "Activities"))
@@ -55,6 +54,8 @@ struct StrainDetailView: View {
                     }.buttonStyle(.plain)
                 }
             }
+            Text("Strain here presents NOOP’s local Effort on a 0–21 axis. It is a change of display units, not the official WHOOP scoring model. Stored Effort and your history stay unchanged.")
+                .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
         }
         .navigationTitle(String(localized: "Strain"))
         #if os(iOS)
