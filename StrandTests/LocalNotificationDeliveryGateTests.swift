@@ -38,6 +38,18 @@ final class LocalNotificationDeliveryGateTests: XCTestCase {
         XCTAssertNotNil(gate.begin("battery-low"))
     }
 
+    func testOldCompletionCannotClearANewerAcceptedDelivery() {
+        let gate = LocalNotificationDeliveryGate()
+        let old = gate.begin("battery-low")!
+        gate.invalidate("battery-low")
+        let new = gate.begin("battery-low")!
+        var commits = 0
+        gate.finish("battery-low", token: new, accepted: true, onAccepted: { commits += 1 }, onStale: { XCTFail() })
+        gate.finish("battery-low", token: old, accepted: true, onAccepted: { XCTFail() }, onStale: { XCTFail() })
+        XCTAssertEqual(commits, 1)
+        XCTAssertNotNil(gate.begin("battery-low"))
+    }
+
     func testOldCompletionCannotCommitOrClearANewerAttempt() {
         let gate = LocalNotificationDeliveryGate()
         let old = gate.begin("battery-low")!
