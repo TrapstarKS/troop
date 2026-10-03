@@ -1296,11 +1296,12 @@ internal fun ReportReviewDialog(
     modeInactive: Boolean,
     onCancel: () -> Unit,
     onShare: () -> Unit,
+    isCopy: Boolean = false,
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
         containerColor = Palette.surfaceOverlay,
-        title = { Text(uiString(R.string.l10n_test_centre_screen_review_before_sharing_d7050383), style = NoopType.title2, color = Palette.textPrimary) },
+        title = { Text(uiString(if (isCopy) R.string.l10n_devices_screen_copy_af74f7c5 else R.string.l10n_test_centre_screen_review_before_sharing_d7050383), style = NoopType.title2, color = Palette.textPrimary) },
         text = {
             Column {
                 if (modeInactive) {
@@ -1313,10 +1314,12 @@ internal fun ReportReviewDialog(
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
-                Text(
-                    uiString(R.string.l10n_test_centre_screen_this_is_exactly_what_your_report_77278bdd),
-                    style = NoopType.subhead, color = Palette.textSecondary,
-                )
+                if (!isCopy) {
+                    Text(
+                        uiString(R.string.l10n_test_centre_screen_this_is_exactly_what_your_report_77278bdd),
+                        style = NoopType.subhead, color = Palette.textSecondary,
+                    )
+                }
                 Text(
                     previewText.ifBlank { "(nothing to share yet)" },
                     style = NoopType.footnote,
@@ -1329,7 +1332,7 @@ internal fun ReportReviewDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onShare) { Text(uiString(R.string.l10n_test_centre_screen_share_09ca55ca), style = NoopType.body, color = Palette.accent) }
+            TextButton(onClick = onShare) { Text(uiString(if (isCopy) R.string.l10n_devices_screen_copy_af74f7c5 else R.string.l10n_test_centre_screen_share_09ca55ca), style = NoopType.body, color = Palette.accent) }
         },
         dismissButton = {
             TextButton(onClick = onCancel) { Text(uiString(R.string.l10n_test_centre_screen_cancel_77dfd213), style = NoopType.body, color = Palette.textSecondary) }

@@ -2858,7 +2858,7 @@ private struct SettingsSection<Content: View>: View {
 
 #if os(iOS)
 /// A read-only environment dump for bug reports: device, iOS+build, Data Protection (#222),
-/// background refresh, low-power, sideload + cert expiry — with a one-tap Copy.
+/// background refresh, low-power, sideload + cert expiry — with reviewed copying.
 private struct DiagnosticsSheet: View {
     let onClose: () -> Void
 
@@ -2899,7 +2899,7 @@ private struct DiagnosticsSheet: View {
                                 .font(StrandFont.mono(12))
                                 .foregroundStyle(StrandPalette.textSecondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .textSelection(.enabled)
+                                .textSelection(.disabled)
                         }
                     }
                 }

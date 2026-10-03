@@ -16,6 +16,7 @@ class DebugExportReview {
         entries: List<Pair<String, ByteArray>>,
         val gate: ReportReviewGate,
         internal val output: suspend (List<Pair<String, ByteArray>>) -> Unit,
+        val isCopy: Boolean = false,
     ) {
         private val snapshot = entries.map { it.first to it.second.copyOf() }
         internal val entries get() = snapshot.map { it.first to it.second.copyOf() }
@@ -39,13 +40,22 @@ class DebugExportReview {
         capBytes: Int = 20 * 1024 * 1024,
         research: Boolean = false,
         ticket: Long? = null,
+        isCopy: Boolean = false,
         output: suspend (List<Pair<String, ByteArray>>) -> Unit,
     ) {
         currentCoroutineContext().ensureActive()
         val preparation = ticket ?: beginPreparation()
         if (!isCurrentPreparation(preparation)) return
         val prepared = withContext(Dispatchers.IO) { if (research) prepareResearch(entries, capBytes) else prepare(entries, capBytes) }
-        if (isCurrentPreparation(preparation)) pending = Pending(preparation, prepared, ReportReviewGate(prepared), output)
+        if (isCurrentPreparation(preparation)) pending = Pending(preparation, prepared, ReportReviewGate(prepared), output, isCopy)
+    }
+
+    suspend fun stageCopy(
+        text: String,
+        capBytes: Int = 20 * 1024 * 1024,
+        output: (String) -> Unit,
+    ) = stage(listOf("report.txt" to text.toByteArray(Charsets.UTF_8)), capBytes, isCopy = true) { entries ->
+        output(String(entries.single().second, Charsets.UTF_8))
     }
 
     suspend fun stageResearch(

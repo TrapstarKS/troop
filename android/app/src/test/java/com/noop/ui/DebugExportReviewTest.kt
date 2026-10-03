@@ -29,6 +29,7 @@ class DebugExportReviewTest {
             exported.add(it)
         }
         val pending = requireNotNull(review.pending)
+        assertFalse(pending.isCopy)
         assertTrue(exported.isEmpty())
         assertTrue(pending.gate.previewText.contains("raw-capture.jsonl"))
         assertFalse(pending.gate.previewText.contains("4C1594026"))
@@ -507,6 +508,47 @@ class DebugExportReviewTest {
             file.delete()
             review.cancel()
         }
+    }
+
+    @Test fun copyReviewExportsOnlyItsBoundedRedactedSnapshotOnce() = runBlocking {
+        val review = DebugExportReview()
+        val copied = arrayListOf<String>()
+        val raw = "WHOOP 4C1594026 Authorization: Bearer private.token\n".repeat(40)
+        review.stageCopy(raw, capBytes = 256) { copied.add(it) }
+        val pending = requireNotNull(review.pending)
+        assertTrue(pending.isCopy)
+        assertFalse(pending.gate.isCleared)
+        assertTrue(copied.isEmpty())
+        val expected = String(pending.entries.single().second, Charsets.UTF_8)
+        assertTrue(expected.toByteArray(Charsets.UTF_8).size <= 256)
+        assertFalse(expected.contains("4C1594026"))
+        assertFalse(expected.contains("private.token"))
+        assertFalse(pending.gate.previewText.contains("private.token"))
+        pending.entries.single().second.fill(0)
+        review.confirm(pending.id)
+        review.confirm(pending.id)
+        assertEquals(listOf(expected), copied)
+        assertNull(review.pending)
+    }
+
+    @Test fun cancelledMissingAndStaleCopyReviewsCannotReachClipboard() = runBlocking {
+        val review = DebugExportReview()
+        val copied = arrayListOf<String>()
+        review.confirm(123)
+        review.stageCopy("cancelled") { copied.add(it) }
+        val cancelledId = requireNotNull(review.pending).id
+        review.cancel()
+        review.confirm(cancelledId)
+        assertTrue(copied.isEmpty())
+        review.stageCopy("old") { copied.add(it) }
+        val oldId = requireNotNull(review.pending).id
+        review.stageCopy("latest") { copied.add(it) }
+        val latestId = requireNotNull(review.pending).id
+        review.confirm(oldId)
+        assertTrue(copied.isEmpty())
+        assertEquals(latestId, review.pending?.id)
+        review.confirm(latestId)
+        assertEquals(listOf("latest"), copied)
     }
 
     @Test fun bearerRedactionMatchesSwiftOracle() {
