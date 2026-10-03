@@ -100,14 +100,18 @@ struct StressMonitorView: View {
     }
 
     private var timeline: some View {
-        VStack(alignment: .leading, spacing: NoopMetrics.space3) {
+        let sleepRows = sleeps.filter { $0.endTs > startTs && $0.effectiveStartTs < endTs }
+        let workoutRows = workouts.filter { $0.endTs > startTs && $0.startTs < endTs }
+        return VStack(alignment: .leading, spacing: NoopMetrics.space3) {
             Text("Stress timeline").font(StrandFont.headline)
             Chart {
-                ForEach(sleeps.filter { $0.endTs > startTs && $0.effectiveStartTs < endTs }, id: \.startTs) { sleep in
+                ForEach(sleepRows.indices, id: \.self) { index in
+                    let sleep = sleepRows[index]
                     RectangleMark(xStart: .value("Start", Date(timeIntervalSince1970: Double(max(startTs, sleep.effectiveStartTs)))), xEnd: .value("End", Date(timeIntervalSince1970: Double(min(endTs, sleep.endTs)))), yStart: .value("Low", 0), yEnd: .value("High", 3))
                         .foregroundStyle(StrandPalette.sleepPrimary.opacity(0.13))
                 }
-                ForEach(workouts.filter { $0.endTs > startTs && $0.startTs < endTs }, id: \.startTs) { workout in
+                ForEach(workoutRows.indices, id: \.self) { index in
+                    let workout = workoutRows[index]
                     RectangleMark(xStart: .value("Start", Date(timeIntervalSince1970: Double(max(startTs, workout.startTs)))), xEnd: .value("End", Date(timeIntervalSince1970: Double(min(endTs, workout.endTs)))), yStart: .value("Low", 0), yEnd: .value("High", 3))
                         .foregroundStyle(StrandPalette.strainPrimary.opacity(0.14))
                 }
