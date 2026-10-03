@@ -579,7 +579,9 @@ struct SleepView: View {
         let day = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
         let days = repo.days.filter { $0.day <= day }
         let need = repo.importedSleep[day]?.needMin ?? SleepModel.sleepNeedMin(days: days)
-        let asleep = repo.days.last(where: { $0.day == day })?.totalSleepMin ?? (night.stages.asleep > 0 ? night.stages.asleep : nil)
+        let dailyAsleep = repo.days.last(where: { $0.day == day })?.totalSleepMin
+        let asleep = dailyAsleep ?? (night.stages.asleep > 0 ? night.stages.asleep : nil)
+        let debt = repo.importedSleep[day]?.debtMin ?? ((dailyAsleep ?? 0) > 0 ? selectedValue(detail?.sleepDebt) : nil)
         return VStack(spacing: NoopMetrics.gap) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: NoopMetrics.gap) {
@@ -597,7 +599,7 @@ struct SleepView: View {
             MetricCard(label: String(localized: "Efficiency"), value: percentText(efficiencyPct(night)))
             MetricCard(label: String(localized: "Respiratory rate"),
                        value: selectedValue(detail?.respiratory).map { String(format: "%.1f", $0) } ?? "—", unit: "/min")
-            MetricCard(label: String(localized: "Sleep Debt"), value: selectedValue(detail?.sleepDebt).map(durationText) ?? "—")
+            MetricCard(label: String(localized: "Sleep Debt"), value: debt.map(durationText) ?? "—")
             sleepArrangeAffordance
         }
     }
