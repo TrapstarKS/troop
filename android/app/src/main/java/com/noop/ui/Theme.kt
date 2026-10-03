@@ -467,6 +467,7 @@ object Metrics {
     val progressHeight = 10.dp
     val editorListMaxHeight = 390.dp
     val detailDial = 260.dp
+    const val fullScoreDialWidthFraction = 0.662f
     val compactDial = 90.dp
     val detailDialStroke = 15.dp
     val compactDialStroke = 5.dp
