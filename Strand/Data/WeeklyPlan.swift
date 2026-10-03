@@ -1,5 +1,29 @@
 import Foundation
 
+struct WeeklyPlanRecoveryDay {
+    let day: String
+    let recovery: Double?
+    let sleepProcessed: Bool
+}
+
+struct WeeklyPlanEligibility: Equatable {
+    static let requiredRecoveries = 7
+    let completedRecoveries: Int
+
+    var remainingRecoveries: Int { max(0, Self.requiredRecoveries - completedRecoveries) }
+    var isEligible: Bool { remainingRecoveries == 0 }
+
+    static func resolve(recoveries: [WeeklyPlanRecoveryDay], today: String) -> WeeklyPlanEligibility {
+        guard WeeklyPlanCalendar.date(today) != nil else { return WeeklyPlanEligibility(completedRecoveries: 0) }
+        let completed = Set(recoveries.compactMap { row -> String? in
+            guard row.sleepProcessed, WeeklyPlanCalendar.date(row.day) != nil, row.day <= today,
+                  let score = row.recovery, score.isFinite, (0...100).contains(score) else { return nil }
+            return row.day
+        })
+        return WeeklyPlanEligibility(completedRecoveries: completed.count)
+    }
+}
+
 enum WeeklyPlanPreset: String, CaseIterable, Identifiable {
     case restRoutine, activeWeek, balancedWeek
     var id: String { rawValue }

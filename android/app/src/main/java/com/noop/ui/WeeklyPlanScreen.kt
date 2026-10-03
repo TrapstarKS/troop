@@ -40,6 +40,8 @@ import com.noop.R
 import com.noop.data.WeeklyPlanCalendar
 import com.noop.data.WeeklyPlanDay
 import com.noop.data.WeeklyPlanEngine
+import com.noop.data.WeeklyPlanEligibility
+import com.noop.data.WeeklyPlanRecoveryDay
 import com.noop.data.WeeklyPlanGoals
 import com.noop.data.WeeklyPlanJournalDay
 import com.noop.data.WeeklyPlanNotice
@@ -48,6 +50,8 @@ import com.noop.data.WeeklyPlanPreset
 import com.noop.data.WeeklyPlanProgress
 import com.noop.data.seedWeeklyPlanDemo
 import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 @Composable
@@ -60,9 +64,11 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
     val journalSeq by vm.repo.journalRevision.collectAsStateWithLifecycle()
     val effortScale = UnitPrefs.effortScale(context)
     var today by remember { mutableStateOf(LocalDate.now().toString()) }
+    var resumeRevision by remember { mutableStateOf(0) }
     var weekOffset by remember { mutableStateOf(0) }
     var days by remember { mutableStateOf<List<WeeklyPlanDay>>(emptyList()) }
     var journal by remember { mutableStateOf<List<WeeklyPlanJournalDay>>(emptyList()) }
+    var recoveries by remember { mutableStateOf<List<WeeklyPlanRecoveryDay>>(emptyList()) }
     var goals by remember { mutableStateOf(WeeklyPlanGoals()) }
     var draft by remember { mutableStateOf(WeeklyPlanGoals()) }
     var editingWeek by remember { mutableStateOf("") }
@@ -77,6 +83,7 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 today = LocalDate.now().toString()
+                resumeRevision += 1
                 catalogItems = loadJournalCatalogItems(context)
             }
         }
@@ -89,19 +96,33 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
     LaunchedEffect(Unit) {
         if (BuildConfig.ENABLE_DEMO) seedWeeklyPlanDemo(context, today)
     }
-    LaunchedEffect(reactiveDays, journalSeq, today, activeStrapId, selectedWeek) {
-        days = vm.repo.daysMerged(activeStrapId).map { WeeklyPlanDay(it.day, it.totalSleepMin, it.strain) }
+    LaunchedEffect(reactiveDays, journalSeq, today, activeStrapId, selectedWeek, resumeRevision) {
+        val metrics = vm.repo.daysMerged(activeStrapId)
+        days = metrics.map { WeeklyPlanDay(it.day, it.totalSleepMin, it.strain) }
+        val now = System.currentTimeMillis() / 1000L
+        // A cached score alone is not a completed recovery: require a persisted, closed sleep summary.
+        val processedDays = vm.repo.allSleepSessionsUnion(activeStrapId)
+            .filter { it.endTs > 0 && it.endTs > it.effectiveStartTs && it.endTs <= now }
+            .map { Instant.ofEpochSecond(it.endTs).atZone(ZoneId.systemDefault()).toLocalDate().toString() }.toSet()
+        recoveries = metrics.map {
+            WeeklyPlanRecoveryDay(it.day, it.recovery,
+                it.day in processedDays && it.totalSleepMin?.let { minutes -> minutes.isFinite() && minutes > 0 } == true)
+        }
+        if (BuildConfig.ENABLE_DEMO && (context as? android.app.Activity)?.intent?.getBooleanExtra("demo_plan_calibrating", false) == true) {
+            recoveries = recoveries.filter { it.sleepProcessed && it.recovery?.let { score -> score.isFinite() && score in 0.0..100.0 } == true }.take(6)
+        }
         val imported = vm.repo.importedSourceIds(activeStrapId).flatMap { vm.repo.journal(it, "0001-01-01", today) }
         val native = vm.repo.journal(JOURNAL_DEVICE_ID, "0001-01-01", today)
         journal = mergeJournalEntries(imported, native).map { WeeklyPlanJournalDay(it.day, it.question, it.answeredYes) }
         val suggested = WeeklyPlanEngine.suggestedGoals(days, today)
         goals = preferences.goals(selectedWeek, suggested)
-        notice = preferences.notice(today)
+        notice = preferences.eligibleNotice(today, WeeklyPlanEligibility.resolve(recoveries, today))
         loaded = true
     }
     val snapshot = remember(goals, selectedWeek, today, days, journal) {
         WeeklyPlanEngine.snapshot(goals, selectedWeek, today, days, journal)
     }
+    val eligibility = remember(recoveries, today) { WeeklyPlanEligibility.resolve(recoveries, today) }
     val items = remember(catalogItems, journal) {
         resolveJournalItems(journal.map { it.question }.distinct().sorted(), catalogItems).filter { !it.kind.isNumeric }
     }
@@ -135,7 +156,20 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
                 Icon(Icons.Default.ChevronRight, stringResource(R.string.trends_next_week), tint = Palette.textSecondary)
             }
         }
-        if (loaded && (preferences.hasPlan(selectedWeek) || weekOffset == 0) && snapshot != null) {
+        if (loaded && !eligibility.isEligible) {
+            NoopCard {
+                Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                    Text(stringResource(R.string.weekly_plan_calibrating), style = NoopType.title2, color = Palette.textPrimary)
+                    Text(stringResource(R.string.weekly_plan_calibration_body), style = NoopType.body, color = Palette.textSecondary)
+                    Text(stringResource(R.string.weekly_plan_recoveries_complete, eligibility.completedRecoveries), style = NoopType.bodyNumber, color = Palette.textPrimary)
+                    Text(stringResource(R.string.weekly_plan_recoveries_remaining, eligibility.remainingRecoveries), style = NoopType.caption, color = Palette.textSecondary)
+                    LinearProgressIndicator(progress = eligibility.completedRecoveries.toFloat() / WeeklyPlanEligibility.REQUIRED_RECOVERIES,
+                        modifier = Modifier.fillMaxWidth(), color = Palette.accent, trackColor = Palette.surfaceInset)
+                    if (weekOffset == 0) NoopButton(stringResource(if (preferences.hasPlan(selectedWeek)) R.string.weekly_plan_edit else R.string.weekly_plan_create),
+                        kind = NoopButtonKind.Secondary, fullWidth = true, onClick = { openEditor() })
+                }
+            }
+        } else if (loaded && (preferences.hasPlan(selectedWeek) || weekOffset == 0) && snapshot != null) {
             if (weekOffset == 0) notice?.let { value ->
                 NoopCard {
                     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {

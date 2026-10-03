@@ -55,7 +55,40 @@ func weeklyPlanOracleOutput() -> String {
     return lines.joined(separator: "\n")
 }
 
+func weeklyPlanEligibilityOracleOutput() -> String {
+    let today = "2026-10-05"
+    let valid = (0..<8).map {
+        WeeklyPlanRecoveryDay(day: WeeklyPlanCalendar.adding(days: $0, to: "2026-09-28")!, recovery: 50, sleepProcessed: true)
+    }
+    var lines: [String] = []
+    func append(_ label: String, _ rows: [WeeklyPlanRecoveryDay], _ day: String = "2026-10-05") {
+        let result = WeeklyPlanEligibility.resolve(recoveries: rows, today: day)
+        lines.append("\(label):\(result.completedRecoveries):\(result.remainingRecoveries):\(result.isEligible)")
+    }
+    for count in [0, 1, 6, 7, 8] { append("count-\(count)", Array(valid.prefix(count)), today) }
+    append("duplicate-seven", Array(valid.prefix(7)) + Array(valid.prefix(7)))
+    append("duplicate-one", Array(repeating: valid[0], count: 7))
+    let scores: [(String, Double?)] = [("missing", nil), ("nan", .nan), ("infinity", .infinity),
+        ("negative-infinity", -.infinity), ("negative", -1), ("above-range", 101), ("zero", 0), ("hundred", 100)]
+    for (label, score) in scores {
+        append(label, Array(valid.prefix(6)) + [WeeklyPlanRecoveryDay(day: "2026-10-04", recovery: score, sleepProcessed: true)])
+    }
+    for day in ["2026-02-30", "2026-2-01", "", "2026-10-06"] {
+        append("day-\(day)", Array(valid.prefix(6)) + [WeeklyPlanRecoveryDay(day: day, recovery: 50, sleepProcessed: true)])
+    }
+    append("invalid-today", valid, "2026-02-30")
+    append("before-seventh", Array(valid.prefix(7)), "2026-10-03")
+    append("incomplete", Array(valid.prefix(6)) + [WeeklyPlanRecoveryDay(day: "2026-10-04", recovery: 50, sleepProcessed: false)])
+    append("subsequent-refresh", Array(valid.prefix(7)))
+    append("not-processed", valid.map { WeeklyPlanRecoveryDay(day: $0.day, recovery: $0.recovery, sleepProcessed: false) })
+    return lines.joined(separator: "\n")
+}
+
 final class WeeklyPlanTests: XCTestCase {
+    func testCompletedRecoveryEligibilityMatchesSwiftOracle() {
+        XCTAssertEqual(weeklyPlanEligibilityOracleOutput(), Self.eligibilityOracle)
+    }
+
     func testSwiftOracleRemainsStable() {
         XCTAssertEqual(weeklyPlanOracleOutput(), Self.expectedOracle)
     }
@@ -93,16 +126,48 @@ final class WeeklyPlanTests: XCTestCase {
         preferences.save(next, weekStart: "2026-10-05")
         XCTAssertEqual(preferences.goals(weekStart: "2026-09-28"), previous)
         XCTAssertEqual(preferences.goals(weekStart: "2026-10-12"), next)
-        let notice = preferences.notice(today: "2026-10-05")!
+        let eligible = WeeklyPlanEligibility.resolve(recoveries: (0..<7).map {
+            WeeklyPlanRecoveryDay(day: WeeklyPlanCalendar.adding(days: $0, to: "2026-09-28")!, recovery: 50, sleepProcessed: true)
+        }, today: "2026-10-05")
+        XCTAssertNil(preferences.eligibleNotice(today: "2026-10-05", eligibility: WeeklyPlanEligibility(completedRecoveries: 6)))
+        XCTAssertEqual(preferences.goals(weekStart: "2026-10-05"), next)
+        let notice = preferences.eligibleNotice(today: "2026-10-05", eligibility: eligible)!
         XCTAssertEqual(notice.id, "recap:2026-09-28")
         preferences.dismiss(notice)
-        XCTAssertNil(WeeklyPlanPreferences(defaults: defaults).notice(today: "2026-10-05"))
-        XCTAssertNil(preferences.notice(today: "2026-10-06"))
+        XCTAssertNil(WeeklyPlanPreferences(defaults: defaults).eligibleNotice(today: "2026-10-05", eligibility: eligible))
+        XCTAssertNil(preferences.eligibleNotice(today: "2026-10-06", eligibility: eligible))
         XCTAssertEqual(WeeklyPlanPreferences(defaults: defaults).goals(weekStart: "2026-09-28"), previous)
         seedWeeklyPlanDemo(defaults: defaults, today: "2026-10-05")
         XCTAssertEqual(preferences.goals(weekStart: "2026-09-28"), previous)
         XCTAssertEqual(preferences.goals(weekStart: "2026-10-05"), next)
     }
+
+    static let eligibilityOracle = """
+    count-0:0:7:false
+    count-1:1:6:false
+    count-6:6:1:false
+    count-7:7:0:true
+    count-8:8:0:true
+    duplicate-seven:7:0:true
+    duplicate-one:1:6:false
+    missing:6:1:false
+    nan:6:1:false
+    infinity:6:1:false
+    negative-infinity:6:1:false
+    negative:6:1:false
+    above-range:6:1:false
+    zero:7:0:true
+    hundred:7:0:true
+    day-2026-02-30:6:1:false
+    day-2026-2-01:6:1:false
+    day-:6:1:false
+    day-2026-10-06:6:1:false
+    invalid-today:0:7:false
+    before-seventh:6:1:false
+    incomplete:6:1:false
+    subsequent-refresh:7:0:true
+    not-processed:0:7:false
+    """
 
     static let expectedOracle = """
     preset:restRoutine:480,5,50,3,5,,any

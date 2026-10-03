@@ -2944,4 +2944,8 @@
     <string name="whoop_plan_local_detail">日记和趋势仍可用于查看本地习惯和进度。</string>
     <string name="plan_numeric_invalid">输入有效数字后即可保存。</string>
     <string name="plan_behavior_comparison_summary">%1$s，%2$s，%3$s</string>
+    <string name="weekly_plan_calibrating">每周计划正在校准</string>
+    <string name="weekly_plan_calibration_body">完成七次恢复评估后，即可查看每周进度和回顾。</string>
+    <string name="weekly_plan_recoveries_complete">已完成 %1$d 次恢复评估，共需 7 次</string>
+    <string name="weekly_plan_recoveries_remaining">仍需完成的恢复评估：%1$d</string>
 </resources>

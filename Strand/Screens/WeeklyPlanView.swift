@@ -14,10 +14,12 @@ struct WeeklyPlanView: View {
     @StateObject private var catalog = JournalCatalogStore()
     @AppStorage(UnitPrefs.effortScaleKey) private var effortScaleRaw = EffortScale.hundred.rawValue
     @State private var today = Repository.localDayKey(Date())
+    @State private var resumeRevision = 0
     @State private var weekOffset = 0
     @State private var goals = WeeklyPlanGoals()
     @State private var editorSession: WeeklyPlanEditorSession?
     @State private var journal: [WeeklyPlanJournalDay] = []
+    @State private var recoveries: [WeeklyPlanRecoveryDay] = []
     @State private var loaded = false
     @State private var saved = false
     @State private var notice: WeeklyPlanNotice?
@@ -32,6 +34,9 @@ struct WeeklyPlanView: View {
     private var snapshot: WeeklyPlanSnapshot? {
         WeeklyPlanEngine.snapshot(goals: goals, weekStart: selectedWeek, today: today, days: days, journal: journal)
     }
+    private var eligibility: WeeklyPlanEligibility {
+        WeeklyPlanEligibility.resolve(recoveries: recoveries, today: today)
+    }
     private var items: [JournalCatalogItem] {
         catalog.resolvedItems(imported: Array(Set(journal.map(\.question))).sorted()).filter { $0.kind == .bool }
     }
@@ -39,7 +44,9 @@ struct WeeklyPlanView: View {
     var body: some View {
         ScreenScaffold(title: "Weekly Plan", subtitle: "Choose local goals for your week.") {
             weekNavigation
-            if loaded, preferences.hasPlan(weekStart: selectedWeek) || weekOffset == 0, let snapshot {
+            if loaded, !eligibility.isEligible {
+                calibrationCard
+            } else if loaded, preferences.hasPlan(weekStart: selectedWeek) || weekOffset == 0, let snapshot {
                 if weekOffset == 0, let notice { noticeCard(notice) }
                 NoopCard {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
@@ -79,9 +86,9 @@ struct WeeklyPlanView: View {
             Text("Goals and progress stay on this device.")
                 .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
         }
-        .task(id: "\(repo.refreshSeq):\(repo.journalSeq):\(repo.loaded):\(today):\(weekOffset)") { await load() }
+        .task(id: "\(repo.refreshSeq):\(repo.journalSeq):\(repo.loaded):\(today):\(weekOffset):\(resumeRevision)") { await load() }
         .onChange(of: scenePhase) { phase in
-            if phase == .active { today = Repository.localDayKey(Date()) }
+            if phase == .active { today = Repository.localDayKey(Date()); resumeRevision += 1 }
         }
         .sheet(item: $editorSession) { session in
             WeeklyPlanEditor(session: session, items: items, effortScale: effortScale,
@@ -105,6 +112,25 @@ struct WeeklyPlanView: View {
                 .disabled(weekOffset >= 0).accessibilityLabel("Next week")
         }
         .tint(StrandPalette.textSecondary)
+    }
+
+    private var calibrationCard: some View {
+        NoopCard {
+            VStack(alignment: .leading, spacing: NoopMetrics.space3) {
+                Text("Weekly Plan is calibrating").font(StrandFont.title2).foregroundStyle(StrandPalette.textPrimary)
+                Text("Seven completed recoveries unlock weekly progress and reviews.")
+                    .font(StrandFont.body).foregroundStyle(StrandPalette.textSecondary)
+                Text("\(eligibility.completedRecoveries) of 7 recoveries complete")
+                    .font(StrandFont.bodyNumber).foregroundStyle(StrandPalette.textPrimary)
+                Text("Recoveries still needed: \(eligibility.remainingRecoveries)")
+                    .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                ProgressView(value: Double(eligibility.completedRecoveries), total: Double(WeeklyPlanEligibility.requiredRecoveries))
+                    .tint(StrandPalette.accent)
+                if weekOffset == 0 {
+                    NoopButton(preferences.hasPlan(weekStart: selectedWeek) ? "Edit goals" : "Create plan", systemImage: "pencil", kind: .secondary, fullWidth: true) { openEditor() }
+                }
+            }
+        }
     }
 
     private func goalCard(title: String, target: String, progress: WeeklyPlanProgress, tint: Color) -> some View {
@@ -163,9 +189,23 @@ struct WeeklyPlanView: View {
         guard repo.loaded else { return }
         let entries = await repo.journalEntries()
         journal = entries.map { WeeklyPlanJournalDay(day: $0.day, question: $0.question, answeredYes: $0.answeredYes) }
+        let now = Date()
+        let sleeps = await repo.allSleepSessions()
+        // A cached score alone is not a completed recovery: require a persisted, closed sleep summary.
+        let processedDays = Set(sleeps.filter { $0.endTs > 0 && $0.endTs > $0.effectiveStartTs && Double($0.endTs) <= now.timeIntervalSince1970 }
+            .map { Repository.localDayKey(Date(timeIntervalSince1970: Double($0.endTs))) })
+        recoveries = repo.days.map {
+            WeeklyPlanRecoveryDay(day: $0.day, recovery: $0.recovery,
+                                  sleepProcessed: processedDays.contains($0.day) && ($0.totalSleepMin.map { $0.isFinite && $0 > 0 } ?? false))
+        }
+        #if DEBUG
+        if CommandLine.arguments.contains("--demo-seed"), CommandLine.arguments.contains("--demo-plan-calibrating") {
+            recoveries = Array(recoveries.filter { $0.sleepProcessed && ($0.recovery.map { $0.isFinite && (0...100).contains($0) } ?? false) }.prefix(6))
+        }
+        #endif
         let suggested = WeeklyPlanEngine.suggestedGoals(days: days, today: today)
         goals = preferences.goals(weekStart: selectedWeek, suggested: suggested)
-        notice = preferences.notice(today: today)
+        notice = preferences.eligibleNotice(today: today, eligibility: eligibility)
         loaded = true
     }
 

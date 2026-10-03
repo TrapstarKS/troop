@@ -2942,4 +2942,8 @@
     <string name="whoop_plan_local_detail">Diario e tendenze restano disponibili per esaminare abitudini e progressi locali.</string>
     <string name="plan_numeric_invalid">Inserisci un numero valido per salvare.</string>
     <string name="plan_behavior_comparison_summary">%1$s, %2$s, %3$s</string>
+    <string name="weekly_plan_calibrating">Calibrazione del piano settimanale</string>
+    <string name="weekly_plan_calibration_body">Sette recuperi completi abilitano i progressi settimanali e i riepiloghi.</string>
+    <string name="weekly_plan_recoveries_complete">%1$d recuperi completi su 7</string>
+    <string name="weekly_plan_recoveries_remaining">Recuperi ancora necessari: %1$d</string>
 </resources>

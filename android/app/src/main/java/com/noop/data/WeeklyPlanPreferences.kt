@@ -20,8 +20,14 @@ class WeeklyPlanPreferences(context: Context) {
         if (updateTemplate) write(goals.normalized, "template")
     }
 
+    // Swift twin: `WeeklyPlanPreferences.eligibleNotice`.
+    fun eligibleNotice(today: String, eligibility: WeeklyPlanEligibility): WeeklyPlanNotice? {
+        if (!eligibility.isEligible) return null
+        return notice(today)
+    }
+
     // Swift twin: `WeeklyPlanPreferences.notice`.
-    fun notice(today: String): WeeklyPlanNotice? {
+    private fun notice(today: String): WeeklyPlanNotice? {
         val week = WeeklyPlanCalendar.weekStart(today) ?: return null
         val previous = WeeklyPlanCalendar.adding(-7, week) ?: return null
         val available = listOf(week, previous).filter { hasPlan(it) }.toSet()

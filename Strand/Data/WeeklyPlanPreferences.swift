@@ -20,7 +20,12 @@ final class WeeklyPlanPreferences {
         if updateTemplate { write(goals.normalized, scope: "template") }
     }
 
-    func notice(today: String) -> WeeklyPlanNotice? {
+    func eligibleNotice(today: String, eligibility: WeeklyPlanEligibility) -> WeeklyPlanNotice? {
+        guard eligibility.isEligible else { return nil }
+        return notice(today: today)
+    }
+
+    private func notice(today: String) -> WeeklyPlanNotice? {
         guard let week = WeeklyPlanCalendar.weekStart(today),
               let previous = WeeklyPlanCalendar.adding(days: -7, to: week) else { return nil }
         let available = Set([week, previous].filter { hasPlan(weekStart: $0) })

@@ -2989,4 +2989,8 @@
     <string name="whoop_plan_local_detail">Tagebuch und Trends bleiben verfügbar, um lokale Gewohnheiten und Fortschritte zu prüfen.</string>
     <string name="plan_numeric_invalid">Gib eine gültige Zahl ein, um zu speichern.</string>
     <string name="plan_behavior_comparison_summary">%1$s, %2$s, %3$s</string>
+    <string name="weekly_plan_calibrating">Wochenplan wird kalibriert</string>
+    <string name="weekly_plan_calibration_body">Sieben abgeschlossene Erholungswerte ermöglichen Wochenfortschritt und Rückblicke.</string>
+    <string name="weekly_plan_recoveries_complete">%1$d von 7 Erholungswerten abgeschlossen</string>
+    <string name="weekly_plan_recoveries_remaining">Noch benötigte Erholungswerte: %1$d</string>
 </resources>
