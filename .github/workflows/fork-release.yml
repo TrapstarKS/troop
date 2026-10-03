@@ -49,7 +49,9 @@ jobs:
           CERT: ${{ secrets.ANDROID_RELEASE_CERT_SHA256 }}
         run: |
           set -euo pipefail
-          test -n "$KEYSTORE" && test -n "$STORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD"
+          for NAME in KEYSTORE STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            test -n "${!NAME}" || { echo "::error::Missing signing secret: $NAME"; exit 1; }
+          done
           [[ "${CERT//:/}" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "::error::Private signing secrets and certificate SHA-256 are required"; exit 1; }
       - id: b
         env:
@@ -193,7 +195,8 @@ jobs:
           import os
           from pathlib import Path
           def escaped(value):
-              return value.encode('unicode_escape').decode('ascii').replace(' ', '\\ ')
+              encoded = value.encode('utf-16-be')
+              return ''.join('\\u' + encoded[i:i+2].hex() for i in range(0, len(encoded), 2))
           fields = {'storeFile': os.environ['RUNNER_TEMP'] + '/troop-release.keystore',
                     'storePassword': os.environ['STORE_PASSWORD'], 'keyAlias': os.environ['KEY_ALIAS'],
                     'keyPassword': os.environ['KEY_PASSWORD']}

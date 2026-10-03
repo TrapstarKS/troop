@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TrapstarKS/troop/releases/latest"><img alt="Latest release" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Frelease.json&style=flat-square"></a>
+  <a href="https://github.com/TrapstarKS/troop/releases/latest"><img alt="Latest release" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FTrapstarKS%2Ftroop%2Fmain%2Fdocs%2Fstats%2Frelease.json&style=flat-square"></a>
   <a href="https://github.com/ryanbr/noop/stargazers"><img alt="Stars" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Fstars.json&style=flat-square"></a>
 </p>
 
@@ -55,7 +55,7 @@
 Pre-built apps you can run right now:
 
 <p>
-  <a href="https://github.com/TrapstarKS/troop/releases/latest"><img alt="Version" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Frelease.json&style=flat-square"></a>
+  <a href="https://github.com/TrapstarKS/troop/releases/latest"><img alt="Version" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FTrapstarKS%2Ftroop%2Fmain%2Fdocs%2Fstats%2Frelease.json&style=flat-square"></a>
   <img alt="Released" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Freleased.json&style=flat-square">
 </p>
 
@@ -213,7 +213,7 @@ with the strap and **score recovery, strain and sleep on your own device** — n
 import required.
 
 <p>
-  <a href="https://github.com/TrapstarKS/troop/releases/latest"><img alt="Latest across all platforms" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Frelease.json&style=flat-square"></a>
+  <a href="https://github.com/TrapstarKS/troop/releases/latest"><img alt="Latest across all platforms" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FTrapstarKS%2Ftroop%2Fmain%2Fdocs%2Fstats%2Frelease.json&style=flat-square"></a>
   <img alt="Commits per month" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fryanbr%2Fnoop%2Fmain%2Fdocs%2Fstats%2Flastcommit.json&style=flat-square">
   <img alt="Top language" src="https://img.shields.io/badge/languages-Swift%20%C2%B7%20Kotlin-E8B84B?style=flat-square">
   <img alt="Code size" src="https://img.shields.io/badge/build-from%20source-6B737B?style=flat-square">
