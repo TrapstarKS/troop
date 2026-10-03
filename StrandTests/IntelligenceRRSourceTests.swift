@@ -62,6 +62,7 @@ final class IntelligenceRRSourceTests: XCTestCase {
 
     func testEmptyAndPreservingPassesCannotReviveBoundaryLegacyHrv() async throws {
         try await withPreferences {
+            TestCentre.activate(.recovery)
             for preserve in [false, true] {
                 for marker: Double? in [nil, 0, 1] {
                     let store = try await WhoopStore.inMemory()
@@ -240,11 +241,13 @@ final class IntelligenceRRSourceTests: XCTestCase {
         try await withPreferences {
             let store = try await WhoopStore.inMemory()
             try register(DeviceRegistryStore(dbQueue: store.registryWriter), canonicalModel: "4.0")
-            let input = night()
+            let input = night(daysBack: quiet ? 2 : 1)
+            let quietDay = Repository.localDayKey(Date())
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
-            let anchor = try XCTUnwrap(formatter.date(from: input.day))
-            let own = (2...15).map { offset in
+            let anchor = try XCTUnwrap(formatter.date(from: quiet ? quietDay : input.day))
+            let offsets = quiet ? Array(3..<17) : Array(2...15)
+            let own = offsets.map { offset in
                 DailyMetric(day: formatter.string(from: anchor.addingTimeInterval(-Double(offset) * 86_400)),
                     totalSleepMin: 480, efficiency: 0.9, deepMin: 90, remMin: 90, lightMin: 300,
                     disturbances: 0, restingHr: 60, avgHrv: 32, recovery: 60, strain: nil, exerciseCount: nil)
@@ -255,7 +258,6 @@ final class IntelligenceRRSourceTests: XCTestCase {
                 disturbances: nil, restingHr: 50, avgHrv: 90, recovery: 90, strain: nil, exerciseCount: nil)
             _ = try await store.upsertDailyMetrics([expired], deviceId: canonical)
             _ = try await store.insert(Streams(hr: input.hr, rr: input.rr), deviceId: canonical)
-            let quietDay = Repository.localDayKey(Date())
             if quiet {
                 let midnight = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)
                 _ = try await store.insert(Streams(hr: (0..<100).map {
@@ -265,6 +267,10 @@ final class IntelligenceRRSourceTests: XCTestCase {
                     deepMin: nil, remMin: nil, lightMin: nil, disturbances: nil, restingHr: 45,
                     avgHrv: 100, recovery: 80, strain: nil, exerciseCount: nil)
                 _ = try await store.upsertDailyMetrics([row], deviceId: canonical + "-noop")
+                let now = Int(Date().timeIntervalSince1970)
+                let quietWindow = try await store.hrSamples(deviceId: canonical,
+                    from: midnight - 30 * 3_600, to: now + 2 * 3_600, limit: 200_000)
+                XCTAssertEqual(quietWindow.count, 100, "the quiet day must stay below the scoring floor")
             }
             let repo = Repository(deviceId: canonical)
             repo.setStoreForTesting(store)
@@ -272,8 +278,12 @@ final class IntelligenceRRSourceTests: XCTestCase {
             var logs: [String] = []
             engine.diagnosticSink = { line, _ in logs.append(line) }
             TestCentre.activate(.recovery)
-            await engine.analyzeRecent(maxDays: 2, force: true, preserveUnscoredHistory: preserve)
-            await repo.refresh(days: 2)
+            let maxDays = quiet ? 3 : 2
+            await engine.analyzeRecent(maxDays: maxDays, force: true, preserveUnscoredHistory: preserve)
+            let scored = try await store.dailyMetrics(deviceId: canonical + "-noop",
+                from: input.day, to: input.day)
+            XCTAssertNotNil(scored.first, "the earlier night must make this a nonempty scoring pass")
+            await repo.refresh(days: maxDays)
             let resolved = try XCTUnwrap(repo.chargeBaselines)
             XCTAssertGreaterThanOrEqual(resolved.hrvHistory.ownValidNights, 14)
             XCTAssertFalse(resolved.hrvHistory.seededByImport)
@@ -411,8 +421,8 @@ final class IntelligenceRRSourceTests: XCTestCase {
     }
 
     // A completed night relative to the test's local day, using the established HR-only sleep fixture.
-    private func night() -> (day: String, hr: [HRSample], rr: [RRInterval]) {
-        let start = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970) - 86_400
+    private func night(daysBack: Int = 1) -> (day: String, hr: [HRSample], rr: [RRInterval]) {
+        let start = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970) - daysBack * 86_400
         let day = Repository.localDayKey(Date(timeIntervalSince1970: Double(start)))
         var hr: [HRSample] = []
         var rr: [RRInterval] = []
@@ -458,6 +468,13 @@ final class IntelligenceRRSourceTests: XCTestCase {
                 from: input.day, to: input.day)
             let promoted = try XCTUnwrap(after.first?.avgHrv)
             XCTAssertGreaterThan(promoted, 0, "the same engine must replace its cached R-R-less result")
+
+            // Promoted HRV enters the baseline signature before unchanged-cache reuse can be checked.
+            log.removeAll()
+            await engine.analyzeRecent(maxDays: 2, force: true)
+            let stabilized = try await store.dailyMetrics(deviceId: canonical + "-noop",
+                from: input.day, to: input.day)
+            XCTAssertEqual(stabilized.first?.avgHrv, promoted)
 
             log.removeAll()
             await engine.analyzeRecent(maxDays: 2, force: true)
