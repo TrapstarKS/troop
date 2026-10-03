@@ -82,6 +82,9 @@ class DemoBluetoothRuntimeTest {
             client.connectFromSystem()
             client.reconnectToAddress("00:11:22:33:44:55", WhoopModel.WHOOP4)
             client.onBluetoothRadioOn()
+            client.scanForWhoops(WhoopModel.WHOOP4)
+            client.scanForWhoops(WhoopModel.WHOOP5_MG)
+            client.stopWhoopScan()
             listOf(standard, ftms, huami, oura).forEach { it.scan(); it.connect("00:11:22:33:44:55"); it.stop() }
             oura.reconnect()
             broadcaster.start()

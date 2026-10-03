@@ -4325,6 +4325,7 @@ class WhoopBleClient(
      */
     @SuppressLint("MissingPermission")
     fun scanForWhoops(model: WhoopModel) {
+        if (!runtimePolicy.allowsBluetooth) return
         val adp = adapter
         if (adp == null || !adp.isEnabled) {
             log("Add-a-WHOOP scan: Bluetooth not ready")
