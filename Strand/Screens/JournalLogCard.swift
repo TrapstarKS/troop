@@ -326,7 +326,10 @@ struct JournalLogCard: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(group.title), \(groupItems.count) items, \(collapsed ? "collapsed" : "expanded")")
+                .accessibilityLabel(Text(verbatim: group.title))
+                .accessibilityValue(Text(verbatim: String(format: String(localized: "%@, %@"),
+                    String(format: String(localized: "%lld"), groupItems.count),
+                    collapsed ? String(localized: "Collapsed") : String(localized: "Expanded"))))
 
                 if !collapsed {
                     ForEach(groupItems) { item in itemRow(item) }
@@ -402,7 +405,7 @@ struct JournalLogCard: View {
                 .foregroundStyle(StrandPalette.textSecondary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(symbol == "plus" ? "Increase" : "Decrease")
+        .accessibilityLabel(Text(verbatim: symbol == "plus" ? String(localized: "Increase") : String(localized: "Decrease")))
     }
 
     private func commitNumeric(_ q: String, value: Double) {

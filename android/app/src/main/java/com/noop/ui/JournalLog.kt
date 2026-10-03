@@ -39,6 +39,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -416,16 +419,23 @@ private fun JournalGroupBlock(
     onRestoreQuestion: (String) -> Unit,
 ) {
     var collapsed by remember(group) { mutableStateOf(false) }
+    val groupTitle = group.title
+    val groupCount = uiString(R.string.l10n_journal_log_items_size_f76ab912, items.size)
+    val groupState = uiString(if (collapsed) R.string.settings_disclosure_collapsed else R.string.settings_disclosure_expanded)
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { collapsed = !collapsed },
+            modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { collapsed = !collapsed }
+                .semantics(mergeDescendants = true) {
+                    contentDescription = groupTitle
+                    stateDescription = "$groupCount, $groupState"
+                },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(group.title.uppercase(), style = NoopType.overline, color = Palette.textTertiary)
+            Text(groupTitle.uppercase(), style = NoopType.overline, color = Palette.textTertiary)
             Spacer(Modifier.width(Metrics.space6))
-            Text(uiString(R.string.l10n_journal_log_items_size_f76ab912, items.size), style = NoopType.caption, color = Palette.textTertiary)
+            Text(groupCount, style = NoopType.caption, color = Palette.textTertiary)
             Spacer(Modifier.weight(1f))
-            Text(if (collapsed) "▸" else "▾", style = NoopType.caption, color = Palette.textTertiary)
+            Text(if (collapsed) "▸" else "▾", style = NoopType.caption, color = Palette.textTertiary, modifier = Modifier.clearAndSetSemantics {})
         }
         if (!collapsed) {
             items.forEach { item ->
@@ -484,7 +494,8 @@ private fun JournalNumericField(
 ) {
     val fieldLabel = listOfNotNull(journalLocalizedLabel(item), item.kind.unitLabel).joinToString(" ")
     Row(verticalAlignment = Alignment.CenterVertically) {
-        JournalChip("−", selected = false) { onCommit(if (item.kind.unitLabel == "°C") (value ?: 0.0) - 1 else ((value ?: 0.0) - 1).coerceAtLeast(0.0)) }
+        JournalChip("−", selected = false,
+            accessibilityLabel = uiString(R.string.l10n_components_decrease_accessibility_df5f1511, fieldLabel)) { onCommit(if (item.kind.unitLabel == "°C") (value ?: 0.0) - 1 else ((value ?: 0.0) - 1).coerceAtLeast(0.0)) }
         Spacer(Modifier.width(Metrics.space4))
         OutlinedTextField(
             value = text,
@@ -501,7 +512,8 @@ private fun JournalNumericField(
             Text(unit, style = NoopType.footnote, color = Palette.textTertiary, maxLines = 1, softWrap = false)
         }
         Spacer(Modifier.width(Metrics.space4))
-        JournalChip("+", selected = false) { onCommit((value ?: 0.0) + 1) }
+        JournalChip("+", selected = false,
+            accessibilityLabel = uiString(R.string.l10n_components_increase_accessibility_0949c0e9, fieldLabel)) { onCommit((value ?: 0.0) + 1) }
         if (value != null) {
             Spacer(Modifier.width(Metrics.space4))
             Text("✕", style = NoopType.caption, color = Palette.textTertiary, modifier = Modifier.clickable { onClear() })
@@ -660,7 +672,7 @@ private fun JournalDivider() {
 /** A pill chip, filled with the accent when selected, hairline-bordered otherwise. Shared by the
  *  day toggle, the yes/no answers, and the "Add" action so they read identically. */
 @Composable
-private fun JournalChip(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+private fun JournalChip(label: String, selected: Boolean, enabled: Boolean = true, accessibilityLabel: String? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
     Text(
         label,
@@ -671,6 +683,7 @@ private fun JournalChip(label: String, selected: Boolean, enabled: Boolean = tru
             .background(if (selected) Palette.accent else Palette.surfaceInset)
             .border(Metrics.divider, if (selected) Palette.accent else Palette.hairline, shape)
             .clickable(enabled = enabled, onClick = onClick)
+            .semantics { if (accessibilityLabel != null) contentDescription = accessibilityLabel }
             .padding(horizontal = Metrics.space16, vertical = Metrics.space10),
     )
 }

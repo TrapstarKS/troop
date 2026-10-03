@@ -46,8 +46,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -861,7 +865,7 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome, displayName: String,
                 }
             }
 
-            e.pctChange?.let { RBar(it / 50.0, tintColor, decorative = true) }
+            e.pctChange?.let { RBar(it / 50.0, tintColor, decorative = true, journalImpact = true) }
             if (!compact) {
                 Text(sentence, style = NoopType.body, color = Palette.textSecondary)
 
@@ -1584,16 +1588,25 @@ private fun RelationshipRow(rel: Relationship) {
  * printed beside the title, so the bar is never an unexplained coloured shape on phone).
  */
 @Composable
-private fun RBar(r: Double, color: Color, decorative: Boolean = false) {
+private fun RBar(r: Double, color: Color, decorative: Boolean = false, journalImpact: Boolean = false) {
     Box(
         modifier = Modifier
             .then(if (decorative) Modifier.clearAndSetSemantics { } else Modifier)
             .fillMaxWidth()
             .height(Metrics.space8)
-            .clip(CircleShape)
+            .then(if (journalImpact) Modifier else Modifier.clip(CircleShape))
             .drawBehind {
                 val half = size.width / 2f
                 val mag = (abs(r).coerceAtMost(1.0)).toFloat() * half
+                if (journalImpact) {
+                    drawContext.canvas.save()
+                    drawContext.canvas.clipPath(Path().apply {
+                        addRoundRect(RoundRect(
+                            Rect(0f, 0f, size.width, size.height),
+                            CornerRadius(size.height / 2f, size.height / 2f),
+                        ))
+                    })
+                }
                 // Inset track.
                 drawLine(
                     color = Palette.surfaceInset,
@@ -1602,13 +1615,27 @@ private fun RBar(r: Double, color: Color, decorative: Boolean = false) {
                     strokeWidth = size.height,
                     cap = StrokeCap.Round,
                 )
-                // Centre tick.
-                drawLine(
-                    color = Palette.hairlineStrong,
-                    start = Offset(half, 0f),
-                    end = Offset(half, size.height),
-                    strokeWidth = 1f,
-                )
+                if (journalImpact) {
+                    var x = -size.height
+                    val spacing = Metrics.space8.toPx()
+                    while (x <= size.width) {
+                        drawLine(
+                            color = Palette.hairlineStrong,
+                            start = Offset(x, size.height),
+                            end = Offset(x + size.height, 0f),
+                            strokeWidth = Metrics.space4.toPx() / 2f,
+                        )
+                        x += spacing
+                    }
+                } else {
+                    // Centre tick.
+                    drawLine(
+                        color = Palette.hairlineStrong,
+                        start = Offset(half, 0f),
+                        end = Offset(half, size.height),
+                        strokeWidth = 1f,
+                    )
+                }
                 // Value fill from centre outward.
                 if (mag > 0f) {
                     val start = if (r >= 0) Offset(half, size.height / 2f)
@@ -1622,6 +1649,12 @@ private fun RBar(r: Double, color: Color, decorative: Boolean = false) {
                         strokeWidth = size.height,
                         cap = StrokeCap.Round,
                     )
+                }
+                if (journalImpact) {
+                    drawContext.canvas.restore()
+                    val origin = Offset(half, size.height / 2f)
+                    drawCircle(Palette.surfaceInset, radius = Metrics.space12.toPx() / 2f, center = origin)
+                    drawCircle(Palette.textPrimary, radius = Metrics.space4.toPx() / 2f, center = origin)
                 }
             },
     )

@@ -1182,7 +1182,7 @@ struct InsightsView: View {
                 }
 
                 if let percent = e.pctChange {
-                    RBar(r: percent / 50, color: tintColor, label: displayName, showsTooltip: false)
+                    RBar(r: percent / 50, color: tintColor, label: displayName, showsTooltip: false, journalImpact: true)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -1512,6 +1512,7 @@ private struct RBar: View {
     let color: Color
     let label: String
     var showsTooltip = true
+    var journalImpact = false
 
     @State private var hovering = false
 
@@ -1521,11 +1522,15 @@ private struct RBar: View {
             let mag = CGFloat(min(abs(r), 1.0)) * half
             ZStack(alignment: .leading) {
                 Capsule().fill(StrandPalette.surfaceInset)
-                // centre tick
-                Rectangle()
-                    .fill(StrandPalette.hairlineStrong)
-                    .frame(width: 1)
-                    .position(x: half, y: geo.size.height / 2)
+                if journalImpact {
+                    DiagonalHatch(spacing: NoopMetrics.space2)
+                        .stroke(StrandPalette.hairlineStrong, lineWidth: NoopMetrics.space1 / 2)
+                } else {
+                    Rectangle()
+                        .fill(StrandPalette.hairlineStrong)
+                        .frame(width: 1)
+                        .position(x: half, y: geo.size.height / 2)
+                }
                 // value fill
                 Capsule()
                     .fill(color)
@@ -1535,6 +1540,18 @@ private struct RBar: View {
             .clipShape(Capsule())
         }
         .frame(height: NoopMetrics.space2)
+        .overlay {
+            if journalImpact {
+                Circle()
+                    .fill(StrandPalette.surfaceInset)
+                    .frame(width: NoopMetrics.space3, height: NoopMetrics.space3)
+                    .overlay {
+                        Circle()
+                            .fill(StrandPalette.textPrimary)
+                            .frame(width: NoopMetrics.space1, height: NoopMetrics.space1)
+                    }
+            }
+        }
         // Tooltip floats above the bar without affecting layout (overlays aren't
         // clipped), so the exact r value reads on hover, same affordance as charts.
         .overlay(alignment: .center) {
