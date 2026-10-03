@@ -392,7 +392,7 @@ public struct TabCapsule: View {
                 Button { onSelect(item.id) } label: {
                     VStack(spacing: NoopMetrics.space1) {
                         Image(systemName: item.systemImage).font(.system(size: NoopMetrics.tabIconSize, weight: .medium))
-                        Text(item.label).font(StrandFont.overlineScaled(10))
+                        Text(item.label).font(StrandFont.overlineScaled(NoopMetrics.tabLabelSize))
                     }
                     .foregroundStyle(selectedID == item.id ? StrandPalette.textPrimary : StrandPalette.textTertiary)
                     .frame(maxWidth: .infinity, minHeight: NoopMetrics.tabHeight)
