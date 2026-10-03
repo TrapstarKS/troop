@@ -115,8 +115,13 @@ struct RecoveryDetailView: View {
                                                           fromDay: RecoveryStrainDetailLogic.startKey(selectedDay: key, days: 30), selectedDay: key)
         let delta = value.flatMap { value in value.isFinite ? baseline.map { value - $0 } : nil }
         let favorable = delta.flatMap { delta in abs(delta) < 0.05 ? nil : higherIsBetter.map { $0 ? delta > 0 : delta < 0 } }
+        let comparison = baseline.map { String(localized: "30-day average: \(format($0)) \(unit)") } ?? String(localized: "Baseline unavailable")
+        let comparisonText = delta.map { delta in
+            let change = String(format: "%+.1f", locale: AppLanguage.activeLocale, delta)
+            return String(localized: "\(change) \(unit) · \(comparison)")
+        } ?? comparison
         return ContributorRow(label: label, value: format(value), unit: unit, systemImage: icon,
-                              comparison: baseline.map { String(localized: "30-day average: \(format($0)) \(unit)") } ?? String(localized: "Baseline unavailable"),
+                              comparison: comparisonText,
                               comparisonSystemImage: delta.map { abs($0) < 0.05 ? "minus" : $0 > 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill" },
                               comparisonColor: favorable.map { $0 ? StrandPalette.positive : StrandPalette.statusWarning })
     }
