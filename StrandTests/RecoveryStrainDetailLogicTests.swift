@@ -2,6 +2,83 @@ import XCTest
 @testable import Strand
 
 final class RecoveryStrainDetailLogicTests: XCTestCase {
+    func testStandaloneSwiftOraclePinsWindowsTimestampsAndZoneProvenance() {
+        var lines: [String] = []
+        let windows: [(Int, Int, Bool, Bool, Int?, Int?, Int)] = [
+         (0,86400,true,false,nil,nil,97200),
+         (0,86400,false,false,nil,nil,172800),
+         (0,86400,true,true,nil,nil,97200),
+         (0,86400,false,true,nil,nil,172800),
+         (0,86400,true,true,72000,nil,97200),
+         (0,86400,false,true,72000,88200,172800),
+         (0,86400,true,true,72000,88200,97200),
+         (0,86400,true,true,72000,108000,97200),
+         (0,86400,true,false,72000,88200,97200),
+         (86400,169200,false,false,nil,nil,250000),
+         (86400,176400,false,false,nil,nil,250000),
+         (172800,259200,false,false,nil,nil,97200),
+         (0,86400,true,true,72000,72000,97200),
+         (0,86400,true,true,72000,71000,97200),
+         (0,86400,true,true,100000,nil,97200),
+         (86400,0,false,false,nil,nil,172800),
+         (0,86400,false,true,72000,Int.min,172800),
+         (0,86400,true,true,72000,Int.max,97200),
+        ]
+        lines.append(windows.map { c in RecoveryStrainDetailLogic.strainWindow(calendarStart:c.0,nextCalendarStart:c.1,isCurrentDay:c.2,sleepOnsetMode:c.3,onset:c.4,nextOnset:c.5,now:c.6).map { "\($0.lowerBound):\($0.upperBound)" } ?? "unavailable" }.joined(separator:","))
+        let timestamps: [Double?] = [nil,.nan,.infinity,-.infinity,-0.1,0,0.9,1.9,Double(Int.min),Double(Int.min).nextDown,Double(Int.max),Double(Int.max).nextDown]
+        lines.append(timestamps.map { RecoveryStrainDetailLogic.timestampSeconds($0).map(String.init) ?? "unavailable" }.joined(separator:","))
+        let percentages = [10.0,20,20,20,30]
+        let recorded = [1.0,2,3,4,5]
+        let durations: [Double] = [0,-1,.nan,.infinity,-.infinity,600,90,1e300]
+        var distributions = durations.map { RecoveryStrainDetailLogic.zoneDistribution(importedPercentages:percentages,durationSeconds:$0,recordedMinutes:recorded) }
+        distributions += [RecoveryStrainDetailLogic.zoneDistribution(importedPercentages:nil,durationSeconds:600,recordedMinutes:recorded),RecoveryStrainDetailLogic.zoneDistribution(importedPercentages:percentages,durationSeconds:0),RecoveryStrainDetailLogic.zoneDistribution(importedPercentages:percentages,durationSeconds:600)]
+        lines.append(distributions.map { d in d.map { ($0.imported ? "imported" : "recorded") + "|" + $0.minutes.map { String($0.bitPattern) }.joined(separator:":") } ?? "unavailable" }.joined(separator:","))
+        let expected = """
+        0:97200,0:86399,0:97200,0:86399,72000:97200,72000:88199,72000:88199,72000:97200,0:97200,86400:169199,86400:176399,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,72000:97200
+        unavailable,unavailable,unavailable,unavailable,-1,0,0,1,-9223372036854775808,unavailable,unavailable,9223372036854774784
+        recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,imported|4607182418800017408:4611686018427387904:4611686018427387904:4611686018427387904:4613937818241073152,imported|4594572339843380019:4599075939470750515:4599075939470750515:4599075939470750515:4601778099247172813,imported|9053470209761937459:9057973809389307955:9057973809389307955:9057973809389307955:9060843088576613453,recorded|4607182418800017408:4611686018427387904:4613937818241073152:4616189618054758400:4617315517961601024,unavailable,imported|4607182418800017408:4611686018427387904:4611686018427387904:4611686018427387904:4613937818241073152
+        """
+        XCTAssertEqual(lines.joined(separator: "\n"), expected)
+    }
+
+    func testStrainWindowIncludesPostMidnightCurrentDataAndAfterMidnightOnsets() {
+        XCTAssertEqual(RecoveryStrainDetailLogic.strainWindow(calendarStart: 0, nextCalendarStart: 86_400,
+            isCurrentDay: true, sleepOnsetMode: false, onset: nil, nextOnset: nil, now: 97_200), 0...97_200)
+        XCTAssertEqual(RecoveryStrainDetailLogic.strainWindow(calendarStart: 0, nextCalendarStart: 86_400,
+            isCurrentDay: false, sleepOnsetMode: false, onset: nil, nextOnset: nil, now: 172_800), 0...86_399)
+        XCTAssertEqual(RecoveryStrainDetailLogic.strainWindow(calendarStart: 0, nextCalendarStart: 86_400,
+            isCurrentDay: true, sleepOnsetMode: true, onset: 72_000, nextOnset: nil, now: 97_200), 72_000...97_200)
+        XCTAssertEqual(RecoveryStrainDetailLogic.strainWindow(calendarStart: 0, nextCalendarStart: 86_400,
+            isCurrentDay: false, sleepOnsetMode: true, onset: 72_000, nextOnset: 88_200, now: 172_800), 72_000...88_199)
+        XCTAssertEqual(RecoveryStrainDetailLogic.strainWindow(calendarStart: 0, nextCalendarStart: 86_400,
+            isCurrentDay: true, sleepOnsetMode: false, onset: 72_000, nextOnset: 88_200, now: 97_200), 0...97_200)
+        XCTAssertNil(RecoveryStrainDetailLogic.strainWindow(calendarStart: 172_800, nextCalendarStart: 259_200,
+            isCurrentDay: false, sleepOnsetMode: false, onset: nil, nextOnset: nil, now: 97_200))
+        XCTAssertNil(RecoveryStrainDetailLogic.strainWindow(calendarStart: 0, nextCalendarStart: 86_400,
+            isCurrentDay: true, sleepOnsetMode: true, onset: 72_000, nextOnset: 72_000, now: 97_200))
+    }
+
+    func testInvalidActivityDurationKeepsRecordedZoneValuesAndProvenanceTogether() {
+        let percentages = [10.0, 20, 20, 20, 30]
+        let recorded = [1.0, 2, 3, 4, 5]
+        for duration in [0.0, -1, .nan, .infinity, -.infinity] {
+            let result = RecoveryStrainDetailLogic.zoneDistribution(
+                importedPercentages: percentages, durationSeconds: duration, recordedMinutes: recorded)
+            XCTAssertEqual(result?.minutes, recorded)
+            XCTAssertEqual(result?.imported, false)
+            XCTAssertNil(RecoveryStrainDetailLogic.zoneDistribution(
+                importedPercentages: percentages, durationSeconds: duration))
+        }
+        let imported = RecoveryStrainDetailLogic.zoneDistribution(
+            importedPercentages: percentages, durationSeconds: 600, recordedMinutes: recorded)
+        XCTAssertEqual(imported?.minutes, [1, 2, 2, 2, 3])
+        XCTAssertEqual(imported?.imported, true)
+        let withoutSplit = RecoveryStrainDetailLogic.zoneDistribution(
+            importedPercentages: nil, durationSeconds: 600, recordedMinutes: recorded)
+        XCTAssertEqual(withoutSplit?.minutes, recorded)
+        XCTAssertEqual(withoutSplit?.imported, false)
+    }
+
     func testWholePercentPresentationKeepsTheStoredRecoveryBand() {
         for score in stride(from: 0.0, through: 100.0, by: 0.001) {
             let shown = RecoveryStrainDetailLogic.recoveryPercent(score)!

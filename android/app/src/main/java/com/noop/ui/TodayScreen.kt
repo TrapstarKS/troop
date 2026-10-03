@@ -1074,7 +1074,7 @@ fun TodayScreen(
         }
     }
     var recoveryDetailDayKey by remember { mutableStateOf<String?>(null) }
-    var strainDetailRequest by remember { mutableStateOf<Pair<String, Double?>?>(null) }
+    var strainDetailRequest by remember { mutableStateOf<Triple<String, Double?, String>?>(null) }
     var sleepDetailDayKey by remember { mutableStateOf<String?>(null) }
     var sleepDismissAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val dispatchAfterSleepClose: (() -> Unit) -> Unit = { action ->
@@ -1102,7 +1102,7 @@ fun TodayScreen(
     }
     val openStrainForDisplayedDay: () -> Unit = {
         if (onOpenStrainForDay != null) onOpenStrainForDay(selectedDayKey, effortForDay)
-        else strainDetailRequest = selectedDayKey to effortForDay
+        else strainDetailRequest = Triple(selectedDayKey, effortForDay, selectedDay.toString())
     }
     val openSleepForDisplayedDay: () -> Unit = {
         if (onOpenSleepForDay != null) onOpenSleepForDay(selectedDayKey)
@@ -1597,6 +1597,7 @@ fun TodayScreen(
         ) {
             Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
                 StrainDetailScreen(vm = viewModel, dayKey = request.first, effortOverride = request.second,
+                    windowDayKey = request.third,
                     onBack = { strainDetailRequest = null })
             }
         }

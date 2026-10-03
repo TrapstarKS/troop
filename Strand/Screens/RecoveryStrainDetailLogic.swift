@@ -5,6 +5,40 @@ enum RecoveryStrainDetailLogic {
         case unavailable, under, optimal, over
     }
 
+    struct ZoneDistribution {
+        let minutes: [Double]
+        let imported: Bool
+    }
+
+    static func zoneDistribution(importedPercentages: [Double]?, durationSeconds: Double,
+                                 recordedMinutes: [Double]? = nil) -> ZoneDistribution? {
+        if let importedPercentages, durationSeconds.isFinite, durationSeconds > 0 {
+            let minutes = importedPercentages.map { durationSeconds / 60 * $0 / 100 }
+            return ZoneDistribution(minutes: minutes, imported: true)
+        }
+        return recordedMinutes.map { ZoneDistribution(minutes: $0, imported: false) }
+    }
+
+    static func timestampSeconds(_ value: Double?) -> Int? {
+        value.flatMap { Int(exactly: floor($0)) }
+    }
+
+    static func strainWindow(calendarStart: Int, nextCalendarStart: Int, isCurrentDay: Bool,
+                             sleepOnsetMode: Bool, onset: Int?, nextOnset: Int?, now: Int) -> ClosedRange<Int>? {
+        guard calendarStart < nextCalendarStart else { return nil }
+        let start = sleepOnsetMode ? onset ?? calendarStart : calendarStart
+        let boundary = sleepOnsetMode ? nextOnset : nil
+        let end: Int
+        if let boundary = boundary ?? (isCurrentDay ? nil : nextCalendarStart) {
+            guard boundary > start else { return nil }
+            end = min(now, boundary - 1)
+        } else {
+            end = now
+        }
+        guard start <= end else { return nil }
+        return start...end
+    }
+
     static func wholeNumber(_ value: Double?) -> Int64? {
         guard let value, value.isFinite, value >= 0 else { return nil }
         return Int64(exactly: value.rounded())

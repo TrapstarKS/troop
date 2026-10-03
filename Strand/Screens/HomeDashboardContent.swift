@@ -6,6 +6,7 @@ import WhoopStore
 struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     let dayKey: String
     let dayOffset: Int
+    var windowDayKey: String? = nil
     private var isToday: Bool { dayOffset == 0 }
     let day: DailyMetric?
     let sleepScore: Double?
@@ -102,9 +103,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
 
     private var recoveryDial: some View {
         let availableRecovery = recoveryValue
-        return NavigationLink {
-            RecoveryDetailView(dayKey: recoveryDayKey)
-        } label: {
+        return NavigationLink(value: TabRoute.recoveryDetailForDay(dayKey: recoveryDayKey)) {
             dial(label: String(localized: "Recovery"), value: availableRecovery,
                  display: RecoveryStrainDetailLogic.recoveryPercent(availableRecovery).map(String.init) ?? "—", unit: "%",
                  color: availableRecovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack,
@@ -115,9 +114,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
 
     private var strainDial: some View {
         let availableStrain = strainValue
-        return NavigationLink {
-            StrainDetailView(dayKey: dayKey, effortOverride: strainValue)
-        } label: {
+        return NavigationLink(value: TabRoute.strainDetailForDay(dayKey: dayKey, effortOverride: availableStrain, windowDayKey: windowDayKey)) {
             dial(label: String(localized: "Strain"), value: availableStrain,
                  display: availableStrain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", unit: "",
                  color: StrandPalette.strainPrimary, caption: nil)
