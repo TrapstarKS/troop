@@ -246,6 +246,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
             Image(systemName: "chevron.right").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
         }
         .frame(minHeight: NoopMetrics.touchTarget)
+        .contentShape(Rectangle())
     }
 
     private var myPlan: some View {
