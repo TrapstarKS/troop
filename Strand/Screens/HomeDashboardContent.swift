@@ -95,12 +95,13 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     }
 
     private var recoveryDial: some View {
-        NavigationLink {
+        let availableRecovery = recovery.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }
+        return NavigationLink {
             RecoveryDetailView(dayKey: recoveryDayKey)
         } label: {
-            dial(label: String(localized: "Recovery"), value: recovery,
-                 display: recovery.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
-                 color: recovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack,
+            dial(label: String(localized: "Recovery"), value: availableRecovery,
+                 display: RecoveryStrainDetailLogic.recoveryPercent(availableRecovery).map(String.init) ?? "—", unit: "%",
+                 color: availableRecovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack,
                  caption: recoveryCaption)
         }
         .buttonStyle(.plain)

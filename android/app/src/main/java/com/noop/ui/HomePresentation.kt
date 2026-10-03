@@ -136,12 +136,13 @@ internal fun HomeDials(
     onRecovery: () -> Unit,
     onStrain: () -> Unit,
 ) {
+    val availableRecovery = recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }
     Row(Modifier.fillMaxWidth().padding(vertical = Metrics.space16),
         horizontalArrangement = Arrangement.spacedBy(Metrics.space8), verticalAlignment = Alignment.Top) {
         HomeDial(uiString(R.string.home_sleep), sleep?.roundToInt()?.toString(), "%", sleep,
             Palette.sleepPrimary, Modifier.weight(1f), onSleep)
-        HomeDial(uiString(R.string.home_recovery), recovery?.roundToInt()?.toString(), "%", recovery,
-            recovery?.let { Palette.recoveryColor(it) } ?: Palette.recoveryHigh, Modifier.weight(1f), onRecovery)
+        HomeDial(uiString(R.string.home_recovery), RecoveryStrainDetailLogic.recoveryPercent(availableRecovery)?.toString(), "%", availableRecovery,
+            availableRecovery?.let { Palette.recoveryColor(it) } ?: Palette.ringTrack, Modifier.weight(1f), onRecovery)
         HomeDial(uiString(R.string.home_strain), strain?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) }, "", strain,
             Palette.strainPrimary, Modifier.weight(1f), onStrain)
     }
