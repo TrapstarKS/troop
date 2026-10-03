@@ -422,12 +422,13 @@ private fun JournalGroupBlock(
     val groupTitle = group.title
     val groupCount = uiString(R.string.l10n_journal_log_items_size_f76ab912, items.size)
     val groupState = uiString(if (collapsed) R.string.settings_disclosure_collapsed else R.string.settings_disclosure_expanded)
+    val groupDescription = uiString(R.string.l10n_fused_record_screen_contrib_source_displayname_fusionformat_value_contrib_d182dd7f, groupCount, groupState)
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
         Row(
             modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { collapsed = !collapsed }
                 .semantics(mergeDescendants = true) {
                     contentDescription = groupTitle
-                    stateDescription = "$groupCount, $groupState"
+                    stateDescription = groupDescription
                 },
             verticalAlignment = Alignment.CenterVertically,
         ) {

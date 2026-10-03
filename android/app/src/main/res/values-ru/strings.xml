@@ -2869,4 +2869,5 @@
     <string name="whoop_plan_local_detail">Дневник и тренды доступны для просмотра ваших локальных привычек и прогресса.</string>
     <string name="plan_numeric_invalid">Введите допустимое число, чтобы сохранить.</string>
     <string name="plan_behavior_comparison_summary">%1$s, %2$s, %3$s</string>
+    <string name="l10n_fused_record_screen_contrib_source_displayname_fusionformat_value_contrib_d182dd7f">%1$s, %2$s</string>
 </resources>
