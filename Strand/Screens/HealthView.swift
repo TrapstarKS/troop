@@ -562,8 +562,7 @@ private struct RecoveryContributorsSection: View {
         // A contributor needs at least the recovery seed depth of prior nights to score against
         // a baseline; below that we show CALIBRATING and leave the bars unfilled but honest.
         let prior = Array(repo.days.dropLast())
-        let priorCount = Baselines.foldHistory(prior.map(\.avgHrv), dayKeys: prior.map(\.day),
-            cfg: Baselines.hrvCfg, baselineEpoch: repo.effectiveHrvBaselineEpoch).nValid
+        let priorCount = repo.chargeBaselines?.hrv.nValid ?? 0
         let ready = priorCount >= Baselines.minNightsSeed
         let contributors = buildContributors(latest)
 
@@ -597,7 +596,7 @@ private struct RecoveryContributorsSection: View {
     /// HRV and Sleep score higher when above baseline; Resting HR and Respiratory score higher
     /// when at/below baseline (lower is better). Strength is a centred 0–100 (baseline ≈ 70).
     private func buildContributors(_ latest: DailyMetric?) -> [Contributor] {
-        let hrvBase  = baseline(epoch: repo.effectiveHrvBaselineEpoch) { $0.avgHrv }
+        let hrvBase = repo.chargeBaselines?.hrv.usable == true ? repo.chargeBaselines?.hrv.baseline : nil
         let rhrBase  = baseline { $0.restingHr.map(Double.init) }
         let sleepBase = baseline { $0.totalSleepMin }
         let respBase = baseline { $0.respRateBpm }

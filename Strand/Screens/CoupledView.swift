@@ -59,8 +59,8 @@ struct CoupledView: View {
     /// Recovery cold-start: nights banked so far while the HRV baseline still seeds, nil once recovery
     /// exists. The SAME pure helper Today's ring reads, so the two screens can't disagree.
     private var calibrationNights: Int? {
-        RecoveryScorer.calibrationNights(nightlyHrv: repo.hrvCalibrationDays.map(\.avgHrv),
-                                         dayKeys: repo.hrvCalibrationDays.map(\.day),
+        RecoveryScorer.calibrationNights(nightlyHrv: repo.hrvCalibrationHistory.map(\.value),
+                                         dayKeys: repo.hrvCalibrationHistory.map(\.day),
                                          hasRecovery: day?.recovery != nil)
     }
 
@@ -527,16 +527,10 @@ struct CoupledView: View {
         return carriedRecoveryDay
     }
 
-    /// The ordered Charge drivers for the displayed ring PLUS the confidence tier from the SAME folded HRV
-    /// baseline — the exact TodayView derivation (pure engine scoring against the folded personal
-    /// baselines). nil for a calibrating / cold-start night, which gates the sheet through to the countdown
-    /// instead. PERF: mirrors TodayView.chargeBreakdown() — the old `chargeDrivers` property plus the
-    /// sheet's inline confidence fold re-folded the full `repo.days` history four times per body eval of
-    /// the open sheet; one call now folds each series exactly once, guards before any fold.
+    /// Drivers and confidence for the displayed Charge row, using the resolved scoring histories.
     private func chargeBreakdown() -> (drivers: [ChargeDriver], confidence: ScoreConfidence)? {
-        guard let row = breakdownRow else { return nil }
-        return ChargeBreakdownWiring.breakdown(days: repo.days, row: row, sleepPerfPercent: sleepPerformance,
-                                               hrvBaselineEpoch: repo.effectiveHrvBaselineEpoch)
+        guard let row = breakdownRow, let baselines = repo.chargeBaselines else { return nil }
+        return ChargeBreakdownWiring.breakdown(baselines: baselines, row: row, sleepPerfPercent: sleepPerformance)
     }
 
     @ViewBuilder

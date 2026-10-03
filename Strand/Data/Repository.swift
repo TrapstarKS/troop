@@ -187,6 +187,15 @@ final class Repository: ObservableObject {
     var hrvCalibrationDays: [DailyMetric] {
         days.filter { Baselines.isInHrvEra(day: $0.day, epoch: effectiveHrvBaselineEpoch) }
     }
+    /// Charge histories resolved from imported and computed buckets before dashboard merging.
+    @Published private(set) var chargeBaselines: ChargeBaselines.Resolved?
+    var hrvCalibrationHistory: [(day: String, value: Double?)] {
+        guard let history = chargeBaselines?.hrvHistory else { return [] }
+        return zip(history.dayKeys, history.values).compactMap { day, value in
+            Baselines.isInHrvEra(day: day, epoch: effectiveHrvBaselineEpoch) ? (day, value) : nil
+        }
+    }
+
     /// Cached sleep sessions over the recent window, oldest→newest.
     @Published var sleeps: [CachedSleepSession] = []
     /// Imported (export-verbatim) sleep figures by day. Empty until a WHOOP import lands.
@@ -343,7 +352,7 @@ final class Repository: ObservableObject {
     /// Daily-metric rows across the imported union for a day range, DEDUPED per day with the ACTIVE STRAP
     /// winning over the canonical import (a live/measured row beats an imported one for the same day). The
     /// single returned row per day feeds the existing imported-vs-computed `mergeDaily` unchanged.
-    private func unionDailyMetrics(store: WhoopStore, from: String, to: String) async -> [DailyMetric] {
+    func unionDailyMetrics(store: WhoopStore, from: String, to: String) async -> [DailyMetric] {
         var byDay: [String: DailyMetric] = [:]
         for id in importedReadIds {   // active strap FIRST → it claims each column, canonical fills its gaps
             for m in (try? await store.dailyMetrics(deviceId: id, from: from, to: to)) ?? [] {
@@ -480,7 +489,7 @@ final class Repository: ObservableObject {
 
     /// Computed ("-noop") daily-metric rows across the computed union, DEDUPED per day (active strap's
     /// computed sibling wins over the canonical computed sibling).
-    private func unionComputedDailyMetrics(store: WhoopStore, from: String, to: String) async -> [DailyMetric] {
+    func unionComputedDailyMetrics(store: WhoopStore, from: String, to: String) async -> [DailyMetric] {
         var byDay: [String: DailyMetric] = [:]
         for id in computedReadIds {
             for m in (try? await store.dailyMetrics(deviceId: id, from: from, to: to)) ?? [] {
@@ -852,6 +861,7 @@ final class Repository: ObservableObject {
     private struct MergedCaches {
         let importedSleep: [String: ImportedSleepFigures]
         let days: [DailyMetric]
+        let chargeBaselines: ChargeBaselines.Resolved
         let sleeps: [CachedSleepSession]
         let vitalRows: [SourcedDailyMetric]
         let freshness: RepositoryFreshness
@@ -945,7 +955,7 @@ final class Repository: ObservableObject {
         refreshGen &+= 1
         let myGen = refreshGen
         let now = Date()
-        let fromDay = Self.dayString(now.addingTimeInterval(-Double(nDays) * 86_400))
+        let fromDay = Self.dayString(now.addingTimeInterval(-Double(max(nDays, ChargeBaselines.windowDays)) * 86_400))
         let toDay = Self.dayString(now.addingTimeInterval(86_400))
         let nowTs = Int(now.timeIntervalSince1970)
         let lo = nowTs - nDays * 86_400, hi = nowTs + 86_400
@@ -963,6 +973,13 @@ final class Repository: ObservableObject {
         let activityFile = (try? await store.dailyMetrics(deviceId: Self.activityFileSource, from: fromDay, to: toDay)) ?? []
         let impSleep = await unionSleepSessions(store: store, from: lo, to: hi)
         let compSleep = await unionComputedSleepSessions(store: store, from: lo, to: hi)
+
+        // #2525: the Charge baselines' inputs, read on the main actor before detaching: today's local day
+        // (the same local-calendar key the engine anchors its fold on) and the two recalibration epochs the
+        // engine reads from the same UserDefaults keys.
+        let chargeAnchorDay = AnalyticsEngine.dayString(nowTs, offsetSec: TimeZone.current.secondsFromGMT(for: now))
+        let hrvEpoch = max(Baselines.hrvBaselineEpoch(), regimeEpoch)
+        let recoveryEpoch = Baselines.recoveryBaselineEpoch()
 
         // Export-verbatim sleep figures (long-format metricSeries rows from WhoopImporter).
         // SleepView prefers these per day over its APPROXIMATE recomputations.
@@ -991,6 +1008,11 @@ final class Repository: ObservableObject {
                     into: Self.mergeDaily(imported: imported, computed: computed, userEditedDays: editedDays),
                     activityFile
                 ),
+                // From the two buckets BEFORE `mergeDaily` blends them: the rule needs to know which nights
+                // are imported and which are the wearer's own.
+                chargeBaselines: ChargeBaselines.resolve(imported: imported, own: computed,
+                                                         anchorDay: chargeAnchorDay,
+                                                         hrvEpoch: hrvEpoch, recoveryEpoch: recoveryEpoch),
                 sleeps: Self.mergeSleep(imported: impSleep, computed: compSleep),
                 vitalRows: Self.sourceRows(imported: imported, computed: computed, apple: apple),
                 freshness: Self.computeFreshness(imported: imported, computed: computed, apple: apple,
@@ -1007,6 +1029,7 @@ final class Repository: ObservableObject {
         // is what stops the analyze-tail's burst of refresh() calls each re-firing TodayView.loadAll().
         let unchanged = loaded
             && merged.days == days
+            && merged.chargeBaselines == chargeBaselines
             && regimeEpoch == hrvRegimeEpoch
             && merged.sleeps == sleeps
             && merged.importedSleep == importedSleep
@@ -1018,6 +1041,7 @@ final class Repository: ObservableObject {
         // the intraday-updating views reload exactly once for this real change.
         self.importedSleep = merged.importedSleep
         self.days = merged.days
+        self.chargeBaselines = merged.chargeBaselines
         self.hrvRegimeEpoch = regimeEpoch
         self.sleeps = merged.sleeps
         self.vitalRows = merged.vitalRows

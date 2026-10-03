@@ -367,6 +367,61 @@ class Whoop5RRSqliteTest {
         assertLegacySnapshotScoringLifecycle("5.0 MG", expectsProtection = true)
     }
 
+    @Test fun shortRescoreRetainsOwnWindowAndDropsExpiredImport() = runBlocking {
+        assertShortRescore(preserve = false, quiet = false)
+    }
+
+    @Test fun normalShortRescoreRemovesQuietRowFromScorerAndDashboard() = runBlocking {
+        assertShortRescore(preserve = false, quiet = true)
+    }
+
+    @Test fun repairShortRescoreRetainsQuietRowInScorerAndDashboard() = runBlocking {
+        assertShortRescore(preserve = true, quiet = true)
+    }
+
+    private suspend fun assertShortRescore(preserve: Boolean, quiet: Boolean) {
+        registry("4.0")
+        activate(id)
+        val now = 1_780_272_000L
+        val offset = java.util.TimeZone.getDefault().getOffset(now * 1000L) / 1000L
+        val end = now - Math.floorMod(now + offset, 86_400L)
+        val scoredEnd = if (quiet) end - 86_400L else end
+        val start = scoredEnd - 4 * 3_600L
+        val anchor = AnalyticsEngine.dayString(end, offset)
+        for (back in 2L..15L) {
+            val day = java.time.LocalDate.parse(anchor).minusDays(back).toString()
+            days["$id-noop" to day] = DailyMetric(deviceId = "$id-noop", day = day,
+                totalSleepMin = 480.0, efficiency = 0.9, restingHr = 60, avgHrv = 32.0, recovery = 60.0)
+        }
+        val expired = java.time.LocalDate.parse(anchor).minusDays(100).toString()
+        days[id to expired] = DailyMetric(deviceId = id, day = expired, restingHr = 50, avgHrv = 90.0)
+        repo.insert(StreamBatch(hr = (start until scoredEnd).map { HrRow(it, 60) },
+            rr = (start until scoredEnd).map { RrRow(it, if (it % 2L == 0L) 980 else 1020) }), id)
+        repo.upsertSleepSessions(listOf(SleepSession(deviceId = id, startTs = start, endTs = scoredEnd,
+            efficiency = 1.0, stagesJSON = AnalyticsEngine.encodeStages(listOf(StageSegment(start, scoredEnd, "light"))))))
+        if (quiet) {
+            repo.insert(StreamBatch(hr = (0L until 100L).map { HrRow(end + 3_600L + it, 60) }), id)
+            days["$id-noop" to anchor] = DailyMetric(deviceId = "$id-noop", day = anchor,
+                totalSleepMin = 480.0, efficiency = 0.9, restingHr = 45, avgHrv = 100.0, recovery = 80.0)
+        }
+        val trace = mutableListOf<String>()
+        IntelligenceEngine.analyzeRecent(repo, maxDays = if (quiet) 2 else 1, importedDeviceId = id,
+            nowSeconds = now + if (quiet) 7_200L else 0L, preserveUnscoredHistory = preserve,
+            recoveryTraceSink = { trace += it }, dayCycleMode = DayCycleMode.MIDNIGHT)
+        val resolved = com.noop.analytics.ChargeBaselines.resolve(
+            repo.importedDailyUnion(id, "0000-01-01", anchor), repo.computedDailyUnion(id, "0000-01-01", anchor),
+            anchor, 0.0, 0.0)
+        assertTrue(resolved.hrvHistory.ownValidNights >= 14)
+        assertFalse(resolved.hrvHistory.seededByImport)
+        assertTrue("scorer and dashboard retain the same own window: $trace",
+            trace.any { it.contains("hrv=own/${resolved.hrvHistory.ownValidNights}") })
+        assertFalse(resolved.hrvHistory.dayKeys.contains(expired))
+        if (quiet) {
+            assertEquals(if (preserve) 100.0 else null, days["$id-noop" to anchor]?.avgHrv)
+            assertEquals(preserve, resolved.hrvHistory.dayKeys.contains(anchor))
+        }
+    }
+
     @Test fun actualWhoop4LegacyNightKeepsScoresWithoutExplanation() = runBlocking {
         assertLegacySnapshotScoringLifecycle("4.0", expectsProtection = false)
     }

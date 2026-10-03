@@ -156,6 +156,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.noop.R
 import com.noop.ai.AiKeyStore
 import com.noop.analytics.Baselines
+import com.noop.analytics.ChargeBaselines
 import com.noop.analytics.BatteryEstimator
 import com.noop.analytics.ChargeDriver
 import com.noop.analytics.ChargeDriverLabel
@@ -332,6 +333,9 @@ fun TodayScreen(
     val today by viewModel.today.collectAsStateWithLifecycle()
     val alert by viewModel.healthAlert.collectAsStateWithLifecycle()
     val days by viewModel.recentDays.collectAsStateWithLifecycle()
+    // #2525: the Charge baselines the engine's rule resolves, the one source for every Charge readout below
+    // the headline (calibration count, "What shaped it", confidence tier).
+    val chargeBaselines by viewModel.chargeBaselines.collectAsStateWithLifecycle()
     val activeDayCycle by viewModel.activeDayCycle.collectAsStateWithLifecycle()
     val spo2CandidateByDay by viewModel.spo2CandidateByDay.collectAsStateWithLifecycle()
     // #2208: `connected` alone never said WHOSE charge liveSnap.batteryPct is. It goes true the moment any
@@ -1062,11 +1066,16 @@ fun TodayScreen(
     // instead of a bare "No Data" so a new BLE-only user knows scores are coming, not broken. (PR #85)
     val hrvRegimeEpoch by viewModel.hrvRegimeEpoch.collectAsStateWithLifecycle()
     val effectiveHrvEpoch = maxOf(NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(), hrvRegimeEpoch)
+    val calibrationHistory = chargeBaselines?.hrvHistory?.let { history ->
+        val nights = history.dayKeys.zip(history.values).filter { Baselines.isInHrvEra(it.first, effectiveHrvEpoch) }
+        history.copy(dayKeys = nights.map { it.first }, values = nights.map { it.second })
+    }
     val recoveryCalibration: Int? = if (selectedDayOffset == 0) {
         // Thread the persisted "Recalibrate HRV baseline" epoch (0 = none) so N folds the SAME
         // epoch-aware history the recovery engine folds — otherwise a post-recalibration user's pre-epoch
         // nights inflate the count past the seed gate and the score side wrongly reads NeedsStrap (Bug B).
-        recoveryCalibrationNights(days, displayMetric?.recovery != null, effectiveHrvEpoch)
+        recoveryCalibrationNights(chargeBaselines?.hrvHistory?.values.orEmpty(),
+            chargeBaselines?.hrvHistory?.dayKeys.orEmpty(), displayMetric?.recovery != null, effectiveHrvEpoch)
     } else {
         null
     }
@@ -1764,7 +1773,7 @@ fun TodayScreen(
                                 recoveryCalibration = recoveryCalibration,
                                 carriedDay = lastScoredRecoveryDay,
                                 days = days,
-                                hrvEpoch = effectiveHrvEpoch,
+                                chargeHrvHistory = calibrationHistory,
                                 synthesisExpanded = synthesisExpanded,
                                 onToggleSynthesis = { synthesisExpanded = !synthesisExpanded },
                                 onOpenReadiness = { showChargeBreakdown = true },
@@ -2003,7 +2012,7 @@ fun TodayScreen(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             ChargeBreakdownSheet(
-            hrvEpoch = effectiveHrvEpoch,
+                chargeBaselines = chargeBaselines,
                 days = days,
                 displayDay = displayMetric,
                 carriedDay = lastScoredRecoveryDay,
@@ -3431,7 +3440,7 @@ private fun SynthesisHeroCard(
     // taps to toggle it / open the Charge breakdown (where the full Readiness card lives). Defaults keep old
     // call sites compiling; the Today call site supplies them.
     days: List<DailyMetric> = emptyList(),
-    hrvEpoch: Double = 0.0,
+    chargeHrvHistory: ChargeBaselines.History? = null,
     synthesisExpanded: Boolean = true,
     onToggleSynthesis: () -> Unit = {},
     onOpenReadiness: () -> Unit = {},
@@ -3490,7 +3499,7 @@ private fun SynthesisHeroCard(
         val detail = if (recoveryCalibration != null) {
             // #612: if the baseline aged out silently — connected, but no new night for > staleDays — say WHY
             // it's calibrating instead of only "learning your baseline". `stale` is always > staleDays (14).
-            val stale = Baselines.nightsSinceNewestValidNight(days.filter { Baselines.isInHrvEra(it.day, hrvEpoch) }.map { it.day }, days.filter { Baselines.isInHrvEra(it.day, hrvEpoch) }.map { it.avgHrv }, logicalDayKeyNow())
+            val stale = Baselines.nightsSinceNewestValidNight(chargeHrvHistory?.dayKeys.orEmpty(), chargeHrvHistory?.values.orEmpty(), logicalDayKeyNow())
             if (stale != null && stale > Baselines.staleDays) {
                 uiString(R.string.l10n_today_screen_no_new_nights_from_your_strap_for_stale_days_8863bcfe, stale)
             } else {
@@ -3502,8 +3511,8 @@ private fun SynthesisHeroCard(
                 // missing nights so a wearer has something to act on instead of something to wait for.
                 // Swift twin: TodayView.calibrationDetail.
                 val cov = Baselines.recentHrvCoverage(
-                    days.filter { Baselines.isInHrvEra(it.day, hrvEpoch) }.map { it.day },
-                    days.filter { Baselines.isInHrvEra(it.day, hrvEpoch) }.map { it.avgHrv }, logicalDayKeyNow(),
+                    chargeHrvHistory?.dayKeys.orEmpty(),
+                    chargeHrvHistory?.values.orEmpty(), logicalDayKeyNow(),
                 )
                 val base = uiString(
                     R.string.today_synthesis_learning_baseline, recoveryCalibration, Baselines.minNightsSeed,
@@ -5314,6 +5323,7 @@ private fun TodayLayoutEditorDialog(
 @Composable
 internal fun ChargeBreakdownSheet(
     days: List<DailyMetric>,
+    chargeBaselines: ChargeBaselines.Resolved?,
     displayDay: DailyMetric?,
     carriedDay: DailyMetric?,
     showReadiness: Boolean,
@@ -5328,7 +5338,6 @@ internal fun ChargeBreakdownSheet(
     // navigation at all, so a link there would be a dead one. A host that cannot go somewhere should
     // not offer to.
     onOpenTrend: (() -> Unit)? = null,
-    hrvEpoch: Double = 0.0,
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -5358,7 +5367,7 @@ internal fun ChargeBreakdownSheet(
             ) {
                 // The breakdown self-gates: a calibrating night (empty drivers) renders nothing here, the
                 // Contributors + Readiness below still give an honest read, never a blank sheet.
-                RecoveryDriversSection(days = days, displayDay = displayDay, carriedDay = carriedDay, hrvEpoch = hrvEpoch)
+                RecoveryDriversSection(baselines = chargeBaselines, displayDay = displayDay, carriedDay = carriedDay)
                 RecoveryContributorsSection(day = displayDay, carriedDay = carriedDay)
                 // S4: the SEPARATE Readiness block now lives here behind the Charge-ring tap (today-only,
                 // matching the old inline gate). A one-word read (Push / Maintain / Rest) stays on the hero.
@@ -5471,18 +5480,14 @@ internal fun ChargeBreakdownSheet(
 
 @Composable
 private fun RecoveryDriversSection(
-    days: List<DailyMetric>,
+    baselines: ChargeBaselines.Resolved?,
     displayDay: DailyMetric?,
     carriedDay: DailyMetric? = null,
-    hrvEpoch: Double,
 ) {
-    // Read the row the Charge ring itself reads: today's own when scored, else the carried last-scored
-    // day (#543) so the breakdown matches the carried ring instead of vanishing at the rollover.
     val readDay = carriedDay ?: displayDay
-    val drivers = remember(days, readDay, hrvEpoch) { recoveryChargeDrivers(days, readDay, hrvEpoch) }
+    val drivers = remember(baselines, readDay) { recoveryChargeDrivers(baselines, readDay) }
     if (drivers.isEmpty()) return
-
-    val tier = remember(days, readDay, hrvEpoch) { chargeConfidenceTier(days, readDay, hrvEpoch) }
+    val tier = remember(baselines, readDay) { chargeConfidenceTier(baselines, readDay) }
     val overline = carriedDay?.let { uiString(R.string.today_charge_carried, carriedCaption(it.day).localized()) }
         ?: uiString(R.string.trends_charge)
 

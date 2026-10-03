@@ -20,6 +20,7 @@ final class IntelligenceRRSourceTests: XCTestCase {
             "profile.stepsManualCoefficient", "profile.stepsHasBankedMotion",
             "noop.analyzeWatermark", "analyzeRecent.stepsMotionCache.v1",
             "noop.hrvBaselineEpoch", "noop.recoveryBaselineEpoch", UnitPrefs.hrvWindowKey,
+            "testcentre.active.recovery", "testcentre.startedAt.recovery",
             RescoreBackgroundScheduler.owedKey, RescoreBackgroundScheduler.owedTokenKey,
             RescoreBackgroundScheduler.lastPassSecondsKey, DayCycleMode.storageKey,
             PuffinExperiment.experimentalSleepV2Key, PuffinExperiment.motionAwareWakeKey,
@@ -99,6 +100,70 @@ final class IntelligenceRRSourceTests: XCTestCase {
         return day.recovery == nil && Whoop5RR.legacyUnscorableNight(
             strictWhoop5: strict, day: day.day, firstRecordedDay: dayKey(firstRecorded),
             firstScorableDay: dayKey(firstScorable), avgHrv: day.avgHrv, totalSleepMin: day.totalSleepMin)
+    }
+
+    func testShortRescoreRetainsOwnWindowAndDropsExpiredImport() async throws {
+        try await assertShortRescore(preserve: false, quiet: false)
+    }
+
+    func testNormalShortRescoreRemovesQuietRowFromScorerAndDashboard() async throws {
+        try await assertShortRescore(preserve: false, quiet: true)
+    }
+
+    func testRepairShortRescoreRetainsQuietRowInScorerAndDashboard() async throws {
+        try await assertShortRescore(preserve: true, quiet: true)
+    }
+
+    private func assertShortRescore(preserve: Bool, quiet: Bool) async throws {
+        try await withPreferences {
+            let store = try await WhoopStore.inMemory()
+            try register(DeviceRegistryStore(dbQueue: store.registryWriter), canonicalModel: "4.0")
+            let input = night()
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            let anchor = try XCTUnwrap(formatter.date(from: input.day))
+            let own = (2...15).map { offset in
+                DailyMetric(day: formatter.string(from: anchor.addingTimeInterval(-Double(offset) * 86_400)),
+                    totalSleepMin: 480, efficiency: 0.9, deepMin: 90, remMin: 90, lightMin: 300,
+                    disturbances: 0, restingHr: 60, avgHrv: 32, recovery: 60, strain: nil, exerciseCount: nil)
+            }
+            _ = try await store.upsertDailyMetrics(own, deviceId: canonical + "-noop")
+            let expired = DailyMetric(day: formatter.string(from: anchor.addingTimeInterval(-100 * 86_400)),
+                totalSleepMin: 480, efficiency: 0.9, deepMin: nil, remMin: nil, lightMin: nil,
+                disturbances: nil, restingHr: 50, avgHrv: 90, recovery: 90, strain: nil, exerciseCount: nil)
+            _ = try await store.upsertDailyMetrics([expired], deviceId: canonical)
+            _ = try await store.insert(Streams(hr: input.hr, rr: input.rr), deviceId: canonical)
+            let quietDay = Repository.localDayKey(Date())
+            if quiet {
+                let midnight = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)
+                _ = try await store.insert(Streams(hr: (0..<100).map {
+                    HRSample(ts: midnight + 3_600 + $0, bpm: 60)
+                }), deviceId: canonical)
+                let row = DailyMetric(day: quietDay, totalSleepMin: 480, efficiency: 0.9,
+                    deepMin: nil, remMin: nil, lightMin: nil, disturbances: nil, restingHr: 45,
+                    avgHrv: 100, recovery: 80, strain: nil, exerciseCount: nil)
+                _ = try await store.upsertDailyMetrics([row], deviceId: canonical + "-noop")
+            }
+            let repo = Repository(deviceId: canonical)
+            repo.setStoreForTesting(store)
+            let engine = IntelligenceEngine(repo: repo, profile: ProfileStore(), deviceId: canonical)
+            var logs: [String] = []
+            engine.diagnosticSink = { line, _ in logs.append(line) }
+            TestCentre.activate(.recovery)
+            await engine.analyzeRecent(maxDays: 2, force: true, preserveUnscoredHistory: preserve)
+            await repo.refresh(days: 2)
+            let resolved = try XCTUnwrap(repo.chargeBaselines)
+            XCTAssertGreaterThanOrEqual(resolved.hrvHistory.ownValidNights, 14)
+            XCTAssertFalse(resolved.hrvHistory.seededByImport)
+            XCTAssertTrue(logs.contains { $0.contains("hrv=own/\(resolved.hrvHistory.ownValidNights)") },
+                          "Short-pass scoring and dashboard must retain the same 21-day own window: \(logs)")
+            XCTAssertFalse(resolved.hrvHistory.dayKeys.contains(expired.day))
+            if quiet {
+                let rows = try await store.dailyMetrics(deviceId: canonical + "-noop", from: quietDay, to: quietDay)
+                XCTAssertEqual(rows.first?.avgHrv, preserve ? 100 : nil)
+                XCTAssertEqual(resolved.hrvHistory.dayKeys.contains(quietDay), preserve)
+            }
+        }
     }
 
     func testLegacySnapshotSurvivesAndClearsAfterSourcePromotion() async throws {
@@ -195,6 +260,12 @@ final class IntelligenceRRSourceTests: XCTestCase {
             // #2126: the first labelled night restores HRV, but Charge recalibrates against
             // labelled nights rather than scoring against the eight pre-label seed nights.
             XCTAssertNil(restored.recovery)
+            await repo.refresh()
+            let calibration = RecoveryScorer.calibrationNights(
+                nightlyHrv: repo.hrvCalibrationHistory.map(\.value),
+                dayKeys: repo.hrvCalibrationHistory.map(\.day), hasRecovery: false)
+            XCTAssertEqual(calibration, repo.chargeBaselines?.hrv.nValid,
+                           "copy and calibration must use the labelled era even while import seeds")
             XCTAssertNotEqual(restored.respRateBpm, legacySnapshot.respRateBpm)
             XCTAssertNotEqual(restored.avgSdnn, legacySnapshot.avgSdnn)
             let promotedSource = try await store.scoreInputSource(deviceId: canonical + "-noop",
