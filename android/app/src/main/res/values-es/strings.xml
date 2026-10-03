@@ -2984,4 +2984,5 @@
     <string name="weekly_plan_calibration_body">Siete recuperaciones completas habilitan el progreso semanal y las revisiones.</string>
     <string name="weekly_plan_recoveries_complete">%1$d de 7 recuperaciones completas</string>
     <string name="weekly_plan_recoveries_remaining">Recuperaciones pendientes: %1$d</string>
+    <string name="today_customize_live_session_availability">Aparece hoy si Live Sessions está activado en Ajustes o hay una sesión activa.</string>
 </resources>

@@ -3026,4 +3026,5 @@
     <string name="weekly_plan_calibration_body">Siedem ukończonych pomiarów regeneracji odblokowuje postępy tygodniowe i podsumowania.</string>
     <string name="weekly_plan_recoveries_complete">Ukończono %1$d z 7 pomiarów regeneracji</string>
     <string name="weekly_plan_recoveries_remaining">Pozostałe pomiary regeneracji: %1$d</string>
+    <string name="today_customize_live_session_availability">Pojawia się dzisiaj, gdy sesje na żywo są włączone w Ustawieniach lub trwa sesja.</string>
 </resources>

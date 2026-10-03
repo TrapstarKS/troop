@@ -4353,6 +4353,16 @@ private fun intStringGrouped(v: Double): String {
 
 // MARK: - Shared Shown / Hidden editor rows
 
+@Composable
+private fun VisibilityItemLabel(title: String, subtitle: String?, color: Color, modifier: Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Metrics.space2)) {
+        Text(title, style = NoopType.body, color = color)
+        if (subtitle != null) {
+            Text(subtitle, style = NoopType.caption, color = Palette.textSecondary)
+        }
+    }
+}
+
 /**
  * The common editor body used by Today sections, Key Metrics and Your Cards. Items are never deleted:
  * remove moves one from Shown to Hidden, add restores it at the end of Shown, and the arrow controls use
@@ -4374,6 +4384,7 @@ internal fun <T> EditableVisibilityRows(
     // a user browses by origin. null (Today sections, Key Metrics, Your Cards) keeps the flat list. The
     // Shown list stays flat — it is the user's own cross-origin order. Twin of the Swift EditableLayoutList.
     hiddenGroup: ((T) -> String)? = null,
+    itemSubtitle: @Composable (T) -> String? = { null },
 ) {
     val minShown = if (allowEmpty) 0 else 1
     Column(
@@ -4414,7 +4425,7 @@ internal fun <T> EditableVisibilityRows(
             ) {
                 if (draggable) Icon(Icons.Filled.DragHandle, null, tint = Palette.textSecondary,
                     modifier = Modifier.size(Metrics.iconSmall).padding(end = Metrics.space4))
-                Text(title, style = NoopType.body, color = Palette.textPrimary, modifier = Modifier.weight(1f))
+                VisibilityItemLabel(title, itemSubtitle(item), Palette.textPrimary, Modifier.weight(1f))
                 IconButton(
                     onClick = {
                         if (index > 0) shown.add(index - 1, shown.removeAt(index))
@@ -4492,7 +4503,7 @@ internal fun <T> EditableVisibilityRows(
                         modifier = Modifier.fillMaxWidth().padding(vertical = Metrics.space6),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(title, style = NoopType.body, color = Palette.textTertiary, modifier = Modifier.weight(1f))
+                        VisibilityItemLabel(title, itemSubtitle(item), Palette.textTertiary, Modifier.weight(1f))
                         IconButton(
                             onClick = { hidden.remove(item); shown.add(item) },
                             modifier = Modifier.size(Metrics.iconButton),
@@ -4517,7 +4528,7 @@ internal fun <T> EditableVisibilityRows(
                     modifier = Modifier.fillMaxWidth().padding(vertical = Metrics.space6),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(title, style = NoopType.body, color = Palette.textTertiary, modifier = Modifier.weight(1f))
+                    VisibilityItemLabel(title, itemSubtitle(item), Palette.textTertiary, Modifier.weight(1f))
                     IconButton(
                         onClick = { shown.add(hidden.removeAt(index)) },
                         modifier = Modifier.size(Metrics.iconButton),
@@ -4900,6 +4911,11 @@ private fun TodayLayoutEditorDialog(
                     shown = shown,
                     hidden = hidden,
                     itemTitle = { uiString(it.titleRes) },
+                    itemSubtitle = {
+                        if (it == TodaySection.LIVE_SESSION) {
+                            stringResource(R.string.today_customize_live_session_availability)
+                        } else null
+                    },
                 )
 
                 // #today-hosted-cards: hand-off to the editor that chooses WHICH Trends/Sleep cards the

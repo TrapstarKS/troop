@@ -2983,4 +2983,5 @@
     <string name="weekly_plan_calibration_body">Sieben abgeschlossene Erholungswerte ermöglichen Wochenfortschritt und Rückblicke.</string>
     <string name="weekly_plan_recoveries_complete">%1$d von 7 Erholungswerten abgeschlossen</string>
     <string name="weekly_plan_recoveries_remaining">Noch benötigte Erholungswerte: %1$d</string>
+    <string name="today_customize_live_session_availability">Erscheint heute, wenn Live Sessions in den Einstellungen aktiviert sind oder eine Session aktiv ist.</string>
 </resources>
