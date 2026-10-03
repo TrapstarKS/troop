@@ -532,6 +532,10 @@ object NoopType {
 
     val bodyNumber = TextStyle(fontFamily = sans, fontWeight = FontWeight.Medium, fontSize = 15.sp, fontFeatureSettings = "tnum")
     val captionNumber = TextStyle(fontFamily = sans, fontWeight = FontWeight.Medium, fontSize = 12.sp, fontFeatureSettings = "tnum")
+    val dialValueCompact = number(26f, FontWeight.Bold)
+    val dialValueFull = display(68f)
+    val dialUnitCompact = number(16f, FontWeight.Bold)
+    val dialUnitFull = number(36f, FontWeight.Bold)
     val metricInline = number(15f)
     val chartValue = number(18f)
     val chartValueLarge = number(22f)

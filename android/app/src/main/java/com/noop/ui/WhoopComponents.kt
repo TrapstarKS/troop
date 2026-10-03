@@ -80,15 +80,16 @@ fun ScoreDial(
                 val origin = Offset(width / 2, width / 2)
                 val arcSize = Size(this.size.width - width, this.size.height - width)
                 drawArc(Palette.ringTrack, -90f, 360f, false, origin, arcSize, style = Stroke(width))
-                targetRange?.let {
+                targetRange?.takeIf { it.start.isFinite() && it.endInclusive.isFinite() }?.let {
                     val start = it.start.coerceIn(0f, 1f)
                     val end = it.endInclusive.coerceIn(start, 1f)
                     drawArc(Palette.textSecondary.copy(alpha = StrandAlpha.chartMarker), -90f + start * 360f,
                         (end - start) * 360f, false, origin, arcSize, style = Stroke(width))
                 }
                 progress?.takeIf { it.isFinite() }?.let {
-                    drawArc(color, -90f, it.coerceIn(0f, 1f) * 360f, false, origin, arcSize,
-                        style = Stroke(width, cap = StrokeCap.Round))
+                    val fraction = it.coerceIn(0f, 1f)
+                    if (fraction > 0f) drawArc(color, -90f, fraction * 360f, false, origin, arcSize,
+                        style = Stroke(width, cap = if (fraction == 1f) StrokeCap.Butt else StrokeCap.Round))
                 }
                 target?.takeIf { it.isFinite() }?.let {
                     val angle = Math.toRadians((-90 + it.coerceIn(0f, 1f) * 360).toDouble())
@@ -102,10 +103,10 @@ fun ScoreDial(
             Column(horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(value, style = if (compact) NoopType.number(26f, FontWeight.Bold) else NoopType.display(68f),
+                    Text(value, style = if (compact) NoopType.dialValueCompact else NoopType.dialValueFull,
                         color = Palette.textPrimary, maxLines = 1)
                     if (unit.isNotEmpty()) Text(unit,
-                        style = NoopType.number(if (compact) 16f else 36f, FontWeight.Bold),
+                        style = if (compact) NoopType.dialUnitCompact else NoopType.dialUnitFull,
                         color = Palette.textPrimary, modifier = Modifier.padding(bottom = Metrics.space4))
                 }
                 if (!compact) Text(label.uppercase(Locale.getDefault()), style = NoopType.overline,
