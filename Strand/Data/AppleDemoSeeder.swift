@@ -223,6 +223,7 @@ enum AppleDemoSeeder {
         }
 
         _ = try await store.upsertDailyMetrics(daily, deviceId: whoop)
+        sleeps.append(contentsOf: sleepDetailExamples(calendar: cal))
         _ = try await store.upsertSleepSessions(sleeps, deviceId: whoop)
         _ = try await store.upsertMetricSeries(series, deviceId: whoop)
         _ = try await store.upsertAppleDaily(appleRows, deviceId: apple)
@@ -246,66 +247,9 @@ enum AppleDemoSeeder {
         _ = try await store.upsertJournal(rows, deviceId: Repository.journalDeviceId)
     }
 
-    // MARK: - helpers
-
-    private static func round1(_ x: Double) -> Double { (x * 10).rounded() / 10 }
-    private static func round2(_ x: Double) -> Double { (x * 100).rounded() / 100 }
-
-    /// Box–Muller normal sample, matching DemoSeeder.gauss exactly.
-    private static func gauss(_ rng: inout SplitMix64, _ mean: Double, _ sd: Double) -> Double {
-        let u1 = rng.nextDouble().clamped(1e-9, 1.0)
-        let u2 = rng.nextDouble()
-        return mean + sd * (Foundation.sqrt(-2.0 * Foundation.log(u1)) * Foundation.cos(2.0 * Double.pi * u2))
-    }
-
-    /// A plausible light→deep→rem cycle as the COMPUTED segment array
-    /// [{"start":epoch,"end":epoch,"stage":"light"|"deep"|"rem"|"wake"}] that SleepView.decodeSegments
-    /// reads, laid end-to-end from `onset`.
-    private static func segmentsJSON(onset: Int, deep: Double, rem: Double, light: Double, awakeMin: Double) -> String {
-        var t = onset
-        var parts: [String] = []
-        func seg(_ stage: String, _ minutes: Double) {
-            let secs = Int(minutes * 60)
-            guard secs > 0 else { return }
-            parts.append("{\"start\":\(t),\"end\":\(t + secs),\"stage\":\"\(stage)\"}")
-            t += secs
-        }
-        seg("light", light * 0.35); seg("deep", deep * 0.6); seg("light", light * 0.30)
-        seg("rem", rem * 0.6); seg("deep", deep * 0.4); seg("light", light * 0.35)
-        seg("rem", rem * 0.4); seg("wake", awakeMin)
-        return "[" + parts.joined(separator: ",") + "]"
-    }
-}
-
-/// Deterministic SplitMix64 PRNG — gives a fixed, reproducible demo dataset across runs (the Apple
-/// counterpart of Kotlin's `Random(0xC0FFEE)`). Not for any security use.
-struct SplitMix64 {
-    private var state: UInt64
-    init(seed: UInt64) { state = seed }
-
-    mutating func next() -> UInt64 {
-        state = state &+ 0x9E3779B97F4A7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
-        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
-        return z ^ (z >> 31)
-    }
-
-    /// Uniform in [0, 1).
-    mutating func nextDouble() -> Double {
-        Double(next() >> 11) * (1.0 / 9007199254740992.0)  // 2^53
-    }
-
-    /// Uniform Int in [lower, upper).
-    mutating func nextInt(_ lower: Int, _ upper: Int) -> Int {
-        guard upper > lower else { return lower }
-        let span = UInt64(upper - lower)
-        return lower + Int(next() % span)
-    }
-}
-
-private extension Double {
-    func clamped(_ lo: Double, _ hi: Double) -> Double { Swift.min(Swift.max(self, lo), hi) }
-    func atLeast(_ lo: Double) -> Double { Swift.max(self, lo) }
-}
-#endif
+    private static func sleepDetailExamples(calendar: Calendar) -> [CachedSleepSession] {
+        let day = calendar.startOfDay(for: Date())
+        guard let onset = calendar.date(bySettingHour: 14, minute: 15, second: 0, of: day) else { return [] }
+        let start = Int(onset.timeIntervalSince1970)
+        return [CachedSleepSession(startTs: start, endTs: start + 30 * 60, efficiency: 100,
+                                   stagesJSON: segmentsJSON(onset: start, deep: 0, rem: 0, light: 30, awakeMin: 0))]

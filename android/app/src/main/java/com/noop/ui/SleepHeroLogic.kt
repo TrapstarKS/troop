@@ -4,6 +4,29 @@ import com.noop.analytics.RestScorer
 import com.noop.data.DailyMetric
 import com.noop.data.SleepSession
 
+internal fun requestedSleepNightOffset(navDays: List<List<SleepSession>>, dayKey: String?): Int? {
+    if (dayKey == null) return null
+    return navDays.indexOfFirst { blocks -> blocks.any { localDayString(it.endTs) == dayKey } }
+        .takeIf { it >= 0 }
+}
+
+internal fun sleepEditGroupFor(session: SleepSession, heroGroup: List<SleepSession>): List<SleepSession> =
+    if (heroGroup.any { it.deviceId == session.deviceId && it.startTs == session.startTs }) heroGroup
+    else listOf(session)
+
+internal fun selectedSleepEfficiency(night: HeroNight?, days: List<DailyMetric>): Double? {
+    val session = night?.session ?: return null
+    val stages = night.groupStages ?: parseSessionStages(
+        com.noop.analytics.SleepStageTotals.clampStagesToOnset(session.stagesJSON, session.effectiveStartTs),
+    )
+    if (stages != null) {
+        val total = stages.awake + stages.light + stages.deep + stages.rem
+        if (total > 0.0) return ((stages.light + stages.deep + stages.rem) / total * 100.0).coerceIn(0.0, 100.0)
+    }
+    val efficiency = session.efficiency ?: days.lastOrNull { it.day == night.dayKey }?.efficiency
+    return efficiency?.takeIf { it.isFinite() }?.let { if (it <= 1.0) it * 100.0 else it }
+}
+
 /** A short Rest state word for the hero gauge — same banding the synthesis hero uses. */
 internal fun sleepScoreWord(score: Double): String = when {
     score < 50.0 -> "Poor"

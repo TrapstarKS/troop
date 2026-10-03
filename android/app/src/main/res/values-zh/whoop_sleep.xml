@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whoop_sleep_detail_subtitle">所选夜晚及其睡眠因素。</string>
+    <string name="whoop_sleep_performance">睡眠表现</string>
+    <string name="whoop_sleep_hours_slept">睡眠时长</string>
+    <string name="whoop_sleep_need">睡眠需求</string>
+    <string name="whoop_sleep_high_stress">高睡眠压力</string>
+    <string name="whoop_sleep_poor">较差</string>
+    <string name="whoop_sleep_sufficient">充足</string>
+    <string name="whoop_sleep_optimal">最佳</string>
+    <string name="whoop_sleep_unavailable">不可用</string>
+    <string name="whoop_sleep_imported_insight">导入的睡眠分数保留自您的记录。此处无法获取高睡眠压力。只有已记录的睡眠阶段才显示时间。</string>
+    <string name="whoop_sleep_local_insight">此分数是设备根据您的睡眠数据估算的。高睡眠压力不可用，也未计入分数。</string>
+    <string name="whoop_sleep_planner">睡眠规划</string>
+    <string name="whoop_sleep_restorative">恢复性睡眠</string>
+    <string name="whoop_sleep_breaths_minute">次呼吸/分钟</string>
+    <string name="whoop_sleep_duration_only">可查看睡眠阶段时长，但未记录具体时间。</string>
+    <string name="whoop_sleep_fragmented">分段睡眠</string>
+    <string name="whoop_sleep_scrub_hint">在时间轴上拖动以查看准确时间及已记录阶段。</string>
+    <string name="whoop_sleep_stage_unrecorded">未记录睡眠阶段</string>
+    <string name="whoop_sleep_awake">清醒</string>
+    <string name="whoop_sleep_rem">REM</string>
+    <string name="whoop_sleep_light">浅睡</string>
+    <string name="whoop_sleep_deep">深睡</string>
+    <string name="whoop_sleep_stage_timeline">睡眠阶段时间轴</string>
+    <string name="whoop_sleep_stage_subtitle">卧床 %1$s · 效率 %2$s</string>
+    <string name="whoop_sleep_raw_stages">设备原始睡眠阶段</string>
+    <string name="whoop_sleep_estimated_stages">设备估算睡眠阶段</string>
+    <string name="whoop_sleep_requested_missing">这一天没有睡眠数据。</string>
+</resources>

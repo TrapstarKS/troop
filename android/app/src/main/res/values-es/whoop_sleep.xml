@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whoop_sleep_detail_subtitle">La noche seleccionada y sus factores de sueño.</string>
+    <string name="whoop_sleep_performance">Rendimiento del sueño</string>
+    <string name="whoop_sleep_hours_slept">Horas dormidas</string>
+    <string name="whoop_sleep_need">Necesidad de sueño</string>
+    <string name="whoop_sleep_high_stress">Estrés alto durante el sueño</string>
+    <string name="whoop_sleep_poor">Bajo</string>
+    <string name="whoop_sleep_sufficient">Suficiente</string>
+    <string name="whoop_sleep_optimal">Óptimo</string>
+    <string name="whoop_sleep_unavailable">No disponible</string>
+    <string name="whoop_sleep_imported_insight">Se conserva la puntuación de sueño importada de tu registro. El estrés alto durante el sueño no está disponible aquí. Las fases solo muestran horarios registrados.</string>
+    <string name="whoop_sleep_local_insight">Esta puntuación es una estimación en el dispositivo a partir de tus datos de sueño. El estrés alto durante el sueño no está disponible y no se añade a la puntuación.</string>
+    <string name="whoop_sleep_planner">Planificador del sueño</string>
+    <string name="whoop_sleep_restorative">Sueño reparador</string>
+    <string name="whoop_sleep_breaths_minute">respiraciones/min</string>
+    <string name="whoop_sleep_duration_only">Las duraciones de las fases están disponibles; sus horarios no se registraron.</string>
+    <string name="whoop_sleep_fragmented">Sueño fragmentado</string>
+    <string name="whoop_sleep_scrub_hint">Arrastra por la línea de tiempo para consultar la hora exacta y la fase registrada.</string>
+    <string name="whoop_sleep_stage_unrecorded">No se registró ninguna fase</string>
+    <string name="whoop_sleep_awake">Despierto</string>
+    <string name="whoop_sleep_rem">REM</string>
+    <string name="whoop_sleep_light">Ligero</string>
+    <string name="whoop_sleep_deep">Profundo</string>
+    <string name="whoop_sleep_stage_timeline">Línea de tiempo de las fases del sueño</string>
+    <string name="whoop_sleep_stage_subtitle">%1$s en la cama · %2$s de eficiencia</string>
+    <string name="whoop_sleep_raw_stages">Fases sin procesar del dispositivo</string>
+    <string name="whoop_sleep_estimated_stages">Fases estimadas en el dispositivo</string>
+    <string name="whoop_sleep_requested_missing">No hay datos de sueño para este día.</string>
+</resources>

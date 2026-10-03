@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whoop_sleep_detail_subtitle">La nuit sélectionnée et ses facteurs de sommeil.</string>
+    <string name="whoop_sleep_performance">Performance du sommeil</string>
+    <string name="whoop_sleep_hours_slept">Heures dormies</string>
+    <string name="whoop_sleep_need">Besoin de sommeil</string>
+    <string name="whoop_sleep_high_stress">Stress élevé pendant le sommeil</string>
+    <string name="whoop_sleep_poor">Faible</string>
+    <string name="whoop_sleep_sufficient">Suffisant</string>
+    <string name="whoop_sleep_optimal">Optimal</string>
+    <string name="whoop_sleep_unavailable">Indisponible</string>
+    <string name="whoop_sleep_imported_insight">Le score de sommeil importé est conservé depuis votre relevé. Le stress élevé pendant le sommeil est indisponible ici. Les phases affichent uniquement les horaires enregistrés.</string>
+    <string name="whoop_sleep_local_insight">Ce score est une estimation calculée sur cet appareil avec vos données de sommeil. Le stress élevé pendant le sommeil est indisponible et ne contribue pas au score.</string>
+    <string name="whoop_sleep_planner">Planificateur de sommeil</string>
+    <string name="whoop_sleep_restorative">Sommeil réparateur</string>
+    <string name="whoop_sleep_breaths_minute">respirations/min</string>
+    <string name="whoop_sleep_duration_only">La durée des phases est disponible ; leurs horaires ne sont pas enregistrés.</string>
+    <string name="whoop_sleep_fragmented">Sommeil fragmenté</string>
+    <string name="whoop_sleep_scrub_hint">Faites glisser sur la chronologie pour consulter l’heure exacte et la phase enregistrée.</string>
+    <string name="whoop_sleep_stage_unrecorded">Aucune phase enregistrée</string>
+    <string name="whoop_sleep_awake">Éveillé</string>
+    <string name="whoop_sleep_rem">REM</string>
+    <string name="whoop_sleep_light">Léger</string>
+    <string name="whoop_sleep_deep">Profond</string>
+    <string name="whoop_sleep_stage_timeline">Chronologie des phases de sommeil</string>
+    <string name="whoop_sleep_stage_subtitle">%1$s au lit · %2$s d’efficacité</string>
+    <string name="whoop_sleep_raw_stages">Phases brutes sur l’appareil</string>
+    <string name="whoop_sleep_estimated_stages">Phases estimées sur l’appareil</string>
+    <string name="whoop_sleep_requested_missing">Aucune donnée de sommeil pour ce jour.</string>
+</resources>
