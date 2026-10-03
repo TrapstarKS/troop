@@ -7,6 +7,8 @@ import StrandDesign
 /// "More" list. Every screen is the same `StrandDesign`-built view the macOS app uses.
 struct RootTabView: View {
     @AppStorage("noop.coachEnabled") private var coachEnabled = true
+    @AppStorage("noop.bottomBarAutoHide") private var bottomBarAutoHide = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The live gym session, owned at the app root — see `LiftSessionController`.
     @EnvironmentObject private var liftSession: LiftSessionController
@@ -32,6 +34,7 @@ struct RootTabView: View {
     @State private var pendingRoutedRequest: RoutedSheetRequest?
     // Keep the outgoing sheet occupied until SwiftUI finishes its dismissal animation.
     @State private var routedSheetActive = false
+    @State private var chromeCollapsed = false
     /// Selected tab — bound so tab switches can crossfade (README §Motion: ~240ms opacity swap
     /// between tab roots, calm easing). Defaults to Today.
     @State private var selectedTab: Int = 0
@@ -121,13 +124,16 @@ struct RootTabView: View {
 
     var body: some View {
         TabView(selection: nativeTabSelection) {
-            tab(todayTabRoot, "Home", "house", path: $tabPaths[0], scrollSignal: scrollTop[0]).tag(0)
-            tab(HealthView(), "Health", "heart", path: $tabPaths[1], scrollSignal: scrollTop[1]).tag(1)
-            tab(planRoot, "Plan", "calendar", path: $tabPaths[2], scrollSignal: scrollTop[2]).tag(2)
+            tab(todayTabRoot, "Home", "house", path: $tabPaths[0], scrollSignal: scrollTop[0], tabIndex: 0).tag(0)
+            tab(HealthView(), "Health", "heart", path: $tabPaths[1], scrollSignal: scrollTop[1], tabIndex: 1).tag(1)
+            tab(planRoot, "Plan", "calendar", path: $tabPaths[2], scrollSignal: scrollTop[2], tabIndex: 2).tag(2)
             moreTab(path: $tabPaths[3], scrollSignal: scrollTop[3]).tag(3)
         }
         .toolbar(.hidden, for: .tabBar)
         .tint(StrandPalette.accent)
+        .onChangeCompat(of: bottomBarAutoHide) { _ in chromeCollapsed = false }
+        .onChangeCompat(of: selectedTab) { _ in chromeCollapsed = false }
+        .onChangeCompat(of: tabPaths[selectedTab].count) { _ in chromeCollapsed = false }
         .onChangeCompat(of: coachEnabled) { enabled in
             if !enabled {
                 pendingCoach = false
@@ -237,12 +243,17 @@ struct RootTabView: View {
                         CoachOrb(label: String(localized: "Coach"), onTap: presentCoach)
                     }
                 }
+                .opacity(chromeVisible ? 1 : 0)
+                .offset(y: chromeVisible ? 0 : NoopMetrics.tabHeight)
+                .allowsHitTesting(chromeVisible)
+                .accessibilityHidden(!chromeVisible)
             }
             .padding(.horizontal, NoopMetrics.screenPadding)
             .padding(.vertical, NoopMetrics.gap)
             .background(StrandPalette.surfaceBase)
         }
         .animation(.easeInOut(duration: 0.25), value: liftSession.isActive)
+        .animation(reduceMotion ? nil : StrandMotion.fade, value: chromeVisible)
         // A session left running by a previous launch is back before this view exists
         // (`LiftSessionController.resumeSaved`, from `StrandiOSApp.init`), as the BAR — not as a sheet
         // thrown in the user's face; they open it when they want it.
@@ -251,8 +262,22 @@ struct RootTabView: View {
         }
     }
 
+    private var chromeVisible: Bool { !bottomBarAutoHide || !chromeCollapsed }
+
+    private func chromeScrollHandler(for tabIndex: Int) -> (CGFloat, CGFloat) -> Void {
+        { oldOffset, newOffset in
+            guard selectedTab == tabIndex, bottomBarAutoHide else { return }
+            if newOffset == 0 {
+                chromeCollapsed = false
+            } else if newOffset != oldOffset {
+                chromeCollapsed = newOffset > oldOffset
+            }
+        }
+    }
+
     private func presentCoach() {
         guard coachEnabled else { return }
+        guard !pendingCoach else { return }
         if pendingRoutedRequest != nil || (routedSheetActive && routedPillar == nil) {
             pendingRoutedRequest = .coach
             return
@@ -433,7 +458,8 @@ struct RootTabView: View {
     }
 
     private func tab<V: View>(_ view: V, _ title: LocalizedStringKey, _ icon: String,
-                              path: Binding<NavigationPath>, scrollSignal: Int) -> some View {
+                              path: Binding<NavigationPath>, scrollSignal: Int, tabIndex: Int) -> some View {
+        let onScroll = chromeScrollHandler(for: tabIndex)
         // Each primary tab gets its OWN NavigationStack so the in-content NavigationLinks (e.g. the Today
         // dashboard card rows) both navigate AND render opaque. An ORPHANED NavigationLink (no
         // NavigationStack ancestor) renders its whole label in a disabled/translucent state — that was
@@ -442,13 +468,15 @@ struct RootTabView: View {
         // detail screens get their own nav bar + back button. The stack is bound to the tab's path so a
         // re-tap of the active tab can pop it to the root (#135/#198); the roots' first-hop links push
         // TabRoute values, registered here ONCE per stack (a double registration double-pushes, #38).
-        NavigationStack(path: path) {
+        return NavigationStack(path: path) {
             view
+                .tabChromeScrollObserver(onScroll)
                 .background(StrandPalette.surfaceBase.ignoresSafeArea())
                 .toolbar(.hidden, for: .navigationBar)
-                .tabRouteDestinations()
+                .tabRouteDestinations(onVerticalScroll: onScroll)
                 .navigationDestination(for: MoreDestination.self) { route in
                     route.destination
+                        .tabChromeScrollObserver(onScroll)
                         .background(StrandPalette.surfaceBase.ignoresSafeArea())
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbarBackground(.hidden, for: .navigationBar)
@@ -481,7 +509,8 @@ struct RootTabView: View {
     // ScreenScaffold for the title1 "More" + subtitle, a `SectionHeader` overline per group, and the group's
     // rows in a single grouped NoopCard with hairline dividers — the same row idiom Settings/Health use.
     private func moreTab(path: Binding<NavigationPath>, scrollSignal: Int) -> some View {
-        NavigationStack(path: path) {
+        let onScroll = chromeScrollHandler(for: 3)
+        return NavigationStack(path: path) {
             ScreenScaffold(title: "More", subtitle: "Everything else, one tap away",
                            onRefresh: { await repo.refresh() },
                            topBackground: liquidScaffoldSky()) {
@@ -551,13 +580,15 @@ struct RootTabView: View {
             // sky; an opaque surfaceBase nav-bar band sat over it and clipped the top on scroll. A hidden
             // bar background keeps the sky edge-to-edge. On the flat (no-sky) screens this is visually
             // identical at rest — the destination's own surfaceBase background shows through the bar.
+            .tabChromeScrollObserver(onScroll)
             .navigationDestination(for: MoreDestination.self) { route in
                 route.destination
+                    .tabChromeScrollObserver(onScroll)
                     .background(StrandPalette.surfaceBase.ignoresSafeArea())
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbarBackground(.hidden, for: .navigationBar)
             }
-            .tabRouteDestinations()
+            .tabRouteDestinations(onVerticalScroll: onScroll)
         }
         // Scroll the More index to the top on an at-root re-tap (#198 follow-up); read by its ScreenScaffold.
         .environment(\.scrollToTopSignal, scrollSignal)
