@@ -148,7 +148,9 @@ public final class StandardHRSource: NSObject, ObservableObject {
                 persist: @escaping (Streams) -> Void,
                 log: @escaping (String) -> Void = { _ in },
                 onBattery: @escaping (Int) -> Void = { _ in },
-                polarDebug: @escaping () -> Bool = { false }) {
+                polarDebug: @escaping () -> Bool = { false },
+                allowsLiveTransports: Bool? = nil,
+                centralFactory: ((CBCentralManagerDelegate) -> CBCentralManager?)? = nil) {
         self.live = live
         self.deviceId = deviceId
         self.persist = persist
@@ -157,13 +159,18 @@ public final class StandardHRSource: NSObject, ObservableObject {
         self.polarDebug = polarDebug
         super.init()
         // Dedicated queue-less central → callbacks arrive on the main queue, matching @MainActor.
-        self.central = CBCentralManager(delegate: self, queue: nil)
+        central = LiveTransportPolicy.makeTransport(
+            allowed: allowsLiveTransports ?? LiveTransportPolicy.enabled) {
+            if let centralFactory { return centralFactory(self) }
+            return CBCentralManager(delegate: self, queue: nil)
+        }
     }
 
     // MARK: - Scanning
 
     /// Begin scanning for generic HR straps advertising the 0x180D service.
     public func scan() {
+        guard central != nil else { return }
         discovered.removeAll()
         seenPeripherals.removeAll()
         scanning = true
@@ -179,13 +186,14 @@ public final class StandardHRSource: NSObject, ObservableObject {
     /// Stop an in-progress scan.
     public func stopScan() {
         scanning = false
-        if central.state == .poweredOn { central.stopScan() }
+        if central?.state == .poweredOn { central?.stopScan() }
     }
 
     // MARK: - Connecting
 
     /// Connect to the chosen discovered strap and start streaming its HR.
     public func connect(_ id: UUID) {
+        guard central != nil else { return }
         stopScan()
         // Before the radio is up a retrieve answers nothing even for a strap this device has been bonded
         // to for weeks, and the branch below would read that as "never seen" and arm a scan (#2433).
@@ -220,7 +228,7 @@ public final class StandardHRSource: NSObject, ObservableObject {
         stopScan()
         pendingConnectID = nil
         if let p = peripheral {
-            central.cancelPeripheralConnection(p)
+            central?.cancelPeripheralConnection(p)
         }
         peripheral = nil
         loggedFirstHR = false         // a later reconnect should log its first sample again

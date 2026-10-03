@@ -506,7 +506,7 @@ private struct DevicesContent: View {
         if let v = d.skinTempDevC { out[.skinTemp] = v }
         if let v = d.steps { out[.steps] = Double(v) }
         if let v = d.totalSleepMin { out[.sleep] = v }
-        if let v = d.activeKcalEst { out[.calories] = v }
+        if let v = d.activeEnergyKcalEst { out[.calories] = v }
         return out
     }
 
@@ -1325,7 +1325,7 @@ private struct ExtendedBatteryProbeResultView: View {
             }
             HStack {
                 if !waiting {
-                    Button("Copy") { PlatformPasteboard.copy(text) }
+                    Button("Copy") { FileExport.copyDebugText(text) }
                 }
                 Spacer()
                 Button("Close") { onClose() }
@@ -1430,7 +1430,7 @@ private struct BodyLocationProbeResultView: View {
             }
             HStack {
                 if !waiting {
-                    Button("Copy") { PlatformPasteboard.copy(text) }
+                    Button("Copy") { FileExport.copyDebugText(text) }
                 }
                 Spacer()
                 Button("Close") { onClose() }
@@ -1552,7 +1552,7 @@ private struct FeatureFlagProbeResultView: View {
             }
             HStack {
                 if !waiting {
-                    Button("Copy") { PlatformPasteboard.copy(text) }
+                    Button("Copy") { FileExport.copyDebugText(text) }
                 }
                 Spacer()
                 Button("Close") { onClose() }
@@ -1633,7 +1633,7 @@ private struct EcgProbeResultView: View {
             }
             HStack {
                 if !waiting {
-                    Button("Copy") { PlatformPasteboard.copy(text) }
+                    Button("Copy") { FileExport.copyDebugText(text) }
                 }
                 Spacer()
                 Button("Close") { onClose() }
@@ -1707,7 +1707,7 @@ private struct DeviceConfigProbeResultView: View {
             }
             HStack {
                 if !waiting {
-                    Button("Copy") { PlatformPasteboard.copy(text) }
+                    Button("Copy") { FileExport.copyDebugText(text) }
                 }
                 Spacer()
                 Button("Close") { onClose() }

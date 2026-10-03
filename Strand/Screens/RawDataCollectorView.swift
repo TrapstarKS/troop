@@ -292,7 +292,8 @@ struct RawDataCollectorView: View {
     }
 
     private func export(_ session: RawDataSessionStore.Session) async {
-        guard let end = session.endedAtMs else { return }
+        guard !Task.isCancelled, let end = session.endedAtMs else { return }
+        let ticket = DebugExportReview.shared.beginPreparation()
         exportingId = session.id
         let bounds = Self.fullSecondBounds(fromMs: session.startedAtMs, toMs: end)
         let from = bounds?.from ?? 1, to = bounds?.to ?? 0
@@ -321,11 +322,15 @@ struct RawDataCollectorView: View {
             entries.append(.init(name: "imu-coverage.json", data: data))
         }
         for segment in segments { entries.append(.init(name: "imu/\(segment.name)", data: segment.data)) }
-        let result = await FileExport.exportBundle(entries: entries,
-                                                    suggestedName: "noop-5mg-raw-\(session.id).zip")
-        if result == nil { exportError = "The export file could not be created or shared." }
-        else {
-            store.markExported(session.id)
+        let staged = await DebugExportReview.shared.stageResearch(entries,
+            suggestedName: "noop-5mg-raw-\(session.id).zip", ticket: ticket) { reviewed, _ in
+                let result = await FileExport.exportBundle(entries: reviewed,
+                    suggestedName: "noop-5mg-raw-\(session.id).zip")
+                if result == nil { exportError = "The export file could not be created or shared." }
+                else { store.markExported(session.id) }
+            }
+        if !staged && DebugExportReview.shared.isCurrentPreparation(ticket) {
+            exportError = "The export file could not be created or shared."
         }
         exportingId = nil
     }

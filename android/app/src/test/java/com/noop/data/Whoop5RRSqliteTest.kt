@@ -340,12 +340,22 @@ class Whoop5RRSqliteTest {
 
         val restored = score()
         assertEquals(40.0, restored.avgHrv!!, 0.001)
-        assertNotNull(restored.recovery)
+        if (expectsProtection) {
+            // #2126: the first labelled beat restarts the WHOOP 5 HRV baseline. This one-day
+            // fixture has a real HRV again, but Charge must calibrate rather than compare it
+            // with the eight pre-label history nights seeded above.
+            assertNull(restored.recovery)
+        } else {
+            assertNotNull(restored.recovery)
+        }
         if (expectsProtection) {
             assertNotEquals(legacySnapshot.respRateBpm, restored.respRateBpm)
             assertNotEquals(legacySnapshot.avgSdnn, restored.avgSdnn)
         }
-        if (expectsProtection) assertEquals(owner, repo.scoreInputSource(computedId, restored.day, "recovery"))
+        if (expectsProtection) {
+            assertNull("a calibrating Charge has no scoring provenance",
+                repo.scoreInputSource(computedId, restored.day, "recovery"))
+        }
         assertFalse(showsLegacyGap(restored, owner))
         val idle = score()
         assertEquals(restored.avgHrv, idle.avgHrv)
@@ -355,6 +365,61 @@ class Whoop5RRSqliteTest {
 
     @Test fun actualWhoop5LegacySnapshotClearsAfterSourcePromotion() = runBlocking {
         assertLegacySnapshotScoringLifecycle("5.0 MG", expectsProtection = true)
+    }
+
+    @Test fun shortRescoreRetainsOwnWindowAndDropsExpiredImport() = runBlocking {
+        assertShortRescore(preserve = false, quiet = false)
+    }
+
+    @Test fun normalShortRescoreRemovesQuietRowFromScorerAndDashboard() = runBlocking {
+        assertShortRescore(preserve = false, quiet = true)
+    }
+
+    @Test fun repairShortRescoreRetainsQuietRowInScorerAndDashboard() = runBlocking {
+        assertShortRescore(preserve = true, quiet = true)
+    }
+
+    private suspend fun assertShortRescore(preserve: Boolean, quiet: Boolean) {
+        registry("4.0")
+        activate(id)
+        val now = 1_780_272_000L
+        val offset = java.util.TimeZone.getDefault().getOffset(now * 1000L) / 1000L
+        val end = now - Math.floorMod(now + offset, 86_400L)
+        val scoredEnd = if (quiet) end - 86_400L else end
+        val start = scoredEnd - 4 * 3_600L
+        val anchor = AnalyticsEngine.dayString(end, offset)
+        for (back in 2L..15L) {
+            val day = java.time.LocalDate.parse(anchor).minusDays(back).toString()
+            days["$id-noop" to day] = DailyMetric(deviceId = "$id-noop", day = day,
+                totalSleepMin = 480.0, efficiency = 0.9, restingHr = 60, avgHrv = 32.0, recovery = 60.0)
+        }
+        val expired = java.time.LocalDate.parse(anchor).minusDays(100).toString()
+        days[id to expired] = DailyMetric(deviceId = id, day = expired, restingHr = 50, avgHrv = 90.0)
+        repo.insert(StreamBatch(hr = (start until scoredEnd).map { HrRow(it, 60) },
+            rr = (start until scoredEnd).map { RrRow(it, if (it % 2L == 0L) 980 else 1020) }), id)
+        repo.upsertSleepSessions(listOf(SleepSession(deviceId = id, startTs = start, endTs = scoredEnd,
+            efficiency = 1.0, stagesJSON = AnalyticsEngine.encodeStages(listOf(StageSegment(start, scoredEnd, "light"))))))
+        if (quiet) {
+            repo.insert(StreamBatch(hr = (0L until 100L).map { HrRow(end + 3_600L + it, 60) }), id)
+            days["$id-noop" to anchor] = DailyMetric(deviceId = "$id-noop", day = anchor,
+                totalSleepMin = 480.0, efficiency = 0.9, restingHr = 45, avgHrv = 100.0, recovery = 80.0)
+        }
+        val trace = mutableListOf<String>()
+        IntelligenceEngine.analyzeRecent(repo, maxDays = if (quiet) 2 else 1, importedDeviceId = id,
+            nowSeconds = now + if (quiet) 7_200L else 0L, preserveUnscoredHistory = preserve,
+            recoveryTraceSink = { trace += it }, dayCycleMode = DayCycleMode.MIDNIGHT)
+        val resolved = com.noop.analytics.ChargeBaselines.resolve(
+            repo.importedDailyUnion(id, "0000-01-01", anchor), repo.computedDailyUnion(id, "0000-01-01", anchor),
+            anchor, 0.0, 0.0)
+        assertTrue(resolved.hrvHistory.ownValidNights >= 14)
+        assertFalse(resolved.hrvHistory.seededByImport)
+        assertTrue("scorer and dashboard retain the same own window: $trace",
+            trace.any { it.contains("hrv=own/${resolved.hrvHistory.ownValidNights}") })
+        assertFalse(resolved.hrvHistory.dayKeys.contains(expired))
+        if (quiet) {
+            assertEquals(if (preserve) 100.0 else null, days["$id-noop" to anchor]?.avgHrv)
+            assertEquals(preserve, resolved.hrvHistory.dayKeys.contains(anchor))
+        }
     }
 
     @Test fun actualWhoop4LegacyNightKeepsScoresWithoutExplanation() = runBlocking {
@@ -387,6 +452,21 @@ class Whoop5RRSqliteTest {
         // Another device's beats never leak into either answer.
         assertNull(repo.firstScorableWhoop5RrTs("someone-else"))
         assertNull(repo.firstRecordedRrTs("someone-else"))
+    }
+
+    @Test fun effectiveHrvEpochUsesValidatedCanonicalBeatsAndLaterManualCut() = runBlocking {
+        registry("WHOOP")
+        registry("5.0", owner = "new-five")
+        activate("new-five")
+        insertRr(100L, null)
+        insertRr(200L, 6)
+        insertRr(86_500L, 5)
+        insertRr(172_900L, 7, device = "new-five")
+        assertEquals(86_400.0, repo.effectiveHrvEpoch("new-five", "new-five", 0.0, 0), 0.0)
+        assertEquals(259_200.0, repo.effectiveHrvEpoch("new-five", id, 259_200.0, 0), 0.0)
+        assertEquals(0.0, repo.effectiveHrvEpoch("new-five", id, 0.0, -3_600), 0.0)
+        registry("4.0", owner = "four")
+        assertEquals(12_345.0, repo.effectiveHrvEpoch("four", id, 12_345.0, 0), 0.0)
     }
 
     private fun insertRr(ts: Long, channel: Int?, suspect: Int? = null, device: String = id) {

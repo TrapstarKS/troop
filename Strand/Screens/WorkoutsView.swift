@@ -239,7 +239,7 @@ struct WorkoutsView: View {
             let toDay = todayDayString()
             let fromDate = Calendar.current.date(byAdding: .day, value: -100, to: Date()) ?? Date()
             let metrics = await repo.dailyMetrics(fromDay: Self.dayFormatter.string(from: fromDate), toDay: toDay)
-            dailyKcal = Dictionary(metrics.compactMap { m in m.activeKcalEst.map { (m.day, $0) } },
+            dailyKcal = Dictionary(metrics.compactMap { m in m.activeEnergyKcalEst.map { (m.day, $0) } },
                                    uniquingKeysWith: max)
         }
         .onAppear {

@@ -121,6 +121,7 @@ public struct DailyMetricRow: Equatable, Sendable {
     public let respRateBpm: Double?
     public let steps: Int?
     public let activeKcalEst: Double?
+    public let activeEnergyKcalEst: Double?
 }
 
 public struct SleepSessionRow: Equatable, Sendable {
@@ -193,10 +194,12 @@ public final class ReadonlyNoopStore {
     public func dailyMetrics(deviceId: String, from: String, to: String) throws -> [DailyMetricRow] {
         guard tableNames.contains("dailyMetric") else { return [] }
         return try dbQueue.read { db in
-            try Row.fetchAll(db, sql: """
+            let activeColumn = try db.columns(in: "dailyMetric").contains { $0.name == "activeEnergyKcalEst" }
+                ? "activeEnergyKcalEst" : "NULL AS activeEnergyKcalEst"
+            return try Row.fetchAll(db, sql: """
                 SELECT day, totalSleepMin, efficiency, deepMin, remMin, lightMin, disturbances,
                        restingHr, avgHrv, recovery, strain, exerciseCount,
-                       spo2Pct, skinTempDevC, respRateBpm, steps, activeKcalEst
+                       spo2Pct, skinTempDevC, respRateBpm, steps, activeKcalEst, \(activeColumn)
                 FROM dailyMetric
                 WHERE deviceId = ? AND day >= ? AND day <= ?
                 ORDER BY day ASC
@@ -210,7 +213,8 @@ public final class ReadonlyNoopStore {
                                    strain: $0["strain"], exerciseCount: $0["exerciseCount"],
                                    spo2Pct: $0["spo2Pct"], skinTempDevC: $0["skinTempDevC"],
                                    respRateBpm: $0["respRateBpm"], steps: $0["steps"],
-                                   activeKcalEst: $0["activeKcalEst"])
+                                   activeKcalEst: $0["activeKcalEst"],
+                                   activeEnergyKcalEst: $0["activeEnergyKcalEst"])
                 }
         }
     }
@@ -643,6 +647,7 @@ private func dailyJSON(_ row: DailyMetricRow, source: String) -> JSONValue {
         "respRateBpm": optionalDouble(row.respRateBpm),
         "steps": optionalInt(row.steps),
         "activeKcalEst": optionalDouble(row.activeKcalEst),
+        "activeEnergyKcalEst": optionalDouble(row.activeEnergyKcalEst),
     ])
 }
 

@@ -246,6 +246,7 @@ struct RootTabView: View {
         // A session left running by a previous launch is back before this view exists
         // (`LiftSessionController.resumeSaved`, from `StrandiOSApp.init`), as the BAR — not as a sheet
         // thrown in the user's face; they open it when they want it.
+        .modifier(DebugExportReviewHost())
         .sheet(isPresented: $liftSession.isPresented, onDismiss: presentPendingCoach) {
             LiftSessionView { }
         }

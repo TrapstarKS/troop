@@ -636,7 +636,7 @@ private fun strapMetricValues(d: DailyMetric): Map<MetricArbitrationPolicy.Metri
     d.skinTempDevC?.let { out[MetricArbitrationPolicy.MetricKind.SKIN_TEMP] = it }
     d.steps?.let { out[MetricArbitrationPolicy.MetricKind.STEPS] = it.toDouble() }
     d.totalSleepMin?.let { out[MetricArbitrationPolicy.MetricKind.SLEEP] = it }
-    d.activeKcalEst?.let { out[MetricArbitrationPolicy.MetricKind.CALORIES] = it }
+    d.activeEnergyKcalEst?.let { out[MetricArbitrationPolicy.MetricKind.CALORIES] = it }
     return out
 }
 

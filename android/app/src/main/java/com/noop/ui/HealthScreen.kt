@@ -2556,7 +2556,7 @@ internal suspend fun buildSeriesVitalDetail(vm: AppViewModel, key: String): Vita
     }
     "active_kcal" -> {
         // #616: calories, like steps (#377), come from TWO disjoint stores — the on-device HR estimate
-        // (DailyMetric.activeKcalEst, exposed by resolvedSeries("active_kcal")) and imported Apple/Health-
+        // (DailyMetric.activeEnergyKcalEst, exposed by resolvedSeries("active_kcal")) and imported Apple/Health-
         // Connect active energy (AppleDaily.activeKcal, where Health Connect writes it — NOT an active_kcal
         // metricSeries row). Reading imports ALONE opened an empty / HealthConnect-only detail for a WHOOP
         // 5.0 user whose calories are on-device, and disagreed with the Key-Metrics tile. Resolve per day

@@ -9,6 +9,8 @@ import com.noop.alarm.SmartAlarmScheduler
 import com.noop.alarm.SmartAlarmStore
 import com.noop.alarm.WindDownScheduler
 import com.noop.alarm.WindDownStore
+import com.noop.analytics.AnalyticsEngine
+import com.noop.analytics.ChargeBaselines
 import com.noop.analytics.Baselines
 import com.noop.analytics.HealthSignalReliability
 import com.noop.ingest.WhoopCsvImporter
@@ -126,6 +128,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** The process owns the store + BLE client (see [NoopApplication]) so the connection can outlive
      *  this Activity-scoped ViewModel and keep streaming under [WhoopConnectionService]. */
     private val noopApp = app as NoopApplication
+    private val runtimePolicy = noopApp.runtimePolicy
 
     // Offline store — process-wide, shared with the background service.
     private val repository: WhoopRepository = noopApp.repository
@@ -315,6 +318,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun makeStrapScanner(): com.noop.ble.StandardHrSource =
         com.noop.ble.StandardHrSource(
             context = appContext,
+            runtimePolicy = runtimePolicy,
             deviceId = "scan-preview",
             liveSink = { _, _ -> },
             // Discovery-only scanner: nothing is persisted, so the outcome callback never fires.
@@ -334,6 +338,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun makeFtmsScanner(): com.noop.ble.FtmsSource =
         com.noop.ble.FtmsSource(
             context = appContext,
+            runtimePolicy = runtimePolicy,
             liveSink = { },
             // Wizard scan diagnostics → the SAME exported strap log the active path uses (issue #421).
             // The source self-prefixes "FTMS: "; [externalLog] redacts addresses. Statuses / counts only.
@@ -349,6 +354,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun makeHuamiScanner(): com.noop.ble.HuamiHrSource =
         com.noop.ble.HuamiHrSource(
             context = appContext,
+            runtimePolicy = runtimePolicy,
             deviceId = "scan-preview",
             liveSink = { },
             // Wizard scan diagnostics → the SAME exported strap log the active path uses (issue #421).
@@ -371,6 +377,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun makeOuraScanner(): com.noop.ble.OuraLiveSource =
         com.noop.ble.OuraLiveSource(
             context = appContext,
+            runtimePolicy = runtimePolicy,
             deviceId = "scan-preview",
             ringGen = com.noop.oura.OuraRingGen.GEN3,
             liveSink = { _, _ -> },
@@ -586,8 +593,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // Declared BEFORE the init block on purpose: the recentDays collector launched from init
     // runs synchronously on Main.immediate and reads this on its very first (cached) emission —
     // a declaration after init would still be null there (JVM initializes fields in declaration
-    // order) and crash the constructor. Opt-OUT, default ON (Android has always run the watch);
-    // port of macOS behavior.illnessWatch, which is opt-in.
+    // order) and crash the constructor. Opt-in, default OFF, matching macOS behavior.illnessWatch.
     private val _illnessWatchEnabled = MutableStateFlow(NoopPrefs.illnessWatch(appContext))
     /** Whether the illness early-warning runs (banner + notification). */
     val illnessWatchEnabled: StateFlow<Boolean> = _illnessWatchEnabled.asStateFlow()
@@ -778,6 +784,51 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val healthSignalEvidence: StateFlow<IllnessHistory.Snapshot?> get() = illnessHistory
+
+    /** Validated transport era; manual restart preferences remain separate for truthful copy. */
+    val hrvRegimeEpoch: StateFlow<Double> = combine(recentDays, activeStrapIdFlow) { _, active ->
+        val now = System.currentTimeMillis()
+        repository.effectiveHrvEpoch(active ?: deviceId, manualEpoch = 0.0,
+            offsetSec = java.util.TimeZone.getDefault().getOffset(now) / 1_000L)
+    }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
+
+    /**
+     * #2525: the Charge baselines (HRV, resting HR, respiration) resolved with the engine's own rule from the
+     * imported and own daily rows, read apart because the rule needs to know which nights are imported. The
+     * single funnel every Charge readout below the headline reads (the "What shaped it" rows, the
+     * calibration count, the confidence tier), so none of them can fold a different history than the score
+     * was computed against. Anchored on today's local day and the two recalibration epochs, read on each
+     * emission exactly as the engine reads them per pass. The read range starts at this ViewModel's first
+     * window start, so it only ever covers MORE days than the window; [ChargeBaselines.history] trims to the
+     * current one. Mirrors the Swift `Repository.chargeBaselines`.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val chargeBaselines: StateFlow<ChargeBaselines.Resolved?> = run {
+        val startSec = System.currentTimeMillis() / 1000L
+        val startTz = java.util.TimeZone.getDefault().getOffset(startSec * 1000L) / 1000L
+        val from = Baselines.cutoffKey(AnalyticsEngine.dayString(startSec, startTz), ChargeBaselines.windowDays - 1)
+        activeStrapIdFlow.flatMapLatest { selected ->
+          val owner = effectiveActiveStrapId(selected, deviceId)
+          combine(
+            repository.importedDailyUnionFlow(owner, from, "9999-12-31"),
+            repository.computedDailyUnionFlow(owner, from, "9999-12-31"),
+            hrvRegimeEpoch,
+        ) { imported, own, regime ->
+            val nowSec = System.currentTimeMillis() / 1000L
+            val tz = java.util.TimeZone.getDefault().getOffset(nowSec * 1000L) / 1000L
+            val prefs = NoopPrefs.of(appContext)
+            ChargeBaselines.resolve(
+                imported = imported,
+                own = own,
+                anchorDay = AnalyticsEngine.dayString(nowSec, tz),
+                hrvEpoch = maxOf(prefs.getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(), regime),
+                recoveryEpoch = prefs.getLong(Baselines.recoveryBaselineEpochKey, 0L).toDouble(),
+            )
+        }
+        }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    }
 
     /**
      * Today's measured steps follow the newest confirmed sleep-onset cycle, independently of the fixed
@@ -1487,6 +1538,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * BLE client itself no-ops if already connected or the runtime permission isn't granted yet.
      */
     private fun autoReconnectOnLaunch() {
+        if (!runtimePolicy.allowsBluetooth) return
         val saved = NoopPrefs.lastDevice(appContext) ?: return
         // No picker restore here any more. This used to assign `_selectedModel` from `saved.second`,
         // which is what let a wrong family survive every restart and re-store itself. `_selectedModel`
@@ -1501,7 +1553,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // APK updates tear down the old foreground service along with the old process. Re-promote it
         // on the first launch after update/restart before reconnecting, so the persistent notification
         // and long-lived connection both come back without the user toggling the setting again.
-        WhoopConnectionService.start(appContext)
+        startConnectionService()
         // The PAIR, deliberately, not the seeded picker value. `setLastDevice` writes address and family
         // in one call, so `saved.second` describes THIS address; the recorded family describes whatever
         // advertised last, which need not be the same strap. `reconnectToAddress` assigns the client's
@@ -1510,6 +1562,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // with a 4.0 and a 5/MG makes them disagree routinely: the 5/MG cannot bond (#1635) so it never
         // becomes the saved device, while every attempt at it re-records WHOOP5_MG.
         ble.reconnectToAddress(saved.first, saved.second)
+    }
+
+    private fun startConnectionService() = runtimePolicy.runBluetooth {
+        WhoopConnectionService.start(appContext)
+    }
+
+    private fun stopConnectionService() = runtimePolicy.runBluetooth {
+        WhoopConnectionService.stop(appContext)
     }
 
     /** Snapshot the user's body profile from SharedPreferences as an analytics [UserProfile]. */
@@ -1616,7 +1676,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // collect it — even if the user hasn't opted into background connection, the route must keep
             // tracking with the screen off (#215). Then mirror the shared route back into the UI state.
             GpsSession.start(startMs, sport.name)
-            WhoopConnectionService.start(appContext)
+            startConnectionService()
             observeGpsSession()
         } else {
             // A non-GPS session has no process-level GpsSession backing it, so make it durable: snapshot
@@ -1718,7 +1778,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         activeWorkoutStore.clear()
         if (w.gpsEnabled) {
             GpsSession.stop()
-            if (!NoopPrefs.backgroundConnection(appContext)) WhoopConnectionService.stop(appContext)
+            if (!NoopPrefs.backgroundConnection(appContext)) stopConnectionService()
         }
         _lastWorkout.value = null
     }
@@ -1743,7 +1803,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // "Connected" notification would outlive the workout. With background-connection on, leave it
         // up. Done here (before the discard early-return) so an empty GPS session tears down too. (#215)
         if (w.gpsEnabled && !NoopPrefs.backgroundConnection(appContext)) {
-            WhoopConnectionService.stop(appContext)
+            stopConnectionService()
         }
         val samples = w.samples
         if (samples.size < 2 && track.size < 2) {
@@ -2338,6 +2398,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // MARK: - Strap controls (thin pass-throughs to the BLE client)
 
     fun connect(promoteService: Boolean = true) {
+        if (!runtimePolicy.allowsBluetooth) return
         // An explicit user-driven Connect must start the reconnect schedule fresh — never inherit a
         // backoff delay accumulated by a prior involuntary-reconnect loop (#48, iOS connect() parity).
         ble.resetReconnectBackoff()
@@ -2351,7 +2412,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Onboarding auto-connects before the user has finished setup and passes promoteService=false
         // so the persistent notification doesn't appear mid-flow; it promotes once on completion.
         if (promoteService && NoopPrefs.backgroundConnection(appContext)) {
-            WhoopConnectionService.start(appContext)
+            startConnectionService()
         }
     }
 
@@ -2360,13 +2421,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun promoteBackgroundConnectionIfActive() {
         if (!NoopPrefs.backgroundConnection(appContext)) return
         if (ble.state.value.connected || ble.state.value.bonded) {
-            WhoopConnectionService.start(appContext)
+            startConnectionService()
         }
     }
 
     fun disconnect() {
         // User asked to disconnect: drop the foreground promotion first, then the link itself.
-        WhoopConnectionService.stop(appContext)
+        stopConnectionService()
         ble.disconnect()
         hrWindow.clear()
         _bpm.value = null
@@ -2446,10 +2507,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         NoopPrefs.setBackgroundConnection(appContext, enabled)
         if (enabled) {
             if (ble.state.value.connected || ble.state.value.bonded) {
-                WhoopConnectionService.start(appContext)
+                startConnectionService()
             }
         } else {
-            WhoopConnectionService.stop(appContext)
+            stopConnectionService()
         }
         // Continuous HRV capture is gated on background connection (it has nothing to stream over without
         // it), so a change here re-reconciles the keep-stream want: turning background off disarms the
@@ -2525,7 +2586,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // WHOOP HR NOOP receives. LOCAL Bluetooth only — nothing leaves the device. The broadcaster is a pure
     // CONSUMER of [ble.state].heartRate (fed in the state-collect loop in init); it never writes back into
     // the WHOOP path, so the strap connection and scoring can't regress.
-    private val broadcaster = HrBroadcaster(appContext, log = { ble.externalLog(it) })
+    private val broadcaster = HrBroadcaster(
+        appContext, log = { ble.externalLog(it) }, runtimePolicy = runtimePolicy,
+    )
 
     private val _hrBroadcast = MutableStateFlow(NoopPrefs.hrBroadcast(appContext))
     /** Whether the "Broadcast heart rate" toggle is on. Default OFF. */
@@ -2546,7 +2609,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         // Resume broadcasting on launch if the user had it on (and the OS permission survives). If the
         // permission was revoked, [HrBroadcaster.start] degrades to a status note rather than crashing.
-        if (_hrBroadcast.value) broadcaster.start()
+        if (runtimePolicy.allowsBluetooth && _hrBroadcast.value) broadcaster.start()
     }
 
     /**
@@ -2861,7 +2924,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         else WindDownScheduler.cancel(appContext)
     }
 
-    // --- Illness watch (opt-out; the evaluation itself is the pure IllnessWatch.evaluate).
+    // --- Illness watch (opt-in; the evaluation itself is the pure IllnessWatch.evaluateWindow).
     // State lives next to _healthAlert above (declaration-order constraint); setter here with
     // the other settings mutators. ---
     fun setIllnessWatchEnabled(enabled: Boolean) {

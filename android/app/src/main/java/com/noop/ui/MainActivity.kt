@@ -159,7 +159,11 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Request the BLE permissions appropriate to the running OS version. */
-    private fun requestBlePermissions() {
+    internal fun requestBlePermissions(
+        runtimePolicy: com.noop.DemoRuntimePolicy = com.noop.DemoRuntimePolicy.current,
+        launch: (Array<String>) -> Unit = { permissionLauncher.launch(it) },
+    ) {
+        if (!runtimePolicy.allowsBluetooth) return
         val needed = buildList {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 // Android 12+: granular Bluetooth permissions.
@@ -174,7 +178,7 @@ class MainActivity : ComponentActivity() {
             }
         }.toTypedArray()
 
-        if (needed.isNotEmpty()) permissionLauncher.launch(needed)
+        if (needed.isNotEmpty()) launch(needed)
     }
 }
 
@@ -1665,6 +1669,16 @@ fun NoopRoot() {
     // Existing, onboarded user: render the app, and if they've updated since last launch
     // (stored version behind current), show "What's New" once over the top.
     AppRoot(viewModel = appViewModel)
+
+    val reviewScope = androidx.compose.runtime.rememberCoroutineScope()
+    DebugExportReview.shared.pending?.let { pending ->
+        ReportReviewDialog(
+            previewText = pending.gate.previewText,
+            modeInactive = false,
+            onCancel = { DebugExportReview.shared.cancel() },
+            onShare = { reviewScope.launch { DebugExportReview.shared.confirm(pending.id) } },
+        )
+    }
 
     if (lastSeenChangelog != AppChangelog.CURRENT_VERSION) {
         Dialog(

@@ -1009,7 +1009,7 @@ interface WhoopDao : DeviceRegistryDao {
         "DELETE FROM dailyMetric WHERE deviceId = 'my-whoop' " +
             "AND efficiency IS NULL AND deepMin IS NULL AND remMin IS NULL AND lightMin IS NULL " +
             "AND disturbances IS NULL AND recovery IS NULL AND strain IS NULL " +
-            "AND steps IS NULL AND activeKcalEst IS NULL " +
+            "AND steps IS NULL AND activeKcalEst IS NULL AND activeEnergyKcalEst IS NULL " +
             "AND day IN (SELECT day FROM dailyMetric d WHERE d.deviceId LIKE '%-noop')"
     )
     suspend fun purgeHcShadowedDailyMetrics(): Int

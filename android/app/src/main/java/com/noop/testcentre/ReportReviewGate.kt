@@ -43,7 +43,7 @@ class ReportReviewGate(private val entries: List<Pair<String, ByteArray>>) {
      *  is belt-and-braces so no single Compose Text can choke the review sheet regardless of what a branch
      *  attaches. Mirrors Swift ReportReviewGate.notShownInline + maxInlineBytes. */
     private fun isExcludedFromInline(name: String, size: Int): Boolean =
-        isBinaryEntry(name) || name in NOT_SHOWN_INLINE || size > MAX_INLINE_BYTES
+        isBinaryEntry(name) || name.startsWith("imu/") || name in NOT_SHOWN_INLINE || size > MAX_INLINE_BYTES
 
     companion object {
         /** Large raw research streams never shown inline by NAME: the WHOOP frame capture plus the Oura

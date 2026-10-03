@@ -592,7 +592,8 @@ private struct RecoveryContributorsSection: View {
         let latest = repo.days.last
         // A contributor needs at least the recovery seed depth of prior nights to score against
         // a baseline; below that we show CALIBRATING and leave the bars unfilled but honest.
-        let priorCount = repo.days.dropLast().compactMap(\.avgHrv).filter { $0 > 0 }.count
+        let prior = Array(repo.days.dropLast())
+        let priorCount = repo.chargeBaselines?.hrv.nValid ?? 0
         let ready = priorCount >= Baselines.minNightsSeed
         let contributors = buildContributors(latest)
 
@@ -626,7 +627,7 @@ private struct RecoveryContributorsSection: View {
     /// HRV and Sleep score higher when above baseline; Resting HR and Respiratory score higher
     /// when at/below baseline (lower is better). Strength is a centred 0–100 (baseline ≈ 70).
     private func buildContributors(_ latest: DailyMetric?) -> [Contributor] {
-        let hrvBase  = baseline { $0.avgHrv }
+        let hrvBase = repo.chargeBaselines?.hrv.usable == true ? repo.chargeBaselines?.hrv.baseline : nil
         let rhrBase  = baseline { $0.restingHr.map(Double.init) }
         let sleepBase = baseline { $0.totalSleepMin }
         let respBase = baseline { $0.respRateBpm }
@@ -661,8 +662,9 @@ private struct RecoveryContributorsSection: View {
 
     /// Mean of a per-day column across prior nights (excludes the latest day so "vs baseline"
     /// compares the latest reading against history). nil until enough nights exist.
-    private func baseline(_ key: (DailyMetric) -> Double?) -> Double? {
-        let prior = repo.days.dropLast().compactMap(key).filter { $0 > 0 }
+    private func baseline(epoch: Double = 0, _ key: (DailyMetric) -> Double?) -> Double? {
+        let prior = repo.days.dropLast().filter { Baselines.isInHrvEra(day: $0.day, epoch: epoch) }
+            .compactMap(key).filter { $0 > 0 }
         guard prior.count >= Baselines.minNightsSeed else { return nil }
         return prior.reduce(0, +) / Double(prior.count)
     }

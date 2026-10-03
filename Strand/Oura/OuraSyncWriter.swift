@@ -37,7 +37,7 @@ enum OuraSyncWriter {
                         deepMin: d.deepMin, remMin: d.remMin, lightMin: d.lightMin, disturbances: nil,
                         restingHr: d.restingHr, avgHrv: d.avgHrvMs, recovery: nil, strain: nil,
                         exerciseCount: nil, spo2Pct: d.spo2Pct, skinTempDevC: d.skinTempDevC,
-                        respRateBpm: d.respRateBpm, steps: d.steps, activeKcalEst: d.activeKcal)
+                        respRateBpm: d.respRateBpm, steps: d.steps, activeKcalEst: d.totalKcal, activeEnergyKcalEst: d.activeKcal)
         }
         summary.days = try await store.upsertDailyMetrics(metrics, deviceId: deviceId)
 
@@ -77,7 +77,11 @@ enum OuraSyncWriter {
 
         // 6. Extras → metricSeries (ref_*/oura_*/vo2max — parity with the file-import lane, sourced from
         //    the extras array so vo2max/ref_sleep_score are never lost even though DailyMetric lacks them).
-        let points = result.extras.map { MetricPoint(day: $0.day, key: $0.key, value: $0.value) }
+        var points = result.extras.map { MetricPoint(day: $0.day, key: $0.key, value: $0.value) }
+        for day in result.days {
+            if let active = day.activeKcal { points.append(MetricPoint(day: day.day, key: "active_kcal", value: active)) }
+            if let total = day.totalKcal { points.append(MetricPoint(day: day.day, key: "energy_kcal", value: total)) }
+        }
         summary.metricPoints = try await store.upsertMetricSeries(points, deviceId: deviceId)
 
         return summary

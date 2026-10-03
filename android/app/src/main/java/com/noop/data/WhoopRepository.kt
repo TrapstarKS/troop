@@ -811,6 +811,15 @@ class WhoopRepository(
     fun computedDailyUnionFlow(activeStrapId: String, from: String, to: String): Flow<List<DailyMetric>> =
         unionDaysFlow(computedSourceIds(activeStrapId).map { dao.dailyMetricsRangeFlow(it, from, to) })
 
+    /** Imported-only daily rows over the same active-and-canonical union, the twin of
+     *  [computedDailyUnionFlow]. The Charge baselines (#2525) read the two buckets apart, because their rule
+     *  needs to know which nights are imported; [daysMergedFlow] has already blended them. */
+    suspend fun importedDailyUnion(activeStrapId: String, from: String, to: String): List<DailyMetric> =
+        unionByDay(importedSourceIds(activeStrapId).map { dao.dailyMetricsRange(it, from, to) })
+
+    fun importedDailyUnionFlow(activeStrapId: String, from: String, to: String): Flow<List<DailyMetric>> =
+        unionDaysFlow(importedSourceIds(activeStrapId).map { dao.dailyMetricsRangeFlow(it, from, to) })
+
     fun metricSeriesComputedUnionFlow(
         activeStrapId: String,
         key: String,
@@ -1382,6 +1391,15 @@ class WhoopRepository(
             if (active != null && active != deviceId) tagged = isWhoop5RrSource(active)
         }
         return com.noop.protocol.Whoop5RR.usesCanonicalSource(owner?.model, owner?.brand, tagged || unlabelledAliasOfWhoop5)
+    }
+
+    /** Same effective HRV era for the scorer, calibration counts and confidence readers. */
+    suspend fun effectiveHrvEpoch(activeOwner: String, importedAlias: String = "my-whoop",
+                                 manualEpoch: Double, offsetSec: Long): Double {
+        val isFive = isWhoop5RrSource(activeOwner)
+        val first = if (isFive) listOf(activeOwner, importedAlias, WHOOP_SOURCE).distinct()
+            .mapNotNull { firstScorableWhoop5RrTs(it) }.minOrNull() else null
+        return com.noop.analytics.Baselines.effectiveHrvEpoch(manualEpoch, first, isFive, offsetSec)
     }
 
     /** The earliest beat this device has banked that the unit policy can actually score, or null when
@@ -2725,7 +2743,8 @@ class WhoopRepository(
             "sleep_light_min", "core_min" -> d.lightMin
             "sleep_performance" -> com.noop.analytics.RestScorer.restFromDaily(d)
             "steps" -> d.steps?.toDouble()
-            "active_kcal", "energy_kcal" -> d.activeKcalEst
+            "active_kcal" -> d.activeEnergyKcalEst
+            "energy_kcal" -> d.activeKcalEst
             else -> null
         }
 
@@ -2840,6 +2859,7 @@ class WhoopRepository(
                 respRateBpm = winner.respRateBpm ?: filler.respRateBpm,
                 steps = winner.steps ?: filler.steps,
                 activeKcalEst = winner.activeKcalEst ?: filler.activeKcalEst,
+                activeEnergyKcalEst = winner.activeEnergyKcalEst ?: filler.activeEnergyKcalEst,
             )
         }
 
@@ -2977,6 +2997,7 @@ class WhoopRepository(
                     respRateBpm = d.respRateBpm ?: c.respRateBpm,
                     steps = d.steps ?: c.steps,
                     activeKcalEst = d.activeKcalEst ?: c.activeKcalEst,
+                    activeEnergyKcalEst = d.activeEnergyKcalEst ?: c.activeEnergyKcalEst,
                     // Raw SpO2 is on-device only (imports never carry it), so the imported row's null
                     // is backfilled from the computed row — otherwise the nightly means would be lost. (#93)
                     spo2Red = d.spo2Red ?: c.spo2Red,

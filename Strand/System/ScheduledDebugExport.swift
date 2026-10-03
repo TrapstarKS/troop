@@ -180,8 +180,8 @@ enum ScheduledDebugExport {
     /// `live.puffinCaptureURL`) so a scheduled drop carries the same matched pair the one-tap "Export raw +
     /// log" does. Returns the written log file URL or nil if the body couldn't be written.
     @discardableResult
-    static func runNow(captureURL: URL? = nil) -> URL? {
-        performExport(markDay: false, captureURL: captureURL)
+    static func runNow(captureURL: URL? = nil, directory: URL? = nil) -> URL? {
+        performExport(markDay: false, captureURL: captureURL, directory: directory)
     }
 
     // MARK: - Scheduling
@@ -260,24 +260,20 @@ enum ScheduledDebugExport {
     /// the same as a manual share. `markDay` records today so the daily dedup/catch-up doesn't
     /// double-write; the "Run now" button passes false so a manual tap always produces a file.
     @discardableResult
-    private static func performExport(markDay: Bool, captureURL: URL? = nil) -> URL? {
-        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+    private static func performExport(markDay: Bool, captureURL: URL? = nil, directory: URL? = nil) -> URL? {
+        guard let docs = directory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
             return nil
         }
         let stamp = FileExport.timestamp()
         let logURL = docs.appendingPathComponent("noop-strap-log-\(stamp).txt")
-        do {
-            try LiveState.scheduledExportText(extraHeaderLines: DebugDataDiagnostics.strapStateLines())
-                .write(to: logURL, atomically: true, encoding: .utf8)
-        } catch {
-            return nil
-        }
-        // Best-effort: copy the supplied raw 5/MG capture alongside, so a "Run now" drop carries the same
-        // matched pair the one-tap "Export raw + log" does. The background timer path passes nil (no live
-        // session), so it writes just the log — honest about what's available with no session open.
-        if let capture = captureURL, FileManager.default.fileExists(atPath: capture.path) {
-            let dest = docs.appendingPathComponent("noop-raw-capture-\(stamp).json")
-            try? FileManager.default.copyItem(at: capture, to: dest)
+        let text = LiveState.scheduledExportText(extraHeaderLines: DebugDataDiagnostics.strapStateLines())
+        let entries = captureURL.map { DebugExportReview.pairEntries(file: $0, text: text, textName: "report.txt") }
+            ?? [.init(name: "report.txt", data: Data(text.utf8))]
+        guard let prepared = try? DebugExportReview.prepare(entries) else { return nil }
+        guard let log = prepared.first(where: { $0.name == "report.txt" }) else { return nil }
+        do { try log.data.write(to: logURL, options: .atomic) } catch { return nil }
+        if let raw = prepared.first(where: { $0.name == "raw-capture.jsonl" }) {
+            try? raw.data.write(to: docs.appendingPathComponent("noop-raw-capture-\(stamp).json"), options: .atomic)
         }
         if markDay {
             UserDefaults.standard.set(dayKey(Date()), forKey: K.lastRun)

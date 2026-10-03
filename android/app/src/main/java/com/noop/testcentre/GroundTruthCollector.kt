@@ -1,9 +1,7 @@
 package com.noop.testcentre
 
 import android.content.Context
-import android.content.Intent
 import android.os.Build
-import androidx.core.content.FileProvider
 import com.noop.BuildConfig
 import com.noop.data.WhoopRepository
 import com.noop.ingest.RawSensorExport
@@ -12,6 +10,7 @@ import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.UUID
@@ -266,36 +265,34 @@ class GroundTruthCollector private constructor(private val context: Context) {
         return snapshot()
     }
 
-    suspend fun export(repo: WhoopRepository, sessionId: String? = null): File = withContext(Dispatchers.IO) {
-        val snap = snapshot()
-        val id = sessionId ?: requireNotNull(snap.sessionId) { "No ground-truth session has been recorded" }
-        val summary = sessions().firstOrNull { it.id == id } ?: error("Ground-truth session is missing")
-        require(!summary.active) { "Stop the session before exporting" }
-        val deviceId = summary.deviceId
-        val source = eventFile(id)
-        require(source.isFile) { "Ground-truth event file is missing" }
-        val events = source.useLines { lines ->
-            lines.filter { it.isNotBlank() }
-                .mapNotNull { line -> runCatching { JSONObject(line) }.getOrNull() }
-                .toList()
-        }
-        val endMs = summary.endedAtMs ?: events.lastOrNull()?.optLong("at_ms") ?: summary.startedAtMs
-        // Export the complete bounded interval; markers are optional annotations.
-        val sensorFrom = ceilSecond(summary.startedAtMs)
-        val sensorTo = endMs / 1_000L - 1L
-        val imuSegments = if (deviceId == null || sensorFrom > sensorTo) emptyList() else
-            ImuSessionFileStore(context).exportSegments(id, sensorFrom, sensorTo)
-        val fullFrom = sensorFrom
-        val fullTo = endMs / 1_000L - 1L
-        // A live capture can only produce its first complete one-second frame after startup.
-        // Historical windows must still cover the exact requested start.
-        val firstImuTs = imuSegments.minOfOrNull { it.startTs }?.takeIf { it <= fullFrom + 1 }
-        val coverageFrom = if (summary.capturedStartedAtMs != null) maxOf(fullFrom, firstImuTs ?: fullFrom)
-            else fullFrom
-        val imuComplete = covers(imuSegments, coverageFrom, fullTo)
-        val outDir = File(context.cacheDir, "logs").apply { mkdirs() }
-        val zip = File(outDir, "noop-5mg-raw-$id.zip")
-        ZipOutputStream(zip.outputStream().buffered()).use { out ->
+    suspend fun export(repo: WhoopRepository, sessionId: String? = null): File {
+        val id = sessionId ?: requireNotNull(snapshot().sessionId) { "No ground-truth session has been recorded" }
+        val zip = File(context.cacheDir, "logs/noop-5mg-raw-$id.zip")
+        return writePreparation(zip) { out ->
+            val summary = sessions().firstOrNull { it.id == id } ?: error("Ground-truth session is missing")
+            require(!summary.active) { "Stop the session before exporting" }
+            val deviceId = summary.deviceId
+            val source = eventFile(id)
+            require(source.isFile) { "Ground-truth event file is missing" }
+            val events = source.useLines { lines ->
+                lines.filter { it.isNotBlank() }
+                    .mapNotNull { line -> runCatching { JSONObject(line) }.getOrNull() }
+                    .toList()
+            }
+            val endMs = summary.endedAtMs ?: events.lastOrNull()?.optLong("at_ms") ?: summary.startedAtMs
+            // Export the complete bounded interval; markers are optional annotations.
+            val sensorFrom = ceilSecond(summary.startedAtMs)
+            val sensorTo = endMs / 1_000L - 1L
+            val imuSegments = if (deviceId == null || sensorFrom > sensorTo) emptyList() else
+                ImuSessionFileStore(context).exportSegments(id, sensorFrom, sensorTo)
+            val fullFrom = sensorFrom
+            val fullTo = endMs / 1_000L - 1L
+            // A live capture can only produce its first complete one-second frame after startup.
+            // Historical windows must still cover the exact requested start.
+            val firstImuTs = imuSegments.minOfOrNull { it.startTs }?.takeIf { it <= fullFrom + 1 }
+            val coverageFrom = if (summary.capturedStartedAtMs != null) maxOf(fullFrom, firstImuTs ?: fullFrom)
+                else fullFrom
+            val imuComplete = covers(imuSegments, coverageFrom, fullTo)
             var v18Count: Int
             out.putNextEntry(ZipEntry("v18-aux.csv"))
             out.bufferedWriterNoClose().use { writer ->
@@ -356,20 +353,49 @@ class GroundTruthCollector private constructor(private val context: Context) {
                 out.closeEntry()
             }
         }
-        val exportedAt = System.currentTimeMillis()
-        prefs.edit().putBoolean(sessionExportedKey(id), true).putLong(sessionLastExportKey(id), exportedAt).apply()
-        if (id == snap.sessionId) prefs.edit().putBoolean("exported", true).apply()
-        zip
     }
 
-    fun share(file: File) {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-            type = "application/zip"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "NOOP 5/MG raw-data session")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }, "Export raw-data session").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    internal suspend fun writePreparation(zip: File, writer: suspend (ZipOutputStream) -> Unit): File {
+        try {
+            return withContext(Dispatchers.IO) {
+                zip.parentFile?.mkdirs()
+                ZipOutputStream(zip.outputStream().buffered()).use { writer(it) }
+                zip
+            }
+        } catch (error: Throwable) {
+            withContext(Dispatchers.IO + NonCancellable) { zip.delete() }
+            throw error
+        }
+    }
+
+    suspend fun share(
+        file: File,
+        sessionId: String? = null,
+        onExported: () -> Unit = {},
+        output: (suspend (List<Pair<String, ByteArray>>) -> File?)? = null,
+        preparationTicket: Long? = null,
+        read: (suspend (File) -> List<Pair<String, ByteArray>>)? = null,
+    ) {
+        try {
+            val ticket = preparationTicket ?: com.noop.ui.DebugExportReview.shared.beginPreparation()
+            val entries = if (read != null) read(file) else
+                withContext(Dispatchers.IO) { com.noop.ui.DebugExportReview.readResearchZip(file) }
+            com.noop.ui.DebugExportReview.shared.stageResearch(entries, ticket = ticket) { reviewed ->
+                val exported = if (output != null) output(reviewed) else
+                    com.noop.ui.LogExport.exportBundle(context, reviewed, file.nameWithoutExtension + "-reviewed.zip")
+                if (exported != null) {
+                    if (sessionId != null) {
+                        prefs.edit().putBoolean(sessionExportedKey(sessionId), true)
+                            .putLong(sessionLastExportKey(sessionId), System.currentTimeMillis()).apply()
+                        if (sessionId == snapshot().sessionId) prefs.edit().putBoolean("exported", true).apply()
+                    }
+                    onExported()
+                }
+            }
+        } finally {
+            // A session export is a temporary private preparation; review owns an immutable snapshot.
+            if (sessionId != null) withContext(Dispatchers.IO + NonCancellable) { file.delete() }
+        }
     }
 
     private fun covers(chunks: List<ImuSessionFileStore.ExportSegment>, from: Long, to: Long): Boolean {

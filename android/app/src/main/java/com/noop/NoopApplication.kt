@@ -31,7 +31,9 @@ import kotlinx.coroutines.runBlocking
  * macOS app gets the same outcome for free — its `AppModel` is an app-level `@StateObject` kept alive
  * by the menu-bar extra.
  */
-class NoopApplication : Application() {
+class NoopApplication(
+    internal val runtimePolicy: DemoRuntimePolicy = DemoRuntimePolicy.current,
+) : Application() {
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(AppLanguagePrefs.wrap(base))
@@ -129,6 +131,7 @@ class NoopApplication : Application() {
         val startupId = whoopStartupDeviceId()
         WhoopBleClient(
             applicationContext,
+            runtimePolicy = runtimePolicy,
             repository = repository,
             deviceId = startupId,
             successfulOffloadSink = {
@@ -164,6 +167,7 @@ class NoopApplication : Application() {
     val sourceCoordinator: SourceCoordinator by lazy {
         SourceCoordinator(
             context = applicationContext,
+            runtimePolicy = runtimePolicy,
             registry = deviceRegistry,
             repository = repository,
             liveSink = { hr, rr -> ble.publishExternalLiveHr(hr, rr) },
