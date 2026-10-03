@@ -17,6 +17,7 @@ object IllnessHistory {
         val hrvReliabilityByDay: Map<String, HealthSignalReliability.Record>,
         val activeId: String = "",
         val respReliabilityByDay: Map<String, HealthSignalReliability.Record> = emptyMap(),
+        val vitalDays: List<DailyMetric> = days,
     ) {
         fun isCurrent(currentDays: List<DailyMetric>, currentActiveId: String): Boolean =
             days == currentDays && activeId == currentActiveId
@@ -44,18 +45,47 @@ object IllnessHistory {
         fun records(respiration: Boolean): Map<String, HealthSignalReliability.Record?> =
             rows.groupBy { it.day }.mapValues { (_, dayRows) ->
                 HealthSignalReliability.firstRecord(sourceIds, dayRows.mapNotNull { row ->
-                    val value = (if (respiration) row.respValue else row.value) ?: return@mapNotNull null
+                    val metric = row.metric
+                    val value = (if (metric == null) {
+                        if (respiration) row.respValue else row.value
+                    } else {
+                        if (respiration) metric.respRateBpm else metric.avgHrv
+                    }) ?: return@mapNotNull null
                     val computed = row.deviceId in computedIds
                     val eligible = if (respiration) HealthSignalReliability.respiration(value, computed, row.respFreshScoringValid) != null
                         else HealthSignalReliability.hrv(value, computed, row.freshScoringValid, row.overcount) != null
                     row.deviceId to HealthSignalReliability.Record(value, eligible)
                 }.toMap())
             }
+        val cachedByDay = days.associateBy { it.day }
+        val physicalMetrics = rows.mapNotNull { it.metric }
+        val vitalDays = if (rows.any { it.metric == null }) days else WhoopRepository.mergeActivityFileSteps(
+            WhoopRepository.mergeDaily(
+                imported = WhoopRepository.unionByDay(sourceIds.filterNot { it in computedIds }.map { id ->
+                    physicalMetrics.filter { it.deviceId == id }
+                }),
+                computed = WhoopRepository.unionByDay(computedIds.map { id ->
+                    physicalMetrics.filter { it.deviceId == id }
+                }),
+            ),
+            physicalMetrics.filter { it.deviceId == WhoopRepository.ACTIVITY_FILE_SOURCE },
+        ).map { row ->
+            cachedByDay[row.day]?.let { cached ->
+                row.copy(totalSleepMin = cached.totalSleepMin, efficiency = cached.efficiency,
+                    deepMin = cached.deepMin, remMin = cached.remMin, lightMin = cached.lightMin,
+                    disturbances = cached.disturbances)
+            } ?: row
+        }
         val hrvRecords = records(false)
         val respRecords = records(true)
         val hrvReliability = LinkedHashMap<String, HealthSignalReliability.Record>()
         val respReliability = LinkedHashMap<String, HealthSignalReliability.Record>()
-        val eligibleDays = days.map { row ->
+        val eligibleDays = vitalDays.map { row ->
+            val contextualRow = cachedByDay[row.day]?.copy(
+                restingHr = row.restingHr, avgHrv = row.avgHrv, avgSdnn = row.avgSdnn,
+                respRateBpm = row.respRateBpm, spo2Pct = row.spo2Pct,
+                skinTempC = row.skinTempC, skinTempDevC = row.skinTempDevC, recovery = row.recovery,
+            ) ?: row
             val hrvRecord = hrvRecords[row.day]
             val respRecord = respRecords[row.day]
             val hrv = row.avgHrv?.takeIf { hrvRecord?.matches(it) == true }
@@ -64,8 +94,8 @@ object IllnessHistory {
                 ?: HealthSignalReliability.Record(row.avgHrv, false)
             if (row.respRateBpm != null) respReliability[row.day] = respRecord
                 ?: HealthSignalReliability.Record(row.respRateBpm, false)
-            row.copy(avgHrv = hrv, respRateBpm = resp)
+            contextualRow.copy(avgHrv = hrv, respRateBpm = resp)
         }
-        return Snapshot(days, eligibleDays, hrvReliability, activeId, respReliability)
+        return Snapshot(days, eligibleDays, hrvReliability, activeId, respReliability, vitalDays)
     }
 }

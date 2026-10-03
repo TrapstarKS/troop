@@ -1953,27 +1953,27 @@ final class AppModel: ObservableObject {
 
     private var illnessEvaluationGeneration = 0
 
-    private func evaluateIllness(_ days: [DailyMetric]) {
+    private func evaluateIllness(_ requestedDays: [DailyMetric]) {
         illnessEvaluationGeneration &+= 1
         let generation = illnessEvaluationGeneration
-        guard behavior.illnessWatch, !intelligence.computing, days.count >= 14,
-              let latestDay = days.last?.day, latestDay == repo.today?.day else {
+        guard behavior.illnessWatch, !intelligence.computing, requestedDays.count >= 14,
+              let latestDay = requestedDays.last?.day, latestDay == repo.today?.day else {
             healthAlert = nil; illnessSignal = nil; illnessDistance = nil; return
         }
         Task { [weak self] in
             guard let self else { return }
-            let sourceIds = self.repo.computedReadIds
-            guard let firstDay = days.first?.day else { return }
-            let records: (hrv: [String: HealthSignalReliability.Record], resp: [String: HealthSignalReliability.Record])
-            do { records = try await self.repo.signalReliabilityByDay(from: firstDay, to: latestDay) }
+            let sourceIds = self.repo.importedReadIds + self.repo.computedReadIds
+            guard let firstDay = requestedDays.first?.day else { return }
+            let signals: Repository.HealthSignalsSnapshot
+            do { signals = try await self.repo.signalReliabilityByDay(from: firstDay, to: latestDay) }
             catch { return }
             var hrvByDay: [String: Double] = [:]
             var respByDay: [String: Double] = [:]
-            for row in self.repo.vitalMetricRows.sorted(by: { $0.source.vitalPriority < $1.source.vitalPriority }) {
+            for row in signals.sourceRows.sorted(by: { $0.source.vitalPriority < $1.source.vitalPriority }) {
                 if hrvByDay[row.metric.day] == nil, let value = row.metric.avgHrv,
-                   records.hrv[row.metric.day]?.matches(value) == true { hrvByDay[row.metric.day] = value }
+                   signals.hrv[row.metric.day]?.matches(value) == true { hrvByDay[row.metric.day] = value }
                 if respByDay[row.metric.day] == nil, let value = row.metric.respRateBpm,
-                   records.resp[row.metric.day]?.matches(value) == true { respByDay[row.metric.day] = value }
+                   signals.resp[row.metric.day]?.matches(value) == true { respByDay[row.metric.day] = value }
             }
             // Confounder tags from the recent journal (within the last ~2 days). Read once, off the
             // engine's hot path , the engine only needs presence flags, not the rows.
@@ -1986,8 +1986,9 @@ final class AppModel: ObservableObject {
                 if q.contains("workout") || q.contains("train") || q.contains("exercise") { ctxHardWorkout = true }
                 if q.contains("sick") || q.contains("ill") || q.contains("unwell") { ctxAlreadyUnwell = true }
             }
-            guard sourceIds == self.repo.computedReadIds else { return }
-            self.applyIllnessSignal(days, hrvByDay: hrvByDay, respByDay: respByDay, generation: generation, alcohol: ctxAlcohol,
+            guard sourceIds == self.repo.importedReadIds + self.repo.computedReadIds else { return }
+            self.applyIllnessSignal(signals.days, requestedDays: requestedDays,
+                                    hrvByDay: hrvByDay, respByDay: respByDay, generation: generation, alcohol: ctxAlcohol,
                                     hardOrLateWorkout: ctxHardWorkout, alreadyUnwell: ctxAlreadyUnwell)
         }
     }
@@ -2005,12 +2006,13 @@ final class AppModel: ObservableObject {
 
     /// Run the `IllnessSignalEngine` from the day history + the journal-derived confounder context, then
     /// publish the result + the semantic `healthAlert` banner payload.
-    private func applyIllnessSignal(_ days: [DailyMetric], hrvByDay: [String: Double], respByDay: [String: Double], generation: Int, alcohol: Bool,
+    private func applyIllnessSignal(_ days: [DailyMetric], requestedDays: [DailyMetric],
+                                    hrvByDay: [String: Double], respByDay: [String: Double], generation: Int, alcohol: Bool,
                                     hardOrLateWorkout: Bool, alreadyUnwell: Bool) {
         // A newer day can arrive while the journal read is in flight. Never publish the older
         // task's alert over that day's result.
         guard !Task.isCancelled, generation == illnessEvaluationGeneration,
-              behavior.illnessWatch, !intelligence.computing, days == repo.days,
+              behavior.illnessWatch, !intelligence.computing, requestedDays == repo.days,
               let latest = days.last, latest.day == repo.today?.day else { return }
         let byDay = Dictionary(days.map { ($0.day, $0) }, uniquingKeysWith: { _, last in last })
         let recentKeys = HealthSignalReliability.dayKeys(ending: latest.day, count: 2)

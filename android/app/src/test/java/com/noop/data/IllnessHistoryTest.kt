@@ -15,6 +15,55 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class IllnessHistoryTest {
+    @Test fun joinedSnapshotCannotLendNewImportedProofToCachedComputedValues() {
+        val cached = DailyMetric("my-whoop-noop", "2026-06-10", totalSleepMin = 321.0, efficiency = 70.0,
+            deepMin = 50.0, remMin = 80.0, lightMin = 191.0, disturbances = 3, restingHr = 50, avgHrv = 40.0,
+            respRateBpm = 16.0, spo2Pct = 98.0, skinTempC = 33.0, steps = 1234)
+        val imported = DailyMetric("my-whoop", cached.day, totalSleepMin = 480.0, efficiency = 90.0,
+            deepMin = 90.0, remMin = 100.0, lightMin = 290.0, disturbances = 1, restingHr = 58, avgHrv = 40.0,
+            respRateBpm = 20.0, spo2Pct = 93.0, skinTempC = 34.0, recovery = 60.0)
+        val rows = listOf(
+            HrvProvenanceRow("my-whoop", cached.day, 40.0, null, null, 20.0, null, imported),
+            HrvProvenanceRow("my-whoop-noop", cached.day, 40.0, 0.0, 1.0, 16.0, 0.0, cached),
+        )
+        val result = IllnessHistory.resolve(listOf(cached), rows,
+            listOf("my-whoop", "my-whoop-noop"), listOf("my-whoop-noop"))
+        assertTrue(result.isCurrent(listOf(cached), ""))
+        assertEquals(listOf(imported.copy(steps = cached.steps, totalSleepMin = cached.totalSleepMin,
+            efficiency = cached.efficiency, deepMin = cached.deepMin, remMin = cached.remMin,
+            lightMin = cached.lightMin, disturbances = cached.disturbances)), result.vitalDays)
+        assertEquals(58, result.alertDays.single().restingHr)
+        assertEquals(20.0, result.alertDays.single().respRateBpm!!, 0.0)
+        assertEquals(1234, result.alertDays.single().steps)
+        assertTrue(result.hrvReliabilityByDay.getValue(cached.day).matches(40.0))
+        assertTrue(result.respReliabilityByDay.getValue(cached.day).matches(20.0))
+        assertFalse(result.respReliabilityByDay.getValue(cached.day).matches(16.0))
+    }
+
+    @Test fun joinedSnapshotKeepsIndependentPhysicalOwnersAndRejectsRemovedRows() {
+        val active = DailyMetric("active-noop", "2026-06-10", respRateBpm = 16.0)
+        val canonical = DailyMetric("my-whoop-noop", active.day, avgHrv = 40.0, respRateBpm = 18.0)
+        val rows = listOf(
+            HrvProvenanceRow(active.deviceId, active.day, null, null, null, 16.0, 1.0, active),
+            HrvProvenanceRow(canonical.deviceId, canonical.day, 40.0, 1.0, 0.0, 18.0, 0.0, canonical),
+        )
+        val ids = listOf("active-noop", "my-whoop-noop")
+        val result = IllnessHistory.resolve(listOf(active), rows, ids, ids)
+        assertEquals(40.0, result.vitalDays.single().avgHrv!!, 0.0)
+        assertEquals(16.0, result.alertDays.single().respRateBpm!!, 0.0)
+        val imported = DailyMetric("active", active.day, totalSleepMin = 480.0, recovery = 60.0)
+        val withDeletedSleep = IllnessHistory.resolve(listOf(active), rows +
+            HrvProvenanceRow(imported.deviceId, imported.day, null, null, null, metric = imported),
+            listOf(imported.deviceId) + ids, ids)
+        assertNull(withDeletedSleep.vitalDays.single().totalSleepMin)
+        assertEquals(60.0, withDeletedSleep.vitalDays.single().recovery!!, 0.0)
+        assertEquals(40.0, withDeletedSleep.vitalDays.single().avgHrv!!, 0.0)
+        assertEquals(16.0, withDeletedSleep.vitalDays.single().respRateBpm!!, 0.0)
+        val removed = IllnessHistory.resolve(listOf(active), emptyList(), ids, ids)
+        assertTrue(removed.vitalDays.isEmpty())
+        assertTrue(removed.alertDays.isEmpty())
+    }
+
     @Test fun respirationHasIndependentFreshnessAndImportedPrecedence() {
         val day = DailyMetric("active-noop", "2026-06-10", avgHrv = 40.0, respRateBpm = 16.0)
         val raw = HrvProvenanceRow("active-noop", day.day, 40.0, 0.0, 1.0, 16.0, 1.0)
@@ -201,4 +250,432 @@ class IllnessHistoryTest {
         if (IllnessAlertPolicy.shouldRecordEvaluation(true, clear.valid)) previous = clear.alert != null
         assertTrue(IllnessAlertPolicy.shouldNotify(raised.alert, previous, "2026-02-01", "2026-02-02"))
     }
+
+    @Test fun joinedSnapshotMatchesStandaloneSwiftOracle() {
+        data class Fixture(
+            val name: String,
+            val sourceIds: List<String>,
+            val computedIds: List<String>,
+            val rows: List<HrvProvenanceRow>,
+            val cachedDays: List<DailyMetric>,
+        )
+        fun number(value: Double?): String = when {
+            value == null -> "-"
+            value.isNaN() -> "nan"
+            value == Double.POSITIVE_INFINITY -> "+inf"
+            value == Double.NEGATIVE_INFINITY -> "-inf"
+            else -> String.format(java.util.Locale.ROOT, "%.1f", value)
+        }
+        val cases = listOf(
+            Fixture(
+                name = "stale-computed",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 0.0, overcount = 1.0, respValue = 16.0, respFreshScoringValid = 0.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = 50, avgHrv = 40.0, recovery = 70.0, strain = null, exerciseCount = null, spo2Pct = 98.0, skinTempDevC = null, respRateBpm = 16.0, steps = 1234, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = 33.0, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                    DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = 50, avgHrv = 40.0, recovery = 70.0, strain = null, exerciseCount = null, spo2Pct = 98.0, skinTempDevC = null, respRateBpm = 16.0, steps = 1234, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = 33.0, sleepHrOnly = null, activeEnergyKcalEst = null),
+                ),
+            ),
+            Fixture(
+                name = "new-vendor-equal-hrv",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 0.0, overcount = 1.0, respValue = 16.0, respFreshScoringValid = 0.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = 50, avgHrv = 40.0, recovery = 70.0, strain = null, exerciseCount = null, spo2Pct = 98.0, skinTempDevC = null, respRateBpm = 16.0, steps = 1234, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = 33.0, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                    HrvProvenanceRow(deviceId = "my-whoop", day = "2026-06-10", value = 40.0, freshScoringValid = null, overcount = null, respValue = 20.0, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = 58, avgHrv = 40.0, recovery = 60.0, strain = null, exerciseCount = null, spo2Pct = 93.0, skinTempDevC = null, respRateBpm = 20.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = 34.0, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                    DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = 50, avgHrv = 40.0, recovery = 70.0, strain = null, exerciseCount = null, spo2Pct = 98.0, skinTempDevC = null, respRateBpm = 16.0, steps = 1234, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = 33.0, sleepHrOnly = null, activeEnergyKcalEst = null),
+                ),
+            ),
+            Fixture(
+                name = "independent-physical-owners",
+                sourceIds = listOf("active", "my-whoop", "active-noop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("active-noop", "my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 1.0, overcount = 0.0, respValue = 20.0, respFreshScoringValid = 0.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 20.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                    HrvProvenanceRow(deviceId = "active-noop", day = "2026-06-10", value = null, freshScoringValid = 0.0, overcount = 1.0, respValue = 16.0, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "active-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "invalid-first-hrv-owner",
+                sourceIds = listOf("active", "my-whoop", "active-noop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("active-noop", "my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 60.0, freshScoringValid = 1.0, overcount = 0.0, respValue = 20.0, respFreshScoringValid = 0.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 60.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 20.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                    HrvProvenanceRow(deviceId = "active-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 0.0, overcount = 1.0, respValue = 16.0, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "active-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "hollow-import-invalid-gapfill",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 0.0, overcount = 1.0, respValue = 20.0, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = 58, avgHrv = 40.0, recovery = 60.0, strain = null, exerciseCount = null, spo2Pct = 93.0, skinTempDevC = null, respRateBpm = 20.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = 34.0, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                    HrvProvenanceRow(deviceId = "my-whoop", day = "2026-06-10", value = null, freshScoringValid = null, overcount = null, respValue = null, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = null, steps = 4321, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "activity-only",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "activity-file", day = "2026-06-10", value = null, freshScoringValid = null, overcount = null, respValue = null, respFreshScoringValid = null, metric = DailyMetric(deviceId = "activity-file", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = null, steps = 12345, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "activity-gapfill",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 1.0, overcount = 0.0, respValue = 20.0, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = 58, avgHrv = 40.0, recovery = 60.0, strain = null, exerciseCount = null, spo2Pct = 93.0, skinTempDevC = null, respRateBpm = 20.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = 34.0, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                    HrvProvenanceRow(deviceId = "activity-file", day = "2026-06-10", value = null, freshScoringValid = null, overcount = null, respValue = null, respFreshScoringValid = null, metric = DailyMetric(deviceId = "activity-file", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = null, steps = 12345, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "activity-keeps-measured-zero",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = null, freshScoringValid = null, overcount = null, respValue = null, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = null, steps = 0, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                    HrvProvenanceRow(deviceId = "activity-file", day = "2026-06-10", value = null, freshScoringValid = null, overcount = null, respValue = null, respFreshScoringValid = null, metric = DailyMetric(deviceId = "activity-file", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = null, steps = 12345, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "activity-ignores-zero",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "activity-file", day = "2026-06-10", value = null, freshScoringValid = null, overcount = null, respValue = null, respFreshScoringValid = null, metric = DailyMetric(deviceId = "activity-file", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = null, steps = 0, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "empty-joined",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                ),
+                cachedDays = listOf(
+                    DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = 50, avgHrv = 40.0, recovery = 70.0, strain = null, exerciseCount = null, spo2Pct = 98.0, skinTempDevC = null, respRateBpm = 16.0, steps = 1234, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = 33.0, sleepHrOnly = null, activeEnergyKcalEst = null),
+                ),
+            ),
+            Fixture(
+                name = "recovery-only",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = null, freshScoringValid = null, overcount = null, respValue = null, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = 60.0, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = null, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "sleep-only",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = null, freshScoringValid = null, overcount = null, respValue = null, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = 480.0, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = null, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "empty-physical-row",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = null, freshScoringValid = null, overcount = null, respValue = null, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = null, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "vendor-lower-boundaries",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop", day = "2026-06-10", value = 5.0, freshScoringValid = null, overcount = null, respValue = 4.0, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 5.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 4.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "vendor-upper-boundaries",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop", day = "2026-06-10", value = 250.0, freshScoringValid = null, overcount = null, respValue = 40.0, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 250.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 40.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "vendor-below-boundaries",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop", day = "2026-06-10", value = 4.999, freshScoringValid = null, overcount = null, respValue = 3.999, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 4.999, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 3.999, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "vendor-above-boundaries",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop", day = "2026-06-10", value = 250.001, freshScoringValid = null, overcount = null, respValue = 40.001, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 250.001, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 40.001, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "vendor-ignores-computed-markers",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop", day = "2026-06-10", value = 40.0, freshScoringValid = 0.0, overcount = Double.POSITIVE_INFINITY, respValue = 16.0, respFreshScoringValid = 0.0, metric = DailyMetric(deviceId = "my-whoop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-valid",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 1.0, overcount = 0.0, respValue = 16.0, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-marker-zero",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 0.0, overcount = 0.0, respValue = 16.0, respFreshScoringValid = 0.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-marker-threshold-pass",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 0.5, overcount = 0.499, respValue = 16.0, respFreshScoringValid = 0.5, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-marker-threshold-reject",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 0.499, overcount = 0.499, respValue = 16.0, respFreshScoringValid = 0.499, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-overcount-threshold",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 1.0, overcount = 0.5, respValue = 16.0, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-missing-markers",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = null, overcount = null, respValue = 16.0, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-no-overcount",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 1.0, overcount = null, respValue = 16.0, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-marker-nan",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = Double.NaN, overcount = 0.0, respValue = 16.0, respFreshScoringValid = Double.NaN, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-marker-positive-inf",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = Double.POSITIVE_INFINITY, overcount = 0.0, respValue = 16.0, respFreshScoringValid = Double.POSITIVE_INFINITY, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-overcount-nan",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 1.0, overcount = Double.NaN, respValue = 16.0, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-overcount-positive-inf",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 1.0, overcount = Double.POSITIVE_INFINITY, respValue = 16.0, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-values-nan",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = Double.NaN, freshScoringValid = 1.0, overcount = 0.0, respValue = Double.NaN, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = Double.NaN, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = Double.NaN, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-values-positive-inf",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = Double.POSITIVE_INFINITY, freshScoringValid = 1.0, overcount = 0.0, respValue = Double.POSITIVE_INFINITY, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = Double.POSITIVE_INFINITY, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = Double.POSITIVE_INFINITY, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-values-negative-inf",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = Double.NEGATIVE_INFINITY, freshScoringValid = 1.0, overcount = 0.0, respValue = Double.NEGATIVE_INFINITY, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = Double.NEGATIVE_INFINITY, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = Double.NEGATIVE_INFINITY, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-respiration-only",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = null, freshScoringValid = null, overcount = null, respValue = 16.0, respFreshScoringValid = 1.0, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "computed-hrv-only",
+                sourceIds = listOf("my-whoop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop-noop", day = "2026-06-10", value = 40.0, freshScoringValid = 1.0, overcount = 0.0, respValue = null, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop-noop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = null, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+            Fixture(
+                name = "vendor-active-first",
+                sourceIds = listOf("active", "my-whoop", "active-noop", "my-whoop-noop", "apple-health"),
+                computedIds = listOf("active-noop", "my-whoop-noop"),
+                rows = listOf(
+                    HrvProvenanceRow(deviceId = "my-whoop", day = "2026-06-10", value = 60.0, freshScoringValid = null, overcount = null, respValue = 20.0, respFreshScoringValid = null, metric = DailyMetric(deviceId = "my-whoop", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 60.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 20.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                    HrvProvenanceRow(deviceId = "active", day = "2026-06-10", value = 40.0, freshScoringValid = null, overcount = null, respValue = 16.0, respFreshScoringValid = null, metric = DailyMetric(deviceId = "active", day = "2026-06-10", totalSleepMin = null, efficiency = null, deepMin = null, remMin = null, lightMin = null, disturbances = null, restingHr = null, avgHrv = 40.0, recovery = null, strain = null, exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = 16.0, steps = null, activeKcalEst = null, spo2Red = null, spo2Ir = null, avgSdnn = null, skinTempC = null, sleepHrOnly = null, activeEnergyKcalEst = null)),
+                ),
+                cachedDays = listOf(
+                ),
+            ),
+        )
+        val actual = cases.joinToString(separator = "\n", postfix = "\n") { fixture ->
+            val snapshot = IllnessHistory.resolve(fixture.cachedDays, fixture.rows, fixture.sourceIds, fixture.computedIds)
+            assertTrue(fixture.name, snapshot.vitalDays.size <= 1)
+            val metric = snapshot.vitalDays.firstOrNull()
+            val hrvEligible = metric?.let { snapshot.hrvReliabilityByDay[it.day]?.matches(it.avgHrv) } == true
+            val respEligible = metric?.let { snapshot.respReliabilityByDay[it.day]?.matches(it.respRateBpm) } == true
+            listOf(fixture.name, metric?.day ?: "-", number(metric?.avgHrv), number(metric?.restingHr?.toDouble()),
+                number(metric?.respRateBpm), number(metric?.spo2Pct), number(metric?.skinTempC ?: metric?.skinTempDevC),
+                number(metric?.recovery), hrvEligible.toString(), respEligible.toString(), metric?.steps?.toString() ?: "-")
+                .joinToString("|")
+        }
+        val expected = """
+stale-computed|2026-06-10|40.0|50.0|16.0|98.0|33.0|70.0|false|false|1234
+new-vendor-equal-hrv|2026-06-10|40.0|58.0|20.0|93.0|34.0|60.0|true|true|1234
+independent-physical-owners|2026-06-10|40.0|-|16.0|-|-|-|true|true|-
+invalid-first-hrv-owner|2026-06-10|40.0|-|16.0|-|-|-|false|true|-
+hollow-import-invalid-gapfill|2026-06-10|40.0|58.0|20.0|93.0|34.0|60.0|false|true|4321
+activity-only|2026-06-10|-|-|-|-|-|-|false|false|12345
+activity-gapfill|2026-06-10|40.0|58.0|20.0|93.0|34.0|60.0|true|true|12345
+activity-keeps-measured-zero|2026-06-10|-|-|-|-|-|-|false|false|0
+activity-ignores-zero|-|-|-|-|-|-|-|false|false|-
+empty-joined|-|-|-|-|-|-|-|false|false|-
+recovery-only|2026-06-10|-|-|-|-|-|60.0|false|false|-
+sleep-only|2026-06-10|-|-|-|-|-|-|false|false|-
+empty-physical-row|2026-06-10|-|-|-|-|-|-|false|false|-
+vendor-lower-boundaries|2026-06-10|5.0|-|4.0|-|-|-|true|true|-
+vendor-upper-boundaries|2026-06-10|250.0|-|40.0|-|-|-|true|true|-
+vendor-below-boundaries|2026-06-10|5.0|-|4.0|-|-|-|false|false|-
+vendor-above-boundaries|2026-06-10|250.0|-|40.0|-|-|-|false|false|-
+vendor-ignores-computed-markers|2026-06-10|40.0|-|16.0|-|-|-|true|true|-
+computed-valid|2026-06-10|40.0|-|16.0|-|-|-|true|true|-
+computed-marker-zero|2026-06-10|40.0|-|16.0|-|-|-|false|false|-
+computed-marker-threshold-pass|2026-06-10|40.0|-|16.0|-|-|-|true|true|-
+computed-marker-threshold-reject|2026-06-10|40.0|-|16.0|-|-|-|false|false|-
+computed-overcount-threshold|2026-06-10|40.0|-|16.0|-|-|-|false|true|-
+computed-missing-markers|2026-06-10|40.0|-|16.0|-|-|-|false|false|-
+computed-no-overcount|2026-06-10|40.0|-|16.0|-|-|-|true|true|-
+computed-marker-nan|2026-06-10|40.0|-|16.0|-|-|-|false|false|-
+computed-marker-positive-inf|2026-06-10|40.0|-|16.0|-|-|-|false|false|-
+computed-overcount-nan|2026-06-10|40.0|-|16.0|-|-|-|false|true|-
+computed-overcount-positive-inf|2026-06-10|40.0|-|16.0|-|-|-|false|true|-
+computed-values-nan|2026-06-10|nan|-|nan|-|-|-|false|false|-
+computed-values-positive-inf|2026-06-10|+inf|-|+inf|-|-|-|false|false|-
+computed-values-negative-inf|2026-06-10|-inf|-|-inf|-|-|-|false|false|-
+computed-respiration-only|2026-06-10|-|-|16.0|-|-|-|false|true|-
+computed-hrv-only|2026-06-10|40.0|-|-|-|-|-|true|false|-
+vendor-active-first|2026-06-10|40.0|-|16.0|-|-|-|true|true|-
+""".trimIndent() + "\n"
+        assertEquals(expected, actual)
+    }
+
 }

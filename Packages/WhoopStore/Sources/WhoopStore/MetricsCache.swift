@@ -79,7 +79,7 @@ public struct CachedSleepSession: Equatable, Codable {
 }
 
 /// One cached daily-metrics row pulled from the server's /v1/daily. Natural key (deviceId, day).
-public struct DailyMetric: Equatable, Codable {
+public struct DailyMetric: Equatable, Codable, Sendable {
     public let day: String           // YYYY-MM-DD
     public let totalSleepMin: Double?
     public let efficiency: Double?

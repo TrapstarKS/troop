@@ -21,16 +21,17 @@ private struct HealthLandingContent: View {
     @EnvironmentObject var repo: Repository
     @EnvironmentObject var intelligence: IntelligenceEngine
     @AppStorage(UnitPrefs.skinTempDisplayKey) private var skinTempDisplayRaw = ""
-    @State private var hrvReliability: [String: HealthSignalReliability.Record]? = nil
-    @State private var respReliability: [String: HealthSignalReliability.Record]? = nil
-    @State private var evidenceIdentity: String? = nil
+    @State private var healthSignals: (identity: String, snapshot: Repository.HealthSignalsSnapshot)? = nil
 
     var body: some View {
-        let day = HealthMonitorSnapshot.dayKey(days: repo.days, now: now)
-        let identity = "\(repo.importedReadIds + repo.computedReadIds):\(repo.refreshSeq):\(intelligence.computing):\(day)"
-        let rows = HealthMonitorSnapshot.rows(sourceRows: repo.vitalMetricRows,
-                                              now: now, todayKey: day, hrvReliabilityByDay: evidenceIdentity == identity ? hrvReliability : nil,
-                                              respReliabilityByDay: evidenceIdentity == identity ? respReliability : nil,
+        let requestedDays = repo.days
+        let requestedDay = HealthMonitorSnapshot.dayKey(days: requestedDays, now: now)
+        let identity = "\(repo.importedReadIds + repo.computedReadIds):\(repo.refreshSeq):\(intelligence.computing):\(requestedDay)"
+        let snapshot = healthSignals?.identity == identity ? healthSignals?.snapshot : nil
+        let day = HealthMonitorSnapshot.dayKey(days: snapshot?.days ?? requestedDays, now: now)
+        let rows = HealthMonitorSnapshot.rows(sourceRows: snapshot?.sourceRows ?? repo.vitalMetricRows,
+                                              now: now, todayKey: day, hrvReliabilityByDay: snapshot?.hrv,
+                                              respReliabilityByDay: snapshot?.resp,
                                               skinTempPreferred: SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute)
         VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
             HealthspanPreviewCard()
@@ -63,16 +64,13 @@ private struct HealthLandingContent: View {
             }.buttonStyle(.plain)
         }
         .task(id: identity) {
-            hrvReliability = nil
-            respReliability = nil
-            evidenceIdentity = nil
-            guard !intelligence.computing else { return }
-            let end = day
-            let records = try? await repo.signalReliabilityByDay(from: Baselines.cutoffKey(todayKey: end, carryDays: 180), to: end)
             guard !Task.isCancelled else { return }
-            hrvReliability = records?.hrv
-            respReliability = records?.resp
-            evidenceIdentity = identity
+            healthSignals = nil
+            guard !intelligence.computing else { return }
+            let snapshot = try? await repo.signalReliabilityByDay(
+                from: Baselines.cutoffKey(todayKey: requestedDay, carryDays: 180), to: requestedDay)
+            guard !Task.isCancelled, !intelligence.computing, let snapshot else { return }
+            healthSignals = (identity, snapshot)
         }
     }
 }

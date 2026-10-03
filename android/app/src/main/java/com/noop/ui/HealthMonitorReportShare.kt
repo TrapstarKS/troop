@@ -20,9 +20,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 internal object HealthMonitorReportShare {
-    suspend fun export(context: Context, report: HealthMonitorReport, skinKind: SkinTempDisplay.Kind) {
+    suspend fun export(context: Context, report: HealthMonitorReport, skinKind: SkinTempDisplay.Kind, temperatureUnit: TemperatureUnit) {
         runCatching {
-            val file = withContext(Dispatchers.IO) { render(context, report, skinKind) }
+            val file = withContext(Dispatchers.IO) { render(context, report, skinKind, temperatureUnit) }
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             val send = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
@@ -38,7 +38,7 @@ internal object HealthMonitorReportShare {
         }
     }
 
-    private fun render(context: Context, report: HealthMonitorReport, skinKind: SkinTempDisplay.Kind): File {
+    private fun render(context: Context, report: HealthMonitorReport, skinKind: SkinTempDisplay.Kind, temperatureUnit: TemperatureUnit): File {
         val document = PdfDocument()
         try {
             val page = document.startPage(PdfDocument.PageInfo.Builder(612, 850, 1).create())
@@ -68,7 +68,7 @@ internal object HealthMonitorReportShare {
             text(context.getString(R.string.health_report_window, report.start, report.end), NoopType.caption,
                 Palette.textSecondary.toArgb())
             y += Metrics.space16.value
-            val fahrenheit = UnitPrefs.temperature(context) == TemperatureUnit.FAHRENHEIT
+            val fahrenheit = temperatureUnit == TemperatureUnit.FAHRENHEIT
             report.rows.forEach { row ->
                 text(context.getString(monitorShortLabel(row.key)), NoopType.headline, Palette.statusPositive.toArgb())
                 val unit = when (row.key) {

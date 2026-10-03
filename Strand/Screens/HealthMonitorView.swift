@@ -11,9 +11,7 @@ struct HealthMonitorView: View {
     @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
     @AppStorage(UnitPrefs.skinTempDisplayKey) private var skinTempDisplayRaw = ""
-    @State private var hrvReliability: [String: HealthSignalReliability.Record]? = nil
-    @State private var respReliability: [String: HealthSignalReliability.Record]? = nil
-    @State private var evidenceIdentity: String? = nil
+    @State private var healthSignals: (identity: String, snapshot: Repository.HealthSignalsSnapshot)? = nil
     @State private var now = Date()
     @State private var reportDays = 30
     @State private var reportFailed = false
@@ -24,13 +22,29 @@ struct HealthMonitorView: View {
     }
 
     var body: some View {
-        let day = HealthMonitorSnapshot.dayKey(days: repo.days, now: now)
-        let identity = "\(repo.importedReadIds + repo.computedReadIds):\(repo.refreshSeq):\(intelligence.computing):\(day)"
-        let evidence = evidenceIdentity == identity ? hrvReliability : nil
-        let respEvidence = evidenceIdentity == identity ? respReliability : nil
-        let rows = HealthMonitorSnapshot.rows(sourceRows: repo.vitalMetricRows, temperatureUnit: temperatureUnit,
+        let requestedDays = repo.days
+        let requestedDay = HealthMonitorSnapshot.dayKey(days: requestedDays, now: now)
+        let identity = "\(repo.importedReadIds + repo.computedReadIds):\(repo.refreshSeq):\(intelligence.computing):\(requestedDay)"
+        let snapshot = healthSignals?.identity == identity ? healthSignals?.snapshot : nil
+        let days = snapshot?.days ?? requestedDays
+        let sourceRows = snapshot?.sourceRows ?? repo.vitalMetricRows
+        let day = HealthMonitorSnapshot.dayKey(days: days, now: now)
+        let evidence = snapshot?.hrv
+        let respEvidence = snapshot?.resp
+        let unit = temperatureUnit
+        let skinPreference = SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute
+        let rows = HealthMonitorSnapshot.rows(sourceRows: sourceRows, temperatureUnit: unit,
                                               now: now, todayKey: day, hrvReliabilityByDay: evidence, respReliabilityByDay: respEvidence,
-                                              skinTempPreferred: SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute)
+                                              skinTempPreferred: skinPreference)
+        let skin = rows.first { $0.id == "skin" }
+        let skinKind = HealthMonitorSnapshot.reportSkinKind(value: skin?.isCurrent == true ? skin?.reading.value : nil,
+                                                            preferred: skinPreference)
+        let duration = reportDays
+        let report = HealthReportPage(rows: rows, sourceRows: sourceRows,
+                                      start: Baselines.cutoffKey(todayKey: day, carryDays: duration - 1), end: day,
+                                      hrvReliability: evidence, respReliability: respEvidence,
+                                      skinKind: skinKind, temperatureUnit: unit)
+        let recordedRecoveries = Set(days.filter { $0.day <= day && $0.recovery?.isFinite == true }.map(\.day)).count
         ScreenScaffold(title: "Health Monitor", onRefresh: { await repo.refresh() }, lazy: true) {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                 NoopCard {
@@ -76,9 +90,9 @@ struct HealthMonitorView: View {
                             Text("180 days").tag(180)
                         }.pickerStyle(.segmented)
                         NoopButton("Export Health Report", systemImage: "square.and.arrow.up", kind: .secondary, fullWidth: true) {
-                            exportReport(rows: rows, now: now, evidence: evidence, respEvidence: respEvidence)
-                        }.disabled(Set(repo.days.filter { $0.day <= HealthMonitorSnapshot.dayKey(days: repo.days, now: now) && $0.recovery?.isFinite == true }.map(\.day)).count < 14)
-                        if Set(repo.days.filter { $0.day <= HealthMonitorSnapshot.dayKey(days: repo.days, now: now) && $0.recovery?.isFinite == true }.map(\.day)).count < 14 {
+                            exportReport(page: report, duration: duration)
+                        }.disabled(snapshot == nil || recordedRecoveries < 14)
+                        if recordedRecoveries < 14 {
                             Text("A Health Report needs 14 recorded recoveries.")
                                 .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
                         }
@@ -88,16 +102,13 @@ struct HealthMonitorView: View {
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
         .task(id: identity) {
-            hrvReliability = nil
-            respReliability = nil
-            evidenceIdentity = nil
-            guard !intelligence.computing else { return }
-            let end = day
-            let records = try? await repo.signalReliabilityByDay(from: Baselines.cutoffKey(todayKey: end, carryDays: 180), to: end)
             guard !Task.isCancelled else { return }
-            hrvReliability = records?.hrv
-            respReliability = records?.resp
-            evidenceIdentity = identity
+            healthSignals = nil
+            guard !intelligence.computing else { return }
+            let snapshot = try? await repo.signalReliabilityByDay(
+                from: Baselines.cutoffKey(todayKey: requestedDay, carryDays: 180), to: requestedDay)
+            guard !Task.isCancelled, !intelligence.computing, let snapshot else { return }
+            healthSignals = (identity, snapshot)
         }
         .alert("Could not create report", isPresented: $reportFailed) {
             Button("OK", role: .cancel) { }
@@ -105,16 +116,8 @@ struct HealthMonitorView: View {
     }
 
     @MainActor
-    private func exportReport(rows: [HealthMonitorRow], now: Date, evidence: [String: HealthSignalReliability.Record]?, respEvidence: [String: HealthSignalReliability.Record]?) {
-        let end = HealthMonitorSnapshot.dayKey(days: repo.days, now: now)
-        let start = Baselines.cutoffKey(todayKey: end, carryDays: reportDays - 1)
-        let skin = rows.first { $0.id == "skin" }
-        let skinKind = HealthMonitorSnapshot.reportSkinKind(value: skin?.isCurrent == true ? skin?.reading.value : nil,
-                                                            preferred: SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute)
-        let page = HealthReportPage(rows: rows, sourceRows: repo.vitalMetricRows, start: start, end: end,
-                                    hrvReliability: evidence, respReliability: respEvidence,
-                                    skinKind: skinKind, temperatureUnit: temperatureUnit)
-        let name = FileExport.timestampedName("noop-health-report-\(reportDays)d", ext: "pdf")
+    private func exportReport(page: HealthReportPage, duration: Int) {
+        let name = FileExport.timestampedName("noop-health-report-\(duration)d", ext: "pdf")
         let renderName = "\(name.dropLast(4))-\(UUID().uuidString).pdf"
         guard let url = TrendsReportRenderer.makePDF(page: page, fileName: renderName) else {
             reportFailed = true

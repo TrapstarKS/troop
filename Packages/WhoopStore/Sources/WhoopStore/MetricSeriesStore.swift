@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-/// One physical source's stored HRV, respiration and same-source fresh-scan evidence from one read snapshot.
+/// One physical source's daily metrics and same-source fresh-scan evidence from one read snapshot.
 public struct HrvProvenanceRow: Equatable, Sendable {
     public let deviceId: String
     public let day: String
@@ -10,6 +10,16 @@ public struct HrvProvenanceRow: Equatable, Sendable {
     public let overcount: Double?
     public let respValue: Double?
     public let respFreshScoringValid: Double?
+    public let metric: DailyMetric?
+
+    public init(deviceId: String, day: String, value: Double?, freshScoringValid: Double?,
+                overcount: Double?, respValue: Double?, respFreshScoringValid: Double?,
+                metric: DailyMetric? = nil) {
+        self.deviceId = deviceId; self.day = day; self.value = value
+        self.freshScoringValid = freshScoringValid; self.overcount = overcount
+        self.respValue = respValue; self.respFreshScoringValid = respFreshScoringValid
+        self.metric = metric
+    }
 }
 
 // MARK: - v9 cache: generic long-format metric store
@@ -80,7 +90,7 @@ extension WhoopStore {
         return try syncRead { db in
             let placeholders = Array(repeating: "?", count: deviceIds.count).joined(separator: ",")
             return try Row.fetchAll(db, sql: """
-                SELECT d.deviceId, d.day, d.avgHrv AS value,
+                SELECT d.*, d.avgHrv AS value,
                        fresh.value AS freshScoringValid, overcount.value AS overcount,
                        d.respRateBpm AS respValue, respFresh.value AS respFreshScoringValid
                 FROM dailyMetric d
@@ -90,12 +100,25 @@ extension WhoopStore {
                     AND overcount.key = 'hrv_rr_overcount'
                 LEFT JOIN metricSeries respFresh ON respFresh.deviceId = d.deviceId AND respFresh.day = d.day
                     AND respFresh.key = 'resp_fresh_scoring_valid'
-                WHERE d.deviceId IN (\(placeholders)) AND d.day >= ? AND d.day <= ? AND (d.avgHrv IS NOT NULL OR d.respRateBpm IS NOT NULL)
+                WHERE d.deviceId IN (\(placeholders)) AND d.day >= ? AND d.day <= ?
                 ORDER BY d.day, d.deviceId
                 """, arguments: StatementArguments(deviceIds + [from, to])).map {
                     HrvProvenanceRow(deviceId: $0["deviceId"], day: $0["day"], value: $0["value"],
                                      freshScoringValid: $0["freshScoringValid"], overcount: $0["overcount"],
-                                     respValue: $0["respValue"], respFreshScoringValid: $0["respFreshScoringValid"])
+                                     respValue: $0["respValue"], respFreshScoringValid: $0["respFreshScoringValid"],
+                                     metric: DailyMetric(day: $0["day"], totalSleepMin: $0["totalSleepMin"],
+                                                         efficiency: $0["efficiency"], deepMin: $0["deepMin"],
+                                                         remMin: $0["remMin"], lightMin: $0["lightMin"],
+                                                         disturbances: $0["disturbances"], restingHr: $0["restingHr"],
+                                                         avgHrv: $0["avgHrv"], recovery: $0["recovery"],
+                                                         strain: $0["strain"], exerciseCount: $0["exerciseCount"],
+                                                         spo2Pct: $0["spo2Pct"], skinTempDevC: $0["skinTempDevC"],
+                                                         respRateBpm: $0["respRateBpm"],
+                                                         steps: $0["steps"], activeKcalEst: $0["activeKcalEst"],
+                                                         activeEnergyKcalEst: $0["activeEnergyKcalEst"],
+                                                         spo2Red: $0["spo2Red"], spo2Ir: $0["spo2Ir"], avgSdnn: $0["avgSdnn"],
+                                                         skinTempC: $0["skinTempC"],
+                                                         sleepHrOnly: $0["sleepHrOnly"]))
                 }
         }
     }

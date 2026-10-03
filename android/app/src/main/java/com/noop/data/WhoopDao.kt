@@ -1,6 +1,7 @@
 package com.noop.data
 
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -240,7 +241,7 @@ internal const val PROMOTE_WHOOP4_HISTORY_SQL =
     "UPDATE rrInterval SET srcChannel = 8, ord = :ord " +
     "WHERE deviceId = :deviceId AND ts = :ts AND rrMs = :rrMs AND seq = :seq AND srcChannel IS NULL"
 
-/** One physical source's HRV, respiration and fresh-scan evidence from one SQLite read snapshot. */
+/** One physical source's daily metrics and fresh-scan evidence from one SQLite read snapshot. */
 data class HrvProvenanceRow(
     val deviceId: String,
     val day: String,
@@ -249,10 +250,17 @@ data class HrvProvenanceRow(
     val overcount: Double?,
     val respValue: Double? = null,
     val respFreshScoringValid: Double? = null,
+    @Embedded(prefix = "metric_") val metric: DailyMetric? = null,
 )
 
 internal const val HRV_PROVENANCE_SQL =
-    "SELECT d.deviceId, d.day, d.avgHrv AS value, fresh.value AS freshScoringValid, overcount.value AS overcount, d.respRateBpm AS respValue, respFresh.value AS respFreshScoringValid " +
+    "SELECT d.deviceId, d.day, d.avgHrv AS value, fresh.value AS freshScoringValid, overcount.value AS overcount, d.respRateBpm AS respValue, respFresh.value AS respFreshScoringValid, " +
+        "d.deviceId AS metric_deviceId, d.day AS metric_day, d.totalSleepMin AS metric_totalSleepMin, d.efficiency AS metric_efficiency, " +
+        "d.deepMin AS metric_deepMin, d.remMin AS metric_remMin, d.lightMin AS metric_lightMin, d.disturbances AS metric_disturbances, " +
+        "d.restingHr AS metric_restingHr, d.avgHrv AS metric_avgHrv, d.recovery AS metric_recovery, d.strain AS metric_strain, " +
+        "d.exerciseCount AS metric_exerciseCount, d.spo2Pct AS metric_spo2Pct, d.skinTempDevC AS metric_skinTempDevC, d.respRateBpm AS metric_respRateBpm, " +
+        "d.steps AS metric_steps, d.activeKcalEst AS metric_activeKcalEst, d.spo2Red AS metric_spo2Red, d.spo2Ir AS metric_spo2Ir, " +
+        "d.avgSdnn AS metric_avgSdnn, d.skinTempC AS metric_skinTempC, d.sleepHrOnly AS metric_sleepHrOnly, d.activeEnergyKcalEst AS metric_activeEnergyKcalEst " +
         "FROM dailyMetric d " +
         "LEFT JOIN metricSeries fresh ON fresh.deviceId = d.deviceId AND fresh.day = d.day " +
         "AND fresh.key = 'hrv_fresh_scoring_valid' " +
@@ -260,7 +268,7 @@ internal const val HRV_PROVENANCE_SQL =
         "AND overcount.key = 'hrv_rr_overcount' " +
         "LEFT JOIN metricSeries respFresh ON respFresh.deviceId = d.deviceId AND respFresh.day = d.day " +
         "AND respFresh.key = 'resp_fresh_scoring_valid' " +
-        "WHERE d.deviceId IN (:deviceIds) AND d.day >= :from AND d.day <= :to AND (d.avgHrv IS NOT NULL OR d.respRateBpm IS NOT NULL) " +
+        "WHERE d.deviceId IN (:deviceIds) AND d.day >= :from AND d.day <= :to " +
         "ORDER BY d.day, d.deviceId"
 
 /**

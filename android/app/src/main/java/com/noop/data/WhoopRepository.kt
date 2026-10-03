@@ -804,7 +804,7 @@ class WhoopRepository(
 
     /** Joins physical-source HRV and evidence before any per-field source coalescing. */
     fun hrvProvenanceFlow(activeStrapId: String, from: String, to: String): Flow<List<HrvProvenanceRow>> =
-        dao.hrvProvenanceFlow(importedSourceIds(activeStrapId) + computedSourceIds(activeStrapId), from, to)
+        dao.hrvProvenanceFlow(importedSourceIds(activeStrapId) + computedSourceIds(activeStrapId) + ACTIVITY_FILE_SOURCE, from, to)
 
     /** Computed-only daily rows; unlike daysMerged this can never substitute imported/calendar steps. */
     fun computedDailyUnionFlow(activeStrapId: String, from: String, to: String): Flow<List<DailyMetric>> =
