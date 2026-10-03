@@ -87,11 +87,12 @@ import kotlin.math.roundToInt
 @Composable
 fun InsightsHubScreen(vm: AppViewModel) {
     val days by vm.recentDays.collectAsState()
+    val journalSeq by vm.repo.journalRevision.collectAsState()
     val hub = remember { InsightsHubViewModel() }
     val state by hub.state.collectAsState()
 
     // Re-derive whenever the cached days change underneath (journal + dose are read via repo).
-    androidx.compose.runtime.LaunchedEffect(days) { hub.load(vm, days) }
+    androidx.compose.runtime.LaunchedEffect(days, journalSeq) { hub.load(vm, days) }
 
     var outcome by remember { mutableStateOf(InsightsOutcome.Recovery) }
     val ranked = remember(state, outcome) { hub.rankFor(state, outcome) }
@@ -207,7 +208,7 @@ private fun MoverCard(r: RankedEffect, outcome: InsightsOutcome) {
                             .drawBehind { drawCircle(tintColor) },
                     )
                     Text(
-                        r.behavior,
+                        journalLocalizedLabel(JournalCatalogItem(r.behavior)),
                         style = NoopType.headline,
                         color = Palette.textPrimary,
                         maxLines = 1,
@@ -219,7 +220,7 @@ private fun MoverCard(r: RankedEffect, outcome: InsightsOutcome) {
                 ConfidencePill(r.confidence)
             }
 
-            Text(r.sentence(), style = NoopType.body, color = Palette.textSecondary)
+            Text(uiString(R.string.plan_association_note), style = NoopType.body, color = Palette.textSecondary)
 
             // With / without means as uniform StatTiles.
             Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
@@ -297,7 +298,7 @@ private fun DoseResponseCard(card: DoseCardData) {
                 ConfidencePill(r.confidence)
             }
 
-            Text(r.sentence(), style = NoopType.body, color = Palette.textSecondary)
+            Text(uiString(R.string.plan_association_note), style = NoopType.body, color = Palette.textSecondary)
 
             // The prior-shrunk curve.
             DoseCurveChart(
@@ -476,7 +477,7 @@ private fun DoseCurveChart(points: List<DoseCurvePoint>, accent: Color, modifier
 // MARK: - Outcome
 
 internal enum class InsightsOutcome(
-    val label: String,
+    private val defaultLabel: String,
     val outcomeName: String,
     val key: String,
     val higherIsBetter: Boolean,
@@ -484,10 +485,16 @@ internal enum class InsightsOutcome(
     val pick: (DailyMetric) -> Double?,
     val format: (Double) -> String,
 ) {
-    Recovery("Charge", "Charge", "recovery", true, DomainTheme.Charge, { it.recovery }, { "${it.roundToInt()}%" }),
+    Recovery("Recovery", "Recovery", "recovery", true, DomainTheme.Charge, { it.recovery }, { "${it.roundToInt()}%" }),
     Hrv("HRV", "HRV", "hrv", true, DomainTheme.Rest, { it.avgHrv }, { "${it.roundToInt()} ms" }),
-    Sleep("Rest", "Rest", "sleep_performance", true, DomainTheme.Rest, { it.efficiency }, { "${it.roundToInt()}%" }),
-    Rhr("RHR", "Resting HR", "rhr", false, DomainTheme.Stress, { it.restingHr?.toDouble() }, { "${it.roundToInt()} bpm" }),
+    Sleep("Sleep Performance", "Sleep Performance", "sleep_performance", true, DomainTheme.Rest, { null }, { "${it.roundToInt()}%" }),
+    Rhr("RHR", "Resting HR", "rhr", false, DomainTheme.Stress, { it.restingHr?.toDouble() }, { "${it.roundToInt()} bpm" });
+
+    val label: String get() = when (this) {
+        Recovery -> uiString(R.string.plan_trends_recovery)
+        Sleep -> uiString(R.string.plan_trends_sleep_performance)
+        else -> defaultLabel
+    }
 }
 
 // MARK: - Dose card view-data
@@ -599,6 +606,8 @@ internal class InsightsHubViewModel {
         // Dose rows per dosed behaviour, under the dedicated dose source; logged "yes" days
         // back-fill dose = 1, explicit dose rows override (matches the Swift contract).
         val doseCards = ArrayList<DoseCardData>()
+        val performance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", vm.activeStrapId)
+        outcomeByKey["sleep_performance"] = performance.points.associate { it.day to it.value }
         for (behavior in DosedBehavior.entries) {
             val doses = HashMap<String, Int>()
             for ((question, set) in behaviours) if (matches(behavior, question)) {

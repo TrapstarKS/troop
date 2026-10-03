@@ -228,7 +228,21 @@ enum AppleDemoSeeder {
         _ = try await store.upsertAppleDaily(appleRows, deviceId: apple)
         if !workouts.isEmpty { _ = try await store.upsertWorkouts(workouts, deviceId: whoop) }
         if !journal.isEmpty { _ = try await store.upsertJournal(journal, deviceId: whoop) }
+        try await seedPlanJournal(into: store)
+        seedWeeklyPlanDemo(today: Repository.localDayKey(Date()))
         NSLog("AppleDemoSeeder: seeded \(daily.count) days, \(workouts.count) workouts.")
+    }
+
+    private static func seedPlanJournal(into store: WhoopStore) async throws {
+        let today = Repository.localDayKey(Date())
+        var rows: [JournalEntry] = []
+        for offset in 1...90 {
+            guard let day = WeeklyPlanCalendar.adding(days: -offset, to: today) else { continue }
+            rows.append(JournalEntry(day: day, question: "Did you read before bed?", answeredYes: offset % 3 != 0, notes: nil))
+            rows.append(JournalEntry(day: day, question: "Did you drink any alcohol?", answeredYes: offset % 4 == 0, notes: nil))
+            rows.append(JournalEntry(day: day, question: "How much caffeine did you consume?", answeredYes: true, notes: nil, numericValue: Double(50 + offset % 4 * 50)))
+        }
+        _ = try await store.upsertJournal(rows, deviceId: Repository.journalDeviceId)
     }
 
     // MARK: - helpers

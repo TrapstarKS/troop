@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -105,7 +106,7 @@ private enum class Outcome(
     val format: (Double) -> String,
 ) {
     Recovery(
-        label = uiString(R.string.l10n_insights_screen_charge_d4e1aee4), outcomeName = "Charge", higherIsBetter = true, domain = DomainTheme.Charge,
+        label = uiString(R.string.plan_trends_recovery), outcomeName = "Recovery", higherIsBetter = true, domain = DomainTheme.Charge,
         pick = { it.recovery }, format = { "${it.roundToInt()}%" },
     ),
     Hrv(
@@ -113,8 +114,8 @@ private enum class Outcome(
         pick = { it.avgHrv }, format = { "${it.roundToInt()} ms" },
     ),
     Sleep(
-        label = uiString(R.string.l10n_insights_screen_rest_b79e5f48), outcomeName = "Rest", higherIsBetter = true, domain = DomainTheme.Rest,
-        pick = { it.efficiency }, format = { "${it.roundToInt()}%" },
+        label = uiString(R.string.plan_trends_sleep_performance), outcomeName = "Sleep Performance", higherIsBetter = true, domain = DomainTheme.Rest,
+        pick = { null }, format = { "${it.roundToInt()}%" },
     ),
     Rhr(
         label = uiString(R.string.l10n_insights_screen_rhr_04edf9b3), outcomeName = "Resting HR", higherIsBetter = false, domain = DomainTheme.Stress,
@@ -169,6 +170,20 @@ private data class InsightModel(
 @Composable
 fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     val days by vm.recentDays.collectAsStateWithLifecycle()
+    var showingWeeklyPlan by remember { mutableStateOf(false) }
+    if (showingWeeklyPlan) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showingWeeklyPlan = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.fillMaxSize().background(Palette.surfaceBase)) {
+                androidx.compose.material3.TextButton(onClick = { showingWeeklyPlan = false }) {
+                    Text(uiString(R.string.weekly_plan_dismiss), style = NoopType.body, color = Palette.textPrimary)
+                }
+                WeeklyPlanScreen(vm)
+            }
+        }
+    }
 
     // Journal answers (all history): imported "my-whoop" rows UNIONED with native "noop-journal"
     // rows (native wins per (day, question)). Keyed on journalSeq so the logging card's saves and
@@ -180,7 +195,12 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     // Map<String, Double> outcome), so "caffeine mg" / "alcohol units" can rank as a numeric outcome.
     var numericJournalSeries by remember { mutableStateOf<Map<String, Map<String, Double>>>(emptyMap()) }
     var journalLoaded by remember { mutableStateOf(false) }
-    var journalSeq by remember { mutableStateOf(0) }
+    var sleepPerformance by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    androidx.compose.runtime.LaunchedEffect(days, vm.activeStrapId) {
+        sleepPerformance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", vm.activeStrapId)
+            .points.associate { it.day to it.value }
+    }
+    val journalSeq by vm.repo.journalRevision.collectAsStateWithLifecycle()
     var dayOffset by remember { mutableStateOf(0L) }
     // #656: honour a day the Today journal widget deep-linked to (tapping a bar opens the journal at THAT
     // day). Consumed once on arrival, then cleared so it doesn't re-apply on the next recomposition.
@@ -189,10 +209,10 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         pendingJournalDay?.let { dayOffset = it; vm.requestJournalDay(null) }
     }
     var importedQuestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var answersDayKey by remember { mutableStateOf("") }
     var dayAnswers by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     // #322: the selected day's native numeric values (question -> value), drives the numeric fields.
     var dayNumeric by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    var preFilledFromYesterday by remember { mutableStateOf(false) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     // #322: the v2 catalog (rename + numeric type + group + order), folding the legacy custom/hidden
@@ -212,7 +232,10 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 val key = LocalDate.now().toString()
-                if (key != currentDayKey) currentDayKey = key
+                if (key != currentDayKey) {
+                    if (dayOffset != 0L) dayOffset += ChronoUnit.DAYS.between(LocalDate.parse(currentDayKey), LocalDate.parse(key))
+                    currentDayKey = key
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -238,33 +261,12 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         controls = controlsByBehaviour.mapValues { it.value.toSet() }
         numericJournalSeries = numericByBehaviour.mapValues { it.value.toMap() }
         importedQuestions = imported.map { it.question }.distinct()
-        val key = journalDayKey(dayOffset)
+        val key = journalDayKey(dayOffset, LocalDate.parse(currentDayKey))
         var answers = native.filter { it.day == key }.associate { it.question to it.answeredYes }
         // #322: the selected day's numeric values (native-only; imported WHOOP rows carry none).
         dayNumeric = native.filter { it.day == key && it.numericValue != null }
             .associate { it.question to it.numericValue!! }
-        // Pre-fill from last night when opening today's journal with no entries yet, makes
-        // recurring patterns (e.g. no alcohol, read before bed) one tap to confirm instead of re-enter.
-        if (answers.isEmpty() && dayOffset == 0L) {
-            val yesterdayAnswers = native
-                .filter { it.day == journalDayKey(1L) }
-                .associate { it.question to it.answeredYes }
-            if (yesterdayAnswers.isNotEmpty()) {
-                // Upsert real rows for today so the effects engine counts the day as logged
-                // and onClear can delete the row it finds. Without this the chips looked
-                // pre-filled but no row existed, so "confirm" persisted nothing and
-                // "clear" tried to delete a phantom.
-                vm.repo.upsertJournal(yesterdayAnswers.map { (q, yes) ->
-                    JournalEntry(JOURNAL_DEVICE_ID, key, q, yes)
-                })
-                answers = yesterdayAnswers
-                preFilledFromYesterday = true
-            } else {
-                preFilledFromYesterday = false
-            }
-        } else {
-            preFilledFromYesterday = false
-        }
+        answersDayKey = key
         dayAnswers = answers
         journalLoaded = true
     }
@@ -284,12 +286,12 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
 
     // Build outcome day-maps + ordered series off the cached daily metrics. Cheap and
     // recomputed only when `days` changes (not on every recomposition).
-    val model = remember(days, behaviours, controls, numericJournalSeries) {
-        buildModel(days, behaviours, controls, numericJournalSeries)
+    val model = remember(days, behaviours, controls, numericJournalSeries, sleepPerformance) {
+        buildModel(days, behaviours, controls, numericJournalSeries, sleepPerformance)
     }
 
     // Ranked behaviour effects for the current outcome (recomputed when outcome/data change).
-    val ranked = remember(model, outcome) { rankEffects(model, outcome) }
+    val ranked = remember(model, outcome, currentDayKey) { rankEffects(model, outcome, currentDayKey) }
     // Curated relationships (independent of the selected outcome).
     val relationships = remember(model) { computeRelationships(model) }
 
@@ -322,8 +324,8 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     val showDayCycleBackground = remember { NoopPrefs.showDayCycleBackground(skyCtx) }
     val skyBehindCards = remember { NoopPrefs.skyBehindCards(skyCtx) }
     LazyScreenScaffold(
-        title = uiString(R.string.l10n_insights_screen_insights_b4510362),
-        subtitle = "Interrogate what affects what.",
+        title = uiString(R.string.l10n_journal_log_journal_57d7f743),
+        subtitle = uiString(R.string.plan_journal_subtitle),
         topBackground = screenBackdropSlot(showDayCycleBackground, skyBehindCards),
         // Sky-behind-cards fills the viewport so the transparent cards reveal the sky the whole way
         // down (Today / Trends / Sleep / metric-detail parity - same two prefs, same two behaviours).
@@ -337,17 +339,12 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
 
         item { Spacer(Modifier.height(Metrics.sectionGap - 20.dp)) }
 
-        // --- Native journal logging (always reachable, the account-free way in) ---
-        if (preFilledFromYesterday) {
-            item {
-            Text(
-                uiString(R.string.l10n_insights_screen_pre_filled_from_last_night_tap_ce81097c),
-                style = NoopType.footnote,
-                color = Palette.textTertiary,
-                modifier = Modifier.fillMaxWidth(),
-            )
+        item {
+            NoopCard(modifier = Modifier.clickable { showingWeeklyPlan = true }) {
+                Text(uiString(R.string.weekly_plan_title), style = NoopType.headline, color = Palette.textPrimary)
             }
         }
+        // --- Native journal logging (always reachable, the account-free way in) ---
         item {
         // Persist a mutated catalog list and refresh state (the pure edit helpers never touch the
         // canonical key, so a rename/regroup/convert keeps history joined; #322).
@@ -356,42 +353,36 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
             catalogItems = next
         }
         JournalLogCard(
-            items = resolveJournalItems(importedQuestions, catalogItems, includeHidden = false),
+            items = resolveJournalItems(importedQuestions, catalogItems, includeHidden = true),
             answers = dayAnswers,
             numericAnswers = dayNumeric,
             dayOffset = dayOffset,
             onDayOffset = { dayOffset = it },
-            onAnswer = { q, yes ->
-                scope.launch {
-                    vm.repo.upsertJournal(
-                        listOf(JournalEntry(JOURNAL_DEVICE_ID, journalDayKey(dayOffset), q, yes)),
-                    )
-                    journalSeq++
-                }
-            },
-            onNumeric = { q, value ->
-                scope.launch {
-                    // A numeric log writes answeredYes=true AND the value (#322), so the effects engine
-                    // counts the day as logged and the with/without split is unchanged.
-                    vm.repo.upsertJournal(
-                        listOf(JournalEntry(JOURNAL_DEVICE_ID, journalDayKey(dayOffset), q,
-                            answeredYes = true, numericValue = value)),
-                    )
-                    journalSeq++
-                }
-            },
-            onClear = { q ->
-                scope.launch {
-                    vm.repo.deleteJournalEntry(JOURNAL_DEVICE_ID, journalDayKey(dayOffset), q)
-                    journalSeq++
-                }
-            },
             onAddCustom = { q, kind, group -> applyCatalog(addCustomJournalItem(catalogItems, q, kind, group)) },
             onRename = { q, name -> applyCatalog(renameJournalItem(catalogItems, q, name)) },
             onSetGroup = { q, group -> applyCatalog(setJournalItemGroup(catalogItems, q, group)) },
             onSetKind = { q, kind -> applyCatalog(setJournalItemKind(catalogItems, q, kind)) },
             onRemoveQuestion = { q -> applyCatalog(removeJournalItem(catalogItems, q)) },
             onRestoreQuestion = { q -> applyCatalog(restoreJournalItem(catalogItems, q)) },
+            answersDayKey = answersDayKey,
+            anchorDay = currentDayKey,
+            morningPrompt = days.any { it.day == currentDayKey && it.totalSleepMin != null },
+            onSave = { day, nextAnswers, nextNumeric, questions ->
+                try {
+                    for (question in questions - nextAnswers.keys) {
+                        vm.repo.deleteJournalEntry(JOURNAL_DEVICE_ID, day, question)
+                    }
+                    vm.repo.upsertJournal(nextAnswers.filterKeys { it in questions }.map { (question, yes) ->
+                        JournalEntry(JOURNAL_DEVICE_ID, day, question, yes, numericValue = nextNumeric[question])
+                    })
+                    vm.repo.noteJournalChanged()
+                    true
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    false
+                }
+            },
         )
         }
 
@@ -474,7 +465,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
                             vm.repo.upsertJournal(
                                 listOf(JournalEntry(JOURNAL_DEVICE_ID, journalDayKey(0L), behaviour, answeredYes)),
                             )
-                            journalSeq++       // refresh behaviours map (logged-today, compliance)
+                            vm.repo.noteJournalChanged()
                             experimentSeq++    // refresh the snapshot
                         }
                     }
@@ -753,6 +744,7 @@ private fun BehaviourSection(
             )
         }
 
+        Text(uiString(R.string.plan_comparison_window), style = NoopType.footnote, color = Palette.textSecondary)
         if (ranked.isEmpty()) {
             NoopCard {
                 Text(
@@ -783,10 +775,10 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome) {
         true -> StrandTone.Positive
         false -> if (e.significant) StrandTone.Critical else StrandTone.Warning
     }
-    val tintColor = tone.color
+    val tintColor = when (movedGood) { true -> Palette.statusPositive; false -> Palette.statusWarning; null -> Palette.textSecondary }
     val arrow = if (e.delta > 0) "↑" else if (e.delta < 0) "↓" else "→"
-    val deltaText = "$arrow ${String.format(Locale.US, "%.1f", abs(e.delta))}"
-    val sentence = effectSentence(e, outcome)
+    val deltaText = e.pctChange?.let { "${if (it > 0) "+" else if (it < 0) "−" else ""}${abs(it).roundToInt()}%" } ?: outcome.format(e.delta)
+    val sentence = uiString(R.string.plan_association_note)
 
     // The card wash reads as the OUTCOME's colour world (so the whole Behaviour Effects
     // section sits in one world), while the dot / StatTile accents stay sign-aware.
@@ -810,21 +802,17 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome) {
                             .drawBehind { drawCircle(tintColor) },
                     )
                     Text(
-                        e.behavior,
-                        style = NoopType.headline,
+                        journalLocalizedLabel(JournalCatalogItem(e.behavior)).uppercase(),
+                        style = NoopType.overline,
                         color = Palette.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                StatePill(
-                    if (e.significant) "SIGNIFICANT" else "EXPLORATORY",
-                    tone = if (e.significant) StrandTone.Positive else StrandTone.Neutral,
-                    showsDot = false,
-                )
+                Text(deltaText, style = NoopType.bodyNumber, color = tintColor)
             }
 
-            // Plain-English sentence.
+            e.pctChange?.let { RBar(it / 50.0, tintColor) }
             Text(sentence, style = NoopType.body, color = Palette.textSecondary)
 
             // With / without means as uniform StatTiles.
@@ -835,7 +823,7 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome) {
                     value = outcome.format(e.meanWith),
                     caption = "n = ${e.nWith}",
                     accent = tintColor,
-                    delta = deltaText,
+                    delta = null,
                     deltaColor = tintColor,
                 )
                 StatTile(
@@ -1265,7 +1253,7 @@ private fun ExperimentBehaviourPicker(
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             candidates.forEach { q ->
                 DropdownMenuItem(
-                    text = { Text(q, style = NoopType.subhead, color = Palette.textPrimary) },
+                    text = { Text(journalLocalizedLabel(JournalCatalogItem(q)), style = NoopType.subhead, color = Palette.textPrimary) },
                     onClick = {
                         onSelect(q)
                         expanded = false
@@ -1532,7 +1520,7 @@ private fun RBar(r: Double, color: Color) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(8.dp)
+            .height(Metrics.space8)
             .clip(CircleShape)
             .drawBehind {
                 val half = size.width / 2f
@@ -1578,12 +1566,13 @@ private fun buildModel(
     behaviours: Map<String, Set<String>>,
     controls: Map<String, Set<String>>,
     numericJournalSeries: Map<String, Map<String, Double>> = emptyMap(),
+    sleepPerformance: Map<String, Double> = emptyMap(),
 ): InsightModel {
     val outcomeByDay = mutableMapOf<Outcome, Map<String, Double>>()
     val seriesByOutcome = mutableMapOf<Outcome, List<Pair<String, Double>>>()
     for (o in Outcome.entries) {
         // Oldest → newest; one value per day (DailyMetric PK is (deviceId, day)).
-        val series = days.mapNotNull { d -> o.pick(d)?.let { d.day to it } }
+        val series = if (o == Outcome.Sleep) sleepPerformance.toList().sortedBy { it.first } else days.mapNotNull { d -> o.pick(d)?.let { d.day to it } }
         seriesByOutcome[o] = series
         outcomeByDay[o] = series.toMap()
     }
@@ -1591,15 +1580,16 @@ private fun buildModel(
 }
 
 /** Rank behaviour effects for one outcome by |Cohen's d|, significant first. */
-private fun rankEffects(model: InsightModel, outcome: Outcome): List<BehaviorEffect> {
-    val outcomeDays = model.outcomeByDay[outcome] ?: emptyMap()
+private fun rankEffects(model: InsightModel, outcome: Outcome, today: String): List<BehaviorEffect> {
+    val firstDay = LocalDate.parse(today).minusDays(89).toString()
+    val outcomeDays = (model.outcomeByDay[outcome] ?: emptyMap()).filterKeys { it >= firstDay && it <= today }
     if (outcomeDays.isEmpty()) return emptyList()
     // Through the shared engine, not a local copy. This screen used to carry its own with/without split,
     // its own pooled-SD Cohen's d and a "crude significance" (|d| >= 0.5 with >= 3 a side) where iOS's
     // same screen ran a Welch p — so identical journals could flag different behaviours on the two
     // platforms. EffectRanker.rankNoLag is the byte-identical twin of Swift's BehaviorInsights.rank,
     // which is what iOS calls here.
-    return EffectRanker.rankNoLag(model.behaviours, model.controls, outcomeDays, outcome.outcomeName)
+    return EffectRanker.rankNoLag(model.behaviours, model.controls, outcomeDays, outcome.outcomeName).filter { it.nWith >= 5 && it.nWithout >= 5 }
 }
 
 /** The curated metric relationships, computed via Pearson r over aligned day pairs. */
