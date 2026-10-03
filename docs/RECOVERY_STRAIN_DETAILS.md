@@ -12,6 +12,6 @@ Activity HR and derived zones use existing source-aware workout reads. Imported 
 
 `WorkoutRow.energyKcal` does not persist an active/total discriminator. Its display is therefore “Recorded energy”, with an explicit explanation. No resting energy is added and no stored row is reinterpreted.
 
-Debug demo seeding adds a separate recent-HR function and a completed activity. It runs only within the original empty-store demo seed, preserving the protection for real stores. The iOS direct demo names are `recovery`, `strain` and `activity`. A fresh demo fixture is required to acquire the added samples.
+Debug demo seeding adds a separate recent-HR function and a completed activity. In the first 45 minutes of a day, the activity belongs to the previous day. It runs only within the original empty-store demo seed, preserving the protection for real stores. The iOS direct demo names are `recovery`, `strain` and `activity`. A fresh demo fixture is required to acquire the added samples.
 
 Apple constructors are `RecoveryDetailView(dayKey:)`, `StrainDetailView(dayKey:effortOverride:)` and `ActivityDetailView(row:)`. Android equivalents are `RecoveryDetailScreen`, `StrainDetailScreen` and `ActivityDetailScreen`. Home must forward its selected date; the optional effort override is the already-resolved stored-axis live read shown by Home. The shell owns route registration; these screens own no independent Home date state.
