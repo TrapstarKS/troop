@@ -698,9 +698,11 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     }
                 }
                 composable(Destination.RecoveryDetail.route) {
-                    CoupledScreen(vm = viewModel, onOpenSleep = { nav.navigate(WhoopRoute.sleepDetail) })
+                    RecoveryDetailScreen(vm = viewModel, onBack = { nav.popBackStack() })
                 }
-                composable(Destination.StrainDetail.route) { WorkoutsScreen(viewModel) }
+                composable(Destination.StrainDetail.route) {
+                    StrainDetailScreen(vm = viewModel, onBack = { nav.popBackStack() })
+                }
                 composable(Destination.Healthspan.route) {
                     HealthScreen(vm = viewModel, onVitalClick = { nav.navigate("vital_detail/$it") },
                         onOpenLabBook = { nav.navigate(Destination.LabBook.route) },
