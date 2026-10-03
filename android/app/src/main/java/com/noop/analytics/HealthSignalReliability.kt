@@ -2,6 +2,13 @@ package com.noop.analytics
 
 /** Eligibility for local wellness alerts; retained computed HRV is not evidence from the fresh scan. */
 object HealthSignalReliability {
+    data class Record(val value: Double, val eligible: Boolean) {
+        fun matches(currentValue: Double?): Boolean = eligible && value.isFinite() && currentValue == value
+    }
+
+    fun firstRecord(sourceIds: List<String>, bySource: Map<String, Record>): Record? =
+        sourceIds.firstNotNullOfOrNull { bySource[it] }
+
     fun hrv(value: Double?, computed: Boolean,
             freshScoringValid: Double? = null, overcount: Double? = null): Double? {
         if (value == null || !value.isFinite() || value < Baselines.hrvCfg.minVal ||

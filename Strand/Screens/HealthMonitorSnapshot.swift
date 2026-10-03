@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 import StrandAnalytics
 import WhoopStore
 
@@ -20,32 +19,34 @@ struct HealthMonitorRow: Identifiable {
 enum HealthMonitorSnapshot {
     static let keys = ["hrv", "rhr", "resp", "spo2", "skin"]
 
+    static func dayKey(days: [DailyMetric], now: Date) -> String {
+        let logical = Repository.logicalDayKey(now)
+        return Repository.resolveToday(days: days, logicalKey: logical, localKey: Repository.localDayKey(now))?.day ?? logical
+    }
+
     static func rows(sourceRows: [SourcedDailyMetric],
                      temperatureUnit: TemperatureUnit = .celsius,
                      now: Date = Date(),
-                     hrvOverCountByDay: [String: Double] = [:],
-                     freshScoringByDay: [String: Double] = [:],
-                     provenanceLoaded: Bool = true,
+                     todayKey: String? = nil,
+                     hrvReliabilityByDay: [String: HealthSignalReliability.Record]? = nil,
                      skinTempPreferred: SkinTempDisplay.Kind = .absolute,
                      hrvBaselineEpoch: Double = Baselines.hrvBaselineEpoch(),
                      recoveryBaselineEpoch: Double = Baselines.recoveryBaselineEpoch()) -> [HealthMonitorRow] {
-        let today = BodyVitalSigns.logicalDayKey(now)
+        let today = todayKey ?? dayKey(days: sourceRows.map(\.metric), now: now)
         let eligibleRows = sourceRows.filter { $0.metric.day <= today }
         let readings = BodyVitalSigns.readings(sourceRows: eligibleRows, temperatureUnit: temperatureUnit,
-                                               now: now, hrvOverCountByDay: hrvOverCountByDay,
-                                               skinTempPreferred: skinTempPreferred)
+                                               now: now,
+                                               skinTempPreferred: skinTempPreferred, todayKey: today)
         return keys.compactMap { key in
-            guard var reading = readings.first(where: { $0.key == key }) else { return nil }
+            guard let reading = readings.first(where: { $0.key == key }) else { return nil }
             let computed = reading.source == .noopComputed || reading.source == .localCache
-            if key == "hrv", !computed { reading.caveat = nil }
-            let verified = key != "hrv" || (provenanceLoaded && HealthSignalReliability.hrv(
-                reading.value, computed: computed,
-                freshScoringValid: reading.day.flatMap { freshScoringByDay[$0] },
-                overcount: reading.day.flatMap { hrvOverCountByDay[$0] }) != nil)
+            let verified = key != "hrv" || (computed
+                ? reading.day.flatMap { hrvReliabilityByDay?[$0] }?.matches(reading.value) == true
+                : HealthSignalReliability.hrv(reading.value, computed: false) != nil)
             let current = reading.day == today
             let absolute = key == "skin" && (reading.value.map(VitalBands.isAbsoluteSkinTemp) ?? true)
             let history = history(key: key, sourceRows: sourceRows, before: today,
-                                  absoluteSkin: absolute, hrvOverCountByDay: hrvOverCountByDay, freshScoringByDay: freshScoringByDay,
+                                  absoluteSkin: absolute, hrvReliabilityByDay: hrvReliabilityByDay,
                                   baselineEpoch: key == "hrv" ? hrvBaselineEpoch : (key == "spo2" ? 0 : recoveryBaselineEpoch))
             let result = HealthMonitorAssessment.assess(value: current ? reading.value : nil,
                                                        history: history, cfg: config(key: key, absoluteSkin: absolute),
@@ -79,17 +80,22 @@ enum HealthMonitorSnapshot {
     }
 
     static func resolvedValues(key: String, sourceRows: [SourcedDailyMetric], absoluteSkin: Bool,
-                               hrvOverCountByDay: [String: Double], freshScoringByDay: [String: Double] = [:]) -> [String: Double] {
+                               hrvReliabilityByDay: [String: HealthSignalReliability.Record]? = nil) -> [String: Double] {
         var byDay: [String: Double] = [:]
+        var resolvedDays = Set<String>()
         for source in DailyMetricSource.vitalPrecedence(for: key) {
             for row in sourceRows where row.source == source {
-                if key == "hrv", HealthSignalReliability.hrv(
-                    row.metric.avgHrv, computed: source == .noopComputed || source == .localCache,
-                    freshScoringValid: freshScoringByDay[row.metric.day],
-                    overcount: hrvOverCountByDay[row.metric.day]) == nil { continue }
-                guard byDay[row.metric.day] == nil,
-                      let number = value(key: key, metric: row.metric, absoluteSkin: absoluteSkin),
-                      number.isFinite else { continue }
+                guard !resolvedDays.contains(row.metric.day),
+                      let number = value(key: key, metric: row.metric, absoluteSkin: absoluteSkin) else { continue }
+                resolvedDays.insert(row.metric.day)
+                guard number.isFinite else { continue }
+                if key == "hrv" {
+                    let computed = source == .noopComputed || source == .localCache
+                    let verified = computed
+                        ? hrvReliabilityByDay?[row.metric.day]?.matches(row.metric.avgHrv) == true
+                        : HealthSignalReliability.hrv(row.metric.avgHrv, computed: false) != nil
+                    if !verified { continue }
+                }
                 byDay[row.metric.day] = number
             }
         }
@@ -97,12 +103,13 @@ enum HealthMonitorSnapshot {
     }
 
     private static func history(key: String, sourceRows: [SourcedDailyMetric], before day: String,
-                                absoluteSkin: Bool, hrvOverCountByDay: [String: Double], freshScoringByDay: [String: Double],
+                                absoluteSkin: Bool, hrvReliabilityByDay: [String: HealthSignalReliability.Record]?,
                                 baselineEpoch: Double) -> [Double?] {
         let byDay = resolvedValues(key: key, sourceRows: sourceRows, absoluteSkin: absoluteSkin,
-                                  hrvOverCountByDay: hrvOverCountByDay, freshScoringByDay: freshScoringByDay)
+                                  hrvReliabilityByDay: hrvReliabilityByDay)
         let epoch = baselineEpoch
-        let cutoff = epoch > 0 ? String(ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: ceil(epoch / 86_400) * 86_400)).prefix(10)) : ""
+        let epochCutoff = epoch > 0 ? String(ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: ceil(epoch / 86_400) * 86_400)).prefix(10)) : ""
+        let cutoff = max(epochCutoff, Baselines.cutoffKey(todayKey: day, carryDays: 180))
         var points = byDay.filter { $0.key < day && $0.key >= cutoff }.map { (day: $0.key, value: Optional($0.value)) }
         let previous = Baselines.cutoffKey(todayKey: day, carryDays: 1)
         if !points.contains(where: { $0.day == previous }) { points.append((previous, nil)) }

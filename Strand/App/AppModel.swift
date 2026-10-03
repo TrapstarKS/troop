@@ -1961,29 +1961,15 @@ final class AppModel: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             let sourceIds = self.repo.computedReadIds
-            guard let store = await self.repo.storeHandle(), let firstDay = days.first?.day else { return }
-            var freshByDay: [String: Double] = [:]
-            var overcountByDay: [String: Double] = [:]
-            do {
-                for id in sourceIds {
-                    for point in try await store.metricSeries(deviceId: id, key: "hrv_fresh_scoring_valid",
-                                                              from: firstDay, to: latestDay) where freshByDay[point.day] == nil {
-                        freshByDay[point.day] = point.value
-                    }
-                    for point in try await store.metricSeries(deviceId: id, key: "hrv_rr_overcount",
-                                                              from: firstDay, to: latestDay) where overcountByDay[point.day] == nil {
-                        overcountByDay[point.day] = point.value
-                    }
-                }
-            } catch { return }
+            guard let firstDay = days.first?.day else { return }
+            let records: [String: HealthSignalReliability.Record]
+            do { records = try await self.repo.hrvReliabilityByDay(from: firstDay, to: latestDay) }
+            catch { return }
             var hrvByDay: [String: Double] = [:]
-            var resolvedHrvDays = Set<String>()
             for row in self.repo.vitalMetricRows.sorted(by: { $0.source.vitalPriority < $1.source.vitalPriority }) {
-                guard let value = row.metric.avgHrv, !resolvedHrvDays.contains(row.metric.day) else { continue }
-                resolvedHrvDays.insert(row.metric.day)
-                let computed = row.source == .noopComputed || row.source == .localCache
-                hrvByDay[row.metric.day] = HealthSignalReliability.hrv(value, computed: computed,
-                    freshScoringValid: freshByDay[row.metric.day], overcount: overcountByDay[row.metric.day])
+                guard hrvByDay[row.metric.day] == nil, let value = row.metric.avgHrv,
+                      records[row.metric.day]?.matches(value) == true else { continue }
+                hrvByDay[row.metric.day] = value
             }
             // Confounder tags from the recent journal (within the last ~2 days). Read once, off the
             // engine's hot path , the engine only needs presence flags, not the rows.

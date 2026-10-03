@@ -8,11 +8,29 @@ import com.noop.data.DailyMetric
 import com.noop.data.DemoSeeder
 import com.noop.data.MetricSeriesRow
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class HealthMonitorModelsTest {
+    @Test fun bankedLocalNightBeforeRolloverMatchesHome() {
+        val now = ZonedDateTime.parse("2026-06-20T02:00:00-03:00")
+        val prior = DailyMetric("strap", "2026-06-19", avgHrv = 80.0)
+        val unbanked = DailyMetric("strap", "2026-06-20", avgHrv = 70.0)
+        assertEquals("2026-06-19", healthMonitorDay(listOf(prior, unbanked), now))
+        assertEquals("2026-06-20", healthMonitorDay(listOf(prior, unbanked.copy(totalSleepMin = 420.0)), now))
+        assertEquals("2026-06-20", healthMonitorDay(listOf(prior, unbanked), now.plusHours(3)))
+        assertEquals("2026-06-20", healthMonitorDay(emptyList(), now.plusHours(3)))
+    }
+
+    @Test fun nonfiniteAndImplausibleValuesAreNotFormattedAsReadings() {
+        for (value in listOf(Double.NaN, Double.POSITIVE_INFINITY, 1e300, 500.0)) {
+            assertNull(healthMonitorDisplayValue("hrv", value))
+        }
+        assertEquals(80.0, healthMonitorDisplayValue("hrv", 80.0)!!, 0.0)
+    }
+
     @Test fun missingCurrentDayDoesNotAssessCarriedOrFutureReadings() {
         val days = listOf(
             DailyMetric("strap", "2026-10-01", restingHr = 50),
@@ -88,7 +106,7 @@ class HealthMonitorModelsTest {
             DailyMetric("strap", "2026-10-02", avgHrv = null),
             DailyMetric("strap", "2026-10-03", avgHrv = 100.0),
         )
-        val report = healthMonitorReport(days, LocalDate.parse("2026-10-02"), 30, SkinTempDisplay.Kind.ABSOLUTE, hrvReliabilityByDay = days.associate { it.day to true })
+        val report = healthMonitorReport(days, LocalDate.parse("2026-10-02"), 30, SkinTempDisplay.Kind.ABSOLUTE, hrvReliabilityByDay = days.mapNotNull { row -> row.avgHrv?.let { row.day to HealthSignalReliability.Record(it, true) } }.toMap())
         val hrv = report.rows.first { it.key == "hrv" }
         assertEquals("2026-09-03", report.start)
         assertEquals(2, hrv.nights)
@@ -104,12 +122,11 @@ class HealthMonitorModelsTest {
             DailyMetric("import", "2026-09-30", avgHrv = 40.0, spo2Pct = 98.0, skinTempDevC = 35.0),
             DailyMetric("strap", "2026-10-01", skinTempDevC = -9.0),
         )
-        val flagged = mapOf("2026-09-29" to 1.0)
-        val absolute = healthMonitorReport(days, LocalDate.parse("2026-10-02"), 180, SkinTempDisplay.Kind.ABSOLUTE, flagged, mapOf("2026-09-29" to false, "2026-09-30" to true))
+        val absolute = healthMonitorReport(days, LocalDate.parse("2026-10-02"), 180, SkinTempDisplay.Kind.ABSOLUTE, mapOf("2026-09-29" to HealthSignalReliability.Record(80.0, false), "2026-09-30" to HealthSignalReliability.Record(40.0, true)))
         assertEquals(40.0, absolute.rows.first { it.key == "hrv" }.mean!!, 0.0)
         assertEquals(98.0, absolute.rows.first { it.key == "spo2" }.mean!!, 0.0)
         assertEquals(34.5, absolute.rows.first { it.key == "skin" }.mean!!, 0.0)
-        val deviation = healthMonitorReport(days, LocalDate.parse("2026-10-02"), 180, SkinTempDisplay.Kind.DEVIATION, flagged, mapOf("2026-09-29" to false, "2026-09-30" to true))
+        val deviation = healthMonitorReport(days, LocalDate.parse("2026-10-02"), 180, SkinTempDisplay.Kind.DEVIATION, mapOf("2026-09-29" to HealthSignalReliability.Record(80.0, false), "2026-09-30" to HealthSignalReliability.Record(40.0, true)))
         val skin = deviation.rows.first { it.key == "skin" }
         assertEquals(1, skin.nights)
         assertEquals(0.2, skin.mean!!, 0.0)

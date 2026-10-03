@@ -10,6 +10,7 @@ import com.noop.alarm.SmartAlarmStore
 import com.noop.alarm.WindDownScheduler
 import com.noop.alarm.WindDownStore
 import com.noop.analytics.Baselines
+import com.noop.analytics.HealthSignalReliability
 import com.noop.ingest.WhoopCsvImporter
 import com.noop.analytics.IllnessSignalEngine
 import com.noop.analytics.IllnessWatch
@@ -771,14 +772,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val illnessHistory: StateFlow<IllnessHistory.Snapshot?> =
-        combine(recentDays, activeStrapIdFlow) { days, activeId ->
+        IllnessHistory.observe(repository, combine(recentDays, activeStrapIdFlow) { days, activeId ->
             effectiveActiveStrapId(activeId, deviceId) to days
-        }.flatMapLatest { (activeId, days) -> IllnessHistory.flow(repository, activeId, days) }
-            .catch { /* A failed/loading read cannot establish a clear notification edge. */ }
+        })
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** Null while provenance loads; computed HRV needs a fresh valid scan before it can corroborate. */
-    val hrvReliabilityByDay: StateFlow<Map<String, Boolean>?> =
+    val hrvReliabilityByDay: StateFlow<Map<String, HealthSignalReliability.Record>?> =
         illnessHistory.map { it?.hrvReliabilityByDay }
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -1004,7 +1004,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Recompute the illness banner + today's row whenever cached days change.
         viewModelScope.launch {
             illnessHistory.collect { snapshot ->
-                if (snapshot == null) return@collect
+                if (snapshot == null || !snapshot.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId))) return@collect
                 val days = snapshot.days
                 val prefs = appContext.getSharedPreferences(NoopPrefs.NAME, android.content.Context.MODE_PRIVATE)
                 // Only treat a row as "today" if its date is the phone's ACTUAL local calendar day.
@@ -1038,7 +1038,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // the persisted edge replaced, and reinstating it would bring the cold start back.
                 // A loading/error emission with fewer than 14 days cannot establish a real clear.
                 if (_illnessWatchEnabled.value && days.size >= 14 && _today.value != null &&
-                    days.lastOrNull()?.day == _today.value?.day && snapshot == illnessHistory.value)
+                    days.lastOrNull()?.day == _today.value?.day && snapshot == illnessHistory.value && snapshot.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId)))
                     IllnessAlertNotifier.onEvaluated(appContext, _healthAlert.value,
                         enabled = _illnessWatchEnabled.value, valid = illnessEvaluation?.valid == true)
                 // Morning recap (#517) — opt-in, default OFF. Once today's row carries a banked night
@@ -1079,7 +1079,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     lastCircadianBins = circadianActivityBins()
                     val loggedPeriodStarts = CycleTrackingStore(repository).starts()
                     _periodStarts.value = loggedPeriodStarts
-                    if (snapshot != illnessHistory.value) return@runCatching
+                    if (!isActive || snapshot != illnessHistory.value || !snapshot.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId))) return@runCatching
                     _v5Signals.value = V5HealthSignals.evaluate(
                         days = snapshot.alertDays,
                         cycleOptedIn = _cycleTrackingEnabled.value,
@@ -2871,7 +2871,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _illnessWatchEnabled.value = enabled
         NoopPrefs.setIllnessWatch(appContext, enabled)
         // Recompute now — the recentDays collector only fires on data changes.
-        val snapshot = illnessHistory.value
+        val snapshot = illnessHistory.value?.takeIf { it.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId)) }
         val days = snapshot?.days.orEmpty()
         val valid = snapshot != null && days.size >= 14 && _today.value != null &&
             days.lastOrNull()?.day == _today.value?.day
@@ -2902,8 +2902,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Launched, like the sibling toggles, because the bins may need a store read before this snapshot
         // is safe to publish — evaluating straight off an empty cache is what erased `bodyClock`.
         viewModelScope.launch {
-            val days = illnessHistory.value?.alertDays ?: return@launch
+            val snapshot = illnessHistory.value ?: return@launch
+            val days = snapshot.alertDays
             val bins = freshCircadianBins()
+            if (!isActive || snapshot != illnessHistory.value || !snapshot.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId))) return@launch
             runCatching {
                 _v5Signals.value = V5HealthSignals.evaluate(
                     days = days,
@@ -2970,8 +2972,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun reloadPeriodStartsAndCycle(store: CycleTrackingStore) {
         val starts = store.starts()
         _periodStarts.value = starts
-        val days = illnessHistory.value?.alertDays ?: return
+        val snapshot = illnessHistory.value ?: return
+        val days = snapshot.alertDays
         val bins = freshCircadianBins()
+        if (!kotlinx.coroutines.currentCoroutineContext().isActive || snapshot != illnessHistory.value ||
+            !snapshot.isCurrent(recentDays.value, effectiveActiveStrapId(activeStrapIdFlow.value, deviceId))) return
         _v5Signals.value = V5HealthSignals.evaluate(
             days = days,
             cycleOptedIn = _cycleTrackingEnabled.value,

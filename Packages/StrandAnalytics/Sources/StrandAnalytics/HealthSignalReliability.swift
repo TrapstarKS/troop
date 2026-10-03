@@ -2,6 +2,17 @@ import Foundation
 
 /// Eligibility for local wellness alerts; a retained computed HRV is not evidence from the fresh scan.
 public enum HealthSignalReliability {
+    public struct Record: Equatable, Sendable {
+        public let value: Double
+        public let eligible: Bool
+        public init(value: Double, eligible: Bool) { self.value = value; self.eligible = eligible }
+        public func matches(_ currentValue: Double?) -> Bool { eligible && value.isFinite && currentValue == value }
+    }
+
+    public static func firstRecord(sourceIds: [String], bySource: [String: Record]) -> Record? {
+        sourceIds.lazy.compactMap { bySource[$0] }.first
+    }
+
     public static func hrv(_ value: Double?, computed: Bool,
                            freshScoringValid: Double? = nil, overcount: Double? = nil) -> Double? {
         guard let value, value.isFinite, value >= Baselines.hrvCfg.minVal,

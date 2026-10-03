@@ -1,6 +1,15 @@
 import Foundation
 import GRDB
 
+/// One physical source's stored HRV and same-source fresh-scan evidence from one read snapshot.
+public struct HrvProvenanceRow: Equatable, Sendable {
+    public let deviceId: String
+    public let day: String
+    public let value: Double
+    public let freshScoringValid: Double?
+    public let overcount: Double?
+}
+
 // MARK: - v9 cache: generic long-format metric store
 // The substrate for a metric explorer. Where MetricsCache / JournalWorkoutAppleCache use a
 // WIDE column-per-metric layout (one table per source, typed nullable columns), this is the
@@ -51,6 +60,28 @@ extension WhoopStore {
     }
 
     // MARK: - Reads
+
+    /// Joins before source coalescing so one strap's marker cannot validate another strap's HRV.
+    public func hrvProvenance(deviceIds: [String], from: String, to: String) async throws -> [HrvProvenanceRow] {
+        guard !deviceIds.isEmpty else { return [] }
+        return try syncRead { db in
+            let placeholders = Array(repeating: "?", count: deviceIds.count).joined(separator: ",")
+            return try Row.fetchAll(db, sql: """
+                SELECT d.deviceId, d.day, d.avgHrv AS value,
+                       fresh.value AS freshScoringValid, overcount.value AS overcount
+                FROM dailyMetric d
+                LEFT JOIN metricSeries fresh ON fresh.deviceId = d.deviceId AND fresh.day = d.day
+                    AND fresh.key = 'hrv_fresh_scoring_valid'
+                LEFT JOIN metricSeries overcount ON overcount.deviceId = d.deviceId AND overcount.day = d.day
+                    AND overcount.key = 'hrv_rr_overcount'
+                WHERE d.deviceId IN (\(placeholders)) AND d.day >= ? AND d.day <= ? AND d.avgHrv IS NOT NULL
+                ORDER BY d.day, d.deviceId
+                """, arguments: StatementArguments(deviceIds + [from, to])).map {
+                    HrvProvenanceRow(deviceId: $0["deviceId"], day: $0["day"], value: $0["value"],
+                                     freshScoringValid: $0["freshScoringValid"], overcount: $0["overcount"])
+                }
+        }
+    }
 
     /// Points for a single `key` on days in [from, to] (lexicographic YYYY-MM-DD compare),
     /// oldest day first. Served index-only by idx_metricSeries_device_key_day.

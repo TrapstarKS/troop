@@ -2,11 +2,13 @@ package com.noop.ui
 
 import com.noop.analytics.Baselines
 import com.noop.analytics.HealthMonitorAssessment
+import com.noop.analytics.HealthSignalReliability
 import com.noop.analytics.MetricCfg
 import com.noop.analytics.SkinTempDisplay
 import com.noop.analytics.VitalBands
 import com.noop.data.DailyMetric
 import java.time.LocalDate
+import java.time.ZonedDateTime
 
 internal val healthMonitorKeys = listOf("hrv", "rhr", "resp", "spo2", "skin")
 
@@ -14,6 +16,16 @@ internal data class HealthMonitorReading(
     val vital: Vital,
     val assessment: HealthMonitorAssessment.Result,
 )
+
+internal fun healthMonitorDay(days: List<DailyMetric>, now: ZonedDateTime): String {
+    val logical = logicalDay(now).toString()
+    return resolveTodayRow(days, logical, now.toLocalDate().toString())?.day ?: logical
+}
+
+internal fun healthMonitorDisplayValue(key: String, value: Double?): Double? {
+    val cfg = healthMonitorCfg(key, value?.let(VitalBands::isAbsoluteSkinTemp) ?: true)
+    return value?.takeIf { it.isFinite() && it >= cfg.minVal && it <= cfg.maxVal }
+}
 
 internal fun healthMonitorCurrentDay(days: List<DailyMetric>, day: String): DailyMetric? =
     days.lastOrNull { it.day == day }
@@ -34,10 +46,11 @@ internal fun healthMonitorHistory(
     day: String,
     baselineEpoch: Long = 0L,
 ): List<Double?> {
+    val cutoff = LocalDate.parse(day).minusDays(180)
     val end = LocalDate.parse(day).minusDays(1)
     val prior = rows.mapNotNull { (key, value) ->
         runCatching { LocalDate.parse(key) }.getOrNull()
-            ?.takeIf { !it.isAfter(end) && (baselineEpoch <= 0L || it.toEpochDay() * 86_400L >= baselineEpoch) }
+            ?.takeIf { !it.isAfter(end) && !it.isBefore(cutoff) && (baselineEpoch <= 0L || it.toEpochDay() * 86_400L >= baselineEpoch) }
             ?.let { it.toString() to value?.takeIf(Double::isFinite) }
     }
     if (prior.isEmpty()) return emptyList()
@@ -49,17 +62,16 @@ internal fun healthMonitorReadings(
     day: String,
     days: List<DailyMetric>,
     tempUnit: TemperatureUnit,
-    hrvOverCountByDay: Map<String, Double>,
     skinTempPreferred: SkinTempDisplay.Kind,
     hrvBaselineEpoch: Long = 0L,
     recoveryBaselineEpoch: Long = 0L,
-    hrvReliabilityByDay: Map<String, Boolean>? = null,
+    hrvReliabilityByDay: Map<String, HealthSignalReliability.Record>? = null,
 ): List<HealthMonitorReading> {
     val original = healthMonitorCurrentDay(days, day)
     val current = healthMonitorCurrentDayMetric(days, day)
     val displayDays = days.map(::healthMonitorFiniteMetric)
     val vitals = vitalsFor(current, displayDays, tempUnit, emptyMap(), false,
-        hrvOverCountByDay, skinTempPreferred).associateBy { it.key }
+        emptyMap(), skinTempPreferred).associateBy { it.key }
     return healthMonitorKeys.map { key ->
         val value = when (key) {
             "hrv" -> original?.avgHrv
@@ -71,13 +83,13 @@ internal fun healthMonitorReadings(
         val resolved = vitals.getValue(key)
         val rawVital = resolved.copy(value = value,
             secondary = resolved.secondary.takeIf { value?.isFinite() == true })
-        val hrvVerified = hrvReliabilityByDay?.get(day) == true
+        val hrvVerified = hrvReliabilityByDay?.get(day)?.matches(value) == true
         val vital = if (key == "hrv" && hrvVerified) rawVital.copy(caveat = null) else rawVital
         val skinAbsolute = vital.value?.let(VitalBands::isAbsoluteSkinTemp) ?: true
         val cfg = healthMonitorCfg(key, skinAbsolute)
         val history = healthMonitorHistory(days.map { row ->
             row.day to when (key) {
-                "hrv" -> row.avgHrv?.takeIf { hrvReliabilityByDay?.get(row.day) == true }
+                "hrv" -> row.avgHrv?.takeIf { hrvReliabilityByDay?.get(row.day)?.matches(row.avgHrv) == true }
                 "rhr" -> row.restingHr?.toDouble()
                 "resp" -> row.respRateBpm
                 "spo2" -> row.spo2Pct
@@ -109,8 +121,7 @@ internal fun healthMonitorReport(
     end: LocalDate,
     windowDays: Int,
     skinKind: SkinTempDisplay.Kind,
-    hrvOverCountByDay: Map<String, Double> = emptyMap(),
-    hrvReliabilityByDay: Map<String, Boolean>? = null,
+    hrvReliabilityByDay: Map<String, HealthSignalReliability.Record>? = null,
 ): HealthMonitorReport {
     val start = end.minusDays(windowDays.toLong() - 1)
     val window = days.filter { row ->
@@ -120,7 +131,7 @@ internal fun healthMonitorReport(
         val cfg = healthMonitorCfg(key, skinKind == SkinTempDisplay.Kind.ABSOLUTE)
         val values = window.mapNotNull { row ->
             when (key) {
-                "hrv" -> row.avgHrv?.takeIf { hrvReliabilityByDay?.get(row.day) == true }
+                "hrv" -> row.avgHrv?.takeIf { hrvReliabilityByDay?.get(row.day)?.matches(row.avgHrv) == true }
                 "rhr" -> row.restingHr?.toDouble()
                 "resp" -> row.respRateBpm
                 "spo2" -> row.spo2Pct

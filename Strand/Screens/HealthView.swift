@@ -6,24 +6,28 @@ import WhoopStore
 
 struct HealthView: View {
     @EnvironmentObject var repo: Repository
+    @State private var now = Date()
 
     var body: some View {
         ScreenScaffold(title: "Health", onRefresh: { await repo.refresh() }, lazy: true) {
-            HealthLandingContent()
+            HealthLandingContent(now: now)
         }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
     }
 }
 
 private struct HealthLandingContent: View {
+    let now: Date
     @EnvironmentObject var repo: Repository
     @EnvironmentObject var intelligence: IntelligenceEngine
-    @State private var overCounts: [String: Double] = [:]
-    @State private var freshScoring: [String: Double] = [:]
-    @State private var provenanceLoaded = false
+    @State private var hrvReliability: [String: HealthSignalReliability.Record]? = nil
+    @State private var evidenceIdentity: String? = nil
 
     var body: some View {
+        let day = HealthMonitorSnapshot.dayKey(days: repo.days, now: now)
+        let identity = "\(repo.importedReadIds + repo.computedReadIds):\(repo.refreshSeq):\(intelligence.computing):\(day)"
         let rows = HealthMonitorSnapshot.rows(sourceRows: repo.vitalMetricRows,
-                                              hrvOverCountByDay: overCounts, freshScoringByDay: freshScoring, provenanceLoaded: provenanceLoaded)
+                                              now: now, todayKey: day, hrvReliabilityByDay: evidenceIdentity == identity ? hrvReliability : nil)
         VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
             NavigationLink(value: TabRoute.healthspan) {
                 NoopCard(tint: StrandPalette.positive) {
@@ -82,17 +86,15 @@ private struct HealthLandingContent: View {
                 }
             }.buttonStyle(.plain)
         }
-        .task(id: "\(repo.refreshSeq):\(intelligence.computing)") {
-            provenanceLoaded = false
-            freshScoring = [:]
-            overCounts = [:]
+        .task(id: identity) {
+            hrvReliability = nil
+            evidenceIdentity = nil
             guard !intelligence.computing else { return }
-            let points = await repo.exploreSeries(key: "hrv_rr_overcount", source: "my-whoop", days: 120)
-            let fresh = await repo.exploreSeries(key: "hrv_fresh_scoring_valid", source: "my-whoop", days: 180)
+            let end = day
+            let records = try? await repo.hrvReliabilityByDay(from: Baselines.cutoffKey(todayKey: end, carryDays: 180), to: end)
             guard !Task.isCancelled else { return }
-            freshScoring = Dictionary(fresh.map { ($0.day, $0.value) }, uniquingKeysWith: { a, _ in a })
-            provenanceLoaded = true
-            overCounts = Dictionary(points.map { ($0.day, $0.value) }, uniquingKeysWith: { a, _ in a })
+            hrvReliability = records
+            evidenceIdentity = identity
         }
     }
 }

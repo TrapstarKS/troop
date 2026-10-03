@@ -1020,6 +1020,9 @@ interface WhoopDao : DeviceRegistryDao {
 
     // MARK: - Generic metric series (Swift metricSeries, v9)
 
+    @Query(HRV_PROVENANCE_SQL)
+    fun hrvProvenanceFlow(deviceIds: List<String>, from: String, to: String): Flow<List<HrvProvenanceRow>>
+
     @Query(
         "SELECT * FROM metricSeries WHERE deviceId = :deviceId AND key = :key AND day >= :from AND day <= :to " +
             "ORDER BY day ASC"

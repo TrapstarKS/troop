@@ -23,7 +23,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.produceState
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +40,7 @@ import com.noop.analytics.SkinTempDisplay
 import com.noop.analytics.VitalBands
 import com.noop.data.DailyMetric
 import java.time.LocalDate
+import java.time.ZonedDateTime
 
 @Composable
 fun HealthMonitorScreen(
@@ -46,20 +49,19 @@ fun HealthMonitorScreen(
     onOpenLiveHr: () -> Unit = {},
 ) {
     val days by vm.recentDays.collectAsStateWithLifecycle()
-    val day = logicalDayKeyNow()
+    val day = rememberHealthMonitorDay(days)
     val readings = rememberHealthMonitorReadings(vm, days, day)
     val context = androidx.compose.ui.platform.LocalContext.current
     val skinPreference = UnitPrefs.skinTempPreferred(context)
     val skinKind = readings.last().vital.value?.let {
         if (VitalBands.isAbsoluteSkinTemp(it)) SkinTempDisplay.Kind.ABSOLUTE else SkinTempDisplay.Kind.DEVIATION
     } ?: skinPreference
-    val hrvOverCountByDay by vm.hrvOverCountByDay.collectAsStateWithLifecycle()
     val reliability by vm.hrvReliabilityByDay.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var sharing by remember { mutableStateOf(false) }
     var reportDays by remember { mutableStateOf(30) }
-    val report = remember(days, day, reportDays, skinKind, hrvOverCountByDay, reliability) {
-        healthMonitorReport(days, LocalDate.parse(day), reportDays, skinKind, hrvOverCountByDay, reliability)
+    val report = remember(days, day, reportDays, skinKind, reliability) {
+        healthMonitorReport(days, LocalDate.parse(day), reportDays, skinKind, reliability)
     }
     LazyScreenScaffold(
         title = stringResource(R.string.health_monitor_title),
@@ -93,22 +95,32 @@ fun HealthMonitorScreen(
 }
 
 @Composable
+private fun rememberHealthMonitorDay(days: List<DailyMetric>): String {
+    val now by produceState(initialValue = ZonedDateTime.now()) {
+        while (true) {
+            value = ZonedDateTime.now()
+            delay(60_000)
+        }
+    }
+    return healthMonitorDay(days, now)
+}
+
+@Composable
 private fun rememberHealthMonitorReadings(vm: AppViewModel, days: List<DailyMetric>, day: String): List<HealthMonitorReading> {
     val context = androidx.compose.ui.platform.LocalContext.current
     val tempUnit = UnitPrefs.temperature(context)
     val skinPreference = UnitPrefs.skinTempPreferred(context)
-    val overcounts by vm.hrvOverCountByDay.collectAsStateWithLifecycle()
     val reliability by vm.hrvReliabilityByDay.collectAsStateWithLifecycle()
     val hrvEpoch = NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L)
     val recoveryEpoch = NoopPrefs.of(context).getLong(Baselines.recoveryBaselineEpochKey, 0L)
-    return remember(day, days, tempUnit, overcounts, skinPreference, hrvEpoch, recoveryEpoch, reliability) {
-        healthMonitorReadings(day, days, tempUnit, overcounts, skinPreference, hrvEpoch, recoveryEpoch, reliability)
+    return remember(day, days, tempUnit, skinPreference, hrvEpoch, recoveryEpoch, reliability) {
+        healthMonitorReadings(day, days, tempUnit, skinPreference, hrvEpoch, recoveryEpoch, reliability)
     }
 }
 
 @Composable
 internal fun HealthMonitorPreview(vm: AppViewModel, days: List<DailyMetric>, onClick: () -> Unit) {
-    val day = logicalDayKeyNow()
+    val day = rememberHealthMonitorDay(days)
     val readings = rememberHealthMonitorReadings(vm, days, day)
     NoopCard(Modifier.clickable(role = Role.Button, onClick = onClick)) {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
@@ -158,10 +170,11 @@ internal val monitorComparedStatuses = setOf(HealthMonitorAssessment.Status.WITH
 private fun HealthMonitorVitalCard(reading: HealthMonitorReading, onClick: () -> Unit) {
     val vital = reading.vital
     val result = reading.assessment
+    val displayValue = healthMonitorDisplayValue(vital.key, vital.value)
     NoopCard(Modifier.clickable(role = Role.Button, onClick = onClick)) {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
-            ContributorRow(label = vital.label, value = vital.value?.takeIf(Double::isFinite)?.let(vital.format) ?: "—",
-                unit = if (vital.value?.isFinite() == true) vital.unit else "",
+            ContributorRow(label = vital.label, value = displayValue?.let(vital.format) ?: "—",
+                unit = if (displayValue != null) vital.unit else "",
                 comparisonIcon = Icons.AutoMirrored.Filled.KeyboardArrowRight)
             StatusPill(statusLabel(result.status), statusIcon(result.status), statusColor(result.status))
             val lower = result.lower

@@ -11,9 +11,9 @@ struct HealthMonitorView: View {
     @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
     @AppStorage(UnitPrefs.skinTempDisplayKey) private var skinTempDisplayRaw = ""
-    @State private var overCounts: [String: Double] = [:]
-    @State private var freshScoring: [String: Double] = [:]
-    @State private var provenanceLoaded = false
+    @State private var hrvReliability: [String: HealthSignalReliability.Record]? = nil
+    @State private var evidenceIdentity: String? = nil
+    @State private var now = Date()
     @State private var reportDays = 30
     @State private var reportFailed = false
 
@@ -23,15 +23,17 @@ struct HealthMonitorView: View {
     }
 
     var body: some View {
-        let now = Date()
+        let day = HealthMonitorSnapshot.dayKey(days: repo.days, now: now)
+        let identity = "\(repo.importedReadIds + repo.computedReadIds):\(repo.refreshSeq):\(intelligence.computing):\(day)"
+        let evidence = evidenceIdentity == identity ? hrvReliability : nil
         let rows = HealthMonitorSnapshot.rows(sourceRows: repo.vitalMetricRows, temperatureUnit: temperatureUnit,
-                                              now: now, hrvOverCountByDay: overCounts, freshScoringByDay: freshScoring, provenanceLoaded: provenanceLoaded,
+                                              now: now, todayKey: day, hrvReliabilityByDay: evidence,
                                               skinTempPreferred: SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute)
         ScreenScaffold(title: "Health Monitor", onRefresh: { await repo.refresh() }, lazy: true) {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                 NoopCard {
                     VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
-                        Text(BodyVitalReading.dayLabel(BodyVitalSigns.logicalDayKey(now)))
+                        Text(BodyVitalReading.dayLabel(day))
                             .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                         HealthMonitorSummary(rows: rows)
                         Text("Your overnight measurements compared with your personal normal range.")
@@ -72,9 +74,9 @@ struct HealthMonitorView: View {
                             Text("180 days").tag(180)
                         }.pickerStyle(.segmented)
                         NoopButton("Export Health Report", systemImage: "square.and.arrow.up", kind: .secondary, fullWidth: true) {
-                            exportReport(rows: rows, now: now)
-                        }.disabled(Set(repo.days.filter { $0.day <= BodyVitalSigns.logicalDayKey(now) && $0.recovery?.isFinite == true }.map(\.day)).count < 14)
-                        if Set(repo.days.filter { $0.day <= BodyVitalSigns.logicalDayKey(now) && $0.recovery?.isFinite == true }.map(\.day)).count < 14 {
+                            exportReport(rows: rows, now: now, evidence: evidence)
+                        }.disabled(Set(repo.days.filter { $0.day <= HealthMonitorSnapshot.dayKey(days: repo.days, now: now) && $0.recovery?.isFinite == true }.map(\.day)).count < 14)
+                        if Set(repo.days.filter { $0.day <= HealthMonitorSnapshot.dayKey(days: repo.days, now: now) && $0.recovery?.isFinite == true }.map(\.day)).count < 14 {
                             Text("A Health Report needs 14 recorded recoveries.")
                                 .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
                         }
@@ -82,17 +84,16 @@ struct HealthMonitorView: View {
                 }
             }
         }
-        .task(id: "\(repo.refreshSeq):\(intelligence.computing)") {
-            provenanceLoaded = false
-            freshScoring = [:]
-            overCounts = [:]
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
+        .task(id: identity) {
+            hrvReliability = nil
+            evidenceIdentity = nil
             guard !intelligence.computing else { return }
-            let points = await repo.exploreSeries(key: "hrv_rr_overcount", source: "my-whoop", days: 180)
-            let fresh = await repo.exploreSeries(key: "hrv_fresh_scoring_valid", source: "my-whoop", days: 180)
+            let end = day
+            let records = try? await repo.hrvReliabilityByDay(from: Baselines.cutoffKey(todayKey: end, carryDays: 180), to: end)
             guard !Task.isCancelled else { return }
-            freshScoring = Dictionary(fresh.map { ($0.day, $0.value) }, uniquingKeysWith: { a, _ in a })
-            provenanceLoaded = true
-            overCounts = Dictionary(points.map { ($0.day, $0.value) }, uniquingKeysWith: { a, _ in a })
+            hrvReliability = records
+            evidenceIdentity = identity
         }
         .alert("Could not create report", isPresented: $reportFailed) {
             Button("OK", role: .cancel) { }
@@ -100,11 +101,11 @@ struct HealthMonitorView: View {
     }
 
     @MainActor
-    private func exportReport(rows: [HealthMonitorRow], now: Date) {
-        let end = BodyVitalSigns.logicalDayKey(now)
+    private func exportReport(rows: [HealthMonitorRow], now: Date, evidence: [String: HealthSignalReliability.Record]?) {
+        let end = HealthMonitorSnapshot.dayKey(days: repo.days, now: now)
         let start = Baselines.cutoffKey(todayKey: end, carryDays: reportDays - 1)
         let page = HealthReportPage(rows: rows, sourceRows: repo.vitalMetricRows, start: start, end: end,
-                                    overCounts: overCounts, freshScoring: freshScoring)
+                                    hrvReliability: evidence)
         let name = FileExport.timestampedName("noop-health-report-\(reportDays)d", ext: "pdf")
         guard let url = TrendsReportRenderer.makePDF(page: page, fileName: name) else {
             reportFailed = true
@@ -201,8 +202,7 @@ private struct HealthReportPage: View {
     let sourceRows: [SourcedDailyMetric]
     let start: String
     let end: String
-    let overCounts: [String: Double]
-    let freshScoring: [String: Double]
+    let hrvReliability: [String: HealthSignalReliability.Record]?
 
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
@@ -213,7 +213,7 @@ private struct HealthReportPage: View {
                 let absolute = row.reading.key == "skin" && (row.reading.value.map(VitalBands.isAbsoluteSkinTemp) ?? true)
                 let cfg = HealthMonitorSnapshot.config(key: row.reading.key, absoluteSkin: absolute)
                 let values = HealthMonitorSnapshot.resolvedValues(key: row.reading.key, sourceRows: sourceRows,
-                                                                  absoluteSkin: absolute, hrvOverCountByDay: overCounts, freshScoringByDay: freshScoring)
+                                                                  absoluteSkin: absolute, hrvReliabilityByDay: hrvReliability)
                     .filter { $0.key >= start && $0.key <= end && $0.value >= cfg.minVal && $0.value <= cfg.maxVal }
                     .map(\.value)
                 VStack(alignment: .leading, spacing: NoopMetrics.space2) {

@@ -33,7 +33,8 @@ enum IllnessNotifier {
         // Authorization is requested once via requestAuthorization() when the watch is enabled;
         // here we only check status (no second system prompt).
         center.getNotificationSettings { settings in
-            guard settings.authorizationStatus == .authorized else { return }
+            guard UserDefaults.standard.bool(forKey: "behavior.illnessWatch"),
+                  settings.authorizationStatus == .authorized else { return }
             let content = UNMutableNotificationContent()
             content.title = String(localized: "Early warning: take it easy")
             content.subtitle = String(localized: "On-device estimate (approximate), not a diagnosis.")

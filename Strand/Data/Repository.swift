@@ -699,6 +699,25 @@ final class Repository: ObservableObject {
         return days.filter { $0.day >= cutoff }
     }
 
+    /// Value-bound HRV eligibility before source coalescing; imports, computed, then Apple retain precedence.
+    func hrvReliabilityByDay(from: String, to: String) async throws -> [String: HealthSignalReliability.Record] {
+        let importedIds = importedReadIds
+        let computedIds = computedReadIds
+        let sourceIds = importedIds + computedIds + [Self.appleHealthSource]
+        guard let store = await ensureStore() else { throw CancellationError() }
+        let rows = try await store.hrvProvenance(deviceIds: sourceIds, from: from, to: to)
+        guard !Task.isCancelled, importedIds == importedReadIds, computedIds == computedReadIds else {
+            throw CancellationError()
+        }
+        var byDay: [String: [String: HealthSignalReliability.Record]] = [:]
+        for row in rows {
+            let eligible = HealthSignalReliability.hrv(row.value, computed: computedIds.contains(row.deviceId),
+                freshScoringValid: row.freshScoringValid, overcount: row.overcount) != nil
+            byDay[row.day, default: [:]][row.deviceId] = HealthSignalReliability.Record(value: row.value, eligible: eligible)
+        }
+        return byDay.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) }
+    }
+
     /// Source-aware rows for vital-sign cards. During previews/tests that set `days` directly,
     /// fall back to the merged local cache so the component still renders.
     var vitalMetricRows: [SourcedDailyMetric] {

@@ -6,9 +6,43 @@ import WhoopStore
 final class HealthMonitorSnapshotTests: XCTestCase {
     private let now = ISO8601DateFormatter().date(from: "2026-06-20T12:00:00Z")!
 
+    private func metric(day: String, totalSleepMin: Double? = nil, restingHr: Int? = nil,
+                        avgHrv: Double? = nil, spo2Pct: Double? = nil, skinTempDevC: Double? = nil,
+                        respRateBpm: Double? = nil, spo2Red: Int? = nil, spo2Ir: Int? = nil) -> DailyMetric {
+        DailyMetric(day: day, totalSleepMin: totalSleepMin, efficiency: nil, deepMin: nil,
+                    remMin: nil, lightMin: nil, disturbances: nil, restingHr: restingHr,
+                    avgHrv: avgHrv, recovery: nil, strain: nil, exerciseCount: nil,
+                    spo2Pct: spo2Pct, skinTempDevC: skinTempDevC, respRateBpm: respRateBpm,
+                    spo2Red: spo2Red, spo2Ir: spo2Ir)
+    }
+
+    func testBankedLocalNightBeforeRolloverMatchesHomeAndBecomesCurrent() {
+        let early = Calendar.current.date(from: DateComponents(year: 2026, month: 6, day: 20, hour: 2))!
+        let values = [SourcedDailyMetric(metric: metric(day: "2026-06-19", avgHrv: 80), source: .whoopImport),
+                      SourcedDailyMetric(metric: metric(day: "2026-06-20", totalSleepMin: 420, avgHrv: 70), source: .whoopImport)]
+        XCTAssertEqual(HealthMonitorSnapshot.dayKey(days: values.map(\.metric), now: early), "2026-06-20")
+        let result = HealthMonitorSnapshot.rows(sourceRows: values, now: early, hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+        let hrv = result.first { $0.id == "hrv" }!
+        XCTAssertTrue(hrv.isCurrent)
+        XCTAssertEqual(hrv.reading.value, 70)
+    }
+
+    func testUnbankedLocalDayKeepsLogicalDayAndRolloverDoesNotPromoteOldVital() {
+        let calendar = Calendar.current
+        let early = calendar.date(from: DateComponents(year: 2026, month: 6, day: 20, hour: 2))!
+        let rolled = calendar.date(from: DateComponents(year: 2026, month: 6, day: 20, hour: 4, minute: 1))!
+        let values = [SourcedDailyMetric(metric: metric(day: "2026-06-19", avgHrv: 80), source: .whoopImport),
+                      SourcedDailyMetric(metric: metric(day: "2026-06-20"), source: .whoopImport)]
+        XCTAssertEqual(HealthMonitorSnapshot.dayKey(days: values.map(\.metric), now: early), "2026-06-19")
+        XCTAssertEqual(HealthMonitorSnapshot.dayKey(days: values.map(\.metric), now: rolled), "2026-06-20")
+        let result = HealthMonitorSnapshot.rows(sourceRows: values, now: rolled, hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+        XCTAssertFalse(result.first { $0.id == "hrv" }!.isCurrent)
+        XCTAssertEqual(result.first { $0.id == "hrv" }!.assessment.status, .unavailable)
+    }
+
     private func rows(currentHrv: Double? = 80, source: DailyMetricSource = .whoopImport) -> [SourcedDailyMetric] {
         (1...20).map { index in
-            SourcedDailyMetric(metric: DailyMetric(day: String(format: "2026-06-%02d", index),
+            SourcedDailyMetric(metric: metric(day: String(format: "2026-06-%02d", index),
                                                    restingHr: 55, avgHrv: index == 20 ? currentHrv : 80,
                                                    spo2Pct: 97, skinTempDevC: 0.1, respRateBpm: 14.5),
                                source: source)
@@ -30,32 +64,55 @@ final class HealthMonitorSnapshotTests: XCTestCase {
         XCTAssertEqual(hrv.assessment.status, .unavailable)
     }
 
-    func testOverCountedCurrentHrvIsUnverified() {
+    func testUnverifiedCurrentComputedHrvCannotClaimWithinRange() {
         let values = rows(source: .noopComputed)
-        let fresh = Dictionary(uniqueKeysWithValues: values.map { ($0.metric.day, 1.0) })
-        let result = HealthMonitorSnapshot.rows(sourceRows: values, now: now,
-                                                hrvOverCountByDay: ["2026-06-20": 1], freshScoringByDay: fresh, hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+        var evidence = Dictionary(uniqueKeysWithValues: values.map {
+            ($0.metric.day, HealthSignalReliability.Record(value: 80, eligible: true))
+        })
+        evidence["2026-06-20"] = .init(value: 80, eligible: false)
+        let result = HealthMonitorSnapshot.rows(sourceRows: values, now: now, hrvReliabilityByDay: evidence,
+                                                hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
         XCTAssertEqual(result.first { $0.id == "hrv" }!.assessment.status, .unverified)
     }
 
-    func testOverCountedHistoryDoesNotBuildTrustedBaseline() {
-        let flags = Dictionary(uniqueKeysWithValues: (1...19).map { (String(format: "2026-06-%02d", $0), 1.0) })
+    func testUnverifiedComputedHistoryCannotBuildTrustedBaseline() {
         let values = rows(source: .noopComputed)
-        let fresh = Dictionary(uniqueKeysWithValues: values.map { ($0.metric.day, 1.0) })
-        let result = HealthMonitorSnapshot.rows(sourceRows: values, now: now, hrvOverCountByDay: flags, freshScoringByDay: fresh, hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+        var evidence = Dictionary(uniqueKeysWithValues: values.map {
+            ($0.metric.day, HealthSignalReliability.Record(value: 80, eligible: false))
+        })
+        evidence["2026-06-20"] = .init(value: 80, eligible: true)
+        let result = HealthMonitorSnapshot.rows(sourceRows: values, now: now, hrvReliabilityByDay: evidence,
+                                                hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
         XCTAssertEqual(result.first { $0.id == "hrv" }!.assessment.status, .calibrating)
     }
 
-    func testComputedHrvWithoutFreshScoringCannotClaimWithinRange() {
-        let result = HealthMonitorSnapshot.rows(sourceRows: rows(source: .noopComputed), now: now, hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+    func testComputedHrvWithoutProvenanceCannotClaimWithinRange() {
+        let result = HealthMonitorSnapshot.rows(sourceRows: rows(source: .noopComputed), now: now,
+                                                hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
         XCTAssertEqual(result.first { $0.id == "hrv" }!.assessment.status, .unverified)
     }
 
-    func testImportedHrvIsNotInvalidatedByComputedMarkers() {
-        let result = HealthMonitorSnapshot.rows(sourceRows: rows(), now: now,
-                                                hrvOverCountByDay: ["2026-06-20": 1],
-                                                freshScoringByDay: ["2026-06-20": 0], hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+    func testComputedHrvCannotBorrowEligibilityForAnotherValue() {
+        let evidence = ["2026-06-20": HealthSignalReliability.Record(value: 81, eligible: true)]
+        let result = HealthMonitorSnapshot.rows(sourceRows: rows(source: .noopComputed), now: now,
+                                                hrvReliabilityByDay: evidence, hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+        XCTAssertEqual(result.first { $0.id == "hrv" }!.assessment.status, .unverified)
+    }
+
+    func testImportedHrvIsNotInvalidatedByComputedProvenance() {
+        let evidence = ["2026-06-20": HealthSignalReliability.Record(value: 80, eligible: false)]
+        let result = HealthMonitorSnapshot.rows(sourceRows: rows(), now: now, hrvReliabilityByDay: evidence,
+                                                hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
         XCTAssertEqual(result.first { $0.id == "hrv" }!.assessment.status, .withinRange)
+    }
+
+    func testUnverifiedWinnerDoesNotFallThroughToAnotherSourceInReports() {
+        let day = "2026-06-20"
+        let values = [SourcedDailyMetric(metric: metric(day: day, avgHrv: 500), source: .whoopImport),
+                      SourcedDailyMetric(metric: metric(day: day, avgHrv: 80), source: .noopComputed)]
+        let evidence = [day: HealthSignalReliability.Record(value: 80, eligible: true)]
+        XCTAssertTrue(HealthMonitorSnapshot.resolvedValues(key: "hrv", sourceRows: values, absoluteSkin: false,
+                                                           hrvReliabilityByDay: evidence).isEmpty)
     }
 
     func testNonfiniteAndImplausibleHrvCannotBeFormattedAsAReading() {
@@ -70,7 +127,7 @@ final class HealthMonitorSnapshotTests: XCTestCase {
 
     func testAbsentOxygenStaysUnavailable() {
         let values = rows().map { source in
-            SourcedDailyMetric(metric: DailyMetric(day: source.metric.day, avgHrv: 80, spo2Red: 100, spo2Ir: 110),
+            SourcedDailyMetric(metric: metric(day: source.metric.day, avgHrv: 80, spo2Red: 100, spo2Ir: 110),
                                source: .noopComputed)
         }
         let result = HealthMonitorSnapshot.rows(sourceRows: values, now: now, hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
