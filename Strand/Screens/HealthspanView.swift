@@ -9,10 +9,9 @@ struct HealthspanView: View {
     @EnvironmentObject private var profile: ProfileStore
     @State private var series: [(day: String, value: Double)] = []
     @State private var fitness: [(day: String, value: Double)] = []
-    @State private var week = 0
+    @State private var reference = Calendar.current.startOfDay(for: Date())
     @State private var showMethod = false
 
-    private var reference: Date { Calendar.current.date(byAdding: .day, value: week * 7, to: Calendar.current.startOfDay(for: Date()))! }
     private var chronologicalAge: Int { Calendar.current.dateComponents([.year], from: Calendar.current.startOfDay(for: profile.dateOfBirth), to: reference).year ?? profile.age }
     private var snapshot: HealthspanPresentation.Snapshot {
         healthspanSnapshot(series: series, days: repo.days, age: chronologicalAge, reference: reference)
@@ -24,7 +23,7 @@ struct HealthspanView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: NoopMetrics.sectionSpacing) {
-                healthspanDateSelector(reference: reference, days: 7, previous: { week -= 1 }, next: { week += 1 }, canAdvance: week < 0)
+                healthspanDateSelector(reference: reference, days: 7, previous: { reference = Calendar.current.date(byAdding: .day, value: -7, to: reference)! }, next: { reference = min(Calendar.current.startOfDay(for: Date()), Calendar.current.date(byAdding: .day, value: 7, to: reference)!) }, canAdvance: reference < Calendar.current.startOfDay(for: Date()))
                 HealthspanOrb(age: snapshot.age, chronologicalAge: chronologicalAge)
                 VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                     Text("Pace of Aging").strandOverline()

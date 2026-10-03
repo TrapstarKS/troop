@@ -39,6 +39,14 @@ class HealthspanPresentationTest {
         assertNull(result.pace)
     }
 
+    @Test fun paceClampsAndNeedsAdultProfile() {
+        for ((slope, expected) in listOf(-0.04 to 30, 0.04 to -10)) {
+            val samples = (0..119 step 7).map { HealthspanPresentation.AgeSample(it, 40 + it * slope) }
+            assertEquals(expected, HealthspanPresentation.snapshot(samples, 21, 40.0).paceTenths)
+            assertNull(HealthspanPresentation.snapshot(samples, 21, Double.NaN).age)
+        }
+    }
+
     private fun row(samples: List<HealthspanPresentation.AgeSample>, count: Int = 21, age: Double = 40.0): String {
         val s = HealthspanPresentation.snapshot(samples, count, age)
         return "${s.age?.let { String.format(Locale.ROOT, "%.1f", it) } ?: "nil"}|${s.paceTenths ?: "nil"}|${s.recoveryDays}|${s.recentSamples}|${s.historySamples}"

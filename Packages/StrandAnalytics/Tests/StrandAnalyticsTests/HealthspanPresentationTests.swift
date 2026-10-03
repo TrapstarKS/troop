@@ -35,6 +35,15 @@ final class HealthspanPresentationTests: XCTestCase {
         XCTAssertNil(result.pace)
     }
 
+    func testPaceClampsAndNeedsAdultProfile() {
+        for (slope, expected) in [(-0.04, 30), (0.04, -10)] {
+            let samples = stride(from: 0, through: 119, by: 7).map { HealthspanPresentation.AgeSample(daysAgo: $0, age: 40 + Double($0) * slope) }
+            let snapshot = HealthspanPresentation.snapshot(samples: samples, recoveryDays: 21, chronologicalAge: 40)
+            XCTAssertEqual(snapshot.paceTenths, expected)
+            XCTAssertNil(HealthspanPresentation.snapshot(samples: samples, recoveryDays: 21, chronologicalAge: .nan).age)
+        }
+    }
+
     private func row(_ samples: [HealthspanPresentation.AgeSample], _ count: Int = 21, _ age: Double = 40) -> String {
         let s = HealthspanPresentation.snapshot(samples: samples, recoveryDays: count, chronologicalAge: age)
         return "\(s.age.map { String(format: "%.1f", $0) } ?? "nil")|\(s.paceTenths.map(String.init) ?? "nil")|\(s.recoveryDays)|\(s.recentSamples)|\(s.historySamples)"

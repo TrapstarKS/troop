@@ -7,7 +7,7 @@ import WhoopStore
 
 struct StressMonitorView: View {
     @EnvironmentObject private var repo: Repository
-    @State private var dayOffset = 0
+    @State private var selectedDate = Calendar.current.startOfDay(for: Date())
     @State private var result: DaytimeStress.Result = .empty
     @State private var latestSampleTs: Int?
     @State private var firstSampleTs: Int?
@@ -19,7 +19,7 @@ struct StressMonitorView: View {
     @State private var selectedTs: Int?
     @State private var observedEnd = 0
 
-    private var date: Date { Calendar.current.date(byAdding: .day, value: dayOffset, to: Calendar.current.startOfDay(for: Date()))! }
+    private var date: Date { selectedDate }
     private var startTs: Int { Int(Calendar.current.startOfDay(for: date).timeIntervalSince1970) }
     private var endTs: Int { Int(Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: date)!).timeIntervalSince1970) }
     private var selected: DaytimeStress.HourPoint? { selectedTs.flatMap { ts in result.timeline.first { $0.startTs == ts } } }
@@ -28,7 +28,7 @@ struct StressMonitorView: View {
         if let selected { return selected }
         guard let latest, let latestSampleTs else { return nil }
         let windowEnd = min(latest.startTs + DaytimeStress.bucketSeconds, latestSampleTs)
-        return dayOffset < 0 || Int(clock.timeIntervalSince1970) - windowEnd <= 900 ? latest : nil
+        return date < Calendar.current.startOfDay(for: clock) || Int(clock.timeIntervalSince1970) - windowEnd <= 900 ? latest : nil
     }
     private var daily: (day: String, value: Double)? { stored.first { healthspanDaysAgo($0.day, reference: date) == 0 } }
     private var minutes: [Int] {
@@ -40,7 +40,7 @@ struct StressMonitorView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: NoopMetrics.sectionSpacing) {
-                healthspanDateSelector(reference: date, previous: { dayOffset -= 1; selectedTs = nil }, next: { dayOffset += 1; selectedTs = nil }, canAdvance: dayOffset < 0)
+                healthspanDateSelector(reference: date, previous: { selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate)!; selectedTs = nil }, next: { selectedDate = min(Calendar.current.startOfDay(for: clock), Calendar.current.date(byAdding: .day, value: 1, to: selectedDate)!); selectedTs = nil }, canAdvance: selectedDate < Calendar.current.startOfDay(for: clock))
                 StressMonitorGauge(value: current?.level)
                 VStack(spacing: NoopMetrics.space2) {
                     Text(current == nil ? (loading ? String(localized: "Loading…") : String(localized: "No current reading")) : (selected == nil ? String(localized: "Latest recorded window") : String(localized: "Selected window")))
@@ -88,7 +88,7 @@ struct StressMonitorView: View {
         .background(StrandPalette.surfaceBase)
         .navigationTitle(String(localized: "Stress Monitor"))
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { clock = $0 }
-        .task(id: "\(repo.refreshSeq)|\(dayOffset)|\(startTs)") { await load() }
+        .task(id: "\(repo.refreshSeq)|\(startTs)") { await load() }
         .sheet(isPresented: $showBreathing) {
             NavigationStack { BreathingView().toolbar { Button("Done") { showBreathing = false } } }
         }
