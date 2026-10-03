@@ -47,6 +47,8 @@ import com.noop.ingest.HealthConnectWriter
 import com.noop.ingest.LiftingImporter
 import com.noop.notif.IllnessAlertNotifier
 import com.noop.notif.ScheduledReportNotifier
+import com.noop.notif.LocalNotificationDispatcher
+import com.noop.notif.LocalNotificationSnapshot
 import com.noop.notif.StrainTargetNotifier
 import com.noop.notif.ScheduledReportPolicy
 import com.noop.notif.scorePctOrNull
@@ -717,6 +719,60 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _today = MutableStateFlow<DailyMetric?>(null)
     val today: StateFlow<DailyMetric?> = _today.asStateFlow()
 
+    private val localNotificationDispatcher = LocalNotificationDispatcher(appContext)
+    private val _localBriefing = MutableStateFlow<LocalNotificationSnapshot?>(null)
+    val localBriefing: StateFlow<LocalNotificationSnapshot?> = _localBriefing.asStateFlow()
+
+    fun setWeeklyPlanNotificationProvider(provider: com.noop.notif.WeeklyPlanNotificationProvider?) {
+        localNotificationDispatcher.weeklyPlanProvider = provider
+    }
+
+    private suspend fun refreshLocalNotifications(days: List<DailyMetric> = recentDays.value) {
+        val now = java.time.Instant.now()
+        val zone = java.time.ZoneId.systemDefault()
+        val localNow = now.atZone(zone)
+        val row = resolveTodayRow(days, logicalDay(localNow).toString(), localNow.toLocalDate().toString())
+        _today.value = row
+        val snapshot = row?.let {
+            val day = java.time.LocalDate.parse(it.day)
+            val sessions = withContext(Dispatchers.IO) {
+                val from = day.minusDays(120).atStartOfDay(zone).toEpochSecond()
+                val to = day.plusDays(1).atStartOfDay(zone).toEpochSecond()
+                WhoopRepository.mergeSleepRichness(
+                    repository.sleepSessionsUnion(activeStrapId, from, to, 120),
+                    repository.computedSleepSessionsUnion(activeStrapId, from, to, 120),
+                ) { session -> java.time.Instant.ofEpochSecond(session.endTs).atZone(zone).toLocalDate().toString() }
+                    .filter { session -> session.endTs > session.effectiveStartTs }
+            }
+            val history = withContext(Dispatchers.IO) { repository.daysMerged(activeStrapId) }
+            val currentStreak = com.noop.analytics.StreakCalculator.streaks(
+                history.map { metric -> metric.day }, history.map { metric -> metric.recovery != null },
+                localNow.toLocalDate().toString()).current
+            val offset = now.atZone(zone).offset.totalSeconds.toLong()
+            val habitual = com.noop.analytics.SleepStageTotals.habitualMidsleepSec(sessions.map { session ->
+                val start = session.effectiveStartTs
+                val middle = start + (session.endTs - start) / 2
+                com.noop.analytics.SleepStageTotals.HistoryBlock(start, session.endTs,
+                    java.time.Instant.ofEpochSecond(middle).atZone(zone).toLocalDate().toString())
+            }, offset)
+            val tonight = sessions.filter { session ->
+                java.time.Instant.ofEpochSecond(session.endTs).atZone(zone).toLocalDate() == day
+            }
+            val selected = com.noop.analytics.SleepStageTotals.mainNightGroupIndices(tonight.map { session ->
+                com.noop.analytics.SleepStageTotals.NightBlock(session.effectiveStartTs, session.endTs)
+            }, offset, habitual)
+            val wake = selected?.maxOfOrNull { index -> tonight[index].endTs }
+            val state = ble.state.value
+            LocalNotificationSnapshot(it.day, wake, it.recovery.scorePctOrNull(),
+                it.totalSleepMin?.roundToInt(), it.strain?.let { value ->
+                    (UnitFormatter.effortValue(value, EffortScale.WHOOP) * 10).roundToInt()
+                }, currentStreak, state.backfilling || state.historyPendingSync || state.analyzingHistory)
+        }
+        val state = ble.state.value
+        _localBriefing.value = snapshot
+        localNotificationDispatcher.evaluate(snapshot, state.connected, state.worn, now.epochSecond)
+    }
+
     /**
      * #849: Today's heavy history-wide reload guard. The Today screen runs a couple of expensive
      * history-wide passes (the workouts/sources footer, which derives HR per imported workout from raw strap
@@ -900,6 +956,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (state.heartRate == null && state.rr.isEmpty()) resetSmoothing()
                 coachZone(state)
                 dispatchDoubleTap(state)
+                localNotificationDispatcher.evaluate(_localBriefing.value?.copy(
+                    syncPending = state.backfilling || state.historyPendingSync || state.analyzingHistory),
+                    state.connected, state.worn, java.time.Instant.now().epochSecond)
                 if (state.bonded && !lastBonded) {
                     // #59/#536: re-arm the strap on (re)bond. One reconcile covers BOTH the smart wake-alarm
                     // and the Buzz-WHOOP companion, arming the single slot to the earliest either wants (#5).
@@ -988,6 +1047,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         // Recompute the illness banner + today's row whenever cached days change.
         viewModelScope.launch {
+            while (true) {
+                delay(60_000)
+                refreshLocalNotifications()
+            }
+        }
+        viewModelScope.launch {
             recentDays.collect { days ->
                 // Only treat a row as "today" if its date is the phone's ACTUAL local calendar day.
                 // Was days.lastOrNull() — the newest stored row regardless of date — so after importing
@@ -1002,9 +1067,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // So: if the local calendar day differs from the logical day AND a row for the local day
                 // has a banked night (totalSleepMin != null), prefer it; otherwise fall back to the
                 // logical-day row, preserving the #144 anti-blank guard (no night yet ⇒ keep yesterday's).
-                val logicalKey = logicalDayKeyNow()       // ISO yyyy-MM-dd, local logical day
-                val localKey = java.time.LocalDate.now().toString()
-                _today.value = resolveTodayRow(days, logicalKey, localKey)
+                refreshLocalNotifications(days)
                 _healthAlert.value =
                     (if (_illnessWatchEnabled.value && _today.value != null &&
                         days.lastOrNull()?.day == _today.value?.day
@@ -1026,16 +1089,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // truth Trends/Insights use). The notifier's persisted day gate makes this safe to call
                 // on every republish. Honest: a night with only one of the two scores omits the other.
                 _today.value?.let { todayRow ->
-                    if (todayRow.totalSleepMin != null) {
-                        ScheduledReportNotifier.onMorning(
-                            context = appContext,
-                            // Key the once-per-recap gate on the banked NIGHT's day, not the calendar day —
-                            // otherwise the midnight rollover re-fires last night's recap for late-nighters (#567).
-                            reportDay = todayRow.day,
-                            chargePct = todayRow.recovery.scorePctOrNull(),
-                            restPct = RestScorer.restFromDaily(todayRow).scorePctOrNull(),
-                        )
-                    }
                     // #593: once-a-day optimal-strain-reached nudge. Convert the stored 0-100 Effort to the
                     // 0-21 coupled axis with the SHIPPED formatter (so it matches every Effort read-out), and
                     // gate against the LOW end of today's recovery-derived optimal band (#43). The notifier's

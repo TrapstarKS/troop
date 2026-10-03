@@ -22,6 +22,14 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     /// is a safe no-op (the tap is simply not routed) rather than a crash if this ever fires before the
     /// root has wired it.
     var onCoachBriefTapped: (() -> Void)?
+    private var pendingLocalRoute: String?
+    var onLocalNotificationTapped: ((String) -> Void)? {
+        didSet {
+            guard let route = pendingLocalRoute, let onLocalNotificationTapped else { return }
+            pendingLocalRoute = nil
+            onLocalNotificationTapped(route)
+        }
+    }
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
@@ -31,15 +39,21 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound, .list])
     }
 
-    /// Handle a tap on a delivered notification. Only the scheduled morning-brief category (K5) routes
-    /// anywhere; every other notification (wind-down, smart-alarm, battery/illness) just opens the app
-    /// to wherever it was, matching the pre-K5 behaviour.
+    /// Route report and device taps to their explicit destination. Retain a cold-start local route
+    /// until the app root attaches its handler; provider briefs retain their existing Coach route.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        if response.notification.request.content.categoryIdentifier == CoachBriefScheduler.notificationCategoryId {
+        let content = response.notification.request.content
+        if content.categoryIdentifier == "local-report",
+           let route = content.userInfo["localNotificationRoute"] as? String {
+            DispatchQueue.main.async {
+                if let handler = self.onLocalNotificationTapped { handler(route) }
+                else { self.pendingLocalRoute = route }
+            }
+        } else if content.categoryIdentifier == CoachBriefScheduler.notificationCategoryId {
             onCoachBriefTapped?()
         }
         completionHandler()

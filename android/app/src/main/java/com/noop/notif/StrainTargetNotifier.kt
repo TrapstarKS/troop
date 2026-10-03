@@ -10,7 +10,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.noop.R
 import com.noop.ui.NoopPrefs
-import com.noop.ui.appLaunchIntent
 
 // MARK: - Target-strain notification (#593)
 //
@@ -81,6 +80,8 @@ object StrainTargetNotifier {
         val copy = StrainTargetPolicy.copy(target21!!)
         runCatching {
             if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+            val time = java.time.LocalTime.now()
+            if (LocalNotificationPrefs.quiet(context, time.hour * 60 + time.minute)) return
             ensureChannel(context)
             post(context, STRAIN_TARGET_NOTIF_ID, copy.first, copy.second)
             // Mark fired only after a successful post, so a notifications-disabled day still notifies once
@@ -92,8 +93,8 @@ object StrainTargetNotifier {
     @SuppressLint("MissingPermission")
     private fun post(context: Context, id: Int, title: String, body: String) {
         val openApp = PendingIntent.getActivity(
-            context, 3,
-            appLaunchIntent(context),
+            context, id,
+            localNotificationLaunchIntent(context, "local_briefing"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n = NotificationCompat.Builder(context, CHANNEL_ID)

@@ -19,6 +19,7 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -528,9 +529,15 @@ class ProfileStore(private val prefs: SharedPreferences) {
 
 // MARK: - Screen
 
+enum class SettingsCategory(val titleRes: Int) {
+    ALL(R.string.more_all), PROFILE(R.string.more_profile), APP(R.string.more_app),
+    DEVICE(R.string.nav_devices), SCORES(R.string.settings_scores), DATA(R.string.more_data), HELP(R.string.more_help),
+}
+
 @Composable
 fun SettingsScreen(
     vm: AppViewModel,
+    initialCategory: SettingsCategory = SettingsCategory.ALL,
     onOpenTestCentre: () -> Unit = {},
     onOpenBackupSync: () -> Unit = {},
     onOpenSelfHostedPush: () -> Unit = {},
@@ -538,6 +545,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var category by remember(initialCategory) { mutableStateOf(initialCategory) }
     val live by vm.live.collectAsStateWithLifecycle()
     // #2338: the read-only advertising-name probe result. Its own flow on the BLE client rather than a
     // LiveState field, matching the other opcode probes.
@@ -932,6 +940,16 @@ fun SettingsScreen(
         // (SharedPreferences is not observable; `mutate` bumps `rev` after each write).
         @Suppress("UNUSED_VARIABLE") val tick = rev
 
+        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(Metrics.selectorSpacing)) {
+            SettingsCategory.entries.forEach { option ->
+                NoopButton(text = uiString(option.titleRes),
+                    kind = if (category == option) NoopButtonKind.Primary else NoopButtonKind.Secondary,
+                    onClick = { category = option })
+            }
+        }
+
+        if (category == SettingsCategory.ALL || category == SettingsCategory.PROFILE) {
         // --- Profile photo (optional, on-device) ---
         // Split into its own section ahead of the body-numbers Profile card, mirroring the iOS
         // SettingsView `profilePhotoCard` (person.crop.circle, the offline blurb). A large avatar + a
@@ -1292,6 +1310,9 @@ fun SettingsScreen(
             }
         }
 
+        }
+
+        if (category == SettingsCategory.ALL || category == SettingsCategory.APP) {
         // --- Daily cycle ---
         SettingsCard(
             icon = Icons.Filled.Autorenew,
@@ -2094,6 +2115,9 @@ fun SettingsScreen(
             }
         }
 
+        }
+
+        if (category == SettingsCategory.ALL || category == SettingsCategory.DEVICE) {
         // --- Strap ---
         SettingsCard(
             icon = Icons.Filled.Sensors,
@@ -2668,6 +2692,9 @@ fun SettingsScreen(
         }
 
 
+        }
+
+        if (category in setOf(SettingsCategory.ALL, SettingsCategory.DEVICE, SettingsCategory.DATA)) {
         // Lower-frequency sections collapse behind a single default-closed disclosure (S3) so the
         // screen opens at the everyday handful instead of the full wall of cards. Nothing is removed;
         // the experimental probes, diagnostics, raw-capture export and Trends report all stay one tap
@@ -3310,6 +3337,9 @@ fun SettingsScreen(
         } // end Advanced disclosure content Column
         } // end SettingsDisclosureGroup("Advanced")
 
+        }
+
+        if (category == SettingsCategory.ALL || category == SettingsCategory.SCORES) {
         // --- Health & wellness (v5 opt-in toggles) ---
         SettingsCard(
             icon = Icons.Filled.Science,
@@ -3465,6 +3495,9 @@ fun SettingsScreen(
             }
         }
 
+        }
+
+        if (category == SettingsCategory.ALL || category == SettingsCategory.HELP) {
         // --- Test Centre (the diagnostic home, #507/#509) ---
         // A nav row into the Test Centre: the single home for the diagnostic, log and test controls (spec
         // section 7). The strap log, recalibrate, scheduled export and experimental toggles also live there
@@ -3483,6 +3516,9 @@ fun SettingsScreen(
             )
         }
 
+        }
+
+        if (category == SettingsCategory.ALL || category == SettingsCategory.SCORES) {
         // --- Charge (Recovery) advanced ---
         // A manual reset for the personal Charge baseline. If a bad first week poisons it — worn while
         // sick, or the first few nights read high (a common cold-start artefact) — the baseline anchors
@@ -3656,6 +3692,9 @@ fun SettingsScreen(
             )
         }
 
+        }
+
+        if (category == SettingsCategory.ALL || category == SettingsCategory.DATA) {
         SettingsCard(
             icon = Icons.Filled.Storage,
             title = uiString(R.string.l10n_settings_screen_backup_restore_a1616284),
@@ -3756,6 +3795,9 @@ fun SettingsScreen(
             )
         }
 
+        }
+
+        if (category == SettingsCategory.ALL || category == SettingsCategory.HELP) {
         // --- About ---
         SettingsCard(
             icon = Icons.Filled.Info,
@@ -4148,6 +4190,8 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+
         }
 
         // What's new sheet, opened from the About row above. Full-screen Dialog so it
