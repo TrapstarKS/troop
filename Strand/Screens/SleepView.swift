@@ -570,7 +570,7 @@ struct SleepView: View {
     }
 
     private func percentText(_ value: Double?) -> String {
-        value.map { String(format: "%.0f%%", $0) } ?? "—"
+        value.map { String(format: "%.0f%%", $0.rounded()) } ?? "—"
     }
 
     private func sleepContributors(_ detail: SleepModel?, night: Night) -> some View {
