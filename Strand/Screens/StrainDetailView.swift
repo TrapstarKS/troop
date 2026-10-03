@@ -193,7 +193,7 @@ struct DetailActivityRow: View {
                         .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                 }
                 Spacer(minLength: 0)
-                Text(row.strain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—")
+                Text(row.strain.flatMap { $0.isFinite ? UnitFormatter.effortDisplay($0, scale: .whoop) : nil } ?? "—")
                     .font(StrandFont.title2).foregroundStyle(StrandPalette.strainPrimary)
                 Image(systemName: "chevron.right").font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
             }

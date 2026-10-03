@@ -87,7 +87,7 @@ struct RecoveryDetailView: View {
                 metric(String(localized: "Respiratory rate"), value: row?.respRateBpm, unit: String(localized: "rpm"), icon: "lungs", higherIsBetter: nil, values: history.map(\.respRateBpm))
                 Divider().overlay(StrandPalette.hairline)
                 ContributorRow(label: String(localized: "Sleep performance"), value: format(sleepPerformance), unit: "%", systemImage: "moon.zzz")
-                if let spo2 = row?.spo2Pct {
+                if let spo2 = row?.spo2Pct, spo2.isFinite {
                     Divider().overlay(StrandPalette.hairline)
                     metric(String(localized: "Blood oxygen"), value: spo2, unit: "%", icon: "drop", higherIsBetter: nil, values: history.map(\.spo2Pct))
                 }
@@ -110,7 +110,7 @@ struct RecoveryDetailView: View {
     private func metric(_ label: String, value: Double?, unit: String, icon: String, higherIsBetter: Bool?, values: [Double?]) -> some View {
         let baseline = RecoveryStrainDetailLogic.priorMean(dayKeys: history.map(\.day), values: values,
                                                           fromDay: RecoveryStrainDetailLogic.startKey(selectedDay: key, days: 30), selectedDay: key)
-        let delta = value.flatMap { value in baseline.map { value - $0 } }
+        let delta = value.flatMap { value in value.isFinite ? baseline.map { value - $0 } : nil }
         let favorable = delta.flatMap { delta in abs(delta) < 0.05 ? nil : higherIsBetter.map { $0 ? delta > 0 : delta < 0 } }
         return ContributorRow(label: label, value: format(value), unit: unit, systemImage: icon,
                               comparison: baseline.map { String(localized: "30-day average: \(format($0)) \(unit)") } ?? String(localized: "Baseline unavailable"),
@@ -121,7 +121,7 @@ struct RecoveryDetailView: View {
     private var trend: some View {
         let start = RecoveryStrainDetailLogic.startKey(selectedDay: key, days: trendDays - 1)
         let points = history.filter { $0.day >= start }.compactMap { day -> TrendPoint? in
-            guard let score = day.recovery, let date = RecoveryStrainDetailLogic.date(day.day) else { return nil }
+            guard let score = day.recovery, score.isFinite, let date = RecoveryStrainDetailLogic.date(day.day) else { return nil }
             return TrendPoint(date: date, value: score)
         }
         return VStack(alignment: .leading, spacing: NoopMetrics.space3) {

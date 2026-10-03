@@ -204,7 +204,7 @@ fun StrainDetailScreen(
                     RecoveryStrainDetailLogic.TargetStatus.Under -> R.string.d2b_target_under
                     RecoveryStrainDetailLogic.TargetStatus.Optimal -> R.string.d2b_target_optimal
                     RecoveryStrainDetailLogic.TargetStatus.Over -> R.string.d2b_target_over
-                }), color = Palette.strainPrimary)
+                }), color = if (target == RecoveryStrainDetailLogic.TargetStatus.Over) Palette.statusWarning else Palette.strainPrimary)
                 if (band != null) Text(uiString(R.string.d2b_optimal_band, band.low, band.high), style = NoopType.body,
                     color = Palette.textSecondary)
             }
@@ -344,7 +344,7 @@ private fun DetailContributor(
 ) {
     val mean = RecoveryStrainDetailLogic.priorMean(days.map { it.day }, days.map(value),
         detailDate(selectedKey).minusDays(30).toString(), selectedKey)
-    val favorable = if (current != null && mean != null && higherFavorable != null && current != mean)
+    val favorable = if (current != null && current.isFinite() && mean != null && higherFavorable != null && kotlin.math.abs(current - mean) >= 0.05)
         (current > mean) == higherFavorable else null
     ContributorRow(label, detailNumber(current, decimals), unit,
         comparison = detailComparison(current, mean, unit, decimals),
