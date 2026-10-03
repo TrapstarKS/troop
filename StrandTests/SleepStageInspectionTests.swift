@@ -67,7 +67,12 @@ final class SleepStageInspectionTests: XCTestCase {
     func testSelectedStagesWinOverDailyTotalsAndMissingStagesKeepDailyFallback() {
         let stages = Stages(awake: 30, light: 300, deep: 60, rem: 60)
         XCTAssertEqual(SleepView.selectedAsleepMinutes(stages: stages, daily: 480), 420)
+        XCTAssertEqual(SleepView.recordedEfficiencyPct(stages)!, 420.0 / 450.0 * 100.0, accuracy: 1e-9)
+        let awake = Stages(awake: 30, light: 0, deep: 0, rem: 0)
+        XCTAssertEqual(SleepView.selectedAsleepMinutes(stages: awake, daily: 480), 0)
+        XCTAssertEqual(SleepView.recordedEfficiencyPct(awake), 0)
         let missing = Stages(awake: 0, light: 0, deep: 0, rem: 0)
+        XCTAssertNil(SleepView.recordedEfficiencyPct(missing))
         XCTAssertEqual(SleepView.selectedAsleepMinutes(stages: missing, daily: 480), 480)
         XCTAssertNil(SleepView.selectedAsleepMinutes(stages: missing, daily: nil))
         XCTAssertNil(SleepView.selectedAsleepMinutes(stages: missing, daily: 0))

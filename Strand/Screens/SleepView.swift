@@ -584,7 +584,7 @@ struct SleepView: View {
                 sleepFactorRow(label: String(localized: "Consistency"), value: selectedValue(detail?.consistency),
                                icon: "moon.phase.waning.crescent", sufficient: 70, optimal: 80)
                 Divider().overlay(StrandPalette.hairline)
-                sleepFactorRow(label: String(localized: "Efficiency"), value: efficiencyPct(night),
+                sleepFactorRow(label: String(localized: "Efficiency"), value: displayedEfficiencyPct(night),
                                icon: "bed.double", sufficient: 80, optimal: 90)
                 Divider().overlay(StrandPalette.hairline)
                 ContributorRow(label: String(localized: "High sleep stress"), value: "—", systemImage: "waveform.path",
@@ -633,8 +633,17 @@ struct SleepView: View {
     }
 
     static func selectedAsleepMinutes(stages: Stages, daily: Double?) -> Double? {
-        if stages.asleep > 0 { return stages.asleep }
+        if stages.total > 0 { return stages.asleep }
         return daily.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    static func recordedEfficiencyPct(_ stages: Stages) -> Double? {
+        guard stages.total > 0 else { return nil }
+        return Swift.min(100, Swift.max(0, stages.asleep / stages.total * 100))
+    }
+
+    private func displayedEfficiencyPct(_ night: Night) -> Double? {
+        Self.recordedEfficiencyPct(night.stages) ?? efficiencyPct(night)
     }
 
     private func selectedAsleepMinutes(_ night: Night) -> Double? {
@@ -672,7 +681,7 @@ struct SleepView: View {
             MetricCard(label: String(localized: "Restorative"),
                        value: night.stages.asleep > 0 ? durationText(night.stages.deep + night.stages.rem) : "—",
                        detail: String(localized: "Deep + REM"), color: StrandPalette.sleepPrimary)
-            MetricCard(label: String(localized: "Efficiency"), value: percentText(efficiencyPct(night)))
+            MetricCard(label: String(localized: "Efficiency"), value: percentText(displayedEfficiencyPct(night)))
             MetricCard(label: String(localized: "Respiratory rate"),
                        value: selectedValue(detail?.respiratory).map { String(format: "%.1f", $0) } ?? "—", unit: "/min")
             MetricCard(label: String(localized: "Sleep Debt"), value: debt.map(durationText) ?? "—")
@@ -2322,7 +2331,7 @@ struct SleepView: View {
     // `debtSigned`) moved to `SleepDebtLedgerCard` with the card; they had no other caller in SleepView.
 
     private func efficiencyText(_ night: Night) -> String {
-        let e = efficiencyPct(night)
+        let e = displayedEfficiencyPct(night)
         return e.map { "\(Int($0.rounded()))%" } ?? "—"
     }
 
