@@ -22,6 +22,7 @@ struct HealthspanView: View {
     private var snapshot: HealthspanPresentation.Snapshot {
         healthspanSnapshot(series: series, days: repo.days, age: chronologicalAge, reference: reference)
     }
+    private var isCalibrating: Bool { chronologicalAge >= 18 && snapshot.recoveryDays < 21 }
     private var window: [DailyMetric] {
         repo.days.filter { healthspanDaysAgo($0.day, reference: reference).map { (0..<7).contains($0) } ?? false }
     }
@@ -41,13 +42,13 @@ struct HealthspanView: View {
                 }
                 NoopCard {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
-                        Text(snapshot.age == nil ? String(localized: "Calibrating") : String(localized: "Local wellness estimate")).font(StrandFont.headline)
-                        if snapshot.age == nil {
+                        Text(snapshot.age != nil ? String(localized: "Local wellness estimate") : isCalibrating ? String(localized: "Calibrating") : String(localized: "Unavailable")).font(StrandFont.headline)
+                        if isCalibrating {
                             Text(String.localizedStringWithFormat(String(localized: "Calibrating (%lld of %lld)"), snapshot.recoveryDays, 21))
                         }
                         Text("A wellness estimate from your habits, not a clinical biological age.")
                             .font(StrandFont.body).foregroundStyle(StrandPalette.textSecondary)
-                        if snapshot.pace == nil { Text("Pace needs 90 days of local history.").font(StrandFont.caption) }
+                        if snapshot.age != nil && snapshot.pace == nil { Text("Pace needs 90 days of local history.").font(StrandFont.caption) }
                         Button("How this estimate works") { showMethod = true }.font(StrandFont.headline).frame(minHeight: NoopMetrics.touchTarget)
                     }
                 }
@@ -124,7 +125,7 @@ struct HealthspanPreviewCard: View {
                     HealthspanOrb(age: snapshot.age, chronologicalAge: profile.age, compact: true)
                     VStack(alignment: .leading, spacing: NoopMetrics.space2) {
                         Text("Healthspan").font(StrandFont.headline)
-                        Text(snapshot.age == nil ? String(localized: "Calibrating") : String(localized: "Local wellness estimate")).font(StrandFont.caption)
+                        Text(snapshot.age != nil ? String(localized: "Local wellness estimate") : profile.age >= 18 && snapshot.recoveryDays < 21 ? String(localized: "Calibrating") : String(localized: "Unavailable")).font(StrandFont.caption)
                         if let pace = snapshot.pace { Text(String(format: "%.1f×", locale: .current, pace)).font(StrandFont.bodyNumber) }
                     }
                     Spacer()
