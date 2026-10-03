@@ -458,6 +458,7 @@ final class Repository: ObservableObject {
             activeEnergyKcalEst: winner.activeEnergyKcalEst ?? filler.activeEnergyKcalEst,
             spo2Red: rawSpo2FromFiller ? filler.spo2Red : winner.spo2Red,
             spo2Ir: rawSpo2FromFiller ? filler.spo2Ir : winner.spo2Ir,
+            avgSdnn: winner.avgSdnn ?? filler.avgSdnn,
             // Strap-only, like raw SpO2: an imported winner carries no absolute skin temp, so take the
             // filler's rather than let the union blank a value the strap did record (#1636).
             skinTempC: winner.skinTempC ?? filler.skinTempC,
