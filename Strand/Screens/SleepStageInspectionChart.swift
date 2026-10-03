@@ -29,7 +29,7 @@ struct SleepStageInspectionChart: View {
         }
         let readout = selectionText(selection)
         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
-            HStack(spacing: NoopMetrics.space3) {
+            HStack(alignment: .top, spacing: NoopMetrics.space3) {
                 VStack(alignment: .trailing, spacing: 0) {
                     ForEach(stages, id: \.self) { stage in
                         Text(stage.label).font(StrandFont.caption)
@@ -37,7 +37,7 @@ struct SleepStageInspectionChart: View {
                             .frame(maxHeight: .infinity)
                     }
                 }
-                .frame(width: NoopMetrics.space10 + NoopMetrics.space1)
+                .frame(width: NoopMetrics.space10 + NoopMetrics.space1, height: NoopMetrics.chartHeight)
                 VStack(spacing: NoopMetrics.space2) {
                     GeometryReader { geometry in
                         Canvas { context, size in

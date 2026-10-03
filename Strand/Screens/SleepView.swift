@@ -2240,6 +2240,7 @@ struct SleepView: View {
             Text(unavailableRequestedDay).font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
             ComingSoon(what: "No sleep data for this day.")
             Button("Last night") {
+                pendingInitialDayKey = nil
                 self.unavailableRequestedDay = nil
                 nightOffset = 0
                 navNight = nil
