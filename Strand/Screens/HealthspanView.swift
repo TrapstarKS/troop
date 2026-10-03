@@ -56,7 +56,7 @@ struct HealthspanView: View {
                     TrackedSectionHeader(title: String(localized: "Contributors"))
                     contributor(String(localized: "Sleep"), symbol: "moon.fill", value: average(window.compactMap(\.totalSleepMin).filter { $0.isFinite && $0 > 0 }).map { healthspanDuration(Int($0)) })
                     contributor(String(localized: "Strain"), symbol: "figure.run", value: average(window.compactMap(\.strain).filter { $0.isFinite && (0...100).contains($0) }).map { String(format: "%.0f / 100", locale: .current, $0) })
-                    contributor(String(localized: "Fitness Age"), symbol: "heart.fill", value: fitness.last(where: { $0.value.isFinite && (20...90).contains($0.value) && (healthspanDaysAgo($0.day, reference: reference).map { (0...14).contains($0) } ?? false) }).map { String(format: "%.1f", locale: .current, $0.value) })
+                    contributor(String(localized: "Fitness Age"), symbol: "heart.fill", value: fitness.last(where: { $0.value.isFinite && (healthspanDaysAgo($0.day, reference: reference).map { (0...14).contains($0) } ?? false) }).map { String(format: "%.1f", locale: .current, $0.value) })
                     Text("Recent context; not a breakdown of age impact.").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                 }
                 HealthSupportingMetricCards()
