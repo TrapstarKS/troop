@@ -2989,4 +2989,5 @@
     <string name="whoop_plan_local_title">Planowanie tygodniowe nie jest jeszcze dostępne</string>
     <string name="whoop_plan_local_detail">Dziennik i trendy pozostają dostępne do przeglądania lokalnych nawyków i postępów.</string>
     <string name="plan_numeric_invalid">Wpisz prawidłową liczbę, aby zapisać.</string>
+    <string name="plan_behavior_comparison_summary">%1$s, %2$s, %3$s</string>
 </resources>

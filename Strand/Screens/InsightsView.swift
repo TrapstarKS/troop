@@ -1135,7 +1135,7 @@ struct InsightsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: "\(displayName), \(deltaText), \(outcome.label)"))
+        .accessibilityLabel(Text("\(displayName), \(deltaText), \(outcome.label)"))
         .accessibilityHint(Text("Details"))
     }
 

@@ -2988,4 +2988,5 @@
     <string name="whoop_plan_local_title">Die Wochenplanung ist noch nicht verfügbar</string>
     <string name="whoop_plan_local_detail">Tagebuch und Trends bleiben verfügbar, um lokale Gewohnheiten und Fortschritte zu prüfen.</string>
     <string name="plan_numeric_invalid">Gib eine gültige Zahl ein, um zu speichern.</string>
+    <string name="plan_behavior_comparison_summary">%1$s, %2$s, %3$s</string>
 </resources>

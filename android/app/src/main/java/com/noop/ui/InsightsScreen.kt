@@ -826,13 +826,14 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome, displayName: String,
     val tintColor = when (movedGood) { true -> Palette.statusPositive; false -> Palette.statusWarning; null -> Palette.textSecondary }
     val deltaText = e.pctChange?.let { "${if (it > 0) "+" else if (it < 0) "−" else ""}${abs(it).roundToInt()}%" } ?: outcome.format(e.delta)
     val sentence = uiString(R.string.plan_association_note)
+    val summaryLabel = uiString(R.string.plan_behavior_comparison_summary, displayName, deltaText, outcome.label)
 
     // The card wash reads as the OUTCOME's colour world (so the whole Behaviour Effects
     // section sits in one world), while the summary / StatTile accents stay sign-aware.
     val modifier = if (compact && onOpen != null) Modifier.clickable(
         role = Role.Button, onClickLabel = uiString(R.string.l10n_skin_temp_cards_screen_view_detail_27af4b67), onClick = onOpen,
     )
-        .semantics(mergeDescendants = true) { contentDescription = "$displayName, $deltaText, ${outcome.label}" } else Modifier
+        .semantics(mergeDescendants = true) { contentDescription = summaryLabel } else Modifier
     NoopCard(modifier = modifier, tint = outcome.domain.color) {
         Column(verticalArrangement = Arrangement.spacedBy(if (compact) Metrics.space8 else Metrics.space16)) {
 

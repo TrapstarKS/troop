@@ -3004,4 +3004,5 @@
     <string name="whoop_plan_local_title">Weekly planning is not available yet</string>
     <string name="whoop_plan_local_detail">Journal and Trends remain available to review your local habits and progress.</string>
     <string name="plan_numeric_invalid">Enter a valid number to save.</string>
+    <string name="plan_behavior_comparison_summary">%1$s, %2$s, %3$s</string>
 </resources>
