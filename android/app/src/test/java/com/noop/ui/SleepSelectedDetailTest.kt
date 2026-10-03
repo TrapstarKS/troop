@@ -7,6 +7,21 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SleepSelectedDetailTest {
+    @Test fun consistencyUsesTheMainNightAndNotAnAfternoonNap() {
+        val zone = java.time.ZoneId.systemDefault()
+        fun timestamp(value: String) = java.time.LocalDateTime.parse(value).atZone(zone).toEpochSecond()
+        val sessions = (1..3).flatMap { day ->
+            val date = "2026-09-%02d".format(day)
+            listOf(SleepSession(deviceId = "test", startTs = timestamp("${date}T00:00"), endTs = timestamp("${date}T07:00")),
+                SleepSession(deviceId = "test", startTs = timestamp("${date}T14:00"), endTs = timestamp("${date}T14:30")))
+        }
+        val detail = selectedSleepDetailModel((1..3).map { day("2026-09-%02d".format(it), 14.2) },
+            night("2026-09-03"), ImportedSleepSeries(), emptyMap(), sessions, true)!!
+        assertEquals(100.0, detail.consistency.selectedValue()!!, 1e-9)
+        assertEquals(14.2, detail.respiratory.selectedValue()!!, 1e-9)
+        assertEquals(420.0 / 450.0 * 100.0, detail.hoursVsNeeded.selectedValue()!!, 1e-9)
+    }
+
     private fun day(date: String, respiratory: Double? = null) = DailyMetric(
         deviceId = "test", day = date, totalSleepMin = 420.0, efficiency = 90.0,
         deepMin = 60.0, remMin = 90.0, lightMin = 270.0, respRateBpm = respiratory,

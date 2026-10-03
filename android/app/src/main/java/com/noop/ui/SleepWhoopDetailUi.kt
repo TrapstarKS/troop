@@ -32,6 +32,7 @@ internal fun selectedSleepDetailModel(
     napSleepMinByDay: Map<String, Double>,
     sessions: List<SleepSession>,
     is24h: Boolean,
+    habitualMidsleepSec: Long? = null,
 ): SleepModel? {
     val day = night?.dayKey ?: return null
     if (days.none { it.day == day }) return null
@@ -43,7 +44,10 @@ internal fun selectedSleepDetailModel(
         heroStages = night.groupStages,
         heroSegments = night.groupSegments,
         napSleepMinByDay = napSleepMinByDay,
-        sessions = sessions.filter { localDayString(it.endTs) <= day },
+        sessions = consistencyNightSpans(sessions.filter { localDayString(it.endTs) <= day },
+            habitualMidsleepSec, Int.MAX_VALUE).map { (onset, wake) ->
+                SleepSession(deviceId = "", startTs = onset, endTs = wake)
+            },
         todayKey = day,
         is24h = is24h,
     )

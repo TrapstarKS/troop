@@ -569,8 +569,8 @@ fun SleepScreen(
         model ?: fallbackSleepModel(days, imported, napSleepMinByDay, sessions = sleeps)
     }
 
-    val selectedDetailModel = remember(days, night, imported, napSleepMinByDay, sleeps, is24h) {
-        selectedSleepDetailModel(days, night, imported, napSleepMinByDay, sleeps, is24h)
+    val selectedDetailModel = remember(days, night, imported, napSleepMinByDay, sleeps, is24h, habitualMidsleep) {
+        selectedSleepDetailModel(days, night, imported, napSleepMinByDay, sleeps, is24h, habitualMidsleep)
     }
     val selectedEfficiencyPct = selectedSleepEfficiency(night, days)
     val selectedAsleepMin = days.lastOrNull { it.day == night?.dayKey }?.totalSleepMin

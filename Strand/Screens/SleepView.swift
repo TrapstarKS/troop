@@ -514,16 +514,28 @@ struct SleepView: View {
     }
 
     private func detailModel(for night: Night) -> SleepModel? {
-        let day = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
+        let wake = Date(timeIntervalSince1970: TimeInterval(night.session.endTs))
+        let day = Repository.localDayKey(wake)
         guard repo.days.contains(where: { $0.day == day }) else { return nil }
         func belongs(_ session: CachedSleepSession) -> Bool {
             Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(session.endTs))) <= day
         }
+        let sessions = (allSessions.isEmpty ? repo.sleeps : allSessions).filter(belongs)
+        let noon = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: wake) ?? wake
         return SleepModel.build(SleepModelInputs(
             days: repo.days.filter { $0.day <= day },
-            sleeps: repo.sleeps.filter(belongs), allSessions: allSessions.filter(belongs),
+            sleeps: Self.mainNightConsistencySessions(sessions, habitualMidsleepSec: habitualMidsleepSec),
+            allSessions: sessions,
             importedSleep: repo.importedSleep, habitualMidsleepSec: habitualMidsleepSec,
-            motionByStart: motionByStart))
+            motionByStart: motionByStart), now: noon)
+    }
+
+    static func mainNightConsistencySessions(_ sessions: [CachedSleepSession], habitualMidsleepSec: Int?) -> [CachedSleepSession] {
+        SleepModel.navDays(navSessions: sessions).reversed().compactMap { blocks in
+            guard let span = mainNightSpan(blocks, habitualMidsleepSec: habitualMidsleepSec) else { return nil }
+            return CachedSleepSession(startTs: span.start, endTs: span.end, efficiency: nil,
+                                      restingHr: nil, avgHrv: nil, stagesJSON: nil)
+        }
     }
 
     private func selectedValue(_ metric: SleepModel.Metric?) -> Double? {
