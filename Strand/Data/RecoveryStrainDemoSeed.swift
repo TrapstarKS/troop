@@ -24,10 +24,12 @@ enum RecoveryStrainDemoSeed {
             }
         }
         _ = try await store.insert(Streams(hr: samples), deviceId: deviceId)
-        guard endMinute > startMinute else { return }
-        let heartRates = (startMinute..<endMinute).map { 130 + $0 % 12 * 3 }
-        let start = Int(today.timeIntervalSince1970) + startMinute * 60
-        let end = Int(today.timeIntervalSince1970) + endMinute * 60
+        guard let activityDay = elapsedMinutes >= 45 ? today : calendar.date(byAdding: .day, value: -1, to: today) else { return }
+        let activityEndMinute = elapsedMinutes >= 45 ? endMinute : 1125
+        let activityStartMinute = activityEndMinute - 45
+        let heartRates = (activityStartMinute..<activityEndMinute).map { 130 + $0 % 12 * 3 }
+        let start = Int(activityDay.timeIntervalSince1970) + activityStartMinute * 60
+        let end = Int(activityDay.timeIntervalSince1970) + activityEndMinute * 60
         let workout = WorkoutRow(startTs: start, endTs: end, sport: "Running", source: "manual",
                                  durationS: Double(end - start), energyKcal: 310,
                                  avgHr: heartRates.reduce(0, +) / heartRates.count, maxHr: heartRates.max(),

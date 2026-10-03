@@ -31,8 +31,11 @@ struct ActivityDetailView: View {
     private var energyLabel: String {
         String(localized: "Recorded energy")
     }
-    private var strain: Double? { row.strain.flatMap { $0.isFinite ? $0 : nil } }
-    private var energy: Double? { row.energyKcal.flatMap { $0.isFinite ? $0 : nil } }
+    private var strain: Double? { row.strain.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil } }
+    private var energy: Int64? { RecoveryStrainDetailLogic.wholeNumber(row.energyKcal) }
+    private var durationMinutes: Int64? {
+        RecoveryStrainDetailLogic.durationMinutes(seconds: row.durationS, fallbackSeconds: Double(row.endTs - row.startTs))
+    }
 
     var body: some View {
         ScreenScaffold(title: nil, lazy: true, topBackground: recoveryStrainBackdrop()) {
@@ -42,7 +45,7 @@ struct ActivityDetailView: View {
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                 Text("\(time(row.startTs)) – \(time(row.endTs))")
                     .font(StrandFont.bodyNumber).foregroundStyle(StrandPalette.textSecondary)
-                Text(String(localized: "\(Int((row.durationS ?? Double(row.endTs - row.startTs)) / 60)) min"))
+                Text(durationMinutes.map { String(localized: "\($0) min") } ?? "—")
                     .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
             }.frame(maxWidth: .infinity)
             ScoreDial(label: String(localized: "Activity strain"), value: strain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—",
@@ -54,20 +57,24 @@ struct ActivityDetailView: View {
                     Divider().overlay(StrandPalette.hairline)
                     ContributorRow(label: String(localized: "Max heart rate"), value: row.maxHr.map(String.init) ?? "—", unit: "bpm", systemImage: "heart.fill")
                     Divider().overlay(StrandPalette.hairline)
-                    ContributorRow(label: energyLabel, value: energy.map { String(Int($0.rounded())) } ?? "—", unit: "kcal", systemImage: "flame")
+                    ContributorRow(label: energyLabel, value: energy.map(String.init) ?? "—", unit: "kcal", systemImage: "flame")
                     Text("The recorded calorie value does not identify active versus total energy. It is shown as recorded, without adding resting energy.")
                         .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
-                    if let distance = row.distanceM, distance.isFinite {
+                    if let distance = row.distanceM, distance.isFinite, distance >= 0 {
                         Divider().overlay(StrandPalette.hairline)
                         ContributorRow(label: String(localized: "Distance"), value: UnitFormatter.distanceFromMeters(distance, system: UnitPrefs.resolveDistance(system: UnitSystem(rawValue: UserDefaults.standard.string(forKey: UnitPrefs.systemKey) ?? "") ?? .metric, override: UserDefaults.standard.string(forKey: UnitPrefs.distanceSystemKey) ?? "")))
                     }
                 }
             }
+            if WorkoutSource.classify(row.source) != .detected {
+                Text("Heart-rate charts for manual and imported activities use the currently selected strap and retained recording history for this time window. The original recording source may differ.")
+                    .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+            }
             DetailHeartRateChart(points: points, loaded: loaded)
             if let average = row.avgHr, !points.isEmpty,
                abs(Double(average) - points.map(\.value).reduce(0, +) / Double(points.count)) > 3,
                row.strain != nil || row.zonesJSON != nil {
-                Text("The saved average differs from this recording. The graph uses recorded heart rate; saved strain and zone data are preserved.")
+                Text("The displayed average differs from this trace. Heart rate comes from recorded samples; existing strain and zone values are preserved.")
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
             }
             DetailZoneBars(minutes: minutes, zoneSet: profile.hrZoneSet, imported: importedZones)
@@ -78,18 +85,26 @@ struct ActivityDetailView: View {
             }.buttonStyle(.plain)
         }
         .navigationTitle(WorkoutSource.displaySport(row.sport))
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(canEdit ? String(localized: "Edit") : String(localized: "Edit a copy")) { showEdit = true }
             }
         }
-        .task(id: "\(row.startTs)|\(row.endTs)|\(row.source)|\(repo.refreshSeq)") { await load() }
+        .task(id: "\(row.startTs)|\(row.endTs)|\(row.source)|\(repo.deviceId)|\(repo.refreshSeq)") { await load() }
         .sheet(isPresented: $showEdit) {
             ManualWorkoutSheet(editing: editRow) { saved, replacing in
                 let replacingOriginal = canEdit
                 Task {
                     await repo.saveManualWorkout(saved, replacing: replacingOriginal ? replacing : nil)
                     await repo.refresh()
+                    if let stored = await repo.workoutRows().first(where: {
+                        $0.startTs == saved.startTs && $0.sport == saved.sport && WorkoutSource.classify($0.source) == .manual
+                    }) {
+                        row = stored
+                    }
                     dismiss()
                 }
             }
@@ -99,7 +114,11 @@ struct ActivityDetailView: View {
 
     private func load() async {
         loaded = false
+        points = []
+        minutes = nil
+        importedZones = false
         let selected = row
+        let deviceId = repo.deviceId
         let buckets = await repo.workoutHrBuckets(from: selected.startTs, to: selected.endTs, source: selected.source)
         var zones: [Double]? = nil
         let percents = WorkoutZones.percents(selected.zonesJSON)
@@ -110,7 +129,8 @@ struct ActivityDetailView: View {
         if zones == nil {
             zones = await repo.workoutZoneMinutes(from: selected.startTs, to: selected.endTs, zoneSet: profile.hrZoneSet, source: selected.source)
         }
-        guard row.startTs == selected.startTs, row.endTs == selected.endTs, row.source == selected.source, !Task.isCancelled else { return }
+        guard row.startTs == selected.startTs, row.endTs == selected.endTs, row.source == selected.source,
+              repo.deviceId == deviceId, !Task.isCancelled else { return }
         let bucketSeconds = max(15, min(300, (selected.endTs - selected.startTs) / 120))
         let segmentIds = hrGapSegments(bucketTs: buckets.map(\.ts), bucketSeconds: bucketSeconds)
         points = buckets.enumerated().map { index, bucket in

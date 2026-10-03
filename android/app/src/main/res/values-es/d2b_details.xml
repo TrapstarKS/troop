@@ -2,6 +2,7 @@
 <resources>
     <string name="d2b_recovery">Recuperación</string>
     <string name="d2b_strain">Esfuerzo</string>
+    <string name="d2b_strain_unavailable">Esfuerzo no disponible</string>
     <string name="d2b_back">Atrás</string>
     <string name="d2b_no_value">—</string>
     <string name="d2b_not_available">No disponible</string>
@@ -57,7 +58,8 @@
     <string name="d2b_duration_minutes">%1$d min</string>
     <string name="d2b_hours_minutes">%1$d h %2$d min</string>
     <string name="d2b_average_hr">Frecuencia cardíaca media</string>
-    <string name="d2b_average_disclosure">La media guardada difiere de este registro. El gráfico usa la frecuencia cardíaca registrada; se conservan los datos guardados de esfuerzo y zonas.</string>
+    <string name="d2b_average_disclosure">La media mostrada difiere de este trazado. La frecuencia cardíaca procede de muestras registradas; los valores existentes de esfuerzo y zonas se conservan.</string>
+    <string name="d2b_trace_source_note">Los gráficos de frecuencia cardíaca de las actividades manuales e importadas usan la banda seleccionada actualmente y el historial de registros conservado de este intervalo. La fuente del registro original puede ser distinta.</string>
     <string name="d2b_maximum_hr">Frecuencia cardíaca máxima</string>
     <string name="d2b_active_energy">Energía activa</string>
     <string name="d2b_recorded_energy">Energía registrada</string>
@@ -70,4 +72,5 @@
     <string name="d2b_days">%1$d días</string>
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">No hay puntuaciones almacenadas disponibles para este rango.</string>
+    <string name="d2b_labeled_percent">%1$s %2$s%%</string>
 </resources>

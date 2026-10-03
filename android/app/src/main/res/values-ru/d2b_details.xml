@@ -2,6 +2,7 @@
 <resources>
     <string name="d2b_recovery">Восстановление</string>
     <string name="d2b_strain">Нагрузка</string>
+    <string name="d2b_strain_unavailable">Нагрузка недоступна</string>
     <string name="d2b_back">Назад</string>
     <string name="d2b_no_value">—</string>
     <string name="d2b_not_available">Недоступно</string>
@@ -57,7 +58,8 @@
     <string name="d2b_duration_minutes">%1$d мин</string>
     <string name="d2b_hours_minutes">%1$d ч %2$d мин</string>
     <string name="d2b_average_hr">Средний пульс</string>
-    <string name="d2b_average_disclosure">Сохранённое среднее отличается от этой записи. График использует записанный пульс; сохранённые данные нагрузки и зон остаются прежними.</string>
+    <string name="d2b_average_disclosure">Отображаемое среднее отличается от этой кривой. Пульс получен из записанных измерений; существующие значения нагрузки и зон сохранены.</string>
+    <string name="d2b_trace_source_note">Графики пульса ручных и импортированных тренировок используют выбранный сейчас браслет и сохранённую историю записей за этот интервал. Источник первоначальной записи может отличаться.</string>
     <string name="d2b_maximum_hr">Максимальный пульс</string>
     <string name="d2b_active_energy">Активная энергия</string>
     <string name="d2b_recorded_energy">Записанная энергия</string>
@@ -70,4 +72,5 @@
     <string name="d2b_days">%1$d дней</string>
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">Для этого диапазона нет сохранённых оценок.</string>
+    <string name="d2b_labeled_percent">%1$s %2$s%%</string>
 </resources>

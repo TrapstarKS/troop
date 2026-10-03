@@ -2,6 +2,7 @@
 <resources>
     <string name="d2b_recovery">Regeneracja</string>
     <string name="d2b_strain">Obciążenie</string>
+    <string name="d2b_strain_unavailable">Obciążenie niedostępne</string>
     <string name="d2b_back">Wstecz</string>
     <string name="d2b_no_value">—</string>
     <string name="d2b_not_available">Niedostępne</string>
@@ -57,7 +58,8 @@
     <string name="d2b_duration_minutes">%1$d min</string>
     <string name="d2b_hours_minutes">%1$d godz %2$d min</string>
     <string name="d2b_average_hr">Średnie tętno</string>
-    <string name="d2b_average_disclosure">Zapisana średnia różni się od tego nagrania. Wykres wykorzystuje zarejestrowane tętno; zapisane dane obciążenia i stref zostają zachowane.</string>
+    <string name="d2b_average_disclosure">Wyświetlana średnia różni się od tego przebiegu. Tętno pochodzi z zapisanych próbek; istniejące wartości obciążenia i stref są zachowane.</string>
+    <string name="d2b_trace_source_note">Wykresy tętna aktywności ręcznych i importowanych korzystają z aktualnie wybranej opaski i zachowanej historii zapisów w tym przedziale. Pierwotne źródło zapisu może być inne.</string>
     <string name="d2b_maximum_hr">Maksymalne tętno</string>
     <string name="d2b_active_energy">Aktywna energia</string>
     <string name="d2b_recorded_energy">Zapisana energia</string>
@@ -70,4 +72,5 @@
     <string name="d2b_days">%1$d dni</string>
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">Brak zapisanych wyników dla tego zakresu.</string>
+    <string name="d2b_labeled_percent">%1$s %2$s%%</string>
 </resources>

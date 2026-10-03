@@ -14,26 +14,30 @@ struct StrainDetailView: View {
     @State private var belowZoneMinutes: Double? = nil
     @State private var workouts: [WorkoutRow] = []
     @State private var loaded = false
+    @State private var openedDeviceId: String?
 
     private var key: String { dayKey ?? repo.today?.day ?? Repository.logicalDayKey(Date()) }
     private var row: DailyMetric? { repo.days.first { $0.day == key } ?? (repo.today?.day == key ? repo.today : nil) }
-    private var rawEffort: Double? { (effortOverride ?? row?.strain).flatMap { $0.isFinite ? $0 : nil } }
+    private var rawEffort: Double? {
+        let displayedOverride = openedDeviceId == nil || openedDeviceId == repo.deviceId ? effortOverride : nil
+        return (displayedOverride ?? row?.strain).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }
+    }
     private var strain: Double? { rawEffort.map { UnitFormatter.effortValue($0, scale: .whoop) } }
-    private var band: ClosedRange<Int>? { CoupledView.optimalStrainRange(recovery: row?.recovery.flatMap { $0.isFinite ? $0 : nil }) }
+    private var strainDisplay: String? { rawEffort.map { UnitFormatter.effortDisplay($0, scale: .whoop) } }
+    private var band: ClosedRange<Int>? { CoupledView.optimalStrainRange(recovery: row?.recovery.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }) }
     private var targetStatus: RecoveryStrainDetailLogic.TargetStatus {
-        RecoveryStrainDetailLogic.targetStatus(strain21: strain, lower: band?.lowerBound, upper: band?.upperBound)
+        RecoveryStrainDetailLogic.targetStatus(displayedStrain: strainDisplay, lower: band?.lowerBound, upper: band?.upperBound)
     }
 
     var body: some View {
         ScreenScaffold(title: nil, lazy: true, topBackground: recoveryStrainBackdrop()) {
             Text(RecoveryStrainDetailLogic.dateLabel(key, locale: AppLanguage.activeLocale)).strandOverline().frame(maxWidth: .infinity)
-            ScoreDial(label: String(localized: "Day strain"), value: rawEffort.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—",
+            ScoreDial(label: String(localized: "Day strain"), value: strainDisplay ?? "—",
                       progress: strain.map { $0 / 21 }, color: StrandPalette.strainPrimary,
                       target: band.map { Double($0.lowerBound) / 21 },
                       targetRange: band.map { Double($0.lowerBound) / 21...Double($0.upperBound) / 21 })
                 .frame(maxWidth: .infinity)
             target
-            InsightCallout(text: String(localized: "Strain here presents NOOP’s local Effort on a 0–21 axis. It is a change of display units, not the official WHOOP scoring model. Stored Effort and your history stay unchanged."))
             DetailHeartRateChart(points: points, loaded: loaded)
             DetailZoneBars(minutes: zoneMinutes, zoneSet: profile.hrZoneSet, belowZoneMinutes: belowZoneMinutes)
             TrackedSectionHeader(title: String(localized: "Activities"))
@@ -44,14 +48,20 @@ struct StrainDetailView: View {
                 }
             } else {
                 ForEach(workouts.indices, id: \.self) { index in
-                    NavigationLink { ActivityDetailView(row: workouts[index]) } label: {
-                        DetailActivityRow(row: workouts[index])
+                    let workout = workouts[index]
+                    NavigationLink { ActivityDetailView(row: workout) } label: {
+                        DetailActivityRow(row: workout)
                     }.buttonStyle(.plain)
                 }
             }
+            Text("Strain here presents NOOP’s local Effort on a 0–21 axis. It is a change of display units, not the official WHOOP scoring model. Stored Effort and your history stay unchanged.")
+                .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
         }
         .navigationTitle(String(localized: "Strain"))
-        .task(id: "\(key)|\(repo.refreshSeq)|\(cycleMode)") { await load() }
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .task(id: "\(key)|\(repo.deviceId)|\(repo.refreshSeq)|\(cycleMode)") { await load() }
     }
 
     private var target: some View {
@@ -77,7 +87,7 @@ struct StrainDetailView: View {
 
     private var statusLabel: String {
         switch targetStatus {
-        case .unavailable: return String(localized: "Target unavailable")
+        case .unavailable: return band == nil ? String(localized: "Target unavailable") : String(localized: "Strain unavailable")
         case .under: return String(localized: "Below suggested range")
         case .optimal: return String(localized: "Within suggested range")
         case .over: return String(localized: "Above suggested range")
@@ -85,9 +95,16 @@ struct StrainDetailView: View {
     }
 
     private func load() async {
+        if openedDeviceId == nil { openedDeviceId = repo.deviceId }
         loaded = false
+        points = []
+        zoneMinutes = nil
+        belowZoneMinutes = nil
+        workouts = []
         guard let day = RecoveryStrainDetailLogic.date(key), let next = Calendar.current.date(byAdding: .day, value: 1, to: day) else { return }
         let requestedKey = key
+        let deviceId = repo.deviceId
+        let requestedMode = cycleMode
         let calendarStart = Int(day.timeIntervalSince1970)
         let calendarEnd = min(Int(next.timeIntervalSince1970), Int(Date().timeIntervalSince1970) + 1)
         let markers = DayCycleMode.persisted(cycleMode) == .sleepOnset
@@ -99,7 +116,7 @@ struct StrainDetailView: View {
         let samples = await repo.hrSamples(from: start, to: max(start, end), limit: 200_000)
         let rows = await repo.workoutRows()
         let segments = hrGapSegments(bucketTs: buckets.map(\.ts), bucketSeconds: 300)
-        guard key == requestedKey, !Task.isCancelled else { return }
+        guard key == requestedKey, repo.deviceId == deviceId, cycleMode == requestedMode, !Task.isCancelled else { return }
         points = buckets.enumerated().map { index, bucket in
             TrendPoint(date: Date(timeIntervalSince1970: Double(bucket.ts)), value: bucket.bpm, segment: segments[index])
         }
@@ -139,11 +156,17 @@ struct DetailZoneBars: View {
     var imported = false
     var belowZoneMinutes: Double? = nil
 
+    private var displayedMinutes: [Int64]? {
+        guard let minutes, minutes.count == 5 else { return nil }
+        let values = minutes.compactMap { RecoveryStrainDetailLogic.wholeNumber($0) }
+        return values.count == 5 ? values : nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.space3) {
             TrackedSectionHeader(title: String(localized: "Heart rate zones"), microLabel: imported ? String(localized: "Imported distribution") : String(localized: "From recorded heart rate"))
             NoopCard {
-                if let minutes, minutes.count == 5 {
+                if let minutes, let displayedMinutes {
                     VStack(spacing: NoopMetrics.space4) {
                         ForEach((0..<5).reversed(), id: \.self) { index in
                             VStack(alignment: .leading, spacing: NoopMetrics.space2) {
@@ -155,7 +178,7 @@ struct DetailZoneBars: View {
                                             .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                                     }
                                     Spacer(minLength: 0)
-                                    Text(String(localized: "\(Int(minutes[index].rounded())) min"))
+                                    Text(String(localized: "\(displayedMinutes[index]) min"))
                                         .font(StrandFont.bodyNumber).foregroundStyle(StrandPalette.textPrimary)
                                 }
                                 GeometryReader { geometry in
@@ -167,8 +190,9 @@ struct DetailZoneBars: View {
                                 }.frame(height: NoopMetrics.indicatorTrackHeight)
                             }.accessibilityElement(children: .combine)
                         }
-                        if let belowZoneMinutes, belowZoneMinutes > 0 {
-                            ContributorRow(label: String(localized: "Below Zone 1"), value: String(Int(belowZoneMinutes.rounded())), unit: String(localized: "min"))
+                        if let belowZoneMinutes, belowZoneMinutes > 0,
+                           let displayedBelowZone = RecoveryStrainDetailLogic.wholeNumber(belowZoneMinutes) {
+                            ContributorRow(label: String(localized: "Below Zone 1"), value: String(displayedBelowZone), unit: String(localized: "min"))
                         }
                         Text(imported ? String(localized: "Zone times use the split saved with this activity.") : String(localized: "Zone times use your configured heart-rate zones and available recording coverage. Gaps are not filled."))
                             .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
@@ -193,7 +217,7 @@ struct DetailActivityRow: View {
                         .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                 }
                 Spacer(minLength: 0)
-                Text(row.strain.flatMap { $0.isFinite ? UnitFormatter.effortDisplay($0, scale: .whoop) : nil } ?? "—")
+                Text(row.strain.flatMap { $0.isFinite && (0...100).contains($0) ? UnitFormatter.effortDisplay($0, scale: .whoop) : nil } ?? "—")
                     .font(StrandFont.title2).foregroundStyle(StrandPalette.strainPrimary)
                 Image(systemName: "chevron.right").font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
             }

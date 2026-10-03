@@ -445,7 +445,7 @@ object WorkoutEditing {
         if (spanSeconds > MAX_MANUAL_SPAN_SECONDS) return null
         if (endSeconds > nowSeconds) return null
         if (avgHr != null && avgHr !in 25..250) return null
-        if (energyKcal != null && (energyKcal < 0 || energyKcal > 20_000)) return null
+        if (energyKcal != null && (!energyKcal.isFinite() || energyKcal < 0 || energyKcal > 20_000)) return null
         // Distance 0-1000 km (#1195): rejects a negative or absurd manual entry. 1000 km comfortably
         // covers any single session (an Ironman bike is 180 km, an ultra 160 km).
         if (distanceM != null && (distanceM < 0 || distanceM > 1_000_000)) return null

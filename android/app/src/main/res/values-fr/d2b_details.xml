@@ -2,6 +2,7 @@
 <resources>
     <string name="d2b_recovery">Récupération</string>
     <string name="d2b_strain">Effort</string>
+    <string name="d2b_strain_unavailable">Effort indisponible</string>
     <string name="d2b_back">Retour</string>
     <string name="d2b_no_value">—</string>
     <string name="d2b_not_available">Non disponible</string>
@@ -57,7 +58,8 @@
     <string name="d2b_duration_minutes">%1$d min</string>
     <string name="d2b_hours_minutes">%1$d h %2$d min</string>
     <string name="d2b_average_hr">Fréquence cardiaque moyenne</string>
-    <string name="d2b_average_disclosure">La moyenne enregistrée diffère de cet enregistrement. Le graphique utilise la fréquence cardiaque enregistrée ; les données d’effort et de zones sauvegardées sont préservées.</string>
+    <string name="d2b_average_disclosure">La moyenne affichée diffère de cette courbe. La fréquence cardiaque provient des échantillons enregistrés ; les valeurs existantes d’effort et de zones sont préservées.</string>
+    <string name="d2b_trace_source_note">Les graphiques de fréquence cardiaque des activités manuelles et importées utilisent le bracelet actuellement sélectionné et l’historique des enregistrements conservés pour cette fenêtre. La source de l’enregistrement d’origine peut être différente.</string>
     <string name="d2b_maximum_hr">Fréquence cardiaque maximale</string>
     <string name="d2b_active_energy">Énergie active</string>
     <string name="d2b_recorded_energy">Énergie enregistrée</string>
@@ -70,4 +72,5 @@
     <string name="d2b_days">%1$d jours</string>
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">Aucun score enregistré disponible pour cette plage.</string>
+    <string name="d2b_labeled_percent">%1$s %2$s%%</string>
 </resources>

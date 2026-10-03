@@ -3,6 +3,7 @@ package com.noop.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -26,6 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.noop.R
 import com.noop.analytics.Baselines
@@ -43,7 +48,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
-import kotlin.math.roundToInt
 
 @Composable
 fun RecoveryDetailScreen(
@@ -53,22 +57,24 @@ fun RecoveryDetailScreen(
     onBack: () -> Unit,
 ) {
     val today by vm.today.collectAsStateWithLifecycle()
-    val days = detailDays(vm)
+    val registryId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeId = registryId ?: vm.activeStrapId
+    val days = detailDays(vm, activeId)
     val selectedKey = dayKey ?: today?.day ?: logicalDayNow().toString()
     val date = detailDate(selectedKey)
-    val selected = days.firstOrNull { it.day == selectedKey } ?: today?.takeIf { it.day == selectedKey }
-    val score = selected?.recovery?.takeIf { it.isFinite() }
+    val selected = days.firstOrNull { it.day == selectedKey }
+    val score = selected?.recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }
     val context = LocalContext.current
     val epoch = NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble()
     val calibration = if (selectedKey == (today?.day ?: logicalDayNow().toString())) recoveryCalibrationNights(
         days.filter { it.day <= selectedKey }, score != null, epoch,
     ) else null
-    var sleepPerformance by remember(selectedKey) { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
+    var sleepPerformance by remember(selectedKey, activeId) { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
     var showInsights by remember { mutableStateOf(false) }
-    LaunchedEffect(selectedKey, days, vm.activeStrapId) {
+    LaunchedEffect(selectedKey, days, activeId) {
         sleepPerformance = runCatching {
             vm.repo.resolvedSeries("sleep_performance", "my-whoop", date.minusDays(30).toString(), selectedKey,
-                strapDeviceId = vm.activeStrapId).values
+                strapDeviceId = activeId).values
         }.getOrDefault(emptyList())
     }
     if (showInsights) {
@@ -86,7 +92,7 @@ fun RecoveryDetailScreen(
         item {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
-                ScoreDial(uiString(R.string.d2b_recovery), detailNumber(score, 0), "%",
+                ScoreDial(uiString(R.string.d2b_recovery), detailRecoveryNumber(score), "%",
                     score?.div(100)?.toFloat(), color)
                 StatusPill(when {
                     score == null && calibration != null -> uiString(R.string.d2b_calibrating, calibration, Baselines.minNightsSeed)
@@ -112,10 +118,8 @@ fun RecoveryDetailScreen(
                         days, selectedKey, { it.respRateBpm })
                     val sleepByDay = sleepPerformance.toMap()
                     val sleep = sleepByDay[selectedKey] ?: selected?.let { RestScorer.restFromDaily(it) }
-                    val sleepMean = RecoveryStrainDetailLogic.priorMean(days.map { it.day }, days.map { sleepByDay[it.day] ?: RestScorer.restFromDaily(it) },
-                        date.minusDays(30).toString(), selectedKey)
-                    ContributorRow(uiString(R.string.d2b_sleep_performance), detailNumber(sleep, 0), "%",
-                        comparison = detailComparison(sleep, sleepMean, "%", 0))
+                    DetailContributor(uiString(R.string.d2b_sleep_performance), sleep, "%", days, selectedKey,
+                        { sleepByDay[it.day] ?: RestScorer.restFromDaily(it) }, decimals = 0)
                     selected?.spo2Pct?.takeIf { it.isFinite() }?.let {
                         DetailContributor(uiString(R.string.d2b_blood_oxygen), it, "%", days, selectedKey, { row -> row.spo2Pct })
                     }
@@ -125,14 +129,18 @@ fun RecoveryDetailScreen(
                             val unit = UnitPrefs.temperature(context)
                             val value = if (kind == SkinTempDisplay.Kind.ABSOLUTE) UnitFormatter.temperatureFromCelsius(reading.value, unit)
                                 else UnitFormatter.temperatureDeltaFromCelsius(reading.value, unit)
-                            ContributorRow(uiString(R.string.d2b_skin_temperature), value,
-                                comparison = uiString(if (kind == SkinTempDisplay.Kind.ABSOLUTE) R.string.d2b_absolute_temperature else R.string.d2b_temperature_deviation))
+                            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+                                ContributorRow(uiString(R.string.d2b_skin_temperature), value)
+                                Text(uiString(if (kind == SkinTempDisplay.Kind.ABSOLUTE) R.string.d2b_absolute_temperature else R.string.d2b_temperature_deviation),
+                                    style = NoopType.caption, color = Palette.textSecondary, textAlign = TextAlign.End)
+                            }
                         }
                     }
                 }
             }
         }
-        item { DetailTrend(days, selectedKey, strain = false) }
+        item { DetailTrend(days, selectedKey) }
         item {
             InsightCallout(uiString(R.string.d2b_behavior_note), uiString(R.string.d2b_behavior_insights), {
                 onOpenInsights?.invoke() ?: run { showInsights = true }
@@ -149,39 +157,47 @@ fun StrainDetailScreen(
     onBack: () -> Unit,
 ) {
     val today by vm.today.collectAsStateWithLifecycle()
-    val days = detailDays(vm)
+    val registryId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeId = registryId ?: vm.activeStrapId
+    val days = detailDays(vm, activeId)
     val selectedKey = dayKey ?: today?.day ?: logicalDayNow().toString()
-    val selected = days.firstOrNull { it.day == selectedKey } ?: today?.takeIf { it.day == selectedKey }
-    val effort = (effortOverride ?: selected?.strain)?.takeIf { it.isFinite() }
+    val selected = days.firstOrNull { it.day == selectedKey }
+    val openedActiveId = remember { activeId }
+    val effort = (effortOverride.takeIf { openedActiveId == activeId } ?: selected?.strain)?.takeIf { it.isFinite() && it in 0.0..100.0 }
     val strain = effort?.let { UnitFormatter.effortValue(it, EffortScale.WHOOP) }
-    val recovery = selected?.recovery?.takeIf { it.isFinite() }
+    val strainDisplay = effort?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) }
+    val recovery = selected?.recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }
     val band = optimalStrainRange(recovery)
-    val target = RecoveryStrainDetailLogic.targetStatus(strain, band?.low, band?.high)
+    val target = RecoveryStrainDetailLogic.targetStatus(strainDisplay, band?.low, band?.high)
     val allWorkouts by vm.workouts.collectAsStateWithLifecycle()
     val live by vm.live.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val profile = remember(context) { ProfileStore.from(context) }
     val mode = NoopPrefs.dayCycleMode(context)
-    var hr by remember(selectedKey) { mutableStateOf<List<HrBucket>>(emptyList()) }
-    var zones by remember(selectedKey) { mutableStateOf<List<Double>?>(null) }
-    var belowZone1 by remember(selectedKey) { mutableStateOf<Double?>(null) }
-    var window by remember(selectedKey) { mutableStateOf<LongRange?>(null) }
+    var hr by remember(selectedKey, activeId, mode) { mutableStateOf<List<HrBucket>>(emptyList()) }
+    var zones by remember(selectedKey, activeId, mode) { mutableStateOf<List<Double>?>(null) }
+    var belowZone1 by remember(selectedKey, activeId, mode) { mutableStateOf<Double?>(null) }
+    var window by remember(selectedKey, activeId, mode) { mutableStateOf<LongRange?>(null) }
     var activity by remember { mutableStateOf<WorkoutRow?>(null) }
-    LaunchedEffect(Unit) { vm.loadWorkouts() }
-    LaunchedEffect(selectedKey, days, vm.activeStrapId, mode, live.lastSyncAt, live.syncChunksThisSession) {
+    var workoutsLoaded by remember(activeId) { mutableStateOf(false) }
+    LaunchedEffect(activeId) {
+        vm.loadWorkouts().join()
+        workoutsLoaded = true
+    }
+    LaunchedEffect(selectedKey, days, activeId, mode, live.lastSyncAt, live.syncChunksThisSession) {
         val date = detailDate(selectedKey)
         val zone = ZoneId.systemDefault()
         val now = System.currentTimeMillis() / 1000
         val markers = if (mode == DayCycleMode.SLEEP_ONSET) runCatching {
-            vm.repo.metricSeriesComputedUnion(vm.activeStrapId, DayCycleIntelligenceIntegration.ONSET_KEY,
+            vm.repo.metricSeriesComputedUnion(activeId, DayCycleIntelligenceIntegration.ONSET_KEY,
                 selectedKey, date.plusDays(1).toString())
         }.getOrDefault(emptyList()) else emptyList()
         val start = markers.firstOrNull { it.day == selectedKey }?.value?.toLong() ?: date.atStartOfDay(zone).toEpochSecond()
         val calendarEnd = date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1
         val end = minOf(now, markers.firstOrNull { it.day == date.plusDays(1).toString() }?.value?.toLong()?.minus(1) ?: calendarEnd)
         window = start..end
-        hr = runCatching { vm.repo.hrBucketsUnion(vm.activeStrapId, start, end, 300) }.getOrDefault(emptyList())
-        val samples = runCatching { vm.repo.hrSamplesUnion(vm.activeStrapId, start, end, limit = 200_000) }.getOrDefault(emptyList())
+        hr = runCatching { vm.repo.hrBucketsUnion(activeId, start, end, 300) }.getOrDefault(emptyList())
+        val samples = runCatching { vm.repo.hrSamplesUnion(activeId, start, end, limit = 200_000) }.getOrDefault(emptyList())
         val split = samples.takeIf { it.isNotEmpty() }?.let { HrZones.timeInZone(it, profile.hrZoneSet) }
         zones = split?.seconds?.map { it / 60 }
         belowZone1 = split?.belowZone1?.div(60)
@@ -191,16 +207,16 @@ fun StrainDetailScreen(
         return
     }
     BackHandler(onBack = onBack)
-    val workouts = allWorkouts.filter { row -> window?.let { row.startTs in it } == true }
+    val workouts = if (workoutsLoaded) allWorkouts.filter { row -> window?.let { row.startTs in it } == true } else emptyList()
     LazyScreenScaffold(title = null, topPadding = Metrics.space8) {
         item { DetailHeader(uiString(R.string.d2b_strain), detailDateLabel(detailDate(selectedKey)), onBack) }
         item {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
-                ScoreDial(uiString(R.string.d2b_strain), detailNumber(strain), progress = strain?.div(21)?.toFloat(),
+                ScoreDial(uiString(R.string.d2b_strain), strainDisplay ?: uiString(R.string.home_no_value), progress = strain?.div(21)?.toFloat(),
                     color = Palette.strainPrimary, targetRange = band?.let { it.low / 21f..it.high / 21f })
                 StatusPill(uiString(when (target) {
-                    RecoveryStrainDetailLogic.TargetStatus.Unavailable -> R.string.d2b_target_unavailable
+                    RecoveryStrainDetailLogic.TargetStatus.Unavailable -> if (band == null) R.string.d2b_target_unavailable else R.string.d2b_strain_unavailable
                     RecoveryStrainDetailLogic.TargetStatus.Under -> R.string.d2b_target_under
                     RecoveryStrainDetailLogic.TargetStatus.Optimal -> R.string.d2b_target_optimal
                     RecoveryStrainDetailLogic.TargetStatus.Over -> R.string.d2b_target_over
@@ -209,8 +225,8 @@ fun StrainDetailScreen(
                     color = Palette.textSecondary)
             }
         }
-        item { InsightCallout(if (effort == null) uiString(R.string.d2b_missing_strain) else uiString(R.string.d2b_effort_explanation, detailNumber(effort))) }
-        item { InsightCallout(uiString(if (band == null) R.string.d2b_missing_target else R.string.d2b_target_note)) }
+        if (effort == null) item { InsightCallout(uiString(R.string.d2b_missing_strain)) }
+        if (band == null) item { InsightCallout(uiString(R.string.d2b_missing_target)) }
         item { DetailHrChart(hr, uiString(R.string.d2b_day_heart_rate), 300) }
         item { DetailZones(zones, uiString(R.string.d2b_strap_zones_note), belowZone1) }
         item { TrackedSectionHeader(uiString(R.string.d2b_activities)) }
@@ -223,7 +239,7 @@ fun StrainDetailScreen(
                             Text(WorkoutEditing.displaySport(row.sport), style = NoopType.title2, color = Palette.textPrimary)
                             Text(detailWorkoutTime(row), style = NoopType.caption, color = Palette.textSecondary)
                         }
-                        Text(detailNumber(row.strain?.let { UnitFormatter.effortValue(it, EffortScale.WHOOP) }),
+                        Text(detailNumber(row.strain?.takeIf { it.isFinite() && it in 0.0..100.0 }?.let { UnitFormatter.effortValue(it, EffortScale.WHOOP) }),
                             style = NoopType.chartValueLarge, color = Palette.strainPrimary)
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, uiString(R.string.d2b_activity_details),
                             tint = Palette.textSecondary, modifier = Modifier.size(Metrics.iconSmall))
@@ -231,28 +247,37 @@ fun StrainDetailScreen(
                 }
             }
         }
-        item { DetailTrend(days, selectedKey, strain = true) }
+        if (effort != null) item {
+            Text(uiString(R.string.d2b_effort_explanation, detailNumber(effort)),
+                style = NoopType.footnote, color = Palette.textTertiary)
+        }
+        if (band != null) item {
+            Text(uiString(R.string.d2b_target_note), style = NoopType.footnote, color = Palette.textTertiary)
+        }
     }
 }
 
 @Composable
 fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) {
+    val registryId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeId = registryId ?: vm.activeStrapId
     val workouts by vm.workouts.collectAsStateWithLifecycle()
     val current = workouts.firstOrNull { it.deviceId == row.deviceId && it.startTs == row.startTs && it.sport == row.sport } ?: row
-    var hr by remember(current) { mutableStateOf<List<HrBucket>>(emptyList()) }
-    var zones by remember(current) { mutableStateOf<List<Double>?>(null) }
-    var importedZones by remember(current) { mutableStateOf(false) }
+    var hr by remember(current, activeId) { mutableStateOf<List<HrBucket>>(emptyList()) }
+    var zones by remember(current, activeId) { mutableStateOf<List<Double>?>(null) }
+    var importedZones by remember(current, activeId) { mutableStateOf(false) }
     var edit by remember { mutableStateOf(false) }
     var moreDetails by remember { mutableStateOf(false) }
     val source = WorkoutEditing.classify(current.source)
     val editable = source == WorkoutSource.MANUAL || source == WorkoutSource.DETECTED
-    LaunchedEffect(current, vm.activeStrapId) {
-        hr = vm.workoutHrBuckets(current.startTs, current.endTs, current.source, current.deviceId)
+    val effort = current.strain?.takeIf { it.isFinite() && it in 0.0..100.0 }
+    LaunchedEffect(current, activeId) {
+        hr = vm.workoutHrBuckets(current.startTs, current.endTs, current.source, current.deviceId, activeId)
         val imported = parseZonePercents(current.zonesJSON)
         val minutes = (current.durationS ?: (current.endTs - current.startTs).toDouble()) / 60
         importedZones = imported != null && minutes > 0
         zones = if (importedZones) imported?.map { it * minutes / 100 }
-            else vm.workoutZoneMinutes(current.startTs, current.endTs, current.source, current.deviceId)
+            else vm.workoutZoneMinutes(current.startTs, current.endTs, current.source, current.deviceId, activeId)
     }
     BackHandler(onBack = onBack)
     LazyScreenScaffold(title = null, topPadding = Metrics.space8) {
@@ -260,11 +285,14 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
         item {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
-                val strain = current.strain?.takeIf { it.isFinite() }?.let { UnitFormatter.effortValue(it, EffortScale.WHOOP) }
+                val strain = effort?.let { UnitFormatter.effortValue(it, EffortScale.WHOOP) }
                 ScoreDial(uiString(R.string.d2b_activity_strain), detailNumber(strain), progress = strain?.div(21)?.toFloat(), color = Palette.strainPrimary)
-                Text(uiString(R.string.d2b_duration, detailDuration(current.durationS ?: (current.endTs - current.startTs).toDouble())),
+                Text(uiString(R.string.d2b_duration, detailDuration(current.durationS, (current.endTs - current.startTs).toDouble())),
                     style = NoopType.body, color = Palette.textSecondary)
             }
+        }
+        if (source != WorkoutSource.DETECTED) item {
+            Text(uiString(R.string.d2b_trace_source_note), style = NoopType.footnote, color = Palette.textTertiary)
         }
         item { DetailHrChart(hr, uiString(R.string.d2b_activity_heart_rate), ((current.endTs - current.startTs) / 120).coerceIn(15, 300)) }
         item {
@@ -278,18 +306,18 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
                         Text(uiString(R.string.d2b_average_disclosure),
                             style = NoopType.caption, color = Palette.textSecondary)
                     }
-                    current.distanceM?.let { distance ->
+                    current.distanceM?.takeIf { it.isFinite() && it >= 0 }?.let { distance ->
                         ContributorRow(uiString(R.string.d2b_distance), UnitFormatter.distanceFromMeters(distance, UnitPrefs.distanceSystem(LocalContext.current)))
                     }
                     ContributorRow(uiString(R.string.d2b_recorded_energy),
-                        detailNumber(current.energyKcal, 0), "kcal")
+                        detailWholeNumber(current.energyKcal), "kcal")
                     if (current.energyKcal != null) Text(uiString(R.string.d2b_energy_note),
                         style = NoopType.caption, color = Palette.textSecondary)
                 }
             }
         }
         item { DetailZones(zones, uiString(if (importedZones) R.string.d2b_imported_zones_note else R.string.d2b_strap_zones_note)) }
-        current.strain?.let { stored -> item { InsightCallout(uiString(R.string.d2b_effort_explanation, detailNumber(stored))) } }
+        effort?.let { stored -> item { InsightCallout(uiString(R.string.d2b_effort_explanation, detailNumber(stored))) } }
         item {
             TextButton(onClick = { edit = true }, modifier = Modifier.fillMaxWidth()) {
                 Text(uiString(if (editable) R.string.d2b_edit_activity else R.string.d2b_copy_activity),
@@ -314,13 +342,10 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
 }
 
 @Composable
-private fun detailDays(vm: AppViewModel): List<DailyMetric> {
-    val recent by vm.recentDays.collectAsStateWithLifecycle()
-    var loaded by remember(vm.activeStrapId) { mutableStateOf<List<DailyMetric>>(emptyList()) }
-    LaunchedEffect(recent, vm.activeStrapId) {
-        loaded = runCatching { vm.repo.daysMerged(vm.activeStrapId) }.getOrDefault(recent)
-    }
-    return loaded.ifEmpty { recent }
+private fun detailDays(vm: AppViewModel, activeId: String): List<DailyMetric> = key(activeId) {
+    val flow = remember(vm, activeId) { vm.repo.daysMergedFlow(activeId) }
+    val days by flow.collectAsStateWithLifecycle(initialValue = emptyList())
+    days
 }
 
 @Composable
@@ -346,9 +371,13 @@ private fun DetailContributor(
         detailDate(selectedKey).minusDays(30).toString(), selectedKey)
     val favorable = if (current != null && current.isFinite() && mean != null && higherFavorable != null && kotlin.math.abs(current - mean) >= 0.05)
         (current > mean) == higherFavorable else null
-    ContributorRow(label, detailNumber(current, decimals), unit,
-        comparison = detailComparison(current, mean, unit, decimals),
-        comparisonColor = when (favorable) { true -> Palette.positive; false -> Palette.statusWarning; null -> Palette.textSecondary })
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+        ContributorRow(label, detailNumber(current, decimals), unit)
+        Text(detailComparison(current, mean, unit, decimals), style = NoopType.caption,
+            color = when (favorable) { true -> Palette.positive; false -> Palette.statusWarning; null -> Palette.textSecondary },
+            textAlign = TextAlign.End)
+    }
 }
 
 private fun detailComparison(current: Double?, mean: Double?, unit: String, decimals: Int): String {
@@ -360,13 +389,12 @@ private fun detailComparison(current: Double?, mean: Double?, unit: String, deci
 }
 
 @Composable
-private fun DetailTrend(days: List<DailyMetric>, selectedKey: String, strain: Boolean) {
+private fun DetailTrend(days: List<DailyMetric>, selectedKey: String) {
     var count by remember { mutableStateOf(7) }
     val selectedDate = detailDate(selectedKey)
     val start = selectedDate.minusDays((count - 1).toLong()).toString()
     val points = days.filter { it.day >= start && it.day <= selectedKey }.mapNotNull { row ->
-        val value = if (strain) row.strain?.let { UnitFormatter.effortValue(it, EffortScale.WHOOP) } else row.recovery
-        value?.takeIf { it.isFinite() }?.let { row.day to it }
+        row.recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }?.let { row.day to it }
     }.sortedBy { it.first }
     NoopCard {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
@@ -383,12 +411,19 @@ private fun DetailTrend(days: List<DailyMetric>, selectedKey: String, strain: Bo
                 style = NoopType.caption, color = Palette.textSecondary)
             if (points.isEmpty()) DetailEmpty(uiString(R.string.d2b_no_trend)) else {
                 val timestamps = points.map { detailDate(it.first).atStartOfDay(ZoneId.systemDefault()).toEpochSecond() }
-                LineChart(points.map { it.second }, Modifier.fillMaxWidth().height(Metrics.trendStripHeight),
-                    color = if (strain) Palette.strainPrimary else Palette.recoveryColor(points.last().second),
-                    selectionEnabled = true, selectionLabels = points.map { detailDateLabel(detailDate(it.first)) },
-                    timestamps = timestamps, segmentIds = hrGapSegmentIds(timestamps, 86400), showsPoints = true,
-                    formatValue = { value -> if (strain) detailNumber(value) else "${detailNumber(value, 0)}%" },
-                    yDomain = if (strain) 0.0..21.0 else 0.0..100.0)
+                val summary = uiString(R.string.trends_trend_a11y, listOf(
+                    uiString(R.string.d2b_labeled_percent, uiString(R.string.explore_latest), detailRecoveryNumber(points.last().second)),
+                    uiString(R.string.d2b_labeled_percent, uiString(R.string.trends_min), detailRecoveryNumber(points.minOf { it.second })),
+                    uiString(R.string.d2b_labeled_percent, uiString(R.string.trends_max), detailRecoveryNumber(points.maxOf { it.second })),
+                ).joinToString(", "))
+                Box(Modifier.clearAndSetSemantics { contentDescription = summary }) {
+                    LineChart(points.map { it.second }, Modifier.fillMaxWidth().height(Metrics.trendStripHeight),
+                        color = Palette.recoveryColor(points.last().second),
+                        selectionEnabled = true, selectionLabels = points.map { detailDateLabel(detailDate(it.first)) },
+                        timestamps = timestamps, segmentIds = hrGapSegmentIds(timestamps, 86400), showsPoints = true,
+                        formatValue = { value -> "${detailRecoveryNumber(value)}%" },
+                        yDomain = 0.0..100.0)
+                }
             }
         }
     }
@@ -400,7 +435,8 @@ private fun DetailHrChart(hr: List<HrBucket>, title: String, bucketSeconds: Long
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
             TrackedSectionHeader(title)
             if (hr.isEmpty()) DetailEmpty(uiString(R.string.d2b_no_hr)) else {
-                Text(uiString(R.string.d2b_hr_window, detailClock(hr.first().bucket), detailClock(hr.last().bucket)),
+                val is24Hour = ClockPrefs.uses24Hour(LocalContext.current)
+                Text(uiString(R.string.d2b_hr_window, clockTimeLabel(hr.first().bucket, is24Hour), clockTimeLabel(hr.last().bucket, is24Hour)),
                     style = NoopType.caption, color = Palette.textSecondary)
                 LineChart(hr.map { it.avgBpm }, Modifier.fillMaxWidth().height(Metrics.chartHeight),
                     color = Palette.strainPrimary, selectionEnabled = true, timestamps = hr.map { it.bucket },
@@ -415,17 +451,20 @@ private fun DetailZones(minutes: List<Double>?, note: String, belowZone1: Double
     NoopCard {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
             TrackedSectionHeader(uiString(R.string.d2b_hr_zones))
-            val total = minutes?.sum() ?: 0.0
-            if (minutes == null) DetailEmpty(uiString(R.string.d2b_no_zones)) else {
-                if (total > 0) SegmentBar(minutes.mapIndexed { index, value -> Palette.hrZoneColor(index + 1) to (value / total).toFloat() },
+            val validMinutes = minutes?.takeIf { it.size == 5 && it.all { value -> RecoveryStrainDetailLogic.wholeNumber(value) != null } }
+            val total = validMinutes?.sum() ?: 0.0
+            if (validMinutes == null) DetailEmpty(uiString(R.string.d2b_no_zones)) else {
+                if (total > 0) SegmentBar(validMinutes.mapIndexed { index, value -> Palette.hrZoneColor(index + 1) to (value / total).toFloat() },
                     Modifier.fillMaxWidth(), height = Metrics.segmentBarHeight)
-                minutes.forEachIndexed { index, value ->
-                    ContributorRow(uiString(R.string.d2b_zone, index + 1), detailNumber(value), uiString(R.string.d2b_minutes),
+                validMinutes.forEachIndexed { index, value ->
+                    ContributorRow(uiString(R.string.d2b_zone, index + 1), detailWholeNumber(value), uiString(R.string.d2b_minutes),
                         comparison = if (total > 0) "${detailNumber(value / total * 100, 0)}%" else null,
                         comparisonColor = Palette.hrZoneColor(index + 1))
                 }
             }
-            if (belowZone1 != null && belowZone1 > 0) ContributorRow(uiString(R.string.d2b_below_zone_one), detailNumber(belowZone1), uiString(R.string.d2b_minutes))
+            belowZone1?.takeIf { it > 0 && RecoveryStrainDetailLogic.wholeNumber(it) != null }?.let {
+                ContributorRow(uiString(R.string.d2b_below_zone_one), detailWholeNumber(it), uiString(R.string.d2b_minutes))
+            }
             Text(note, style = NoopType.caption, color = Palette.textSecondary)
         }
     }
@@ -438,12 +477,20 @@ private fun DetailEmpty(text: String) {
 
 private fun detailDate(key: String): LocalDate = runCatching { LocalDate.parse(key) }.getOrDefault(logicalDayNow())
 private fun detailDateLabel(date: LocalDate): String = date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
-private fun detailClock(ts: Long): String = Instant.ofEpochSecond(ts).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
-private fun detailWorkoutTime(row: WorkoutRow): String = uiString(R.string.d2b_activity_time,
-    detailDateLabel(Instant.ofEpochSecond(row.startTs).atZone(ZoneId.systemDefault()).toLocalDate()), detailClock(row.startTs), detailClock(row.endTs))
+@Composable
+private fun detailWorkoutTime(row: WorkoutRow): String {
+    val is24Hour = ClockPrefs.uses24Hour(LocalContext.current)
+    return uiString(R.string.d2b_activity_time,
+        detailDateLabel(Instant.ofEpochSecond(row.startTs).atZone(ZoneId.systemDefault()).toLocalDate()),
+        clockTimeLabel(row.startTs, is24Hour), clockTimeLabel(row.endTs, is24Hour))
+}
 private fun detailNumber(value: Double?, decimals: Int = 1): String = value?.takeIf { it.isFinite() }
     ?.let { String.format(Locale.getDefault(), "%.${decimals}f", it) } ?: uiString(R.string.d2b_no_value)
-private fun detailDuration(seconds: Double): String {
-    val minutes = (seconds / 60).roundToInt().coerceAtLeast(0)
+private fun detailRecoveryNumber(score: Double?): String =
+    detailNumber(RecoveryStrainDetailLogic.recoveryPercent(score)?.toDouble(), 0)
+private fun detailWholeNumber(value: Double?): String = RecoveryStrainDetailLogic.wholeNumber(value)
+    ?.let { String.format(Locale.getDefault(), "%d", it) } ?: uiString(R.string.d2b_no_value)
+private fun detailDuration(seconds: Double?, fallbackSeconds: Double? = null): String {
+    val minutes = RecoveryStrainDetailLogic.durationMinutes(seconds, fallbackSeconds) ?: return uiString(R.string.d2b_no_value)
     return if (minutes >= 60) uiString(R.string.d2b_hours_minutes, minutes / 60, minutes % 60) else uiString(R.string.d2b_duration_minutes, minutes)
 }

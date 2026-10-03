@@ -24,9 +24,12 @@ internal object RecoveryStrainDemoSeed {
             }
         }
         repo.insertHr(samples)
-        if (endMinute <= startMinute) return
-        val start = todayStart + startMinute * 60
-        val end = todayStart + endMinute * 60
+        val activityDay = if (elapsedMinutes >= 45) today else today.minusDays(1)
+        val activityEndMinute = if (elapsedMinutes >= 45) endMinute else 1125
+        val activityStartMinute = activityEndMinute - 45
+        val activityStart = activityDay.atStartOfDay(zone).toEpochSecond()
+        val start = activityStart + activityStartMinute * 60
+        val end = activityStart + activityEndMinute * 60
         val activityHr = samples.filter { it.ts >= start && it.ts < end }.map { it.bpm }
         repo.upsertWorkouts(listOf(WorkoutRow(
             deviceId = "my-whoop", startTs = start, endTs = end, sport = "Running", source = "manual",

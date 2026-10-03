@@ -1,7 +1,19 @@
 package com.noop.ui
 
+import kotlin.math.floor
+import kotlin.math.roundToLong
+
 internal object RecoveryStrainDetailLogic {
     enum class TargetStatus { Unavailable, Under, Optimal, Over }
+
+    fun recoveryPercent(score: Double?): Int? =
+        score?.takeIf { it.isFinite() && it in 0.0..100.0 }?.let { floor(it).toInt() }
+
+    fun wholeNumber(value: Double?): Long? =
+        value?.takeIf { it.isFinite() && it >= 0 && it < Long.MAX_VALUE.toDouble() }?.roundToLong()
+
+    fun durationMinutes(seconds: Double?, fallbackSeconds: Double? = null): Long? =
+        (seconds ?: fallbackSeconds)?.let { wholeNumber(floor(it / 60)) }
 
     fun priorMean(
         dayKeys: List<String>,
@@ -15,7 +27,8 @@ internal object RecoveryStrainDetailLogic {
         return prior.takeIf { it.isNotEmpty() }?.average()
     }
 
-    fun targetStatus(strain21: Double?, lower: Int?, upper: Int?): TargetStatus {
+    fun targetStatus(displayedStrain: String?, lower: Int?, upper: Int?): TargetStatus {
+        val strain21 = displayedStrain?.toDoubleOrNull()
         if (strain21 == null || !strain21.isFinite() || lower == null || upper == null || lower > upper) {
             return TargetStatus.Unavailable
         }

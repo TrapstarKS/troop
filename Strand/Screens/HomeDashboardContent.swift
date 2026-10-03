@@ -97,23 +97,25 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     }
 
     private var recoveryDial: some View {
-        NavigationLink {
+        let availableRecovery = recovery.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }
+        return NavigationLink {
             RecoveryDetailView(dayKey: recoveryDayKey)
         } label: {
-            dial(label: String(localized: "Recovery"), value: recovery,
-                 display: recovery.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
-                 color: recovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack,
+            dial(label: String(localized: "Recovery"), value: availableRecovery,
+                 display: RecoveryStrainDetailLogic.recoveryPercent(availableRecovery).map(String.init) ?? "—", unit: "%",
+                 color: availableRecovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack,
                  caption: recoveryCaption)
         }
         .buttonStyle(.plain)
     }
 
     private var strainDial: some View {
-        NavigationLink {
+        let availableStrain = strain.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }
+        return NavigationLink {
             StrainDetailView(dayKey: dayKey, effortOverride: strain)
         } label: {
-            dial(label: String(localized: "Strain"), value: strain,
-                 display: strain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", unit: "",
+            dial(label: String(localized: "Strain"), value: availableStrain,
+                 display: availableStrain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", unit: "",
                  color: StrandPalette.strainPrimary, caption: nil)
         }
         .buttonStyle(.plain)
@@ -212,7 +214,9 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                             eventRow(title: WorkoutSource.displaySport(workout.sport),
                                      subtitle: Date(timeIntervalSince1970: TimeInterval(workout.startTs))
                                         .formatted(date: .omitted, time: .shortened),
-                                     value: HomeDayActivities.duration(Double(max(0, workout.endTs - workout.startTs)) / 60),
+                                     value: RecoveryStrainDetailLogic.durationMinutes(seconds: workout.durationS,
+                                        fallbackSeconds: Double(workout.endTs - workout.startTs))
+                                        .map { HomeDayActivities.duration(Double($0)) } ?? "—",
                                      icon: "figure.run", color: StrandPalette.strainPrimary)
                         }
                     }
@@ -270,8 +274,8 @@ enum HomeDayActivities {
     }
 
     static func duration(_ minutes: Double) -> String {
-        guard minutes.isFinite else { return "—" }
-        let rounded = Int(max(0, minutes).rounded())
+        guard minutes.isFinite,
+              let rounded = RecoveryStrainDetailLogic.wholeNumber(max(0, minutes)) else { return "—" }
         return rounded >= 60
             ? String(localized: "\(rounded / 60)h \(rounded % 60)m")
             : String(localized: "\(rounded)m")

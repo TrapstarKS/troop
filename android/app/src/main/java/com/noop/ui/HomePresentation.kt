@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.Lifecycle
@@ -136,13 +137,15 @@ internal fun HomeDials(
     onRecovery: () -> Unit,
     onStrain: () -> Unit,
 ) {
+    val availableRecovery = recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }
+    val availableStrain = strain?.takeIf { it.isFinite() && it in 0.0..100.0 }
     Row(Modifier.fillMaxWidth().padding(vertical = Metrics.space16),
         horizontalArrangement = Arrangement.spacedBy(Metrics.space8), verticalAlignment = Alignment.Top) {
         HomeDial(uiString(R.string.home_sleep), sleep?.roundToInt()?.toString(), "%", sleep,
             Palette.sleepPrimary, Modifier.weight(1f), onSleep)
-        HomeDial(uiString(R.string.home_recovery), recovery?.roundToInt()?.toString(), "%", recovery,
-            recovery?.let { Palette.recoveryColor(it) } ?: Palette.recoveryHigh, Modifier.weight(1f), onRecovery)
-        HomeDial(uiString(R.string.home_strain), strain?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) }, "", strain,
+        HomeDial(uiString(R.string.home_recovery), RecoveryStrainDetailLogic.recoveryPercent(availableRecovery)?.toString(), "%", availableRecovery,
+            availableRecovery?.let { Palette.recoveryColor(it) } ?: Palette.ringTrack, Modifier.weight(1f), onRecovery)
+        HomeDial(uiString(R.string.home_strain), availableStrain?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) }, "", availableStrain,
             Palette.strainPrimary, Modifier.weight(1f), onStrain)
     }
 }
@@ -244,7 +247,7 @@ internal fun HomeDayEvents(day: DailyMetric?, workouts: List<WorkoutRow>, onSlee
             }
         }
         workouts.forEach { workout ->
-            NoopCard(Modifier.clickable(onClick = { onWorkout(workout) })) {
+            NoopCard(Modifier.clickable(onClickLabel = uiString(R.string.today_action_show_workout), role = Role.Button, onClick = { onWorkout(workout) })) {
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Metrics.space12)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Metrics.space4)) {
@@ -255,9 +258,9 @@ internal fun HomeDayEvents(day: DailyMetric?, workouts: List<WorkoutRow>, onSlee
                         Text(uiString(R.string.home_activity_time, start.format(format), end.format(format)),
                             style = NoopType.caption, color = Palette.textSecondary)
                     }
-                    workout.strain?.let {
-                        Text(UnitFormatter.effortDisplay(it, EffortScale.WHOOP), style = NoopType.title2, color = Palette.strainPrimary)
-                    }
+                    Text(workout.strain?.takeIf { it.isFinite() && it in 0.0..100.0 }
+                        ?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) } ?: uiString(R.string.home_no_value),
+                        style = NoopType.title2, color = Palette.strainPrimary)
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Palette.textSecondary,
                         modifier = Modifier.size(Metrics.iconSmall))
                 }

@@ -22,7 +22,15 @@ private struct ActivityDemoHost: View {
             if let row { ActivityDetailView(row: row) }
             else { ProgressView().tint(StrandPalette.strainPrimary) }
         }
-        .task(id: repo.refreshSeq) { row = await repo.workoutRows().first }
+        .task(id: repo.refreshSeq) {
+            let now = Int(Date().timeIntervalSince1970)
+            let rows = await repo.workoutRows()
+            guard !Task.isCancelled else { return }
+            row = rows.first {
+                $0.startTs <= now && $0.endTs <= now && $0.source == "manual" && $0.sport == "Running"
+                    && $0.durationS == 2700 && $0.energyKcal == 310 && $0.strain == 52
+            } ?? rows.first { $0.startTs <= now && $0.endTs <= now }
+        }
     }
 }
 #endif
