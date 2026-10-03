@@ -110,7 +110,12 @@ class ScoringReadinessTest {
         val entered = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()
         val dao = Proxy.newProxyInstance(WhoopDao::class.java.classLoader, arrayOf(WhoopDao::class.java)) {
-            _, method, _ -> if (method.name == "analysisFingerprint") "input" else error("Unexpected DAO ${method.name}")
+            _, method, _ -> when (method.name) {
+                "analysisFingerprint" -> "input"
+                "pairedDevice", "activeDeviceId" -> null
+                "hasWhoop5RrSource" -> false
+                else -> error("Unexpected DAO ${method.name}")
+            }
         } as WhoopDao
         val owner = object : IntelligenceEngine.DayOwnerSource {
             override suspend fun candidatePriorities(): List<Pair<String, Int>> {
