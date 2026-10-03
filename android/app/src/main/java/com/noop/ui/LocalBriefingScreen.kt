@@ -24,7 +24,7 @@ fun LocalBriefingScreen(vm: AppViewModel, onOpenCoach: () -> Unit, onOpenCoachSe
     val snapshot by vm.localBriefing.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var review by remember(notificationContext?.identity) {
-        mutableStateOf(notificationContext?.family in listOf("dayInReview", "strainReady", "streakSummary"))
+        mutableStateOf(notificationContext?.family in listOf("dayInReview", "strainReady", "streakSummary", "strainTarget"))
     }
     val current = snapshot?.let { LocalRecordedReport(it.day, it.recovery, it.sleepMinutes, it.strainTenths, it.streak) }
     val report = LocalRecordedReport.forDisplay(notificationContext, current)

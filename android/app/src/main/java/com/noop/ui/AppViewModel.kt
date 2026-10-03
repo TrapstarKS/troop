@@ -51,6 +51,7 @@ import com.noop.notif.LocalNotificationDispatcher
 import com.noop.notif.LocalNotificationSnapshot
 import com.noop.notif.LocalNotificationRefresh
 import com.noop.notif.hasImportedNotificationInputs
+import com.noop.notif.notificationComputedSources
 import com.noop.notif.StrainTargetNotifier
 import com.noop.notif.ScheduledReportPolicy
 import com.noop.notif.scorePctOrNull
@@ -751,21 +752,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _localBriefing.value = _localBriefing.value?.copy(syncPending = true)
         }
         var inputStable = false
+        var capturedSleepInputs: Pair<List<com.noop.data.SleepSession>, List<com.noop.data.SleepSession>>? = null
+        suspend fun sleepInputs(day: java.time.LocalDate): Pair<List<com.noop.data.SleepSession>, List<com.noop.data.SleepSession>> =
+            withContext(Dispatchers.IO) {
+                val from = day.minusDays(120).atStartOfDay(zone).toEpochSecond()
+                val to = day.plusDays(1).atStartOfDay(zone).toEpochSecond()
+                repository.sleepSessionsUnion(sourceId, from, to, 120) to
+                    repository.computedSleepSessionsUnion(sourceId, from, to, 120)
+            }
         localNotificationRefresh.run(read = {
             val fingerprint = repository.analysisFingerprint()
             val history = withContext(Dispatchers.IO) { repository.daysMerged(sourceId) }
             val row = resolveTodayRow(history, logicalKey, localKey)
             val snapshot = row?.let {
                 val day = java.time.LocalDate.parse(it.day)
-                val sessions = withContext(Dispatchers.IO) {
-                    val from = day.minusDays(120).atStartOfDay(zone).toEpochSecond()
-                    val to = day.plusDays(1).atStartOfDay(zone).toEpochSecond()
-                    WhoopRepository.mergeSleepRichness(
-                        repository.sleepSessionsUnion(sourceId, from, to, 120),
-                        repository.computedSleepSessionsUnion(sourceId, from, to, 120),
-                    ) { session -> java.time.Instant.ofEpochSecond(session.endTs).atZone(zone).toLocalDate().toString() }
-                        .filter { session -> session.endTs > session.effectiveStartTs }
-                }
+                val candidates = sleepInputs(day)
+                capturedSleepInputs = candidates
+                val sessions = WhoopRepository.mergeSleepRichness(candidates.first, candidates.second) { session ->
+                    java.time.Instant.ofEpochSecond(session.endTs).atZone(zone).toLocalDate().toString()
+                }.filter { session -> session.endTs > session.effectiveStartTs }
                 val currentStreak = com.noop.analytics.StreakCalculator.streaks(
                     history.map { metric -> metric.day }, history.map { metric -> metric.recovery != null },
                     localNow.toLocalDate().toString()).current
@@ -784,25 +789,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }, offset, habitual)
                 val wake = selected?.maxOfOrNull { index -> tonight[index].endTs }
                 val importedIds = repository.importedSourceIds(sourceId)
+                val from = minOf(day, localNow.toLocalDate().minusDays(currentStreak.toLong() + 1)).toString()
                 val imported = WhoopRepository.unionByDay(importedIds.map { id ->
-                    val from = minOf(day, localNow.toLocalDate().minusDays(currentStreak.toLong() + 1)).toString()
                     repository.dailyMetrics(id, from, localKey)
                 })
+                val computedCandidates = repository.computedSourceIds(sourceId).flatMap { id ->
+                    repository.dailyMetrics(id, from, localKey)
+                }
+                val wakeSources = selected?.map { index -> tonight[index].deviceId } ?: emptyList()
+                val streakAnchor = if (history.any { metric -> metric.day == localKey && metric.recovery != null }) {
+                    localNow.toLocalDate()
+                } else localNow.toLocalDate().minusDays(1)
+                val streakFrom = streakAnchor.minusDays((currentStreak - 1).coerceAtLeast(0).toLong()).toString()
+                val computedSources = notificationComputedSources(it, imported, computedCandidates, wakeSources,
+                    importedIds, if (currentStreak == 0) emptyList() else history.filter { metric ->
+                        metric.day in streakFrom..streakAnchor.toString() && metric.recovery != null
+                    })
                 val importedStreak = com.noop.analytics.StreakCalculator.streaks(
                     imported.map { metric -> metric.day }, imported.map { metric -> metric.recovery != null }, localKey).current
-                val importedInputs = hasImportedNotificationInputs(it, imported,
-                    selected?.map { index -> tonight[index].deviceId } ?: emptyList(),
-                    importedIds, currentStreak, importedStreak)
+                val importedInputs = computedSources?.isEmpty() == true &&
+                    hasImportedNotificationInputs(it, imported, wakeSources, importedIds, currentStreak, importedStreak)
                 val state = ble.state.value
                 LocalNotificationSnapshot(it.day, wake, it.recovery.scorePctOrNull(),
                     it.totalSleepMin?.roundToInt(), it.strain?.let { value ->
                         (UnitFormatter.effortValue(value, EffortScale.WHOOP) * 10).roundToInt()
                     }, currentStreak, state.backfilling || state.historyPendingSync || state.analyzingHistory ||
-                        !scoring.ready(importedInputs, fingerprint, it.day, importedIds))
+                        (computedSources == null || !scoring.ready(importedInputs, fingerprint, it.day, computedSources)))
             }
             val currentRows = repository.recentDaysMergedFlow(sourceId).first()
-            inputStable = fingerprint == repository.analysisFingerprint() &&
-                row == resolveTodayRow(currentRows, logicalKey, localKey)
+            inputStable = row == resolveTodayRow(currentRows, logicalKey, localKey) &&
+                (row == null || capturedSleepInputs == sleepInputs(java.time.LocalDate.parse(row.day))) &&
+                fingerprint == repository.analysisFingerprint()
             snapshot
         }, isCurrent = {
             inputStable && sourceId == activeStrapId && activeWhoop == ble.activeDeviceIsWhoop &&

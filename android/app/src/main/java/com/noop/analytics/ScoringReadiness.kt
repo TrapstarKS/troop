@@ -14,12 +14,12 @@ class ScoringReadiness {
         val completedSourceId: String? = null,
         val completedDays: Set<String> = emptySet(),
     ) {
-        fun ready(importedInputs: Boolean, inputFingerprint: String, day: String, sourceIds: List<String>): Boolean {
+        fun ready(importedInputs: Boolean, inputFingerprint: String, day: String, computedSources: Collection<String>): Boolean {
             if (pending != 0 || failedGeneration != null) return false
             if (importedInputs) return true
             val completed = computedInputFingerprint
             return !completed.isNullOrEmpty() && completed == inputFingerprint && day in completedDays &&
-                completedSourceId in sourceIds
+                computedSources.isNotEmpty() && computedSources.all { it == completedSourceId }
         }
     }
 

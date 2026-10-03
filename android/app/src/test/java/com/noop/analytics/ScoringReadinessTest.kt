@@ -2,6 +2,8 @@ package com.noop.analytics
 
 import com.noop.data.WhoopDao
 import com.noop.data.WhoopRepository
+import com.noop.data.DailyMetric
+import com.noop.notif.notificationComputedSources
 import java.lang.reflect.Proxy
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
@@ -131,5 +133,48 @@ class ScoringReadinessTest {
         assertEquals(0, failed.pending)
         assertNotNull(failed.failedGeneration)
         assertFalse(failed.ready(false, "input", "today", listOf("my-whoop")))
+    }
+
+    @Test
+    fun canonicalSuccessCannotReleaseActiveComputedFieldsUnderEitherRowIdentity() = runTest {
+        val readiness = ScoringReadiness()
+        val day = "2026-10-03"
+        val active = DailyMetric("strap-b-noop", day, recovery = 80.0, totalSleepMin = 420.0, strain = 40.0)
+        val canonical = active.copy(deviceId = "my-whoop-noop", recovery = 65.0)
+        val imported = DailyMetric("strap-b", day)
+        val retainedImportId = WhoopRepository.mergeDaily(listOf(imported), listOf(active)).single()
+        assertEquals("strap-b", retainedImportId.deviceId)
+        readiness.track(sourceId = "my-whoop", inputFingerprint = { "input" }, completedDays = { setOf(day) }) { }
+        for (row in listOf(active, retainedImportId)) {
+            val required = notificationComputedSources(row, listOf(imported), listOf(active, canonical),
+                listOf("strap-b-noop"), listOf("strap-b", "my-whoop"), listOf(row))!!
+            assertEquals(setOf("strap-b"), required)
+            assertFalse(readiness.state.value.ready(false, "input", day, required))
+        }
+        val canonicalSources = notificationComputedSources(canonical, emptyList(), listOf(canonical),
+            listOf("my-whoop-noop"), listOf("strap-b", "my-whoop"), listOf(canonical))!!
+        assertTrue(readiness.state.value.ready(false, "input", day, canonicalSources))
+        val mixedSources = notificationComputedSources(active, emptyList(), listOf(active, canonical),
+            listOf("my-whoop-noop"), listOf("strap-b", "my-whoop"), listOf(active))!!
+        assertEquals(setOf("strap-b", "my-whoop"), mixedSources)
+        assertFalse(readiness.state.value.ready(false, "input", day, mixedSources))
+        readiness.track(sourceId = "strap-b", inputFingerprint = { "input" }, completedDays = { setOf(day) }) { }
+        assertTrue(readiness.state.value.ready(false, "input", day, setOf("strap-b")))
+        assertFalse(readiness.state.value.ready(false, "input", day, mixedSources))
+    }
+
+    @Test
+    fun perFieldCoalescingRequiresBothActualComputedContributors() = runTest {
+        val day = "2026-10-03"
+        val active = DailyMetric("strap-b-noop", day, recovery = 80.0)
+        val canonical = DailyMetric("my-whoop-noop", day, totalSleepMin = 420.0, strain = 40.0)
+        val row = WhoopRepository.unionByDay(listOf(listOf(active), listOf(canonical))).single()
+        assertEquals("strap-b-noop", row.deviceId)
+        val required = notificationComputedSources(row, emptyList(), listOf(active, canonical),
+            listOf("my-whoop-noop"), listOf("strap-b", "my-whoop"), listOf(row))!!
+        assertEquals(setOf("strap-b", "my-whoop"), required)
+        val readiness = ScoringReadiness()
+        readiness.track(sourceId = "my-whoop", inputFingerprint = { "input" }, completedDays = { setOf(day) }) { }
+        assertFalse(readiness.state.value.ready(false, "input", day, required))
     }
 }

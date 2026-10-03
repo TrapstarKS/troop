@@ -97,4 +97,33 @@ class LocalNotificationRefreshTest {
         assertFalse(hasImportedNotificationInputs(imported, listOf(imported.copy(recovery = null)),
             listOf("my-whoop"), listOf("my-whoop"), 3, 3))
     }
+
+    @Test
+    fun sleepOnlyUpdateCannotPublishOldWakeOrConsumeMarker() = runTest {
+        val refresh = LocalNotificationRefresh()
+        val delayed = CompletableDeferred<Unit>()
+        val row = DailyMetric("my-whoop", "2026-10-03", totalSleepMin = 420.0)
+        var sleepInputs = listOf(1_000L to 2_000L)
+        var briefingWake: Long? = null
+        var markers = 0
+        var inputStable = false
+        val older = launch {
+            refresh.run(read = {
+                val capturedRow = row
+                val capturedSleep = sleepInputs.toList()
+                delayed.await()
+                inputStable = capturedRow == row && capturedSleep == sleepInputs
+                capturedSleep.last().second
+            }, isCurrent = { inputStable }) {
+                briefingWake = it
+                markers++
+            }
+        }
+        runCurrent()
+        sleepInputs = listOf(1_100L to 2_100L)
+        delayed.complete(Unit)
+        older.join()
+        assertEquals(null, briefingWake)
+        assertEquals(0, markers)
+    }
 }
