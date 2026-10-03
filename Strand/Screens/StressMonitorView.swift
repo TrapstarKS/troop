@@ -30,7 +30,7 @@ struct StressMonitorView: View {
         let windowEnd = min(latest.startTs + DaytimeStress.bucketSeconds, latestSampleTs)
         return date < Calendar.current.startOfDay(for: clock) || Int(clock.timeIntervalSince1970) - windowEnd <= 900 ? latest : nil
     }
-    private var daily: (day: String, value: Double)? { stored.first { healthspanDaysAgo($0.day, reference: date) == 0 } }
+    private var daily: (day: String, value: Double)? { stored.first { $0.value.isFinite && (0...3).contains($0.value) && healthspanDaysAgo($0.day, reference: date) == 0 } }
     private var minutes: [Int] {
         HealthspanPresentation.zoneMinutes(hours: result.hours.map { point in
             (level: point.level, minutes: max(0, min(point.startTs + DaytimeStress.bucketSeconds, observedEnd) - max(point.startTs, firstSampleTs ?? point.startTs)) / 60)
@@ -235,7 +235,7 @@ struct StressMonitorPreviewCard: View {
                 }.foregroundStyle(StrandPalette.textPrimary)
             }
         }.buttonStyle(.plain)
-        .task(id: repo.refreshSeq) { daily = (await repo.series(key: "stress", source: "my-whoop")).last }
+        .task(id: repo.refreshSeq) { daily = (await repo.series(key: "stress", source: "my-whoop")).last { $0.value.isFinite && (0...3).contains($0.value) && healthspanDate($0.day) != nil } }
     }
 }
 
