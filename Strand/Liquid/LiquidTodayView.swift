@@ -401,15 +401,6 @@ struct LiquidTodayView: View {
         .liquidMediumHaptic(trigger: pullHaptic)
         // hydrationSeq joins the id so logging a drink re-reads the card immediately, the same trigger set
         // classic TodayView's reloadHydration() uses.
-        .onChangeCompat(of: selectedDayOffset) { _ in
-            liveEffortRequest = UUID()
-            cachedDisplayDay = nil
-            cachedChargeDisplay = .noData
-            cachedRecoveryDayKey = nil
-            liveTodayStrain = nil
-            restScore = nil
-            workouts = []
-        }
         .task(id: "\(repo.refreshSeq)-\(selectedDayOffset)-\(repo.hydrationSeq)-\(hydrationEnabled)-\(dayCycleModeRaw)") {
             DashboardCardPrefs.migrateLegacyStepsAverage()
             await load()
@@ -1339,11 +1330,12 @@ struct LiquidTodayView: View {
     private func ktileFor(_ metric: KeyMetric, hrv: Double?, rhr: Double?) -> some View {
         switch metric {
         case .charge:
+            let recovery = HomeScoreValue.resolve(chargeDisplay.pct)
             // Reads the SAME resolved Charge the hero draws, not `displayDay?.recovery` raw — the tile and the
             // hero are the same number, so a carry that reached only one of them would put two answers for
             // Charge on one screen. (#543: one prior row feeds every recovery-derived read-out.) Strain below
             // stays raw, matching the Effort hero, which correctly does not carry.
-            ktile(String(localized: "Recovery"), icon: keyMetricIcon(metric), intText(chargeDisplay.pct), "%", chargeDisplay.pct.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack, frac(chargeDisplay.pct), key: HeroRingMetric.charge)
+            ktile(String(localized: "Recovery"), icon: keyMetricIcon(metric), RecoveryStrainDetailLogic.recoveryPercent(recovery).map(String.init) ?? "—", "%", recovery.map(StrandPalette.recoveryColor) ?? StrandPalette.ringTrack, frac(recovery), key: HeroRingMetric.charge)
         case .effort:
             // #492: Effort is a load index (0–100 NOOP / 0–21 WHOOP), NOT a percentage, and the unit was
             // wrong on either axis. Fixed on Android and in `TodayView` at the time; THIS view kept the old
@@ -1352,7 +1344,7 @@ struct LiquidTodayView: View {
             // rows use, so all three now agree by construction.
             ktile(String(localized: "Strain"), icon: keyMetricIcon(metric), effortStrain(displayDay).map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", "", StrandPalette.strainPrimary, frac(effortStrain(displayDay)), key: HeroRingMetric.effort)
         case .rest:
-            ktile(String(localized: "Sleep"), icon: keyMetricIcon(metric), intText(restScore), "%", StrandPalette.sleepPrimary, frac(restScore), key: HeroRingMetric.rest)
+            ktile(String(localized: "Sleep"), icon: keyMetricIcon(metric), intText(HomeScoreValue.resolve(restScore)), "%", StrandPalette.sleepPrimary, frac(HomeScoreValue.resolve(restScore)), key: HeroRingMetric.rest)
         case .hrv:
             ktile("HRV", icon: keyMetricIcon(metric), intText(hrv), "ms", StrandPalette.metricCyan, fracOver(hrv, 120), key: "hrv")
         case .restingHr:
@@ -1442,7 +1434,8 @@ struct LiquidTodayView: View {
                 NavigationLink(value: TabRoute.strainDetailForDay(dayKey: selectedDayKey, effortOverride: effortStrain(displayDay).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }, windowDayKey: Repository.localDayKey(selectedLogicalDay))) { tile }
                 .buttonStyle(.plain)
             } else if key == HeroRingMetric.rest {
-                NavigationLink(value: TabRoute.sleepDetailForDay(dayKey: selectedDayKey)) { tile }.buttonStyle(.plain)
+                NavigationLink(value: TabRoute.sleepDetailForDay(dayKey: selectedDayKey)) { tile }
+                .buttonStyle(.plain)
             } else if let metric = detailMetric ?? key.flatMap({ key in
                 MetricCatalog.all.first(where: { $0.key == key })
             }) {
@@ -1591,11 +1584,25 @@ struct LiquidTodayView: View {
     private func load() async {
         let effortRequest = UUID()
         liveEffortRequest = effortRequest
+        // Reset in the same task that owns the request token. A separate day-change callback can
+        // run after this task starts and invalidate the new load, leaving the selected day empty.
+        cachedDisplayDay = nil
+        cachedChargeDisplay = .noData
+        cachedRecoveryDayKey = nil
+        liveTodayStrain = nil
+        restScore = nil
+        workouts = []
         let loadDayKey = selectedDayKey
+        let loadDeviceId = repo.deviceId
+        let loadLogicalDay = selectedLogicalDay
+        let loadOffset = selectedDayOffset
+        let loadMode = dayCycleMode
+        let loadNow = Date()
         let loadSeq = repo.refreshSeq
         func isCurrentRequest() -> Bool {
             !Task.isCancelled && liveEffortRequest == effortRequest
                 && selectedDayKey == loadDayKey && repo.refreshSeq == loadSeq
+                && repo.deviceId == loadDeviceId && selectedDayOffset == loadOffset && dayCycleMode == loadMode
         }
         // #989: today's hydration total + goal. One metricSeries row + a UserDefaults read, same as classic
         // TodayView.reloadHydration(). Cleared when the feature is off so the card can't show a stale total.
@@ -1646,25 +1653,29 @@ struct LiquidTodayView: View {
             todayKey: tkey)
 
         let cal = Calendar.current
-        let dayStart = cal.startOfDay(for: selectedLogicalDay)
-        let calendarFrom = Int(dayStart.timeIntervalSince1970)
-        // today → midnight..now; a past day → its full 24h (a missing morning reads as empty space).
-        let calendarTo: Int = selectedDayOffset == 0
-            ? Int(Date().timeIntervalSince1970)
-            : Int((cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart).timeIntervalSince1970)
-        let nextDayKey = Repository.localDayKey(cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart)
-        let cycleMarkers = dayCycleMode == .sleepOnset
+        let dayStart = cal.startOfDay(for: loadLogicalDay)
+        let nextDay = cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let markerDay = RecoveryStrainDetailLogic.date(loadDayKey) ?? dayStart
+        let nextMarkerDay = cal.date(byAdding: .day, value: 1, to: markerDay) ?? markerDay
+        let nextMarkerKey = Repository.localDayKey(nextMarkerDay)
+        let cycleMarkers = loadMode == .sleepOnset
             ? await repo.exploreSeries(key: DayCycleIntelligenceIntegration.onsetKey, source: "my-whoop") : []
-        let from = cycleMarkers.last(where: { $0.day == selectedDayKey }).map { Int($0.value) } ?? calendarFrom
-        let toExclusive = cycleMarkers.last(where: { $0.day == nextDayKey }).map { Int($0.value) } ?? calendarTo
-        let to = max(from, toExclusive - 1)
+        let window = RecoveryStrainDetailLogic.strainWindow(
+            calendarStart: Int(dayStart.timeIntervalSince1970), nextCalendarStart: Int(nextDay.timeIntervalSince1970),
+            isCurrentDay: loadOffset == 0, sleepOnsetMode: loadMode == .sleepOnset,
+            onset: RecoveryStrainDetailLogic.timestampSeconds(cycleMarkers.last { $0.day == loadDayKey }?.value),
+            nextOnset: RecoveryStrainDetailLogic.timestampSeconds(cycleMarkers.last { $0.day == nextMarkerKey }?.value),
+            now: Int(loadNow.timeIntervalSince1970))
+        guard isCurrentRequest() else { return }
+        let from = window?.lowerBound ?? Int(dayStart.timeIntervalSince1970)
+        let to = window?.upperBound ?? from
         // #1001: in-progress Effort for TODAY, over the SAME window resolved just above (the day-cycle
         // onset when that mode is on, else calendar midnight → now) with the identical params the daily
         // pass uses, so the live number matches what the engine will eventually persist. Below
         // `StrainScorer.minReadings` the scorer returns nil and the read-outs fall back to the stored row
         // — never a fabricated value. A navigated past day clears it.
         let liveStrainLocal: Double?
-        if selectedDayOffset == 0 {
+        if loadOffset == 0, window != nil {
             // An EXPLICIT limit, not the 8000 default: that default is chart-sized, and this read is
             // whole-window. `hrSamples` is `ORDER BY ts ASC LIMIT`, so truncation drops the NEWEST rows —
             // at the ~18k HR rows a real day banks, the default covered roughly the first ten hours and the
@@ -1700,7 +1711,7 @@ struct LiquidTodayView: View {
         async let spo2CandA = repo.exploreSeries(key: "spo2_candidate", source: "my-whoop")
         async let weightA = repo.series(key: "weight", source: "apple-health", days: 91)
         async let appleA = repo.appleDailyRows()
-        async let hrA = repo.hrBuckets(from: from, to: to, bucketSeconds: 300)
+        async let hrA: [HRBucket] = window == nil ? [] : await repo.hrBuckets(from: from, to: to, bucketSeconds: 300)
         async let wkA = repo.workoutRows()
         // Ask the same cross-source resolver the Classic Today view uses which source actually won each
         // displayed score. Include the exact carried-Charge day; a fixed relative lookback can miss a
@@ -2072,7 +2083,7 @@ struct LiquidTodayView: View {
     /// differently. `d` for today is always today's row or nil, never a prior day, so the floor cannot
     /// resurrect a stale day — it only stops a read-out dropping below what today has already earned.
     private func effortStrain(_ d: DailyMetric?) -> Double? {
-        StrainScorer.effectiveEffort(live: selectedDayOffset == 0 ? liveTodayStrain : nil, stored: d?.strain)
+        HomeScoreValue.resolve(StrainScorer.effectiveEffort(live: selectedDayOffset == 0 ? liveTodayStrain : nil, stored: d?.strain))
     }
 
     private func effortText(_ s: Double?) -> String {

@@ -4,6 +4,16 @@ import WhoopStore
 
 @MainActor
 final class HomeDayActivitiesTests: XCTestCase {
+    func testInvalidImportedScoresRemainUnavailable() {
+        for value in [Double.nan, .infinity, -.infinity, -1, 101, 1e100] {
+            XCTAssertNil(HomeScoreValue.resolve(value))
+        }
+        XCTAssertNil(HomeScoreValue.resolve(nil))
+        for value in [0.0, 33.5, 34, 66.5, 67, 100] {
+            XCTAssertEqual(HomeScoreValue.resolve(value), value)
+        }
+    }
+
     func testManualEntryKeepsTheDisplayedCivilDayAndNeverStartsInTheFuture() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

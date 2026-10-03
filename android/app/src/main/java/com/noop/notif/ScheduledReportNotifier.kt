@@ -10,7 +10,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.noop.R
 import com.noop.ui.NoopPrefs
-import kotlin.math.roundToInt
 
 // MARK: - Scheduled report notifications (#517)
 //
@@ -211,6 +210,3 @@ object ScheduledReportNotifier {
         }
     }
 }
-
-/** Round a 0–100 score to a whole number for display, or null if absent (never fabricate a 0). */
-internal fun Double?.scorePctOrNull(): Int? = this?.roundToInt()

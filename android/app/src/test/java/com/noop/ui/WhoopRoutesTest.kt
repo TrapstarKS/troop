@@ -7,6 +7,16 @@ import org.junit.Test
 
 class WhoopRoutesTest {
     @Test
+    fun `selected Sleep date has its own restorable entry without changing its caller tab`() {
+        val route = WhoopRoute.sleepForDay("2026-10-02")
+        assertEquals("sleep/2026-10-02", route)
+        assertEquals("sleep/{dayKey}", WhoopRoute.sleepDetailForDay)
+        assertEquals(Destination.Sleep, Destination.forRoute(route))
+        assertNull(Destination.rootForRoute(route))
+        assertEquals("sleep", WhoopRoute.sleepDetail)
+    }
+
+    @Test
     fun `only exact roots change the selected shell tab`() {
         listOf(Destination.Today, Destination.Health, Destination.Plan, Destination.More).forEach {
             assertEquals(it, Destination.rootForRoute(it.route))

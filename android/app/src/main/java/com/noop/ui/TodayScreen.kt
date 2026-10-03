@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Accessibility
 import androidx.compose.material.icons.filled.Add
@@ -336,6 +337,8 @@ fun TodayScreen(
     onOpenPlan: (() -> Unit)? = null,
     onOpenRecoveryForDay: ((String) -> Unit)? = null,
     onOpenStrainForDay: ((String, Double?) -> Unit)? = null,
+    onOpenSleepPlanner: (() -> Unit)? = null,
+    onOpenSleepForDay: ((String) -> Unit)? = null,
 ) {
     val today by viewModel.today.collectAsStateWithLifecycle()
     val alert by viewModel.healthAlert.collectAsStateWithLifecycle()
@@ -492,7 +495,7 @@ fun TodayScreen(
         // "Today · <today>" over yesterday's values, which disagreed with the Intelligence History row for
         // the same data (#434). iOS/Mac already label by the shown row's day; this brings Android to parity.
         val keyDate = runCatching { LocalDate.parse(selectedDayKey) }.getOrNull() ?: selectedDay
-        val date = keyDate.format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.getDefault()))
+        val date = keyDate.format(DateTimeFormatter.ofPattern(if (keyDate.year == todayDate.year) "EEE, d MMM" else "EEE, d MMM yyyy", Locale.getDefault()))
         when (selectedDayOffset) {
             0 -> uiString(R.string.today_day_with_date, date)
             1 -> uiString(R.string.today_yesterday_with_date, date)
@@ -904,9 +907,9 @@ fun TodayScreen(
         // stale, fall through to null so the Rest ring shows its needs-a-tracked-night state instead of a
         // frozen number. `selectedDayKey` is today's key at offset 0, so it anchors the freshness check.
         val latest = byDay.entries.maxByOrNull { it.key }
-        restScoreForDay = freshRestScore(
+        restScoreForDay = homeScoreValue(freshRestScore(
             todayValue = byDay[selectedDayKey], lastDay = latest?.key, lastValue = latest?.value,
-            isTodaySelected = selectedDayOffset == 0, today = selectedDayKey)
+            isTodaySelected = selectedDayOffset == 0, today = selectedDayKey))
     }
 
     // Provenance (COMPONENT 4): the REAL per-metric merge winner for the selected day's three hero scores,
@@ -942,22 +945,42 @@ fun TodayScreen(
     // `minReadings`, so before there's enough HR the gauge falls back to the stored value and never shows a
     // fabricated number. Any past day → null (the gauge uses the stored strain). Keyed on the same inputs
     // as the day-scoped loads so it reloads as the selector moves and as a sync/import grows the HR window.
+    val publishedHomeStrap by viewModel.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val homeStrapId = effectiveActiveStrapId(publishedHomeStrap, viewModel.deviceId)
     var liveTodayStrain by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(days, selectedDayKey, selectedDayOffset, activeDayCycle, dayCycleMode) {
+    LaunchedEffect(days, selectedDayKey, selectedDayOffset, activeDayCycle, dayCycleMode, homeStrapId,
+        liveSnap.lastSyncAt, liveSnap.syncChunksThisSession) {
         liveTodayStrain = if (selectedDayOffset == 0) withContext(Dispatchers.Default) {
             val zone = ZoneId.systemDefault()
             val now = System.currentTimeMillis() / 1000
-            val start = activeDayCycleStart(
-                mode = dayCycleMode,
-                confirmedOrSyntheticOnset = activeDayCycle?.onsetTs,
+            val strapDeviceId = homeStrapId
+            val markerDay = LocalDate.parse(selectedDayKey)
+            val nextMarkerDay = markerDay.plusDays(1)
+            val markers = if (dayCycleMode == DayCycleMode.SLEEP_ONSET) try {
+                viewModel.repo.metricSeriesComputedUnion(strapDeviceId, DayCycleIntelligenceIntegration.ONSET_KEY,
+                    markerDay.toString(), nextMarkerDay.toString())
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) { emptyList() } else emptyList()
+            val window = RecoveryStrainDetailLogic.strainWindow(
                 calendarStart = selectedDay.atStartOfDay(zone).toEpochSecond(),
-            )
+                nextCalendarStart = selectedDay.plusDays(1).atStartOfDay(zone).toEpochSecond(),
+                isCurrentDay = true, sleepOnsetMode = dayCycleMode == DayCycleMode.SLEEP_ONSET,
+                onset = RecoveryStrainDetailLogic.timestampSeconds(markers.lastOrNull { it.day == markerDay.toString() }?.value),
+                nextOnset = RecoveryStrainDetailLogic.timestampSeconds(markers.lastOrNull { it.day == nextMarkerDay.toString() }?.value),
+                now = now,
+            ) ?: return@withContext null
             // #908: read the active strap ∪ canonical "my-whoop" union, NOT a hardcoded "my-whoop". A strap
             // re-added through the device manager banks its live HR under its own fresh id, so a pinned
             // "my-whoop" read returned nothing and Effort integrated to 0 off an empty series. Single-WHOOP
             // install resolves to "my-whoop" ⇒ one id ⇒ byte-identical read.
-            val todayHr = runCatching { viewModel.repo.hrSamplesUnion(viewModel.activeStrapId, start, now) }
-                .getOrDefault(emptyList())
+            val todayHr = try {
+                viewModel.repo.hrSamplesUnion(strapDeviceId, window.first, window.last)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) { emptyList() }
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (strapDeviceId != viewModel.activeStrapId) return@withContext null
             // effMaxHR resolution matches AnalyticsEngine: manual HR-max override first, else Tanaka from age.
             val effMaxHR = profileStore.hrMaxOverride.takeIf { it > 0 }?.toDouble()
                 ?: if (profileStore.age > 0) StrainScorer.tanakaHRmax(profileStore.age.toDouble()) else null
@@ -978,10 +1001,10 @@ fun TodayScreen(
     // badge show what the hero ring shows. Both used to read `displayMetric.strain` straight off the daily
     // row, which only refreshes when the heavy daily pass runs — so an active morning read 2.3 on the ring
     // and 0.5 in the other two. The ring resolves the same way from the same rule (see ScoreHeroRow).
-    val effortForDay = StrainScorer.effectiveEffort(
+    val effortForDay = homeScoreValue(StrainScorer.effectiveEffort(
         live = if (selectedDayOffset == 0) liveTodayStrain else null,
         stored = displayMetric?.strain,
-    )
+    ))
 
     // Recovery cold-start: recovery is null until the HRV baseline crosses the seed gate
     // (Baselines.minNightsSeed valid nights). Show honest "calibrating, N of 4 nights" progress
@@ -1076,6 +1099,19 @@ fun TodayScreen(
     }
     var recoveryDetailDayKey by remember { mutableStateOf<String?>(null) }
     var strainDetailRequest by remember { mutableStateOf<Triple<String, Double?, String>?>(null) }
+    var sleepDetailDayKey by remember { mutableStateOf<String?>(null) }
+    var sleepDismissAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val dispatchAfterSleepClose: (() -> Unit) -> Unit = { action ->
+        sleepDismissAction = action
+        sleepDetailDayKey = null
+    }
+    LaunchedEffect(sleepDetailDayKey, sleepDismissAction) {
+        if (sleepDetailDayKey == null) {
+            val action = sleepDismissAction ?: return@LaunchedEffect
+            sleepDismissAction = null
+            action()
+        }
+    }
     var showWeeklyPlan by remember { mutableStateOf(false) }
     val openWeeklyPlan: () -> Unit = {
         if (onOpenPlan != null) onOpenPlan()
@@ -1092,10 +1128,15 @@ fun TodayScreen(
         if (onOpenStrainForDay != null) onOpenStrainForDay(selectedDayKey, effortForDay)
         else strainDetailRequest = Triple(selectedDayKey, effortForDay, selectedDay.toString())
     }
+    val openSleepForDisplayedDay: () -> Unit = {
+        if (onOpenSleepForDay != null) onOpenSleepForDay(selectedDayKey)
+        else sleepDetailDayKey = selectedDayKey
+    }
     val openDashboardMetric: (String) -> Unit = { key ->
         when (key) {
             HERO_CHARGE_METRIC_KEY -> openRecoveryForDisplayedDay()
             HERO_EFFORT_METRIC_KEY -> openStrainForDisplayedDay()
+            HERO_REST_METRIC_KEY -> openSleepForDisplayedDay()
             else -> onOpenMetric(key)
         }
     }
@@ -1207,18 +1248,42 @@ fun TodayScreen(
     val openAddActivity: () -> Unit = {
         val now = java.time.ZonedDateTime.now()
         val nowMillis = now.toInstant().toEpochMilli()
-        manualActivityEndMillis = LocalDate.parse(selectedDayKey).atTime(now.toLocalTime()).atZone(now.zone)
+        manualActivityEndMillis = selectedDay.atTime(now.toLocalTime()).atZone(now.zone)
             .toInstant().toEpochMilli().coerceAtMost(nowMillis)
     }
     val homeWorkoutRows by viewModel.workouts.collectAsStateWithLifecycle()
-    val publishedHomeStrap by viewModel.activeStrapIdFlow.collectAsStateWithLifecycle()
-    val homeStrapId = effectiveActiveStrapId(publishedHomeStrap, viewModel.deviceId)
-    LaunchedEffect(days, selectedDayKey, homeStrapId, homeWorkoutRows) {
+    // Preserve the existing Test Centre battery analysis after replacing the old source-summary header.
+    LaunchedEffect(homeStrapId, activeIsWhoop, liveSnap.connected, liveSnap.batteryPct,
+        liveSnap.whoop5, liveSnap.charging) {
+        val testCentre = com.noop.testcentre.TestCentre.from(context)
+        if (!activeIsWhoop || !liveSnap.connected || liveSnap.charging == true ||
+            !testCentre.active(com.noop.testcentre.TestDomain.BATTERY)) return@LaunchedEffect
+        val now = System.currentTimeMillis() / 1000
+        val rated = if (liveSnap.whoop5) BatteryEstimator.ratedLifeHoursWhoop5 else BatteryEstimator.ratedLifeHoursWhoop4
+        val trace = try {
+            val samples = viewModel.repo.batterySamples(homeStrapId, now - 14L * 86_400, now, limit = 2_000)
+                .mapNotNull { sample -> sample.soc?.let { sample.ts to it } }
+            withContext(Dispatchers.Default) { BatteryEstimator.estimateTrace(samples, rated).second }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            viewModel.ble.externalLog("Battery analysis unavailable (${error.javaClass.simpleName})",
+                com.noop.testcentre.TestDomain.BATTERY)
+            return@LaunchedEffect
+        }
+        ensureActive()
+        if (homeStrapId != viewModel.activeStrapId || !testCentre.active(com.noop.testcentre.TestDomain.BATTERY)) {
+            return@LaunchedEffect
+        }
+        for (line in trace) viewModel.ble.externalLog(line, com.noop.testcentre.TestDomain.BATTERY)
+    }
+    LaunchedEffect(days, selectedDay, selectedDayKey, homeStrapId, homeWorkoutRows) {
         val effectDayKey = selectedDayKey
+        val effectWindowDay = selectedDay
         val effectStrapId = homeStrapId
         homeDayWorkouts = emptyList()
         homeDayStress = null
-        val date = LocalDate.parse(effectDayKey)
+        val date = effectWindowDay
         val zone = ZoneId.systemDefault()
         val start = date.atStartOfDay(zone).toEpochSecond()
         val end = date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1
@@ -1302,12 +1367,18 @@ fun TodayScreen(
                 dateLabel = when (selectedDayOffset) {
                     0 -> uiString(R.string.today_day_today)
                     1 -> uiString(R.string.today_day_yesterday)
-                    else -> date.format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()))
+                    else -> date.format(DateTimeFormatter.ofPattern(if (date.year == todayDate.year) "d MMM" else "d MMM yyyy", Locale.getDefault()))
                 },
                 offset = selectedDayOffset, streak = streaks.current,
                 battery = HeaderBatteryDisplay.resolve(activeIsWhoop, liveSnap.connected, liveSnap.batteryPct, ouraBatteryPct),
                 connected = liveSnap.connected,
                 onPick = { selectedDayOffset = it }, onProfile = onOpenSettings, onDevices = onOpenDevices,
+                recordingState = if (selectedDayOffset == 0) homeRecordingState(
+                    connected = liveSnap.connected, scanning = liveSnap.scanning,
+                    backfilling = liveSnap.backfilling, hrStreaming = liveSnap.hrStreaming,
+                    hasSessionHistory = liveSnap.syncChunksThisSession > 0,
+                    historySyncExperimental = liveSnap.historySyncExperimental,
+                ) else null,
             )
         }
         item(key = "home-dials") {
@@ -1316,17 +1387,9 @@ fun TodayScreen(
                     sleep = restScoreForDay,
                     recovery = displayMetric?.recovery ?: lastScoredCharge?.value,
                     strain = effortForDay,
-                    onSleep = onOpenSleep,
+                    onSleep = openSleepForDisplayedDay,
                     onRecovery = openRecoveryForDisplayedDay, onStrain = openStrainForDisplayedDay,
                 )
-                heroSourceLabel?.let { Text(it, style = NoopType.caption, color = Palette.textSecondary) }
-                if (selectedDayOffset == 0) HomeRecordingStatus(homeRecordingState(
-                    connected = liveSnap.connected, scanning = liveSnap.scanning,
-                    backfilling = liveSnap.backfilling, hrStreaming = liveSnap.hrStreaming,
-                    hasSessionHistory = liveSnap.syncChunksThisSession > 0,
-                    historySyncExperimental = liveSnap.historySyncExperimental,
-                ))
-                scanHint?.let { Text(it, style = NoopType.caption, color = Palette.textSecondary) }
                 if (chargeLegacyRrGap) ChargeLegacyRrGapNote()
                 else if (displayMetric?.recovery == null) ScoreStateNote(scoreState)
                 if (restPendingSync(restScoreForDay, liveSnap.backfilling, live.historyPendingSync, selectedDayOffset == 0)) {
@@ -1365,7 +1428,7 @@ fun TodayScreen(
                 if (selectedDayOffset == 0 && activeLiveSession != null) {
                     LiveSessionEntryCard(onOpen = { showLiveSession = true })
                 }
-                HomeDayEvents(displayMetric, homeDayWorkouts, onOpenSleep) { selectedWorkoutRow = it }
+                HomeDayEvents(displayMetric, homeDayWorkouts, openSleepForDisplayedDay) { selectedWorkoutRow = it }
             }
         }
         item(key = "home-plan") { HomePlanSummary(viewModel, openWeeklyPlan) }
@@ -1374,7 +1437,7 @@ fun TodayScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TrackedSectionHeader(uiString(R.string.home_my_dashboard), modifier = Modifier.weight(1f))
                     TodayEditAction(onClick = { showMetricsEditor = true },
-                        contentDescription = uiString(R.string.l10n_today_screen_edit_key_metrics_f95e61a4))
+                        contentDescription = uiString(R.string.home_my_dashboard))
                 }
                 MetricGrid(
                     d = stepResolvedDisplayMetric, w = window,
@@ -1405,6 +1468,12 @@ fun TodayScreen(
                     color = Palette.textPrimary, modifier = Modifier.weight(1f))
                 Icon(if (homeExtrasExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     null, tint = Palette.textSecondary)
+            }
+        }
+        if (heroSourceLabel != null || scanHint != null) item(key = "home-provenance") {
+            Column(verticalArrangement = Arrangement.spacedBy(Metrics.space4)) {
+                heroSourceLabel?.let { Text(it, style = NoopType.caption, color = Palette.textSecondary) }
+                scanHint?.let { Text(it, style = NoopType.caption, color = Palette.textSecondary) }
             }
         }
         if (homeExtrasExpanded) item(key = "home-extra-dashboard") {
@@ -1503,6 +1572,44 @@ fun TodayScreen(
                         }
                     }
                     Box(Modifier.weight(1f)) { WeeklyPlanScreen(viewModel) }
+                }
+            }
+        }
+    }
+
+    sleepDetailDayKey?.let { dayKey ->
+        var showPlanner by remember(dayKey) { mutableStateOf(false) }
+        val backFromSleepPage: () -> Unit = {
+            if (showPlanner) showPlanner = false else sleepDetailDayKey = null
+        }
+        Dialog(
+            onDismissRequest = backFromSleepPage,
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            BackHandler(onBack = backFromSleepPage)
+            Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
+                Column {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        if (showPlanner) TextButton(onClick = { showPlanner = false }) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = Palette.textPrimary,
+                                modifier = Modifier.size(Metrics.iconSmall))
+                            Text(uiString(R.string.nav_sleep), style = NoopType.headline, color = Palette.textPrimary)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { sleepDetailDayKey = null }) {
+                            Text(uiString(R.string.l10n_today_screen_done_e9b450d1), style = NoopType.headline, color = Palette.textPrimary)
+                        }
+                    }
+                    Box(Modifier.weight(1f)) {
+                        if (showPlanner) SmartAlarmScreen(viewModel) else {
+                            SleepScreen(vm = viewModel, initialDayKey = dayKey,
+                                onOpenJournal = { dispatchAfterSleepClose(onOpenJournal) },
+                                onOpenAlarms = {
+                                    if (onOpenSleepPlanner != null) dispatchAfterSleepClose(onOpenSleepPlanner)
+                                    else showPlanner = true
+                                })
+                        }
+                    }
                 }
             }
         }
@@ -5510,13 +5617,12 @@ private fun MetricGrid(
     // editor + enabled-order + collapse expander are all preserved; only the tile look changes.
     val descriptors: Map<KeyMetric, KeyTileData> = mapOf(
         KeyMetric.CHARGE to run {
-            val v = d?.recovery ?: lastScoredCharge?.value
+            val v = homeScoreValue(d?.recovery ?: lastScoredCharge?.value)
             KeyTileData(
                 label = uiString(R.string.l10n_today_screen_recovery_ea924f72),
-                value = d?.recovery?.let { "${it.roundToInt()}" }
-                    ?: recoveryCalibration?.let { "$it/${Baselines.minNightsSeed}" }
-                    ?: lastScoredCharge?.let { "${it.value.roundToInt()}" } ?: NO_DATA,
-                unit = if (d?.recovery != null || lastScoredCharge != null) "%" else "",
+                value = RecoveryStrainDetailLogic.recoveryPercent(v)?.toString()
+                    ?: recoveryCalibration?.let { "$it/${Baselines.minNightsSeed}" } ?: NO_DATA,
+                unit = if (v != null) "%" else "",
                 tint = v?.let { Palette.recoveryColor(it) } ?: Palette.chargeColor,
                 frac = v?.let { (it / 100.0).coerceIn(0.0, 1.0) },
                 spark = w.recovery,
@@ -6024,22 +6130,35 @@ private fun HeartRateTrendCard(
     val live by viewModel.live.collectAsStateWithLifecycle()
     // Re-load when the day list changes (an import updates it), when the day selector moves, and, via the
     // sync tokens, when a strap offload banks fresh HR samples for the current window. Also on first compose.
-    LaunchedEffect(days, selectedDay, today, live.lastSyncAt, live.syncChunksThisSession, dayCycleMode) {
+    LaunchedEffect(days, selectedDay, today, displayMetric?.day, live.lastSyncAt, live.syncChunksThisSession, dayCycleMode) {
         val zone = ZoneId.systemDefault()
         val calendarStart = selectedDay.atStartOfDay(zone).toEpochSecond()
         val nextStart = selectedDay.plusDays(1).atStartOfDay(zone).toEpochSecond()
         val now = System.currentTimeMillis() / 1000
-        val calendarEnd = if (selectedDay == today) now else (nextStart - 1)
+        val markerDay = displayMetric?.day?.let(LocalDate::parse) ?: selectedDay
+        val nextMarkerDay = markerDay.plusDays(1)
+        val strapDeviceId = viewModel.activeStrapId
         val markerRows = if (dayCycleMode == DayCycleMode.SLEEP_ONSET) runCatching {
             viewModel.repo.metricSeriesComputedUnion(
-                viewModel.activeStrapId, DayCycleIntelligenceIntegration.ONSET_KEY,
-                selectedDay.toString(), selectedDay.plusDays(1).toString(),
+                strapDeviceId, DayCycleIntelligenceIntegration.ONSET_KEY,
+                markerDay.toString(), nextMarkerDay.toString(),
             )
         }.getOrDefault(emptyList()) else emptyList()
-        val start = markerRows.firstOrNull { it.day == selectedDay.toString() }?.value?.toLong()
-            ?: calendarStart
-        val end = markerRows.firstOrNull { it.day == selectedDay.plusDays(1).toString() }?.value?.toLong()
-            ?.minus(1L) ?: calendarEnd
+        val window = RecoveryStrainDetailLogic.strainWindow(
+            calendarStart = calendarStart, nextCalendarStart = nextStart, isCurrentDay = selectedDay == today,
+            sleepOnsetMode = dayCycleMode == DayCycleMode.SLEEP_ONSET,
+            onset = RecoveryStrainDetailLogic.timestampSeconds(markerRows.lastOrNull { it.day == markerDay.toString() }?.value),
+            nextOnset = RecoveryStrainDetailLogic.timestampSeconds(markerRows.lastOrNull { it.day == nextMarkerDay.toString() }?.value),
+            now = now,
+        )
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        if (strapDeviceId != viewModel.activeStrapId) return@LaunchedEffect
+        if (window == null) {
+            buckets = emptyList(); sleepToday = null; workoutsToday = emptyList()
+            return@LaunchedEffect
+        }
+        val start = window.first
+        val end = window.last
         // #908: the Today HR curve reads the active strap ∪ canonical "my-whoop" union, NOT a hardcoded
         // "my-whoop". A strap re-added via the device manager banks live HR under its own fresh id, so a
         // pinned read showed the "no heart rate banked yet today" empty state. Single-WHOOP ⇒ one id ⇒ same.
@@ -7569,9 +7688,9 @@ private fun KeyMetricsEditorDialog(
                 verticalArrangement = Arrangement.spacedBy(Metrics.space16),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(Metrics.space2)) {
-                    Text(uiString(R.string.l10n_today_screen_edit_key_metrics_f95e61a4), style = NoopType.title2, color = Palette.textPrimary)
+                    Text(uiString(R.string.home_my_dashboard), style = NoopType.title2, color = Palette.textPrimary)
                     Text(
-                        uiString(R.string.l10n_today_screen_choose_which_tiles_show_on_your_a4e3acfb),
+                        uiString(R.string.home_dashboard_edit_description),
                         style = NoopType.subhead,
                         color = Palette.textSecondary,
                     )
@@ -7583,7 +7702,7 @@ private fun KeyMetricsEditorDialog(
                     label = { if (it) uiString(R.string.nav_trends) else uiString(R.string.nav_today) },
                     onSelect = { detailed = it },
                     modifier = Modifier.fillMaxWidth(),
-                    accessibilityLabel = uiString(R.string.l10n_today_screen_edit_key_metrics_f95e61a4),
+                    accessibilityLabel = uiString(R.string.home_my_dashboard),
                 )
                 // The detailed graphs' trailing window — 1 week / 2 weeks / 1 month (the NOOP signature
                 // segmented pill, same control the trend screens use). Only shown while Detailed is on.

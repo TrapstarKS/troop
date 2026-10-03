@@ -37,4 +37,5 @@
     <string name="home_metrics_count" translatable="false">%1$d/5</string>
     <string name="home_dial_label" translatable="false">%1$s ›</string>
     <string name="home_status_capture_experimental">Enregistrement en direct · historique expérimental</string>
+    <string name="home_dashboard_edit_description">Choisissez les éléments de Mon tableau de bord. Faites-les glisser ou utilisez les flèches pour les réordonner.</string>
 </resources>

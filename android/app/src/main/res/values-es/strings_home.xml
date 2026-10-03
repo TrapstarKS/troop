@@ -37,4 +37,5 @@
     <string name="home_metrics_count" translatable="false">%1$d/5</string>
     <string name="home_dial_label" translatable="false">%1$s ›</string>
     <string name="home_status_capture_experimental">Registro en directo · historial experimental</string>
+    <string name="home_dashboard_edit_description">Elige los elementos de Mi panel. Arrastra para ordenarlos o usa las flechas.</string>
 </resources>

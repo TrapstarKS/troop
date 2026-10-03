@@ -33,7 +33,7 @@ class TodayWorkoutTapTest {
         assertTrue(body.contains("onWorkout(workout)"))
         assertTrue(body.contains("onClickLabel = uiString(R.string.today_action_show_workout)"))
         assertTrue(body.contains("role = Role.Button"))
-        assertTrue(todayScreen().contains("HomeDayEvents(displayMetric, homeDayWorkouts, onOpenSleep) { selectedWorkoutRow = it }"))
+        assertTrue(todayScreen().contains("HomeDayEvents(displayMetric, homeDayWorkouts, openSleepForDisplayedDay) { selectedWorkoutRow = it }"))
     }
 
     @Test
@@ -60,16 +60,36 @@ class TodayWorkoutTapTest {
     @Test
     fun bothPlatformsWindowMyDayToTheSelectedCalendarDay() {
         val android = todayScreen()
-        assertTrue(android.contains("val date = LocalDate.parse(effectDayKey)"))
+        assertTrue(android.contains("val effectWindowDay = selectedDay"))
+        assertTrue(android.contains("val date = effectWindowDay"))
         assertTrue(android.contains("val start = date.atStartOfDay(zone).toEpochSecond()"))
         assertTrue(android.contains("val end = date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1"))
         assertTrue(android.contains("viewModel.repo.workoutsAllSources(effectStrapId, start, end)"))
-        assertTrue(android.contains("HomeDayEvents(displayMetric, homeDayWorkouts, onOpenSleep)"))
+        assertTrue(android.contains("HomeDayEvents(displayMetric, homeDayWorkouts, openSleepForDisplayedDay)"))
         val dashboard = source("Strand/Screens/HomeDashboardContent.swift")
-        assertTrue(dashboard.contains("HomeDayActivities.rows(workouts, dayKey: dayKey)"))
+        assertTrue(dashboard.contains("HomeDayActivities.rows(workouts, dayKey: activityDayKey)"))
+        assertTrue(dashboard.contains("private var activityDayKey: String { windowDayKey ?? dayKey }"))
         for (path in listOf("Strand/Screens/TodayView.swift", "Strand/Liquid/LiquidTodayView.swift")) {
-            assertTrue(source(path).contains("dayKey: selectedDayKey"))
+            assertTrue(source(path).contains("windowDayKey: Repository.localDayKey(selectedLogicalDay)"))
         }
         assertTrue(source("Strand/Screens/TodayView.swift").contains("workouts.filter { WorkoutSource.isAppleHealth"))
+    }
+
+    @Test
+    fun displayedMarkerDayAndItsSuccessorFeedTheSharedWindowResolver() {
+        for (path in listOf("Strand/Screens/TodayView.swift", "Strand/Liquid/LiquidTodayView.swift")) {
+            val text = source(path)
+            assertTrue("$path must anchor onset markers to the displayed row", text.contains("RecoveryStrainDetailLogic.date(loadDayKey)"))
+            assertTrue("$path must advance that marker date", text.contains("value: 1, to: markerDay"))
+            assertTrue("$path must use the tested paired interval", text.contains("RecoveryStrainDetailLogic.strainWindow("))
+            assertFalse("$path must not reuse the displayed marker as its end", text.contains("let nextDayKey = Repository.localDayKey(nextDay)"))
+            assertFalse("$path must not resolve a different live onset", text.contains("let effortStart ="))
+        }
+        val android = todayScreen()
+        assertTrue(android.contains("val markerDay = LocalDate.parse(selectedDayKey)"))
+        assertTrue(android.contains("val nextMarkerDay = markerDay.plusDays(1)"))
+        assertTrue(android.contains("viewModel.repo.hrSamplesUnion(strapDeviceId, window.first, window.last)"))
+        assertTrue(android.contains("liveSnap.lastSyncAt, liveSnap.syncChunksThisSession"))
+        assertFalse(android.contains("val start = activeDayCycleStart("))
     }
 }

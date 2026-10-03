@@ -20,7 +20,7 @@ struct LocalBriefingView: View {
         let streak = StreakCalculator.streaks(dayKeys: repo.days.map(\.day), qualified: repo.days.map { $0.recovery != nil }, today: today).current
         let figures = row.flatMap { repo.importedSleep[$0.day] }
         let current = LocalRecordedReport(day: row?.day ?? today,
-            recovery: row?.recovery.map { Int($0.rounded()) },
+            recovery: RecoveryStrainDetailLogic.recoveryPercent(row?.recovery),
             sleepMinutes: row?.totalSleepMin.map { Int($0.rounded()) },
             strainTenths: row?.strain.map { Int(($0 * 2.1).rounded()) }, streak: streak,
             sleepNeedMinutes: figures?.needMin.map { Int($0.rounded()) },

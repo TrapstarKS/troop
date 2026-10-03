@@ -8,6 +8,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     let dayOffset: Int
     var windowDayKey: String? = nil
     private var isToday: Bool { dayOffset == 0 }
+    private var activityDayKey: String { windowDayKey ?? dayKey }
     let day: DailyMetric?
     let sleepScore: Double?
     let recovery: Double?
@@ -25,15 +26,19 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     @EnvironmentObject private var router: NavRouter
     @EnvironmentObject private var repo: Repository
     @EnvironmentObject private var intelligence: IntelligenceEngine
-    @State private var showManualActivity = false
-    @State private var manualEndDate = Date()
+    private struct ManualActivityTarget: Identifiable {
+        let id = UUID()
+        let endDate: Date
+    }
+    @State private var manualActivity: ManualActivityTarget?
     @State private var startWorkoutRequested = false
     @ScaledMetric private var columnWidth = NoopMetrics.compactScoreDialDiameter
+    @State private var viewportWidth: CGFloat?
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
             scoreRow
-            InsightCallout(text: guidance, actionLabel: onGuidance == nil ? nil : String(localized: "Daily Outlook"), onAction: onGuidance)
+            guidanceCard
             monitorRow
             myDay
             myPlan
@@ -57,8 +62,11 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 Text("Your Cards").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
             }
         }
-        .sheet(isPresented: $showManualActivity) {
-            ManualWorkoutSheet(initialEndDate: manualEndDate) { row, _ in
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            geometry.size.width + NoopMetrics.screenHPadding * 2
+        } action: { viewportWidth = $0 }
+        .sheet(item: $manualActivity) { target in
+            ManualWorkoutSheet(initialEndDate: target.endDate) { row, _ in
                 Task {
                     await repo.saveManualWorkout(row)
                     await intelligence.analyzeRecent()
@@ -85,18 +93,23 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
         .padding(.vertical, NoopMetrics.space4)
     }
 
+    private var sleepValue: Double? { HomeScoreValue.resolve(sleepScore) }
+    private var recoveryValue: Double? { HomeScoreValue.resolve(recovery) }
+    private var strainValue: Double? { HomeScoreValue.resolve(strain) }
+
     private var sleepDial: some View {
         NavigationLink(value: TabRoute.sleepDetailForDay(dayKey: dayKey)) {
-            dial(label: String(localized: "Sleep"), value: sleepScore,
-                 display: sleepScore.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
+            dial(label: String(localized: "Sleep"), value: sleepValue,
+                 display: sleepValue.map { "\(Int($0.rounded()))" } ?? "—", unit: "%",
                  color: StrandPalette.sleepPrimary,
-                 caption: sleepScore == nil ? String(localized: isToday ? "No sleep yet" : "No data for this day") : nil)
+                 caption: sleepValue == nil ? String(localized: day?.totalSleepMin != nil
+                    ? "Not enough data" : (isToday ? "No sleep yet" : "No data for this day")) : nil)
         }
         .buttonStyle(.plain)
     }
 
     private var recoveryDial: some View {
-        let availableRecovery = recovery.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }
+        let availableRecovery = recoveryValue
         return NavigationLink(value: TabRoute.recoveryDetailForDay(dayKey: recoveryDayKey)) {
             dial(label: String(localized: "Recovery"), value: availableRecovery,
                  display: RecoveryStrainDetailLogic.recoveryPercent(availableRecovery).map(String.init) ?? "—", unit: "%",
@@ -107,7 +120,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     }
 
     private var strainDial: some View {
-        let availableStrain = strain.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }
+        let availableStrain = strainValue
         return NavigationLink(value: TabRoute.strainDetailForDay(dayKey: dayKey, effortOverride: availableStrain, windowDayKey: windowDayKey)) {
             dial(label: String(localized: "Strain"), value: availableStrain,
                  display: availableStrain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", unit: "",
@@ -121,7 +134,8 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
         VStack(spacing: NoopMetrics.space1) {
             ScoreDial(label: "\(label) ›", value: display, unit: value == nil ? "" : unit,
                       progress: value.map { $0 / 100 }, color: color, size: .compact,
-                      accessibilityLabel: "\(label), \(display)\(value == nil ? "" : unit)")
+                      accessibilityLabel: "\(label), \(display)\(value == nil ? "" : unit)",
+                      viewportWidth: viewportWidth)
             if let caption {
                 Text(caption).font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                     .multilineTextAlignment(.center)
@@ -131,9 +145,40 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
         .frame(maxWidth: .infinity, alignment: .top)
     }
 
+    private var guidanceCard: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+            HStack {
+                Text("Daily Outlook").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+                Spacer(minLength: NoopMetrics.space2)
+                if let onGuidance {
+                    Button(action: onGuidance) {
+                        Image(systemName: "chevron.right").font(StrandFont.headline)
+                            .frame(width: NoopMetrics.touchTarget, height: NoopMetrics.touchTarget)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(StrandPalette.textPrimary)
+                    .accessibilityLabel("Daily Outlook")
+                }
+            }
+            Text(guidance).font(StrandFont.body).foregroundStyle(StrandPalette.textSecondary)
+        }
+        .padding(NoopMetrics.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius).fill(StrandPalette.surfaceBase))
+        .background {
+            RoundedRectangle(cornerRadius: NoopMetrics.cardRadius).fill(StrandPalette.surfaceRaised)
+                .padding(.horizontal, NoopMetrics.space2).offset(y: NoopMetrics.space1)
+        }
+        .background {
+            RoundedRectangle(cornerRadius: NoopMetrics.cardRadius).fill(StrandPalette.surfaceOverlay)
+                .padding(.horizontal, NoopMetrics.space4).offset(y: NoopMetrics.space2)
+        }
+        .padding(.bottom, NoopMetrics.space2)
+    }
+
     private var guidance: String {
         if !isToday && day == nil { return String(localized: "No data for this day") }
-        guard let recovery else {
+        guard let recovery = recoveryValue else {
             return String(localized: "Still learning your baseline. A few more nights and this fills in.")
         }
         if recovery >= 67 { return String(localized: "You're primed. A hard session should land well today.") }
@@ -169,8 +214,8 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                 TrackedSectionHeader(title: String(localized: "My Day"))
                 Menu {
                     Button {
-                        manualEndDate = HomeDayActivities.manualEnd(dayKey: dayKey)
-                        showManualActivity = true
+                        manualActivity = ManualActivityTarget(
+                            endDate: HomeDayActivities.manualEnd(dayKey: activityDayKey))
                     } label: {
                         Label("Add activity", systemImage: "plus")
                     }
@@ -201,7 +246,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                                  value: day?.totalSleepMin.map { HomeDayActivities.duration($0) } ?? "—",
                                  icon: "moon.fill", color: StrandPalette.sleepPrimary)
                     }
-                    ForEach(Array(HomeDayActivities.rows(workouts, dayKey: dayKey).enumerated()), id: \.offset) { _, workout in
+                    ForEach(Array(HomeDayActivities.rows(workouts, dayKey: activityDayKey).enumerated()), id: \.offset) { _, workout in
                         Divider().overlay(StrandPalette.hairline)
                         Button { onWorkout(workout) } label: {
                             eventRow(title: WorkoutSource.displaySport(workout.sport),
@@ -213,7 +258,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
                                      icon: "figure.run", color: StrandPalette.strainPrimary)
                         }
                     }
-                    if HomeDayActivities.rows(workouts, dayKey: dayKey).isEmpty {
+                    if HomeDayActivities.rows(workouts, dayKey: activityDayKey).isEmpty {
                         Text("No activities").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                     }
                 }
@@ -240,6 +285,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
             Image(systemName: "chevron.right").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
         }
         .frame(minHeight: NoopMetrics.touchTarget)
+        .contentShape(Rectangle())
     }
 
     private var myPlan: some View {
@@ -294,16 +340,15 @@ struct HomeDateChrome: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.space1) {
-            TopChrome(dateLabel: dateLabel, previousLabel: String(localized: "Previous day"),
+            TopChrome(dateLabel: headerLabel, previousLabel: String(localized: "Previous day"),
                       nextLabel: String(localized: "Next day"), profileLabel: String(localized: "Menu and settings"),
                       strapLabel: live.connected ? String(localized: "Connected") : String(localized: "Disconnected"),
+                      streakCount: streak,
+                      streakLabel: [String(localized: "Scored-day streak"), streak.formatted(.number)].joined(separator: ", "),
                       batteryPercent: batteryPercent, isConnected: live.connected, canGoNext: selectedOffset > 0,
                       onPrevious: { step(1) }, onNext: { step(-1) }, onDate: { showCalendar = true },
                       onProfile: onProfile, onStrap: { router.openDevices() })
             HStack(spacing: NoopMetrics.space2) {
-                Label("\(streak)", systemImage: "flame.fill")
-                    .font(StrandFont.captionNumber).foregroundStyle(StrandPalette.textSecondary)
-                    .accessibilityLabel("Scored-day streak")
                 Spacer()
                 if selectedOffset == 0 {
                     if live.backfilling {
@@ -326,6 +371,13 @@ struct HomeDateChrome: View {
             .datePickerStyle(.graphical)
             .padding(NoopMetrics.space4)
         }
+    }
+
+    private var headerLabel: String {
+        guard Calendar.current.component(.year, from: selectedDate) != Calendar.current.component(.year, from: Date()) else {
+            return dateLabel
+        }
+        return selectedDate.formatted(.dateTime.day().month(.abbreviated).year().locale(AppLanguage.activeLocale))
     }
 
     private var batteryPercent: Int? {

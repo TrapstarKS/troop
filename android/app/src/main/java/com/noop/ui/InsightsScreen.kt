@@ -431,7 +431,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         // --- Personal experiment (LOCAL ONLY n-of-1 protocol) ------------------
         item {
         run {
-            // Candidates are gated to behaviours the user actually has data for, 
+            // Candidates are gated to behaviours the user actually has data for,
             // logged journal questions ∪ imported wording, minus hidden, NOT the
             // starter catalog (triage fix a/b). Empty → real empty-state guard.
             // Hidden canonicals come from the v2 catalog now (#322), same triage-fix semantics.
