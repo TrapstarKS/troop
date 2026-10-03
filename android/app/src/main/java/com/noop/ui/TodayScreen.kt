@@ -109,8 +109,11 @@ import androidx.compose.ui.zIndex
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -1168,20 +1171,31 @@ fun TodayScreen(
     var homeDayWorkouts by remember { mutableStateOf<List<WorkoutRow>>(emptyList()) }
     var homeDayStress by remember { mutableStateOf<Double?>(null) }
     LaunchedEffect(days, selectedDayKey) {
+        val effectDayKey = selectedDayKey
         homeDayWorkouts = emptyList()
         homeDayStress = null
-        val date = LocalDate.parse(selectedDayKey)
+        val date = LocalDate.parse(effectDayKey)
         val zone = ZoneId.systemDefault()
         val start = date.atStartOfDay(zone).toEpochSecond()
         val end = date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1
-        homeDayWorkouts = runCatching {
+        val workouts = runCatching {
             viewModel.repo.workoutsAllSources(viewModel.activeStrapId, start, end)
                 .sortedBy { it.startTs }
-        }.getOrDefault(emptyList())
-        homeDayStress = runCatching {
-            viewModel.repo.metricSeries("my-whoop", "stress", selectedDayKey, selectedDayKey)
+        }.getOrElse {
+            if (it is CancellationException) throw it
+            emptyList()
+        }
+        currentCoroutineContext().ensureActive()
+        val stress = runCatching {
+            viewModel.repo.metricSeries("my-whoop", "stress", effectDayKey, effectDayKey)
                 .lastOrNull()?.value?.coerceIn(0.0, 3.0)
-        }.getOrNull()
+        }.getOrElse {
+            if (it is CancellationException) throw it
+            null
+        }
+        currentCoroutineContext().ensureActive()
+        homeDayWorkouts = workouts
+        homeDayStress = stress
     }
 
     // #817 - horizontal swipe to change day, alongside the header chevrons. `detectHorizontalDragGestures`
@@ -1234,8 +1248,8 @@ fun TodayScreen(
         topPadding = Metrics.space12,
         rowSpacing = Metrics.space24,
         listState = todayListState,
-        topBackground = screenBackdropSlot(showDayCycleBackground, skyBehindCards),
-        fullBleedBackground = screenBackdropFullBleed(showDayCycleBackground, skyBehindCards),
+        topBackground = screenBackdropSlot(false, false),
+        fullBleedBackground = screenBackdropFullBleed(false, false),
     ) {
         item(key = "home-chrome") {
             val date = runCatching { LocalDate.parse(selectedDayKey) }.getOrNull() ?: selectedDay

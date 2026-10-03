@@ -1457,20 +1457,7 @@ struct TodayView: View {
     }
 
     var body: some View {
-        ScreenScaffold(title: nil, onRefresh: { await repo.refresh() },
-                       // PERF (scroll): lazy column so the scaffold materialises Today's content on demand.
-                       // Today supplies its own inner eager VStack (below), so the staggered section reveal is
-                       // unchanged, this only defers building the single inner stack until it scrolls in.
-                       // Byte-identical layout (LazyVStack == eager VStack alignment/spacing/header).
-                       lazy: true,
-                       // PERF (scroll stutter): the day-cycle scene is a static masked Image. CoreAnimation
-                       // already caches it as a stable image layer, so it does NOT re-rasterize on body
-                       // re-evals or scroll. NO .drawingGroup(), wrapping this 600pt masked image in a
-                       // second offscreen pass DOUBLED its cost and re-rasterised it on every TodayView
-                       // body re-eval (the masked image is itself one offscreen pass). That was a v7.0.2
-                       // lag regression; removing the flatten restores native layer caching.
-                       topBackground: showDayCycleBackground
-                           ? AnyView(SceneScreenBackground(hour: demoSceneHour)) : nil) {
+        ScreenScaffold(title: nil, onRefresh: { await repo.refresh() }, lazy: true) {
             LazyVStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                 HomeDateChrome(selectedOffset: $selectedDayOffset, selectedDate: Self.dayParser.date(from: selectedDayKey) ?? selectedLogicalDay,
                     dateLabel: selectedDayOffset == 0 ? String(localized: "Today")
@@ -4522,11 +4509,13 @@ struct TodayView: View {
         // #860 retired the launch auto-land, this pass no longer changes `selectedDayOffset`, so there's no
         // re-fire to bail for: the history-wide set + the new-day announce run straight through below.
         await loadDayScoped()
+        guard !Task.isCancelled else { return }
         // #today-hosted-cards: refresh the shared SleepModel for the hosted sleep cards. Runs on EVERY load
         // (before the cache-restore short-circuit below), so the card survives a tab-away/return; the gate
         // inside makes it a no-op unless a sleep card is actually hosted.
         await loadHostedSleepModel()
         await loadHostedStress()
+        guard !Task.isCancelled else { return }
         // #849: a bare Today RE-MOUNT (tab-away + return, or an Apple-Health import that recreates the view)
         // re-fires this task with TodayView's `@State` reset, so the heavy history-wide pass re-ran in full
         // every time even when NOTHING in the data had changed: hundreds of redundant reads (incl. the
@@ -4561,6 +4550,7 @@ struct TodayView: View {
         // of the flag. The deferred set is guaranteed to run later via the coalesced refresh (see .task note).
         if !backfillActivelyWriting || !loadedHistoryWideOnce {
             await loadHistoryWide()
+            guard !Task.isCancelled, repo.refreshSeq == currentSeq else { return }
             loadedHistoryWideOnce = true
             // Record the seq we just loaded so a later re-mount with unchanged data short-circuits above.
             repo.todayHistoryWideLoadedSeq = currentSeq
@@ -4750,6 +4740,7 @@ struct TodayView: View {
             xiaomiDays: xiaomiDays,
             xiaomiSleeps: xiaomiSleeps,
             stressToday: stressToday,
+            homeStressByDay: homeStressByDay,
             fitnessAgeToday: fitnessAgeToday,
             vo2maxToday: vo2maxToday,
             vitalityToday: vitalityToday
@@ -4769,6 +4760,7 @@ struct TodayView: View {
         xiaomiDays = c.xiaomiDays
         xiaomiSleeps = c.xiaomiSleeps
         stressToday = c.stressToday
+        homeStressByDay = c.homeStressByDay
         fitnessAgeToday = c.fitnessAgeToday
         vo2maxToday = c.vo2maxToday
         vitalityToday = c.vitalityToday
@@ -4874,6 +4866,10 @@ struct TodayView: View {
         // is keyed by the state this pass actually loaded for.
         let loadSeq = repo.refreshSeq
         let loadDayKey = selectedDayKey
+        func isCurrentRequest() -> Bool {
+            !Task.isCancelled && liveEffortRequest == effortRequest
+                && selectedDayKey == loadDayKey && repo.refreshSeq == loadSeq
+        }
         if repo.todayDayScopedLoadedSeq == loadSeq,
            repo.todayDayScopedLoadedDayKey == loadDayKey,
            let cached = repo.todayDayScopedCache,
@@ -4908,6 +4904,7 @@ struct TodayView: View {
         // composite and an importer sees the export's figure, exactly like the Rest detail screen.
         let restSeries = await restSeriesA
         let dayCycleSeries = await dayCycleSeriesA
+        guard isCurrentRequest() else { return }
         let restByDay = Dictionary(restSeries.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
         // The Rest TILE's sparkline (#614 follow-up). The tile's number is `restScore` (the Rest composite,
         // 0–100) but its mini-graph used to plot raw sleep MINUTES (`sparks["sleep_total_min"]`), so the
@@ -4948,6 +4945,7 @@ struct TodayView: View {
                 metricKey: "sleep_performance"
             )
         }
+        guard isCurrentRequest() else { return }
         provenanceByMetric = provenance
         providerByMetric = providers
 
@@ -4971,6 +4969,7 @@ struct TodayView: View {
             ?? calendarEnd
         let windowEndInclusive = max(windowStart, windowEndExclusive - 1)
         let hrBucketsLocal = await repo.hrBuckets(from: windowStart, to: windowEndInclusive, bucketSeconds: 300)
+        guard isCurrentRequest() else { return }
         // A bucket with no samples is absent from the aggregate, so without a segment break the line
         // joins its two neighbours and draws a steady climb across hours the strap recorded nothing.
         let hrSegments = hrGapSegments(bucketTs: hrBucketsLocal.map(\.ts), bucketSeconds: 300)
@@ -4991,6 +4990,7 @@ struct TodayView: View {
         // under its OWN fresh id, so a read pinned to the canonical "my-whoop" would drop the icon for a
         // re-added strap (the #904/#908 family). nil (no classed sample) hides the icon.
         let stepClassLocal = await repo.stepActivityClassLatest(from: windowStart, to: windowEndInclusive)
+        guard isCurrentRequest() else { return }
         stepActivityClassToday = stepClassLocal
 
         // #860 item 1: the launch auto-land (#605/#739 "snap to the most recent data day when today is
@@ -5033,8 +5033,7 @@ struct TodayView: View {
         } else {
             liveStrainLocal = nil
         }
-        guard !Task.isCancelled, liveEffortRequest == effortRequest,
-              selectedDayKey == loadDayKey, repo.refreshSeq == loadSeq else { return }
+        guard isCurrentRequest() else { return }
         liveTodayStrain = liveStrainLocal
         // Pin the chart axis to the loaded window, today midnight→now, a past day the full 24h, so
         // a gap (e.g. a morning the strap wasn't banking) shows as empty space, not a late start.
@@ -5064,6 +5063,7 @@ struct TodayView: View {
                 CachedSleepSession(startTs: span.start, endTs: span.end,
                                    efficiency: nil, restingHr: nil, avgHrv: nil, stagesJSON: nil)
             }
+        guard isCurrentRequest() else { return }
         sleepToday = sleepTodayLocal
 
         // #932: snapshot everything just computed onto the long-lived `repo`, keyed by the (seq, day) this
@@ -5075,7 +5075,7 @@ struct TodayView: View {
         // skipping here costs nothing but a cache miss. The snapshot is built from the LOCALS captured at
         // each computation point, never from `@State` at tail time: a cancelled sibling pass's interleaved
         // `@State` writes (its awaits still complete) can therefore never leak into this pass's bank.
-        guard loadDayKey == selectedDayKey, !Task.isCancelled else { return }
+        guard isCurrentRequest() else { return }
         repo.todayDayScopedCache = TodayDayScopedCache(
             restSpark: restSparkLocal,
             restScore: restScoreLocal,
@@ -5424,6 +5424,7 @@ struct TodayHistoryWideCache {
     let xiaomiDays: Int
     let xiaomiSleeps: Int
     let stressToday: Double?
+    let homeStressByDay: [String: Double]
     let fitnessAgeToday: Double?
     let vo2maxToday: Double?
     let vitalityToday: Double?

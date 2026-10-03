@@ -380,33 +380,10 @@ struct LiquidTodayView: View {
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         #endif
         .onPreferenceChange(PullOffsetKey.self) { handlePull($0) }
-        // The sky is a FIXED full-bleed backdrop drawn behind the scroll content, edge-to-edge under the
-        // status bar. A ScrollView background does not scroll with the content, so pulling down never
-        // moves the sky (the exact behaviour the scaffold uses on the classic Today).
-        .background(alignment: .top) {
-            ZStack(alignment: .top) {
+        .background {
+            ZStack {
                 StrandPalette.surfaceBase
-                // Custom background image (#custom-background): a picked photo OVERRIDES the sky, filling
-                // the whole backdrop (same cached image as every other tab, so it's seamless).
-                if backgroundStore.isActive {
-                    BackgroundImageBackdrop()
-                }
-                // Day-cycle scene (#698): the sky only paints when the toggle is ON AND no custom image is
-                // active; off = the plain surfaceBase canvas above (parity with Android + classic TodayView).
-                else if showDayCycleBackground {
-                    // Reduce-motion (and low-power) users get the same sky posed still — no twinkle/breath.
-                    // Also static until the first data load settles, so launch isn't fighting a live sky too.
-                    // "Sky behind cards" (opt-in): fill the whole backdrop with a softer settle so the sky
-                    // reads under every card, instead of the default 340 top band that dissolves to canvas.
-                    Group {
-                        if poseStill || !dataLoaded { LiquidSkyStatic(hour: liveHour, settleStrength: skyBehindCards ? 0.78 : 1) }
-                        else { LiquidSky(hour: liveHour, settleStrength: skyBehindCards ? 0.78 : 1) }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: skyBehindCards ? nil : 340, alignment: .top)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                }
+                if backgroundStore.isActive { BackgroundImageBackdrop() }
             }
             .ignoresSafeArea()
         }
@@ -1638,10 +1615,16 @@ struct LiquidTodayView: View {
         liveEffortRequest = effortRequest
         let loadDayKey = selectedDayKey
         let loadSeq = repo.refreshSeq
+        func isCurrentRequest() -> Bool {
+            !Task.isCancelled && liveEffortRequest == effortRequest
+                && selectedDayKey == loadDayKey && repo.refreshSeq == loadSeq
+        }
         // #989: today's hydration total + goal. One metricSeries row + a UserDefaults read, same as classic
         // TodayView.reloadHydration(). Cleared when the feature is off so the card can't show a stale total.
         if hydrationEnabled {
-            hydrationTotalML = await repo.hydrationTotal(day: Repository.localDayKey(Date()))
+            let hydration = await repo.hydrationTotal(day: Repository.localDayKey(Date()))
+            guard isCurrentRequest() else { return }
+            hydrationTotalML = hydration
             hydrationGoalML = repo.hydrationGoalML(profileSex: profile.sex)
         } else {
             hydrationTotalML = nil
@@ -1650,8 +1633,9 @@ struct LiquidTodayView: View {
         // Resolve the O(days) lookups ONCE here (not on every body re-render): the selected day and the
         // readiness verdict. Both scan repo.days (up to 599 rows); doing it per-render was the stutter.
         let day = resolveDisplayDay()
-        cachedDisplayDay = day
         await reloadRRUnitPolicy()
+        guard isCurrentRequest() else { return }
+        cachedDisplayDay = day
         cachedReadiness = ReadinessEngine.evaluate(days: repo.days, today: day?.day)
         // Prior-day vitals carry, resolved ONCE here (never in body). Bound to today's own key so it can't
         // echo today's still-forming row; only on today (a past day's own row is the whole story).
@@ -1723,8 +1707,7 @@ struct LiquidTodayView: View {
         } else {
             liveStrainLocal = nil
         }
-        guard !Task.isCancelled, liveEffortRequest == effortRequest,
-              selectedDayKey == loadDayKey, repo.refreshSeq == loadSeq else { return }
+        guard isCurrentRequest() else { return }
         liveTodayStrain = liveStrainLocal
 
         async let restA = repo.exploreSeries(key: "sleep_performance", source: "my-whoop")
@@ -1753,6 +1736,7 @@ struct LiquidTodayView: View {
 
         let restSeries = await restA
         let stepsSeries = await stepsA
+        guard isCurrentRequest() else { return }
         let restByDay = Dictionary(restSeries.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
         // Selected day's Rest; tail fallback only at offset 0 (a past day with no row shows nothing) AND
         // only when the tail night is still fresh. #977: a live 5.0 whose sleep never scores (no overnight
@@ -1766,6 +1750,7 @@ struct LiquidTodayView: View {
         // StressModel loops the full history to build its baseline — run it OFF the main actor so a big
         // history doesn't stutter the UI. Snapshot the inputs (value types) into the detached task.
         let storedStress = await stressA
+        guard isCurrentRequest() else { return }
         homeStressByDay = Dictionary(storedStress.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
         let daysSnapshot = repo.days
 
@@ -1785,6 +1770,8 @@ struct LiquidTodayView: View {
         // Queue 11a: SpO₂ candidate fallback — day-keyed for the tile's value lookup, windowed for its
         // detailed-mode sparkline below (same shape as `restByDay`/`kSparks["spo2"]` above).
         let spo2CandSeries = await spo2CandA
+        let weightSeries = await weightA
+        guard isCurrentRequest() else { return }
         spo2CandidateByDay = Dictionary(spo2CandSeries.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
         var winImportedKcal: [String: Double] = [:]
         for r in appleRowsForSpark where r.day >= sparkCutoff && r.day <= selectedDayKey {
@@ -1814,14 +1801,17 @@ struct LiquidTodayView: View {
                 .map { ($0.day, $0.value) },
             "sleep_performance": restSeries.filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey }
                 .map { ($0.day, $0.value) },
-            "weight": (await weightA).filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey },
+            "weight": weightSeries.filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey },
         ]
-        stress = await Task.detached(priority: .utility) {
+        let computedStress = await Task.detached(priority: .utility) {
             StressModel(days: daysSnapshot, stored: storedStress)?.score
         }.value
-        fitnessAge = (await fitA).last?.value   // history-wide latest banked (not day-scoped)
-        vo2max = (await vo2A).last?.value        // #1391: latest banked VO₂max estimate
-        vitality = (await vitA).last?.value
+        let (fitSeries, vo2Series, vitalitySeries) = await (fitA, vo2A, vitA)
+        guard isCurrentRequest() else { return }
+        stress = computedStress
+        fitnessAge = fitSeries.last?.value
+        vo2max = vo2Series.last?.value
+        vitality = vitalitySeries.last?.value
         // Steps is a DAILY metric, so key it to the SELECTED day (like restScore above), not the history-wide
         // latest. Without this, swiping to a past day with no strap step count showed today's estimate (the
         // `.last` value) instead of that day's. Mirrors the classic Today's stepsEstByDay[selectedDayKey].
@@ -1830,27 +1820,25 @@ struct LiquidTodayView: View {
         // Imported Apple Health steps for the SELECTED day (max across rows), the middle tier between the
         // measured strap count and the motion estimate. Health Connect is Android-only, so apple-health is
         // the sole import source on iOS. Mirrors Android `stepsForDay` (#377).
-        importedStepsDay = (await appleA).filter { $0.day == selectedDayKey }.compactMap { $0.steps }.max()
+        importedStepsDay = appleRowsForSpark.filter { $0.day == selectedDayKey }.compactMap { $0.steps }.max()
         // #616: same-day imported active energy — the calorie fallback when the strap banked no on-device
         // HR estimate for the day, so the tile/card/detail agree (imported-first, mirrors steps).
-        importedActiveKcalDay = (await appleA).filter { $0.day == selectedDayKey }.compactMap { $0.activeKcal }.max()
+        importedActiveKcalDay = appleRowsForSpark.filter { $0.day == selectedDayKey }.compactMap { $0.activeKcal }.max()
 
         // Weight for the SELECTED day: prefers a real Apple-Health reading (today's daily, else the
         // "weight" series' newest point so a sparse-but-recent value still renders). Falls back to the
         // user's profile weight in the renderer (weightTile).
-        let appleRows = await appleA
-        let weightSeries = await weightA
-        weightKg = appleRows.filter { $0.day == selectedDayKey }.compactMap { $0.weightKg }.max()
+        weightKg = appleRowsForSpark.filter { $0.day == selectedDayKey }.compactMap { $0.weightKg }.max()
             ?? weightSeries.last(where: { $0.day <= selectedDayKey })?.value
 
         // Awaited ONCE: the timestamps and the means have to come from the same read, or the segments
         // would describe a different series than the one drawn.
         let hrBuckets = await hrA
+        guard isCurrentRequest() else { return }
         hrValues = hrBuckets.map { $0.bpm }
         hrSegments = hrGapSegments(bucketTs: hrBuckets.map { $0.ts }, bucketSeconds: 300)
         let loadedWorkouts = await wkA
-        guard !Task.isCancelled, liveEffortRequest == effortRequest,
-              selectedDayKey == loadDayKey, repo.refreshSeq == loadSeq else { return }
+        guard isCurrentRequest() else { return }
         workouts = HomeDayActivities.rows(loadedWorkouts, dayKey: loadDayKey)
 
         let (chargeSource, effortSource, restSource) = await (chargeSourceA, effortSourceA, restSourceA)
@@ -1874,6 +1862,7 @@ struct LiquidTodayView: View {
                 )
             }
         }
+        guard isCurrentRequest() else { return }
         heroProviderByMetric = providers
 
         // #today-hosted-cards: build the shared SleepModel that backs the hosted sleep cards, but ONLY when
