@@ -47,7 +47,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
-import kotlin.math.roundToInt
+import kotlin.math.floor
 
 @Composable
 fun RecoveryDetailScreen(
@@ -301,7 +301,7 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
                         ContributorRow(uiString(R.string.d2b_distance), UnitFormatter.distanceFromMeters(distance, UnitPrefs.distanceSystem(LocalContext.current)))
                     }
                     ContributorRow(uiString(R.string.d2b_recorded_energy),
-                        detailNumber(current.energyKcal, 0), "kcal")
+                        detailWholeNumber(current.energyKcal), "kcal")
                     if (current.energyKcal != null) Text(uiString(R.string.d2b_energy_note),
                         style = NoopType.caption, color = Palette.textSecondary)
                 }
@@ -438,17 +438,20 @@ private fun DetailZones(minutes: List<Double>?, note: String, belowZone1: Double
     NoopCard {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
             TrackedSectionHeader(uiString(R.string.d2b_hr_zones))
-            val total = minutes?.sum() ?: 0.0
-            if (minutes == null) DetailEmpty(uiString(R.string.d2b_no_zones)) else {
-                if (total > 0) SegmentBar(minutes.mapIndexed { index, value -> Palette.hrZoneColor(index + 1) to (value / total).toFloat() },
+            val validMinutes = minutes?.takeIf { it.size == 5 && it.all { value -> RecoveryStrainDetailLogic.wholeNumber(value) != null } }
+            val total = validMinutes?.sum() ?: 0.0
+            if (validMinutes == null) DetailEmpty(uiString(R.string.d2b_no_zones)) else {
+                if (total > 0) SegmentBar(validMinutes.mapIndexed { index, value -> Palette.hrZoneColor(index + 1) to (value / total).toFloat() },
                     Modifier.fillMaxWidth(), height = Metrics.segmentBarHeight)
-                minutes.forEachIndexed { index, value ->
-                    ContributorRow(uiString(R.string.d2b_zone, index + 1), detailNumber(value), uiString(R.string.d2b_minutes),
+                validMinutes.forEachIndexed { index, value ->
+                    ContributorRow(uiString(R.string.d2b_zone, index + 1), detailWholeNumber(value), uiString(R.string.d2b_minutes),
                         comparison = if (total > 0) "${detailNumber(value / total * 100, 0)}%" else null,
                         comparisonColor = Palette.hrZoneColor(index + 1))
                 }
             }
-            if (belowZone1 != null && belowZone1 > 0) ContributorRow(uiString(R.string.d2b_below_zone_one), detailNumber(belowZone1), uiString(R.string.d2b_minutes))
+            belowZone1?.takeIf { it > 0 && RecoveryStrainDetailLogic.wholeNumber(it) != null }?.let {
+                ContributorRow(uiString(R.string.d2b_below_zone_one), detailWholeNumber(it), uiString(R.string.d2b_minutes))
+            }
             Text(note, style = NoopType.caption, color = Palette.textSecondary)
         }
     }
@@ -472,7 +475,9 @@ private fun detailNumber(value: Double?, decimals: Int = 1): String = value?.tak
     ?.let { String.format(Locale.getDefault(), "%.${decimals}f", it) } ?: uiString(R.string.d2b_no_value)
 private fun detailRecoveryNumber(score: Double?): String =
     detailNumber(RecoveryStrainDetailLogic.recoveryPercent(score)?.toDouble(), 0)
+private fun detailWholeNumber(value: Double?): String = RecoveryStrainDetailLogic.wholeNumber(value)
+    ?.let { String.format(Locale.getDefault(), "%d", it) } ?: uiString(R.string.d2b_no_value)
 private fun detailDuration(seconds: Double): String {
-    val minutes = (seconds / 60).roundToInt().coerceAtLeast(0)
+    val minutes = RecoveryStrainDetailLogic.wholeNumber(floor(seconds / 60)) ?: return uiString(R.string.d2b_no_value)
     return if (minutes >= 60) uiString(R.string.d2b_hours_minutes, minutes / 60, minutes % 60) else uiString(R.string.d2b_duration_minutes, minutes)
 }

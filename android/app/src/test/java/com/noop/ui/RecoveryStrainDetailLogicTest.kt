@@ -1,10 +1,52 @@
 package com.noop.ui
 
+import kotlin.math.floor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RecoveryStrainDetailLogicTest {
+    @Test
+    fun comparisonTargetsAndNumericPresentationMatchSwiftOracle() {
+        val keys = listOf("2026-08-31", "2026-09-01", "2026-09-15", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03")
+        val values = listOf(999.0, 10.0, null, 20.0, Double.NaN, 100.0, 1000.0)
+        val targets = listOf(null, "nan", "0.0", "3.99", "4.0", "10.0", "10.01", "21.0")
+        val recoveries = listOf(null, Double.NaN, Double.POSITIVE_INFINITY, -1.0, 0.0,
+            33.49, 33.999, 34.0, 66.49, 66.999, 67.0, 99.999, 100.0, 101.0)
+        val wholeValues = listOf(null, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
+            -1.0, -0.0, 0.0, 0.49, 0.5, 1.49, 1.5, 1e300,
+            9_223_372_036_854_775_808.0, Math.nextDown(9_223_372_036_854_775_808.0))
+        val durations = listOf(-1.0, Double.NaN, 1e300, 59.0, 60.0, 89.0, 90.0, 119.9, 120.0)
+        val actual = listOf(
+            RecoveryStrainDetailLogic.priorMean(keys, values, "2026-09-01", "2026-10-02")!!.toString(),
+            targets.joinToString(",") { RecoveryStrainDetailLogic.targetStatus(it, 4, 10).name.lowercase() },
+            recoveries.joinToString(",") { RecoveryStrainDetailLogic.recoveryPercent(it)?.toString() ?: "unavailable" },
+            wholeValues.joinToString(",") { RecoveryStrainDetailLogic.wholeNumber(it)?.toString() ?: "unavailable" },
+            durations.joinToString(",") { RecoveryStrainDetailLogic.wholeNumber(floor(it / 60))?.toString() ?: "unavailable" },
+        ).joinToString("\n", postfix = "\n")
+        val expected = """
+        15.0
+        unavailable,unavailable,under,under,optimal,optimal,over,over
+        unavailable,unavailable,unavailable,unavailable,0,33,33,34,66,66,67,99,100,unavailable
+        unavailable,unavailable,unavailable,unavailable,unavailable,0,0,0,1,1,2,unavailable,unavailable,9223372036854774784
+        unavailable,unavailable,unavailable,0,1,1,1,1,2
+        """.trimIndent() + "\n"
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun wholeNumberRoundsHalfUpWithinRepresentableRange() {
+        val values = listOf(0.0, 0.49, 0.5, 1.49, 1.5, 2.5, Long.MAX_VALUE.toDouble() - 1024)
+        assertEquals(listOf(0L, 0L, 1L, 1L, 2L, 3L, 9_223_372_036_854_774_784L),
+            values.map(RecoveryStrainDetailLogic::wholeNumber))
+    }
+
+    @Test
+    fun wholeNumberRejectsMissingMalformedAndUnrepresentableValues() {
+        listOf(null, -1.0, Double.NaN, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1e300, Long.MAX_VALUE.toDouble())
+            .forEach { assertNull(RecoveryStrainDetailLogic.wholeNumber(it)) }
+    }
+
     @Test
     fun recoveryPercentPreservesSemanticBandsAtEveryThreshold() {
         val scores = listOf(0.0, 33.999999, 34.0, 66.999999, 67.0, 99.999999, 100.0)

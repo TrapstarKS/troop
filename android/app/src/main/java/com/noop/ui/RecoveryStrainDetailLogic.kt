@@ -1,12 +1,16 @@
 package com.noop.ui
 
 import kotlin.math.floor
+import kotlin.math.roundToLong
 
 internal object RecoveryStrainDetailLogic {
     enum class TargetStatus { Unavailable, Under, Optimal, Over }
 
     fun recoveryPercent(score: Double?): Int? =
         score?.takeIf { it.isFinite() && it in 0.0..100.0 }?.let { floor(it).toInt() }
+
+    fun wholeNumber(value: Double?): Long? =
+        value?.takeIf { it.isFinite() && it >= 0 && it < Long.MAX_VALUE.toDouble() }?.roundToLong()
 
     fun priorMean(
         dayKeys: List<String>,

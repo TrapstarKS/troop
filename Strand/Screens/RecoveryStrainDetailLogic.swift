@@ -5,6 +5,11 @@ enum RecoveryStrainDetailLogic {
         case unavailable, under, optimal, over
     }
 
+    static func wholeNumber(_ value: Double?) -> Int64? {
+        guard let value, value.isFinite, value >= 0 else { return nil }
+        return Int64(exactly: value.rounded())
+    }
+
     static func recoveryPercent(_ score: Double?) -> Int? {
         guard let score, score.isFinite, (0...100).contains(score) else { return nil }
         return Int(floor(score))

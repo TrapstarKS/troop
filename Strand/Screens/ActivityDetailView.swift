@@ -32,7 +32,10 @@ struct ActivityDetailView: View {
         String(localized: "Recorded energy")
     }
     private var strain: Double? { row.strain.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil } }
-    private var energy: Double? { row.energyKcal.flatMap { $0.isFinite ? $0 : nil } }
+    private var energy: Int64? { RecoveryStrainDetailLogic.wholeNumber(row.energyKcal) }
+    private var durationMinutes: Int64? {
+        RecoveryStrainDetailLogic.wholeNumber(floor((row.durationS ?? Double(row.endTs - row.startTs)) / 60))
+    }
 
     var body: some View {
         ScreenScaffold(title: nil, lazy: true, topBackground: recoveryStrainBackdrop()) {
@@ -42,7 +45,7 @@ struct ActivityDetailView: View {
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                 Text("\(time(row.startTs)) – \(time(row.endTs))")
                     .font(StrandFont.bodyNumber).foregroundStyle(StrandPalette.textSecondary)
-                Text(String(localized: "\(Int((row.durationS ?? Double(row.endTs - row.startTs)) / 60)) min"))
+                Text(durationMinutes.map { String(localized: "\($0) min") } ?? "—")
                     .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
             }.frame(maxWidth: .infinity)
             ScoreDial(label: String(localized: "Activity strain"), value: strain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—",
@@ -54,7 +57,7 @@ struct ActivityDetailView: View {
                     Divider().overlay(StrandPalette.hairline)
                     ContributorRow(label: String(localized: "Max heart rate"), value: row.maxHr.map(String.init) ?? "—", unit: "bpm", systemImage: "heart.fill")
                     Divider().overlay(StrandPalette.hairline)
-                    ContributorRow(label: energyLabel, value: energy.map { String(Int($0.rounded())) } ?? "—", unit: "kcal", systemImage: "flame")
+                    ContributorRow(label: energyLabel, value: energy.map(String.init) ?? "—", unit: "kcal", systemImage: "flame")
                     Text("The recorded calorie value does not identify active versus total energy. It is shown as recorded, without adding resting energy.")
                         .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                     if let distance = row.distanceM, distance.isFinite, distance >= 0 {
