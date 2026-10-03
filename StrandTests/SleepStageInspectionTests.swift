@@ -99,6 +99,18 @@ final class SleepStageInspectionTests: XCTestCase {
         XCTAssertNil(SleepView.selectedNapAsleepMinutes([session("14:15", "15:00", nil)]))
     }
 
+    func testActualHeartRateWindowFiltersMissingDataAndBreaksLongGaps() {
+        func point(_ ts: Int, bpm: Double = 60) -> HRBucket {
+            HRBucket(ts: ts, bpm: bpm, minBpm: bpm, maxBpm: bpm)
+        }
+        let buckets = [point(900), point(660), point(120), point(60), point(1100), point(180, bpm: .nan)]
+        XCTAssertEqual(SleepHeartRateSamples.runs(buckets, from: 60, to: 1000).map { $0.map(\.ts) },
+                       [[60, 120], [660, 900]])
+        XCTAssertEqual(SleepHeartRateSamples.runs(buckets, from: 60, to: 600).map { $0.map(\.ts) }, [[60, 120]])
+        XCTAssertTrue(SleepHeartRateSamples.runs(buckets, from: 60, to: 60).isEmpty)
+        XCTAssertTrue(SleepHeartRateSamples.runs([], from: 60, to: 1000).isEmpty)
+    }
+
     func testExactStageBoundariesAndMissingIntervals() {
         let intervals = [SleepInterval(stage: .light, start: 0, end: 60),
                          SleepInterval(stage: .deep, start: 60, end: 120),

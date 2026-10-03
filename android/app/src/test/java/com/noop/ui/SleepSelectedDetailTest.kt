@@ -126,7 +126,7 @@ class SleepSelectedDetailTest {
         assertNull(napAsleepMinutes(listOf(nap, nap.copy(stagesJSON = null))))
     }
 
-    @Test fun missingStagesUseOnlyTheExactDailyFallbackAndMissingDailyDataDoesNotInventSufficiency() {
+    @Test fun missingStagesUseExactDailyFallbackAndImportedNeedSupportsRecordedSleepWithoutDailyRow() {
         val daily = day("2026-10-02")
         val selected = night(daily.day).copy(session = night(daily.day).session.copy(efficiency = 0.88))
         val detail = selectedSleepDetailModel(listOf(daily), selected, ImportedSleepSeries(),
@@ -141,7 +141,7 @@ class SleepSelectedDetailTest {
         val withoutDay = selectedSleepAmounts(recorded, null, null, 450.0)
         assertEquals(390.0, withoutDay.asleepMin!!, 0.0)
         assertEquals(450.0, withoutDay.needMin!!, 0.0)
-        assertNull(withoutDay.sufficiencyPct)
+        assertEquals(390.0 / 450.0 * 100.0, withoutDay.sufficiencyPct!!, 0.0)
         assertNull(napAsleepMinutes(listOf(selected.session)))
         val awakeNight = selected.copy(session = selected.session.copy(
             stagesJSON = """{"awake":60,"light":0,"deep":0,"rem":0}"""))
