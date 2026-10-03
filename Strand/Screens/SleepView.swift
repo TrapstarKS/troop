@@ -12,6 +12,7 @@ import UIKit
 struct SleepView: View {
     let initialDayKey: String?
     @State private var initialSelectionApplied: Bool
+    @State private var pendingInitialDayKey: String?
     @State private var consumedInitialDayKey: String?
     @State private var unavailableRequestedDay: String?
     @EnvironmentObject var repo: Repository
@@ -126,6 +127,7 @@ struct SleepView: View {
     init(initialDayKey: String? = nil) {
         self.initialDayKey = initialDayKey
         _initialSelectionApplied = State(initialValue: initialDayKey == nil)
+        _pendingInitialDayKey = State(initialValue: initialDayKey)
     }
 
     /// The analytical cards to render, in saved order minus the hidden set.
@@ -134,7 +136,7 @@ struct SleepView: View {
     }
 
     private var requestedSelectionReady: Bool {
-        initialDayKey == nil || (initialSelectionApplied && consumedInitialDayKey == initialDayKey)
+        initialSelectionApplied && consumedInitialDayKey == initialDayKey
     }
 
     var body: some View {
@@ -197,6 +199,7 @@ struct SleepView: View {
             }
             .onChangeCompat(of: initialDayKey) { day in
                 initialSelectionApplied = day == nil
+                pendingInitialDayKey = day
                 consumedInitialDayKey = nil
                 unavailableRequestedDay = nil
                 nightOffset = 0
@@ -2136,12 +2139,12 @@ struct SleepView: View {
 
     private func applyRequestedDaySelection() {
         guard !initialSelectionApplied, loadedSleepRefresh == repo.refreshSeq,
-              let initialDayKey else { return }
-        let offset = SleepModel.requestedNightOffset(navDays: navDays, dayKey: initialDayKey)
-        unavailableRequestedDay = offset == nil ? initialDayKey : nil
+              let pendingInitialDayKey else { return }
+        let offset = SleepModel.requestedNightOffset(navDays: navDays, dayKey: pendingInitialDayKey)
+        unavailableRequestedDay = offset == nil ? pendingInitialDayKey : nil
         nightOffset = offset ?? 0
         navNight = offset.flatMap { $0 == 0 ? nil : decodedNight(at: $0) }
-        consumedInitialDayKey = initialDayKey
+        consumedInitialDayKey = pendingInitialDayKey
         initialSelectionApplied = true
         resetResultNotice()
     }
@@ -2233,7 +2236,7 @@ struct SleepView: View {
             .font(StrandFont.subhead)
             .foregroundStyle(StrandPalette.sleepPrimary)
             .frame(minHeight: NoopMetrics.touchTarget)
-        } else if initialDayKey != nil && (!initialSelectionApplied || consumedInitialDayKey != initialDayKey) {
+        } else if !requestedSelectionReady {
             ComingSoon(what: "Loading your sleep history…")
         } else if repo.loaded {
             ComingSoon(what: "No nights here yet. Import your WHOOP export in Data Sources to see every night, your sleep stages and trends straight away. Or open Intelligence to see last night computed from the strap after you wear it to bed.")
