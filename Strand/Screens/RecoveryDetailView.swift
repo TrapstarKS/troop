@@ -149,7 +149,8 @@ struct RecoveryDetailView: View {
 
 private struct RecoveryHistoryPlot: View {
     let points: [TrendPoint]
-    @State private var selected: TrendPoint?
+    @State private var selectedDate: Date?
+    private var selected: TrendPoint? { points.first { $0.date == selectedDate } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
@@ -175,7 +176,7 @@ private struct RecoveryHistoryPlot: View {
                         .gesture(DragGesture(minimumDistance: 0).onChanged { gesture in
                             let x = gesture.location.x - geometry[proxy.plotAreaFrame].origin.x
                             guard let date: Date = proxy.value(atX: x) else { return }
-                            selected = points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+                            selectedDate = points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }?.date
                         })
                 }
             }
