@@ -45,7 +45,7 @@ import androidx.compose.material.icons.filled.Hexagon
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.MonitorHeart
-import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.automirrored.filled.Rule
@@ -218,7 +218,7 @@ internal enum class Destination(
 
     // The "More" tab: its own navigated page (mirroring the iOS More tab) that hosts the full
     // grouped destination list. It is NOT itself in any [DrawerGroup] — it's the door to them.
-    More("more", R.string.nav_more, Icons.Filled.MoreHoriz);
+    More("more", R.string.nav_more, Icons.Filled.Menu);
 
     companion object {
         /** Resolve the destination owning the current back-stack route (defaults to Today). */
@@ -1151,7 +1151,7 @@ private fun GlassBottomBar(
     onTabSelected: (Destination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tabs = barLeadingTabs + barTrailingTabs + BarTab(Destination.More, Icons.Filled.MoreHoriz, R.string.nav_more)
+    val tabs = barLeadingTabs + barTrailingTabs + BarTab(Destination.More, Icons.Filled.Menu, R.string.nav_more)
     Row(modifier.fillMaxWidth().navigationBarsPadding()
         .padding(horizontal = Metrics.space16)
         .padding(top = Metrics.space4, bottom = Metrics.space12),
