@@ -1525,9 +1525,8 @@ final class Repository: ObservableObject {
 
     /// Hand-correct a night's bed (onset) and/or wake (end) time. `detectedStartTs` is the immutable
     /// detected key; the corrected onset is stored in `startTsAdjusted` so the key never moves (the
-    /// recompute guard + daily override keep matching on it). The merged session list carries no source
-    /// deviceId (same reason as the journal reads below), so this applies under BOTH the imported and
-    /// computed sources , only the namespace that holds the night updates; the other is a no-op.
+    /// recompute guard + daily override keep matching on it). A supplied visible owner selects exactly
+    /// that namespace; older id-free callers retain computed-first owner resolution.
     ///
     /// Stages are **re-derived from the raw streams** for the corrected `[newStartTs, newEndTs]` window
     /// via `SleepStager.stageSession` , exactly what WHOOP does, so extending a boundary recovers real
@@ -1535,7 +1534,7 @@ final class Repository: ObservableObject {
     /// night) does it fall back to reshaping the stored summary (`SleepWindowReclip`). Refreshes so the
     /// hero re-reads the corrected night immediately.
     func editSleepTimes(detectedStartTs: Int, oldEndTs: Int, storedStagesJSON: String?,
-                        newStartTs: Int, newEndTs: Int) async {
+                        newStartTs: Int, newEndTs: Int, visibleOwnerDeviceId: String? = nil) async {
         guard let store = await ensureStore() else { return }
         // #940 belt-and-braces: never persist a future-ending or inverted corrected window, whatever
         // the UI sent. The editor's own guards (past-bounded bed picker + cross-midnight auto-correct
@@ -1556,7 +1555,7 @@ final class Repository: ObservableObject {
         // tab can display (computed precedence preserved by ordering). Stop at the first source that
         // matched, so a coincidental same-startTs row in another namespace never takes a second edit —
         // and, unlike the old computed-then-active pair, a night under the canonical source is reached.
-        for ownerDeviceId in sleepOwnerIds {
+        for ownerDeviceId in visibleOwnerDeviceId.map({ [$0] }) ?? sleepOwnerIds {
             let changed = (try? await store.applySleepEdit(
                 deviceId: ownerDeviceId, detectedStartTs: detectedStartTs,
                 newStartTs: safeStartTs, newEndTs: safeEndTs, stagesJSON: stagesJSON)) ?? 0
@@ -1574,8 +1573,7 @@ final class Repository: ObservableObject {
     /// Two durable effects, mirroring the workout-dismiss path:
     ///  1. delete the row from whichever namespace OWNS it: try the computed source first, fall back to
     ///     the imported `deviceId` only when no computed row matched, exactly as `editSleepTimes` applies
-    ///     its edit (the merged session list carries no source deviceId, so we resolve the owner here and
-    ///     never delete a coincidental same-startTs row in the other namespace);
+    ///     its edit. A supplied visible owner routes both deletion and undo snapshot to that namespace;
     ///  2. persist a `dismissedSleep` span in UserDefaults so the next `analyzeRecent` re-detection doesn't
     ///     simply regenerate the night: the engine's sleep guard now skips any re-detected session
     ///     overlapping a dismissed span (just as the dismissed-WORKOUT spans hide a re-derived bout).
@@ -1586,12 +1584,15 @@ final class Repository: ObservableObject {
     /// (it is never re-detected, so it needs no suppression). The undo re-inserts the snapshot into its
     /// ORIGINAL namespace and lifts the tombstone.
     @discardableResult
-    func deleteSleepSession(detectedStartTs: Int, endTs: Int) async -> SleepDeletionSnapshot? {
+    func deleteSleepSession(detectedStartTs: Int, endTs: Int,
+                            visibleOwnerDeviceId: String? = nil) async -> SleepDeletionSnapshot? {
         guard let store = await ensureStore() else { return nil }
         // Snapshot the owning row BEFORE deleting, resolving the owner exactly as the delete does below:
         // computed source first, imported deviceId as the fallback. A one-second-wide window around the
         // immutable detected key uniquely identifies the row (the key never moves).
-        let snapshot = await ownedSleepRowSnapshot(store: store, detectedStartTs: detectedStartTs)
+        let owners = visibleOwnerDeviceId.map { [$0] } ?? sleepOwnerIds
+        let snapshot = await ownedSleepRowSnapshot(store: store, detectedStartTs: detectedStartTs, owners: owners)
+        guard visibleOwnerDeviceId == nil || snapshot != nil else { return nil }
         // Record the durable tombstone ONLY for a DETECTED night. A `userEdited` row (a hand-corrected
         // night or a manually-added nap) is never re-detected, so suppressing its window would needlessly
         // block a real future night that happens to overlap it.
@@ -1601,7 +1602,7 @@ final class Repository: ObservableObject {
         }
         // Delete from the same union of possible owners the Sleep tab reads from, first match wins —
         // so a night under the canonical source (post strap re-add) is actually removed, not no-op'd.
-        for ownerDeviceId in sleepOwnerIds {
+        for ownerDeviceId in owners {
             let deleted = (try? await store.deleteSleepSession(
                 deviceId: ownerDeviceId, startTs: detectedStartTs)) ?? 0
             if deleted > 0 { break }
@@ -1638,7 +1639,8 @@ final class Repository: ObservableObject {
     /// Read the single owned sleep row for `detectedStartTs`, resolving the namespace exactly as
     /// `deleteSleepSession` does (computed first, imported fallback). Returns the row plus the owning
     /// deviceId so undo can restore it into that same namespace.
-    private func ownedSleepRowSnapshot(store: WhoopStore, detectedStartTs: Int) async -> SleepDeletionSnapshot? {
+    private func ownedSleepRowSnapshot(store: WhoopStore, detectedStartTs: Int,
+                                       owners: [String]) async -> SleepDeletionSnapshot? {
         func row(_ deviceId: String) async -> CachedSleepSession? {
             let rows = (try? await store.sleepSessions(deviceId: deviceId,
                                                        from: detectedStartTs, to: detectedStartTs,
@@ -1657,7 +1659,7 @@ final class Repository: ObservableObject {
         }
         // Same owner union as the edit/delete paths, so the undo snapshot records the row's REAL owner
         // (including the canonical source) instead of guessing computed-or-active.
-        for ownerDeviceId in sleepOwnerIds {
+        for ownerDeviceId in owners {
             if let session = await row(ownerDeviceId) {
                 return await snapshot(session, owner: ownerDeviceId)
             }
