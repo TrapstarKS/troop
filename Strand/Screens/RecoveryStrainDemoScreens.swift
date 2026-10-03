@@ -26,7 +26,10 @@ private struct ActivityDemoHost: View {
             let now = Int(Date().timeIntervalSince1970)
             let rows = await repo.workoutRows()
             guard !Task.isCancelled else { return }
-            row = rows.first { $0.startTs <= now && $0.endTs <= now }
+            row = rows.first {
+                $0.startTs <= now && $0.endTs <= now && $0.source == "manual" && $0.sport == "Running"
+                    && $0.durationS == 2700 && $0.energyKcal == 310 && $0.strain == 52
+            } ?? rows.first { $0.startTs <= now && $0.endTs <= now }
         }
     }
 }
