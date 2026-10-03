@@ -180,5 +180,30 @@ class ReleaseTagRegressionTests(unittest.TestCase):
                 git('tag', '-d', 'v1.2.3')
 
 
+class IOSAnonymizationRegressionTests(unittest.TestCase):
+    def test_already_clean_bundle_is_successful(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / 'Fixture.app'; bundle.mkdir()
+            binary = bundle / 'fixture'; binary.write_bytes(b'\x00clean fixture\xff')
+            script = Path(__file__).with_name('anonymize-ios-app.sh')
+            result = subprocess.run(['bash', str(script), str(bundle)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(binary.read_bytes(), b'\x00clean fixture\xff')
+
+    def test_scrub_preserves_length_and_verifies_nested_raw_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / 'Fixture.app'
+            nested = bundle / 'PlugIns/Widget.appex'; nested.mkdir(parents=True)
+            binary = nested / 'fixture'
+            home = str(Path.home()).encode()
+            original = b'\x00' + home + b'\xff/source\x00' + home
+            binary.write_bytes(original)
+            script = Path(__file__).with_name('anonymize-ios-app.sh')
+            result = subprocess.run(['bash', str(script), str(bundle)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(len(binary.read_bytes()), len(original))
+            self.assertNotIn(home, binary.read_bytes())
+
+
 if __name__ == '__main__':
     unittest.main()
