@@ -19,11 +19,12 @@ public enum HealthMonitorAssessment {
     }
 
     /// Local display configuration; does not change recovery scoring or stored values.
-    public static let bloodOxygenCfg = MetricCfg(
-        minVal: 70.0, maxVal: 100.0, floorSpread: 0.5, halfLifeB: 14.0, halfLifeS: 21.0
-    )
+    public static var bloodOxygenCfg: MetricCfg {
+        MetricCfg(minVal: 70.0, maxVal: 100.0, floorSpread: 0.5, halfLifeB: 14.0, halfLifeS: 21.0)
+    }
 
     /// History is oldest first, excludes the displayed day, and includes missing calendar nights.
+    /// Kotlin twin: `HealthMonitorAssessment.assess`.
     public static func assess(value: Double?, history: [Double?], cfg: MetricCfg,
                               verified: Bool = true) -> Result {
         guard let value, value.isFinite else { return Result(status: .unavailable) }

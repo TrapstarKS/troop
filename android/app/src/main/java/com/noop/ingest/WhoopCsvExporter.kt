@@ -424,7 +424,8 @@ object WhoopCsvExporter {
             "${journal.size} journal entries."
     }
 
-    /** The WHOOP column carries an absolute; true deviations cannot be exported as temperatures. */
+    /** The WHOOP column carries an absolute; true deviations cannot be exported as temperatures.
+     * Swift twin: `WhoopCsvExporter.exportedSkinTempCelsius`. */
     internal fun exportedSkinTempCelsius(daily: DailyMetric): Double? =
         daily.skinTempC ?: daily.skinTempDevC?.takeIf { it >= 20 }
 }

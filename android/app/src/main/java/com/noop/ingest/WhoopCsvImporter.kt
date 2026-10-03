@@ -341,7 +341,8 @@ object WhoopCsvImporter {
 
     // MARK: - physiological_cycles.csv -> DailyMetric
 
-    /** Incoming rows replace the same stored day before folding preceding absolute nights. */
+    /** Incoming rows replace the same stored day before folding preceding absolute nights.
+     * Swift twin: `WhoopImporter.withSkinTempDeviations`. */
     internal fun withSkinTempDeviations(rows: List<DailyMetric>, history: List<DailyMetric> = emptyList()): List<DailyMetric> {
         val cfg = Baselines.metricCfg["skin_temp"] ?: return rows
         val byDay = (history + rows).associateBy { it.day }
@@ -356,7 +357,8 @@ object WhoopCsvImporter {
     }
 
     /** Only a matching canonical WHOOP-import series point proves a legacy absolute-in-deviation row.
-     * Older Android imports have no such marker and remain untouched; reimport supplies the absolute. */
+     * Older Android imports have no such marker and remain untouched; reimport supplies the absolute.
+     * Swift twin: `WhoopImporter.skinTempRepair`. */
     internal fun skinTempRepair(rows: List<DailyMetric>, importedTemperatures: List<MetricSeriesRow>,
                                 deviceId: String = WHOOP_DEVICE): List<DailyMetric> {
         if (deviceId != WHOOP_DEVICE) return emptyList()
@@ -373,6 +375,7 @@ object WhoopCsvImporter {
         return withSkinTempDeviations(moved, history)
     }
 
+    /** Swift twin: `WhoopImporter.repairAbsoluteSkinTempIfNeeded`. */
     suspend fun repairAbsoluteSkinTempIfNeeded(repo: WhoopRepository, deviceId: String = WHOOP_DEVICE,
                                                flagGet: () -> Boolean, flagSet: () -> Unit): Boolean {
         if (deviceId != WHOOP_DEVICE || flagGet()) return false

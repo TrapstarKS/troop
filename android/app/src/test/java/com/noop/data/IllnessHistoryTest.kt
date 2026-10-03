@@ -164,10 +164,10 @@ class IllnessHistoryTest {
             restingHr = 50, avgHrv = if (day in 27..30) 60.0 else null) }
         val recent = listOf("2026-02-01", "2026-02-02").map { day ->
             DailyMetric(deviceId = "test", day = day, restingHr = 58, avgHrv = 20.0) }
-        assertNull(IllnessWatch.evaluate(baseline + recent))
+        assertNull(IllnessWatch.evaluateWindow(baseline + recent).alert)
         val trusted = baseline.map { it.copy(avgHrv = 60.0) } + recent
-        assertNotNull(IllnessWatch.evaluate(trusted))
-        assertNull(IllnessWatch.evaluate(trusted, 1769947200.0, 1769947200.0))
+        assertNotNull(IllnessWatch.evaluateWindow(trusted).alert)
+        assertNull(IllnessWatch.evaluateWindow(trusted, 1769947200.0, 1769947200.0).alert)
     }
 
     @Test fun historicalRowsDoNotBridgeAMissingCalendarWindow() {
@@ -175,7 +175,7 @@ class IllnessHistoryTest {
             restingHr = 50, avgHrv = 60.0) }
         val recent = listOf("2026-03-01", "2026-03-02").map { day ->
             DailyMetric(deviceId = "test", day = day, restingHr = 58, avgHrv = 20.0) }
-        assertNull(IllnessWatch.evaluate(baseline + recent))
+        assertNull(IllnessWatch.evaluateWindow(baseline + recent).alert)
     }
     @Test fun unknownFreshHrvDoesNotClearThenRenotifyAnExistingRaisedPattern() {
         val baseline = (1..31).map { day -> DailyMetric(deviceId = "my-whoop-noop", day = "2026-01-%02d".format(day),

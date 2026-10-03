@@ -84,11 +84,6 @@ object IllnessWatch {
      */
     data class Evaluation(val alert: String?, val valid: Boolean)
 
-    fun evaluate(days: List<DailyMetric>): String? = evaluateWindow(days).alert
-
-    fun evaluate(days: List<DailyMetric>, hrvBaselineEpoch: Double, recoveryBaselineEpoch: Double): String? =
-        evaluateWindow(days, hrvBaselineEpoch, recoveryBaselineEpoch).alert
-
     fun evaluateWindow(days: List<DailyMetric>, hrvBaselineEpoch: Double = 0.0,
                        recoveryBaselineEpoch: Double = 0.0): Evaluation {
         if (days.size < 14) return Evaluation(null, false)

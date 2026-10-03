@@ -64,6 +64,7 @@ extension WhoopStore {
     // MARK: - Reads
 
     /// Joins before source coalescing so markers cannot validate another strap's HRV or respiration.
+    /// Kotlin twin: `WhoopDao.hrvProvenanceFlow`.
     public func hrvProvenance(deviceIds: [String], from: String, to: String) async throws -> [HrvProvenanceRow] {
         guard !deviceIds.isEmpty else { return [] }
         return try syncRead { db in

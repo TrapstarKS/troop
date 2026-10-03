@@ -19,11 +19,11 @@ object HealthMonitorAssessment {
     )
 
     /** Local display configuration; does not change recovery scoring or stored values. */
-    val bloodOxygenCfg = MetricCfg(
-        minVal = 70.0, maxVal = 100.0, floorSpread = 0.5, halfLifeB = 14.0, halfLifeS = 21.0,
-    )
+    val bloodOxygenCfg: MetricCfg
+        get() = MetricCfg(minVal = 70.0, maxVal = 100.0, floorSpread = 0.5, halfLifeB = 14.0, halfLifeS = 21.0)
 
-    /** History is oldest first, excludes the displayed day, and includes missing calendar nights. */
+    /** History is oldest first, excludes the displayed day, and includes missing calendar nights.
+     * Swift twin: `HealthMonitorAssessment.assess`. */
     fun assess(value: Double?, history: List<Double?>, cfg: MetricCfg, verified: Boolean = true): Result {
         if (value == null || !value.isFinite()) return Result(Status.UNAVAILABLE)
         val finiteHistory = history.map { it?.takeIf { night -> night.isFinite() } }

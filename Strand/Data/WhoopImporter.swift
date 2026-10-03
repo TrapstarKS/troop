@@ -12,6 +12,7 @@ enum WhoopImporter {
     /// Derive each imported deviation from preceding absolute nights. Incoming rows replace the same
     /// stored day before folding, so partial imports and repeated imports never count a night twice.
     /// Duplicate incoming days use the last row, matching the store's upsert order.
+    /// Kotlin twin: `WhoopCsvImporter.withSkinTempDeviations`.
     static func withSkinTempDeviations(_ rows: [DailyMetric], history: [DailyMetric] = []) -> [DailyMetric] {
         guard let cfg = Baselines.metricCfg["skin_temp"] else { return rows }
         var byDay: [String: DailyMetric] = [:]
@@ -33,6 +34,7 @@ enum WhoopImporter {
 
     /// Only a matching WHOOP-import series point proves the old absolute-in-deviation shape. Magnitude
     /// alone cannot distinguish a manual/native value. Existing absolute/deviation rows stay unchanged.
+    /// Kotlin twin: `WhoopCsvImporter.skinTempRepair`.
     static func skinTempRepair(_ rows: [DailyMetric], importedTemperatures: [MetricPoint],
                                deviceId: String = importedDeviceId) -> [DailyMetric] {
         guard deviceId == importedDeviceId else { return [] }
@@ -50,6 +52,7 @@ enum WhoopImporter {
         return withSkinTempDeviations(moved, history: history)
     }
 
+    /// Kotlin twin: `WhoopCsvImporter.repairAbsoluteSkinTempIfNeeded`.
     @discardableResult
     static func repairAbsoluteSkinTempIfNeeded(store: WhoopStore, deviceId: String = importedDeviceId,
                                                defaults: UserDefaults = .standard) async -> Bool {
