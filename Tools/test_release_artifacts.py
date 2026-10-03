@@ -1,6 +1,7 @@
 import argparse
 import importlib.util
 import json
+import os
 from pathlib import Path
 import plistlib
 import re
@@ -148,6 +149,36 @@ class StableSigningRegressionTests(unittest.TestCase):
 
 
 class ReleaseTagRegressionTests(unittest.TestCase):
+    def test_only_confirmed_404_allows_release_preparation(self):
+        script = Path(__file__).with_name('require-release-absent.sh')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake = root / 'gh'
+            fake.write_text('#!/bin/bash\nprintf "HTTP/2.0 %s Status\\n\\n{}\\n" "$FIXTURE_STATUS"\n[[ "$FIXTURE_STATUS" == 200 ]]\n')
+            fake.chmod(0o755)
+            for status in ['200', '404', '403', '429', '500', 'network-error']:
+                env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'], FIXTURE_STATUS=status)
+                result = subprocess.run(['bash', str(script), REPO, 'v1.2.3'], env=env, capture_output=True)
+                self.assertEqual(result.returncode == 0, status == '404', status)
+
+    def test_draft_asset_roster_rejects_unexpected_attachments(self):
+        workflow = (Path(__file__).parents[1] / '.github/workflows/fork-release.yml').read_text()
+        roster = re.search(r"printf '%s\\n' \"NOOP-android[^\n]+\n[^\n]+expected-assets.txt\n[^\n]+downloaded-assets.txt\n[^\n]+diff -u expected-assets.txt downloaded-assets.txt", workflow).group()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); assets = root / 'artifacts'; assets.mkdir()
+            for name in ['NOOP-android-v1.2.3.apk', 'NOOP-android-v1.2.3-metadata.json',
+                         'NOOP-macos-v1.2.3.zip', 'NOOP-ios-unsigned-v1.2.3.ipa']:
+                (assets / name).touch()
+            def run():
+                return subprocess.run(['bash', '-c', 'set -euo pipefail\nVER=1.2.3\n' + roster], cwd=root,
+                                      capture_output=True).returncode
+            self.assertEqual(run(), 0)
+            (assets / 'stray.apk').touch()
+            self.assertNotEqual(run(), 0)
+            (assets / 'stray.apk').unlink()
+            (assets / 'NOOP-android-v1.2.3.apk').unlink()
+            self.assertNotEqual(run(), 0)
+
     def test_tag_without_release_is_rejected_and_publish_checks_peeled_commit(self):
         workflow = (Path(__file__).parents[1] / '.github/workflows/fork-release.yml').read_text()
         creation_guards = re.findall(r'REMOTE_TAG=\$\(git ls-remote[^\n]+\)\n\s*test -z[^\n]+', workflow)

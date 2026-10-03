@@ -75,10 +75,7 @@ jobs:
           [ -n "${OVERRIDE:-}" ] && NEW="$OVERRIDE"
           [[ "$NEW" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "::error::Version must be X.Y.Z"; exit 1; }
           TAG="v${NEW}"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::Release already exists. Use a new version; release assets are immutable."
-            exit 1
-          fi
+          Tools/require-release-absent.sh "$GITHUB_REPOSITORY" "$TAG"
           REMOTE_TAG=$(git ls-remote --tags origin "refs/tags/$TAG" "refs/tags/$TAG^{}")
           test -z "$REMOTE_TAG" || { echo "::error::Remote tag already exists; refusing source/artifact mismatch"; exit 1; }
           echo "ver=$NEW" >> "$GITHUB_OUTPUT"
@@ -115,9 +112,8 @@ jobs:
           echo "buildVersion=$(grep -m1 'CURRENT_PROJECT_VERSION:' project.yml | sed -E 's/.*\"([0-9]+)\".*/\1/')" >> "$GITHUB_OUTPUT"
 
           # Draft at the bumped commit. Published tags and assets are never overwritten.
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::Release appeared during version bump; refusing to overwrite."; exit 1
-          else
+          Tools/require-release-absent.sh "$GITHUB_REPOSITORY" "$TAG"
+          {
             # Release body = the maintained per-version changelog docs/releases/<TAG>.md, plus a
             # downloads footer. Warn (don't fail) if that file is missing so you notice a forgotten
             # changelog. (CHANGELOG.md is the stale legacy file; docs/releases/ is the source of truth.)
@@ -164,7 +160,7 @@ jobs:
             test -z "$REMOTE_TAG" || { echo "::error::Remote tag appeared during build preparation"; exit 1; }
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" \
               --title "troop ${NEW}" --notes-file "$BODY" --draft
-          fi
+          }
 
   android:
     needs: bump
@@ -404,6 +400,10 @@ jobs:
           test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = true
           mkdir artifacts
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir artifacts
+          printf '%s\n' "NOOP-android-v${VER}.apk" "NOOP-android-v${VER}-metadata.json" \
+            "NOOP-macos-v${VER}.zip" "NOOP-ios-unsigned-v${VER}.ipa" | sort > expected-assets.txt
+          find artifacts -mindepth 1 -maxdepth 1 -exec basename {} \; | sort > downloaded-assets.txt
+          diff -u expected-assets.txt downloaded-assets.txt
           test -f "artifacts/NOOP-android-v${VER}.apk"
           test -f "artifacts/NOOP-android-v${VER}-metadata.json"
           test -f "artifacts/NOOP-macos-v${VER}.zip"
