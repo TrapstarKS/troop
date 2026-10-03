@@ -17,9 +17,21 @@ final class StrandDesignTests: XCTestCase {
     }
 
     func testRecoveryGradientStops() {
-        XCTAssertEqual(StrandPalette.recoveryStops.count, 5)
+        let previousStyle = StrandPalette.chartStyle
+        defer { StrandPalette.chartStyle = previousStyle }
+        StrandPalette.chartStyle = .titanium
+        XCTAssertEqual(StrandPalette.recoveryStops.count, 6)
         XCTAssertEqual(StrandPalette.recoveryStops.first?.location, 0.0)
         XCTAssertEqual(StrandPalette.recoveryStops.last?.location, 1.0)
+        StrandPalette.chartStyle = .classic
+        XCTAssertEqual(StrandPalette.recoveryStops.count, 5)
+    }
+
+    func testRecoveryBandBoundaries() {
+        XCTAssertEqual(StrandPalette.recoveryBandColor(33.99), StrandPalette.recoveryLow)
+        XCTAssertEqual(StrandPalette.recoveryBandColor(34), StrandPalette.recoveryMedium)
+        XCTAssertEqual(StrandPalette.recoveryBandColor(66.99), StrandPalette.recoveryMedium)
+        XCTAssertEqual(StrandPalette.recoveryBandColor(67), StrandPalette.recoveryHigh)
     }
 
     func testRecoveryColorEndpoints() {

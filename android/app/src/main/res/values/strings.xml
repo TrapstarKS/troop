@@ -2885,4 +2885,10 @@
     <string name="raw_diag_ecg_probe_start">Start ECG capture</string>
     <string name="raw_diag_ecg_probe_stop">Stop ECG capture</string>
     <string name="raw_diag_ecg_probe_running">A capture may still be running on this strap. The verdict goes to the strap log.</string>
+    <string name="whoop_nav_home">Home</string>
+    <string name="whoop_nav_plan">Plan</string>
+    <string name="whoop_nav_healthspan">Healthspan</string>
+    <string name="whoop_nav_weekly_plan">Weekly Plan</string>
+    <string name="whoop_plan_local_title">Weekly planning is not available yet</string>
+    <string name="whoop_plan_local_detail">Journal and Trends remain available to review your local habits and progress.</string>
 </resources>

@@ -59,6 +59,7 @@ fun screenBackdropSlot(
     skyBehindCards: Boolean,
 ): (@Composable () -> Unit)? = when {
     BackgroundImageStore.isActive -> { { BackgroundImageBackdrop() } }
+    !Palette.isLight -> { { Box(Modifier.fillMaxSize().background(Palette.canvasGradient)) } }
     showDayCycleBackground -> { { LiquidScreenSky(fillHeight = skyBehindCards) } }
     else -> null
 }
@@ -68,7 +69,7 @@ fun screenBackdropSlot(
 fun screenBackdropFullBleed(
     showDayCycleBackground: Boolean,
     skyBehindCards: Boolean,
-): Boolean = BackgroundImageStore.isActive || (showDayCycleBackground && skyBehindCards)
+): Boolean = BackgroundImageStore.isActive || !Palette.isLight || (showDayCycleBackground && skyBehindCards)
 
 /** The reusable liquid sky backdrop for a liquid screen's top region. Drop it into a scaffold's
  *  `topBackground` slot. [height] is the sky band; the sky fades into the theme canvas within it, so the
