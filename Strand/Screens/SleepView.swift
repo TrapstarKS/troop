@@ -435,8 +435,8 @@ struct SleepView: View {
         return AnalyticsEngine.Rest.composite(daily: daily)
     }
 
-    /// Dispatch a reorderable Sleep section to its card. Naps rides with `.stages` (drawn inside the stages
-    /// hero); the Rest hero is pinned outside this list. Mirrors the Android SleepScreen `when(section)`.
+    /// Dispatch an advanced Sleep section to its card. Summary, stages, naps and night metrics are
+    /// pinned outside this list. Mirrors the Android SleepScreen `when(section)`.
     @ViewBuilder
     private func sleepSectionView(_ section: SleepSection, _ model: SleepModel) -> some View {
         switch section {
@@ -487,9 +487,7 @@ struct SleepView: View {
         }
     }
 
-    /// Immersive Rest-world hero: compact Bevel-like hierarchy — centered "Sleep", muted circular
-    /// performance ring, state word, source badge. Night scene lives on ScreenScaffold.topBackground
-    /// (fixed under the status bar); this column only owns the readable content. Presentation-only.
+    /// The selected night's performance ring, source and locally available contributors.
     @ViewBuilder
     private func restHero(_ model: SleepModel, detail: SleepModel?) -> some View {
         let night = displayedNight(model)
