@@ -608,7 +608,7 @@ internal class InsightsHubViewModel {
         // Dose rows per dosed behaviour, under the dedicated dose source; logged "yes" days
         // back-fill dose = 1, explicit dose rows override (matches the Swift contract).
         val doseCards = ArrayList<DoseCardData>()
-        val performance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", activeStrapId)
+        val performance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", strapDeviceId = activeStrapId)
         outcomeByKey["sleep_performance"] = performance.points.associate { it.day to it.value }
         for (behavior in DosedBehavior.entries) {
             val doses = HashMap<String, Int>()

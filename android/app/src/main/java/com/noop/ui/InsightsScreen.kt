@@ -214,7 +214,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     var journalLoaded by remember { mutableStateOf(false) }
     var sleepPerformance by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     androidx.compose.runtime.LaunchedEffect(days, activeStrapId) {
-        sleepPerformance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", activeStrapId)
+        sleepPerformance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", strapDeviceId = activeStrapId)
             .points.associate { it.day to it.value }
     }
     val journalSeq by vm.repo.journalRevision.collectAsStateWithLifecycle()
