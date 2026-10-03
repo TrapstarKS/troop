@@ -673,7 +673,7 @@ internal fun AlarmWeekdayPicker(selected: Set<Int>, onToggle: (Int) -> Unit) {
 }
 
 /** Calendar.DAY_OF_WEEK numbers laid out Monday-first (Mon…Sun → 2,3,4,5,6,7,1). */
-private val SMART_ALARM_WEEKDAY_ORDER = intArrayOf(2, 3, 4, 5, 6, 7, 1)
+internal val SMART_ALARM_WEEKDAY_ORDER = intArrayOf(2, 3, 4, 5, 6, 7, 1)
 
 /** A day reads as "on" when the set is empty (= every day) or explicitly contains it. Pure for tests. */
 internal fun smartAlarmWeekdayIsSelected(dow: Int, days: Set<Int>): Boolean =
@@ -707,7 +707,7 @@ private fun smartAlarmWeekdayInitial(dow: Int): String = when (dow) {
     1 -> "S"; 2 -> "M"; 3 -> "T"; 4 -> "W"; 5 -> "T"; 6 -> "F"; 7 -> "S"; else -> "?"
 }
 
-private fun smartAlarmWeekdayName(dow: Int): String = when (dow) {
+internal fun smartAlarmWeekdayName(dow: Int): String = when (dow) {
     1 -> "Sun"; 2 -> "Mon"; 3 -> "Tue"; 4 -> "Wed"; 5 -> "Thu"; 6 -> "Fri"; 7 -> "Sat"; else -> "?"
 }
 

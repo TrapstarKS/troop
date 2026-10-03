@@ -27,6 +27,18 @@ import kotlin.random.Random
  */
 object DemoSeeder {
 
+    fun seedSleepPlannerPreferences(context: android.content.Context) {
+        val prefs = com.noop.ui.NoopPrefs.of(context)
+        if (prefs.contains("sleepPlanner.goalPercent")) return
+        com.noop.alarm.SleepPlannerStore.from(context).write(com.noop.alarm.SleepPlannerSettings(
+            goalPercent = 100,
+            goals = mapOf(6 to 85, 7 to 70),
+            baseNeedMinutes = 480,
+            debtMinutes = 75,
+            historyNights = 14,
+        ))
+    }
+
     private const val WHOOP = "my-whoop"
     private const val APPLE = "apple-health"
     // The NOOP-COMPUTED strap source ("<strap>-noop") the IntelligenceEngine persists its derived weekly

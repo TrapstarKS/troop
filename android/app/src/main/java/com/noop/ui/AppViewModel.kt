@@ -723,6 +723,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Whether the evening wind-down nudge is scheduled. */
     val windDownEnabled: StateFlow<Boolean> = _windDownEnabled.asStateFlow()
 
+    private val sleepPlannerStore = com.noop.alarm.SleepPlannerStore.from(appContext).also {
+        if (com.noop.BuildConfig.ENABLE_DEMO) com.noop.data.DemoSeeder.seedSleepPlannerPreferences(appContext)
+    }
+    private val _sleepPlannerSettings = MutableStateFlow(sleepPlannerStore.read())
+    val sleepPlannerSettings: StateFlow<com.noop.alarm.SleepPlannerSettings> = _sleepPlannerSettings.asStateFlow()
+
+    private val plannerClockReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: android.content.Intent) {
+            reconcileStrapAlarm()
+            schedulePlannerReminders()
+        }
+    }
+
     // MARK: - Today's cached metrics
 
     private val _today = MutableStateFlow<DailyMetric?>(null)
@@ -994,6 +1007,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // existing WHOOP flow below runs unchanged; it only acts when a non-WHOOP strap is the active
         // device. The Devices screen (next task) calls onActiveDeviceChanged after a setActive.
         noopApp.sourceCoordinator.start()
+        androidx.core.content.ContextCompat.registerReceiver(
+            appContext, plannerClockReceiver,
+            android.content.IntentFilter().apply {
+                addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
+                addAction(android.content.Intent.ACTION_TIME_CHANGED)
+            },
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         // #1410: on the first launch after an update, append an APP_VERSION_CHANGED event so a single
         // export can answer "what ran when". Idempotent — the stored last-seen version only advances
         // once the transition is recorded, so a background-only launch is caught on the next UI open.
@@ -1009,13 +1030,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         refreshActiveDeviceName()
         // #577 — surface the strap's smart-alarm wake as a local notification too (iOS AppModel.postSmartAlarm
         // twin), so a pocketed phone doesn't miss the wrist buzz. Self-gates on the wrist-alerts master.
-        ble.onSmartAlarmFired = { com.noop.notif.SmartAlarmNotifier.onFired(appContext) }
+        ble.onSmartAlarmFired = {
+            com.noop.notif.SmartAlarmNotifier.onFired(appContext)
+            val firedEpochMs = NoopPrefs.of(appContext).getLong("alarm.lastArmSentEpoch", 0L) * 1000L
+            reconcileStrapAlarm(maxOf(System.currentTimeMillis(), firedEpochMs))
+        }
         // Smooth HR from each LiveState emission, and re-arm the strap's firmware alarm whenever it
         // (re)bonds. A smart-alarm time changed while the strap was away never reached it — the send
         // is gated on bond — so the strap kept the OLD time and fired at it (#59). Gated on enabled so
         // a disabled alarm doesn't disarm on every reconnect.
         viewModelScope.launch {
             var lastBonded = false
+            var lastAlarmReady = false
             ble.state.collect { state ->
                 state.heartRate?.let { ingestHr(it) }
                 // #39 parity with iOS: clear the smoothed median on a true disconnect (no HR AND no R-R) so the
@@ -1026,10 +1052,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 dispatchDoubleTap(state)
                 localNotificationDispatcher.observeDeviceState(state.connected, state.worn, java.time.Instant.now().epochSecond,
                     ble.activeDeviceIsWhoop, activeStrapId)
+                val alarmReady = state.connected && state.encryptedBond && ble.activeDeviceIsWhoop
+                if (alarmReady && !lastAlarmReady) reconcileStrapAlarm()
+                lastAlarmReady = alarmReady
                 if (state.bonded && !lastBonded) {
                     // #59/#536: re-arm the strap on (re)bond. One reconcile covers BOTH the smart wake-alarm
                     // and the Buzz-WHOOP companion, arming the single slot to the earliest either wants (#5).
-                    reconcileStrapAlarm()
                     // Remember this strap so we can reconnect to it directly on the next launch (#67),
                     // e.g. after an APK update restarts the process. The address and model must both
                     // describe the link that actually bonded: scan fallback / easy-connect can establish
@@ -2856,24 +2884,143 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // NOTE: the _smartAlarm* state fields are declared ABOVE the init block (next to _illnessWatchEnabled)
     // so the init bond-collector can't read them before they're initialized (#84). ---
 
+    fun setSleepPlannerSettings(settings: com.noop.alarm.SleepPlannerSettings) {
+        sleepPlannerStore.write(settings)
+        _sleepPlannerSettings.value = sleepPlannerStore.read()
+        schedulePlannerReminders()
+    }
+
+    fun refreshSleepPlannerInputs() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val strapId = activeStrapId
+            runCatching {
+                val days = repository.daysMerged(strapId)
+                val now = System.currentTimeMillis() / 1000L
+                val imported = repository.sleepSessionsUnion(strapId, 0L, now)
+                val computed = repository.computedSleepSessionsUnion(strapId, 0L, now)
+                val sleeps = WhoopRepository.mergeSleepRichness(imported, computed) { localDayString(it.endTs) }
+                val naps = napSleepMinutesByDay(sleeps, repository.habitualMidsleepSec(strapId))
+                val baseNeed = RestScorer.personalizedNeedHours(
+                    days.mapNotNull { it.totalSleepMin?.takeIf { minutes -> minutes > 0.0 }?.div(60.0) }, null,
+                ) * 60.0
+                val ledger = com.noop.analytics.SleepDebt.ledger(
+                    series = days.map { it.day to com.noop.analytics.SleepDebt.creditedSleepMin(it.totalSleepMin, naps[it.day] ?: 0.0) },
+                    needHours = baseNeed / 60.0,
+                )
+                withContext(Dispatchers.Main) {
+                    if (strapId == activeStrapId) setSleepPlannerSettings(_sleepPlannerSettings.value.copy(
+                        baseNeedMinutes = kotlin.math.floor(baseNeed + 0.5).toInt(),
+                        debtMinutes = kotlin.math.floor(-ledger.balanceMin + 0.5).toInt().coerceAtLeast(0),
+                        historyNights = ledger.nightCount,
+                    ))
+                }
+            }
+        }
+    }
+
+    fun saveSleepPlannerAlarm(
+        enabled: Boolean,
+        wakeMinutes: Int,
+        weekdays: Set<Int>,
+        overrides: Map<Int, Int>,
+        mode: String,
+    ): String {
+        if (!ble.activeDeviceIsWhoop) return "unsupported"
+        if (!live.value.connected || !live.value.encryptedBond || !ble.commandChannelReady) return "reconnect"
+        if (enabled && live.value.whoop5Detected && !PuffinExperiment.from(appContext).isEnabled) return "unsupported"
+        val nowMs = System.currentTimeMillis()
+        _smartAlarmEnabled.value = enabled
+        _smartAlarmMinutes.value = wakeMinutes.coerceIn(0, 1439)
+        _smartAlarmWeekdays.value = weekdays.filter { it in 1..7 }.toSet()
+        _smartAlarmDayOverrides.value = overrides.filter { (day, minute) -> day in 1..7 && minute in 0..1439 }
+        NoopPrefs.setSmartAlarmEnabled(appContext, enabled)
+        NoopPrefs.setSmartAlarmMinutes(appContext, _smartAlarmMinutes.value)
+        NoopPrefs.setSmartAlarmWeekdays(appContext, _smartAlarmWeekdays.value)
+        NoopPrefs.setSmartAlarmDayOverrides(appContext, _smartAlarmDayOverrides.value)
+        setSleepPlannerSettings(_sleepPlannerSettings.value.copy(alarmMode = mode, skippedOccurrence = ""))
+        if (phoneAlarmStore.enabled) SmartAlarmScheduler.arm(appContext, phoneAlarmStore)
+        reconcileStrapAlarm(nowMs)
+        if (!enabled) return "cancelRequested"
+        val prefs = NoopPrefs.of(appContext)
+        if (prefs.getLong("alarm.lastArmAt", 0L) < nowMs) return "notSent"
+        val expected = nextSmartAlarmEpochSec(
+            _smartAlarmMinutes.value, _smartAlarmWeekdays.value, nowMs = nowMs,
+            dayOverrides = _smartAlarmDayOverrides.value,
+        )
+        val recorded = prefs.getLong("alarm.lastArmSentEpoch", 0L) == expected
+            && prefs.getString("alarm.lastArmDeviceId", null) == activeStrapId
+            && prefs.getBoolean("alarm.lastArmConnected", false)
+        return if (recorded) "sent" else "requested"
+    }
+
+    fun skipNextSleepPlannerAlarm(nowMs: Long = System.currentTimeMillis()): String {
+        if (!_smartAlarmEnabled.value) return "disabled"
+        if (!ble.activeDeviceIsWhoop) return "unsupported"
+        if (!live.value.connected || !live.value.encryptedBond || !ble.commandChannelReady) return "reconnect"
+        if (live.value.whoop5Detected && !PuffinExperiment.from(appContext).isEnabled) return "unsupported"
+        val clock = java.util.Calendar.getInstance().apply { timeInMillis = nowMs }
+        if (com.noop.analytics.PlannerAlarmPolicy.isSkipPending(_sleepPlannerSettings.value.skippedOccurrence, clock)) return "alreadySkipped"
+        val epoch = nextSmartAlarmEpochSec(
+            _smartAlarmMinutes.value, _smartAlarmWeekdays.value, nowMs = nowMs,
+            dayOverrides = _smartAlarmDayOverrides.value,
+            skippedOccurrence = _sleepPlannerSettings.value.skippedOccurrence,
+        ) ?: return "disabled"
+        val occurrence = java.util.Calendar.getInstance().apply { timeInMillis = epoch * 1000L }
+        val token = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(occurrence)
+        setSleepPlannerSettings(_sleepPlannerSettings.value.copy(skippedOccurrence = token))
+        if (phoneAlarmStore.enabled) SmartAlarmScheduler.arm(appContext, phoneAlarmStore)
+        reconcileStrapAlarm(nowMs)
+        return "requested"
+    }
+
+    fun restoreSleepPlannerOccurrence(): String {
+        if (!ble.activeDeviceIsWhoop) return "unsupported"
+        if (!live.value.connected || !live.value.encryptedBond || !ble.commandChannelReady) return "reconnect"
+        if (live.value.whoop5Detected && !PuffinExperiment.from(appContext).isEnabled) return "unsupported"
+        clearSleepPlannerSkip()
+        if (phoneAlarmStore.enabled) SmartAlarmScheduler.arm(appContext, phoneAlarmStore)
+        reconcileStrapAlarm()
+        return "requested"
+    }
+
+    private fun clearSleepPlannerSkip() {
+        if (_sleepPlannerSettings.value.skippedOccurrence.isNotEmpty()) {
+            setSleepPlannerSettings(_sleepPlannerSettings.value.copy(skippedOccurrence = ""))
+        }
+    }
+
+    fun refreshSleepPlannerReminders() = schedulePlannerReminders()
+
+    private fun schedulePlannerReminders() {
+        if (windDownStore.enabled || _sleepPlannerSettings.value.debtReminderEnabled) WindDownScheduler.schedule(
+            appContext, windDownStore, _smartAlarmMinutes.value, _smartAlarmDayOverrides.value,
+        ) else WindDownScheduler.cancel(appContext)
+    }
+
     fun setSmartAlarmEnabled(enabled: Boolean) {
+        clearSleepPlannerSkip()
         _smartAlarmEnabled.value = enabled
         NoopPrefs.setSmartAlarmEnabled(appContext, enabled)
+        schedulePlannerReminders()
         reconcileStrapAlarm()
     }
 
     fun setSmartAlarmMinutes(minutes: Int) {
+        clearSleepPlannerSkip()
         _smartAlarmMinutes.value = minutes.coerceIn(0, 24 * 60 - 1)
         NoopPrefs.setSmartAlarmMinutes(appContext, _smartAlarmMinutes.value)
+        schedulePlannerReminders()
         reconcileStrapAlarm()
     }
 
     /** Set which weekdays the strap alarm fires on (Calendar.DAY_OF_WEEK 1=Sun…7=Sat; empty = every
      *  day). Re-arms so the change takes effect immediately. Mirrors macOS (#539). */
     fun setSmartAlarmWeekdays(days: Set<Int>) {
+        clearSleepPlannerSkip()
         val clean = days.filter { it in 1..7 }.toSet()
         _smartAlarmWeekdays.value = clean
         NoopPrefs.setSmartAlarmWeekdays(appContext, clean)
+        schedulePlannerReminders()
         reconcileStrapAlarm()
     }
 
@@ -2881,11 +3028,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      *  (that day falls back to the default time). Persists + re-arms immediately so the next occurrence
      *  uses the new time. */
     fun setSmartAlarmDayOverride(dow: Int, minutes: Int?) {
+        clearSleepPlannerSkip()
         if (dow !in 1..7) return
         val next = _smartAlarmDayOverrides.value.toMutableMap()
         if (minutes == null) next.remove(dow) else next[dow] = minutes.coerceIn(0, 24 * 60 - 1)
         _smartAlarmDayOverrides.value = next
         NoopPrefs.setSmartAlarmDayOverrides(appContext, next)
+        schedulePlannerReminders()
         reconcileStrapAlarm()
     }
 
@@ -2916,7 +3065,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (phoneAlarmStore.enabled) SmartAlarmScheduler.arm(appContext, phoneAlarmStore)
         // The wind-down nudge is derived from the wake time, so keep it in step.
         if (windDownStore.enabled) WindDownScheduler.schedule(
-            appContext, windDownStore, phoneAlarmStore.targetMinutes, phoneAlarmStore.targetOverrides,
+            appContext, windDownStore, _smartAlarmMinutes.value, _smartAlarmDayOverrides.value,
         )
         // #536: re-arm the strap at the new earliest time when "Buzz WHOOP 4" is on. Routed through the
         // single reconciler so it can't clobber a smart-alarm the user still has on (#5).
@@ -2947,7 +3096,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // pointing at the old wake on exactly the day the user changed.
         if (windDownStore.enabled) {
             WindDownScheduler.schedule(
-                appContext, windDownStore, phoneAlarmStore.targetMinutes, phoneAlarmStore.targetOverrides,
+                appContext, windDownStore, _smartAlarmMinutes.value, _smartAlarmDayOverrides.value,
             )
         }
     }
@@ -2990,10 +3139,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setWindDownEnabled(enabled: Boolean) {
         windDownStore.enabled = enabled
         _windDownEnabled.value = enabled
-        if (enabled) WindDownScheduler.schedule(
-            appContext, windDownStore, phoneAlarmStore.targetMinutes, phoneAlarmStore.targetOverrides,
-        )
-        else WindDownScheduler.cancel(appContext)
+        schedulePlannerReminders()
     }
 
     // --- Illness watch (opt-in; the evaluation itself is the pure IllnessWatch.evaluateWindow).
@@ -3167,7 +3313,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      *
      *  Needs the strap connected (if it isn't, send() logs "ignored, not connected" and the reconcile
      *  takes effect next time you connect + change a setting; the bond-edge re-arm also calls this). */
-    private fun reconcileStrapAlarm() {
+    private fun reconcileStrapAlarm(nowMs: Long = System.currentTimeMillis()) {
+        if (!ble.activeDeviceIsWhoop || !live.value.connected || !live.value.encryptedBond || !ble.commandChannelReady) return
         // Smart wake-alarm's requested time (honours weekdays + per-day overrides), or null when off /
         // no valid firing day.
         val smartEpoch = if (_smartAlarmEnabled.value) {
@@ -3175,24 +3322,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _smartAlarmMinutes.value,
                 _smartAlarmWeekdays.value,
                 dayOverrides = _smartAlarmDayOverrides.value,
+                nowMs = nowMs,
+                skippedOccurrence = _sleepPlannerSettings.value.skippedOccurrence,
             )
         } else null
-        // Buzz-WHOOP-4 companion's requested time: the phone alarm's EARLIEST wake time, next occurrence
-        // ON A DAY THAT ALARM ACTUALLY FIRES. This routes through the same weekday-aware resolver the
-        // smart alarm uses rather than nextDailyEpochSec, which is unconditionally daily: leaving it daily
-        // would buzz the strap on a morning the phone alarm is switched off, which is precisely the day the
-        // user asked to sleep in. An empty weekday set still means every day.
-        //
-        // #1858: the per-day overrides go through TOO. This companion exists to buzz the strap at the phone
-        // alarm's earliest wake time, so a day whose wake time was moved must move the buzz with it — the
-        // comment here used to say "the phone alarm has none", which stopped being true the moment it got
-        // them, and a strap buzzing at the old time is worse than one not buzzing at all.
+        // The companion uses the next future elapsed window start, including midnight and DST changes.
+        // An already-open phone window keeps its independent deadline while the companion advances.
         val buzzEpoch = if (_buzzWhoop4Enabled.value) {
-            nextSmartAlarmEpochSec(
-                phoneAlarmStore.targetMinutes,
-                phoneAlarmStore.weekdays,
-                dayOverrides = phoneAlarmStore.targetOverrides,
-            )
+            SmartAlarmScheduler.nextFutureWindowStart(
+                now = java.util.Calendar.getInstance().apply { timeInMillis = nowMs },
+                weekdays = phoneAlarmStore.weekdays,
+                windowMinutes = phoneAlarmStore.windowMinutes,
+                skippedOccurrence = _sleepPlannerSettings.value.skippedOccurrence,
+            ) { phoneAlarmStore.targetFor(it) }
+                ?.timeInMillis?.div(1000L)
         } else null
 
         val epochSec = earliestStrapAlarmEpochSec(smartEpoch, buzzEpoch)
@@ -3341,6 +3484,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        appContext.unregisterReceiver(plannerClockReceiver)
         super.onCleared()
         // #78 hole-4: drop the app-foreground salvage-probe hook with this ViewModel (the next Activity's
         // ViewModel re-registers its own), so a cleared VM can never leak resume callbacks.
@@ -3440,7 +3584,7 @@ internal fun zoneCoachBuzzLoops(previousZone: Int, zone: Int, recoveryEnabled: B
  *    Numbers outside 1…7 are ignored.
  *  - [nowMs]/[calendarFactory]: injected for tests; default to the real clock + local calendar.
  *
- * Scans today through +7 days for the next strictly-future occurrence on an enabled weekday. Returns
+ * Scans today through +14 days for the next strictly-future occurrence on an enabled weekday. Returns
  * null only when no valid weekday falls in that range (i.e. the set held nothing in 1…7).
  */
 internal fun nextSmartAlarmEpochSec(
@@ -3449,6 +3593,7 @@ internal fun nextSmartAlarmEpochSec(
     nowMs: Long = System.currentTimeMillis(),
     calendarFactory: () -> java.util.Calendar = { java.util.Calendar.getInstance() },
     dayOverrides: Map<Int, Int> = emptyMap(),
+    skippedOccurrence: String = "",
 ): Long? {
     val valid = weekdays.filter { it in 1..7 }.toSet()
     // An EMPTY input means "every day" (backward compatible). A non-empty selection that filters to
@@ -3457,7 +3602,7 @@ internal fun nextSmartAlarmEpochSec(
     // Per-weekday OVERRIDES (#554): only valid (day 1…7, minute in-range) entries count; a day without an
     // override uses the default [minuteOfDay]. When the map is empty this is byte-for-byte the old path.
     val cleanOverrides = dayOverrides.filterKeys { it in 1..7 }.filterValues { it in 0 until 24 * 60 }
-    for (offset in 0..7) {
+    for (offset in 0..14) {
         // Resolve this calendar day's weekday first, so the per-day override time is applied BEFORE the
         // strictly-future check (a later override time can make today's occurrence still pending).
         val probe = calendarFactory().apply {
@@ -3468,15 +3613,10 @@ internal fun nextSmartAlarmEpochSec(
         // Skip days the alarm doesn't fire on (empty weekdays = every day).
         if (weekdays.isNotEmpty() && !valid.contains(dow)) continue
         val wakeMin = cleanOverrides[dow] ?: minuteOfDay
-        val cal = calendarFactory().apply {
-            timeInMillis = nowMs
-            add(java.util.Calendar.DAY_OF_YEAR, offset)
-            set(java.util.Calendar.HOUR_OF_DAY, wakeMin / 60)
-            set(java.util.Calendar.MINUTE, wakeMin % 60)
-            set(java.util.Calendar.SECOND, 0)
-            set(java.util.Calendar.MILLISECOND, 0)
-        }
+        val cal = com.noop.analytics.SleepPlanner.wakeDate(wakeMin, probe)
         if (cal.timeInMillis <= nowMs) continue
+        val occurrence = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(cal)
+        if (occurrence == skippedOccurrence) continue
         return cal.timeInMillis / 1000
     }
     return null
@@ -3487,7 +3627,7 @@ internal fun nextSmartAlarmEpochSec(
  * epoch-second. Pure + clock-injectable so it can be unit-tested.
  *
  * NO PRODUCTION CALLER as of the phone alarm gaining weekday selection: the "Buzz WHOOP 4/5" companion
- * was its only one, and it now routes through [nextSmartAlarmEpochSec] so a day switched off on the
+ * was its only one, and it now routes through [SmartAlarmScheduler.nextFutureWindowStart] so a day switched off on the
  * phone alarm cannot leave the strap buzzing on that morning. Kept because it is the reference for what
  * "unconditionally daily" means here — [nextSmartAlarmEpochSec] with an empty weekday set must stay
  * equivalent to it, and its own test is what pins that. Delete it only alongside that equivalence.

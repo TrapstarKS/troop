@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sleep_planner_title">Sleep Planner</string>
+    <string name="sleep_planner_subtitle">Plan your sleep. Set your wake deadline.</string>
+    <string name="sleep_planner_next_plan">Next sleep plan</string>
+    <string name="sleep_planner_peak" formatted="false">100%\nPeak</string>
+    <string name="sleep_planner_perform" formatted="false">85%\nPerform</string>
+    <string name="sleep_planner_get_by" formatted="false">70%\nGet by</string>
+    <string name="sleep_planner_bedtime">Suggested bedtime</string>
+    <string name="sleep_planner_sleep_target">Sleep target</string>
+    <string name="sleep_planner_need">Sleep need, including debt</string>
+    <string name="sleep_planner_debt">Added sleep debt</string>
+    <string name="sleep_planner_ready">Local estimate from your sleep history.</string>
+    <string name="sleep_planner_learning">Building your estimate: at least 3 recorded nights are needed.</string>
+    <string name="sleep_planner_haptic">Haptic alarm</string>
+    <string name="sleep_planner_enable">Enable strap alarm</string>
+    <string name="sleep_planner_exact">Exact time</string>
+    <string name="sleep_planner_goal_mode">Sleep goal</string>
+    <string name="sleep_planner_recovery_mode">Recovery</string>
+    <string name="sleep_planner_adaptive_unavailable">Early waking is unavailable in this build. The strap uses your latest deadline; fresh current-night sleep or recovery data is required to advance it. Yesterday’s recovery is never used.</string>
+    <string name="sleep_planner_exact_time">Default wake deadline</string>
+    <string name="sleep_planner_latest_time">Default wake deadline</string>
+    <string name="sleep_planner_wake">Default wake deadline</string>
+    <string name="sleep_planner_day_plan">Daily goals and weekend times</string>
+    <string name="sleep_planner_default_goal">Default sleep goal</string>
+    <string name="sleep_planner_use_default">Use default</string>
+    <string name="sleep_planner_save">Save alarm</string>
+    <string name="sleep_planner_reported">Strap reports this deadline. This readback is diagnostic, not a wake guarantee.</string>
+    <string name="sleep_planner_sent">Wake command recorded; awaiting strap confirmation.</string>
+    <string name="sleep_planner_off">Strap alarm disabled in NOOP.</string>
+    <string name="sleep_planner_local">Saved locally; strap deadline not confirmed.</string>
+    <string name="sleep_planner_saved_deadline">Saved wake deadline</string>
+    <string name="sleep_planner_countdown">Alarm in %1$s</string>
+    <string name="sleep_planner_reconnect_error">Could not save. Reconnect and retry; your existing alarm has not changed.</string>
+    <string name="sleep_planner_unsupported">This strap alarm requires a supported WHOOP connection. WHOOP 5/MG also needs experimental Protocol probes.</string>
+    <string name="sleep_planner_permission">Notifications are blocked. Enable them in system settings to receive reminders.</string>
+    <string name="sleep_planner_send_error">The command was not recorded as sent. Reconnect and retry.</string>
+    <string name="sleep_planner_reconnect">Reconnect strap</string>
+    <string name="sleep_planner_skip">Skip next alarm</string>
+    <string name="sleep_planner_awake">I’m awake — cancel next alarm</string>
+    <string name="sleep_planner_skipped">Skipped %1$s. Future alarm days stay enabled.</string>
+    <string name="sleep_planner_restore">Restore skipped alarm</string>
+    <string name="sleep_planner_skip_saved">The next occurrence is already skipped.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">Last reported strap charge was below 20%. Charge it before relying on the alarm.</string>
+    <string name="sleep_planner_phone_battery" formatted="false">Phone battery is 20% or lower. This is NOOP’s local warning threshold.</string>
+    <string name="sleep_planner_backup">Keep a separate backup for a wake you cannot miss. Strap alarms need an active app connection to repeat on later days.</string>
+    <string name="sleep_planner_reminders">Evening reminders</string>
+    <string name="sleep_planner_wind_down">Remind me to wind down</string>
+    <string name="sleep_planner_reminder_time">Suggested reminder</string>
+    <string name="sleep_planner_debt_reminder">Include sleep-debt nudge</string>
+    <string name="sleep_planner_reminder_help">Optional reminders use this plan and its daily goals. Debt guidance is newly authored for NOOP and is off by default.</string>
+    <string name="sleep_planner_phone_alarm">Phone wake window and backup</string>
+    <string name="sleep_planner_previous_day">Previous day</string>
+    <string name="sleep_planner_back">Back to Sleep Planner</string>
+    <string name="sleep_planner_reminder_title">Time to wind down</string>
+    <string name="sleep_planner_reminder_notification">Your sleep plan suggests winding down for a %1$s bedtime.</string>
+    <string name="sleep_planner_debt_notification">Make room for sleep tonight. Your local plan suggests bed at %1$s, with recent sleep debt included in your need.</string>
+    <string name="sleep_planner_cancel_requested">Cancellation requested; the strap has not confirmed it.</string>
+    <string name="sleep_planner_notification_settings">Notification settings</string>
+    <string name="sleep_planner_phone_help">Phone light-sleep detection with an exact wake deadline.</string>
+    <string name="sleep_planner_update_requested">Alarm update requested; strap confirmation is still pending.</string>
+</resources>
