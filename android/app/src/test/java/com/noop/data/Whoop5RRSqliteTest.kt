@@ -446,7 +446,9 @@ class Whoop5RRSqliteTest {
         val scoredEnd = if (quiet) end - 2 * 86_400L else end
         val start = scoredEnd - 4 * 3_600L
         val anchor = AnalyticsEngine.dayString(end, offset)
-        for (back in 2L..15L) {
+        // Keep fourteen known valid nights outside every day this pass replaces.
+        val firstHistoryBack = if (quiet) 3L else 2L
+        for (back in firstHistoryBack until firstHistoryBack + 14L) {
             val day = java.time.LocalDate.parse(anchor).minusDays(back).toString()
             days["$id-noop" to day] = DailyMetric(deviceId = "$id-noop", day = day,
                 totalSleepMin = 480.0, efficiency = 0.9, restingHr = 60, avgHrv = 32.0, recovery = 60.0)
@@ -459,6 +461,8 @@ class Whoop5RRSqliteTest {
             efficiency = 1.0, stagesJSON = AnalyticsEngine.encodeStages(listOf(StageSegment(start, scoredEnd, "light"))))))
         if (quiet) {
             repo.insert(StreamBatch(hr = (0L until 100L).map { HrRow(end + 3_600L + it, 60) }), id)
+            assertEquals("quiet anchor contains only the sparse current-day samples", 100,
+                repo.hrSamplesForDevice(id, end - 30L * 3_600L, now + 7_200L).size)
             days["$id-noop" to anchor] = DailyMetric(deviceId = "$id-noop", day = anchor,
                 totalSleepMin = 480.0, efficiency = 0.9, restingHr = 45, avgHrv = 100.0, recovery = 80.0)
         }
@@ -477,6 +481,7 @@ class Whoop5RRSqliteTest {
         if (quiet) {
             assertEquals(if (preserve) 100.0 else null, days["$id-noop" to anchor]?.avgHrv)
             assertEquals(preserve, resolved.hrvHistory.dayKeys.contains(anchor))
+            assertEquals(if (preserve) 15 else 14, resolved.hrvHistory.ownValidNights)
         }
     }
 
