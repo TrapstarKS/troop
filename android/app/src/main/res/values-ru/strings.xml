@@ -2867,4 +2867,5 @@
     <string name="whoop_nav_weekly_plan">План на неделю</string>
     <string name="whoop_plan_local_title">Планирование недели пока недоступно</string>
     <string name="whoop_plan_local_detail">Дневник и тренды доступны для просмотра ваших локальных привычек и прогресса.</string>
+    <string name="plan_numeric_invalid">Введите допустимое число, чтобы сохранить.</string>
 </resources>

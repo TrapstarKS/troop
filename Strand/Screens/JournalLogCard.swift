@@ -47,6 +47,7 @@ struct JournalLogCard: View {
 
     @State private var draftAnswers: [String: Bool] = [:]
     @State private var draftNumeric: [String: Double] = [:]
+    @State private var draftNumericText: [String: String] = [:]
     @State private var baselineAnswers: [String: Bool] = [:]
     @State private var baselineNumeric: [String: Double] = [:]
     @State private var saving = false
@@ -55,7 +56,17 @@ struct JournalLogCard: View {
     @State private var calendarDate = Date()
     @State private var pendingOffset: Int?
 
-    private var dirty: Bool { draftAnswers != baselineAnswers || draftNumeric != baselineNumeric }
+    private var dirty: Bool {
+        draftAnswers != baselineAnswers || draftNumeric != baselineNumeric || draftNumericText.contains {
+            $0.value != (baselineNumeric[$0.key].map(NumericLogField.format) ?? "")
+        }
+    }
+    private var invalidNumeric: Bool {
+        draftNumericText.contains { question, text in
+            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                journalNumericValue(text, allowNegative: JournalFactor.find(question)?.unit == "°C") == nil
+        }
+    }
     private var selectedDate: Date {
         JournalCalendar.date(dayKey) ?? Date()
     }
@@ -181,7 +192,12 @@ struct JournalLogCard: View {
                                 .disabled(!dirty || saving)
                             Button(action: saveDraft) { Text(saving ? String(localized: "Saving…") : String(localized: "Save journal")) }
                                 .buttonStyle(.borderedProminent)
-                                .disabled(!dirty || saving)
+                                .disabled(!dirty || saving || invalidNumeric)
+                        }
+                        if invalidNumeric {
+                            Text("Enter a valid number to save.")
+                                .font(StrandFont.footnote)
+                                .foregroundStyle(StrandPalette.statusWarning)
                         }
                         if saveFailed {
                             Text("Journal could not be saved. Try again.")
@@ -235,6 +251,7 @@ struct JournalLogCard: View {
         baselineNumeric = numericAnswers
         draftAnswers = answers
         draftNumeric = numericAnswers
+        draftNumericText = [:]
         saveFailed = false
     }
 
@@ -248,11 +265,13 @@ struct JournalLogCard: View {
         baselineNumeric = [:]
         draftAnswers = [:]
         draftNumeric = [:]
+        draftNumericText = [:]
         dayOffset = offset
         onChanged()
     }
 
     private func saveDraft() {
+        guard dirty, !saving, !invalidNumeric else { return }
         let day = dayKey
         let nextAnswers = draftAnswers
         let nextNumeric = draftNumeric
@@ -275,6 +294,7 @@ struct JournalLogCard: View {
             if !saveFailed {
                 baselineAnswers = nextAnswers
                 baselineNumeric = nextNumeric
+                draftNumericText = [:]
                 repo.noteJournalChanged()
             }
             onChanged()
@@ -341,10 +361,9 @@ struct JournalLogCard: View {
         return HStack(spacing: NoopMetrics.space2) {
             stepperButton("minus", q: item.canonical, current: current)
             NumericLogField(
-                value: current,
-                placeholder: "—",
-                onCommit: { v in commitNumeric(item.canonical, value: v) },
-                onClear: { draftNumeric.removeValue(forKey: item.canonical); draftAnswers.removeValue(forKey: item.canonical) })
+                text: Binding(get: { draftNumericText[item.canonical] ?? draftNumeric[item.canonical].map(NumericLogField.format) ?? "" },
+                              set: { editNumeric(item.canonical, text: $0) }),
+                placeholder: "—")
             .frame(width: NoopMetrics.space4 * 4)
             if let unit = item.kind.unitLabel, !unit.isEmpty {
                 Text(verbatim: unit)
@@ -356,6 +375,7 @@ struct JournalLogCard: View {
                 Button {
                     draftNumeric.removeValue(forKey: item.canonical)
                     draftAnswers.removeValue(forKey: item.canonical)
+                    draftNumericText.removeValue(forKey: item.canonical)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(StrandFont.footnote)
@@ -383,8 +403,22 @@ struct JournalLogCard: View {
 
     private func commitNumeric(_ q: String, value: Double) {
         guard value.isFinite, value >= 0 || JournalFactor.find(q)?.unit == "°C" else { return }
+        draftNumericText.removeValue(forKey: q)
         draftNumeric[q] = value
         draftAnswers[q] = true
+        saveFailed = false
+    }
+
+    private func editNumeric(_ q: String, text: String) {
+        guard !saving, answersDayKey == dayKey else { return }
+        draftNumericText[q] = text
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draftNumeric.removeValue(forKey: q)
+            draftAnswers.removeValue(forKey: q)
+        } else if let value = journalNumericValue(text, allowNegative: JournalFactor.find(q)?.unit == "°C") {
+            draftNumeric[q] = value
+            draftAnswers[q] = true
+        }
         saveFailed = false
     }
 
@@ -523,6 +557,7 @@ struct JournalLogCard: View {
     private func answerPill(_ label: LocalizedStringKey, q: String, value: Bool) -> some View {
         let selected = draftAnswers[q] == value
         return pillButton(label, selected: selected) {
+            draftNumericText.removeValue(forKey: q)
             if selected {
                 draftAnswers.removeValue(forKey: q)
                 draftNumeric.removeValue(forKey: q)
@@ -551,41 +586,31 @@ struct JournalLogCard: View {
     }
 }
 
-/// A compact numeric log field: shows the current value or a ghost placeholder, commits a Double on
-/// return / focus-out. Kept small so the numeric row reads like the yes/no pills.
-private struct NumericLogField: View {
-    let value: Double?
-    let placeholder: String
-    let onCommit: (Double) -> Void
-    let onClear: () -> Void
+private func journalNumericValue(_ text: String, allowNegative: Bool) -> Double? {
+    let cleaned = text.replacingOccurrences(of: ",", with: ".").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let value = Double(cleaned), value.isFinite, value >= 0 || allowNegative else { return nil }
+    return value
+}
 
-    @FocusState private var focused: Bool
-    @State private var text = ""
+/// A compact numeric log field whose text stays in the parent draft, including incomplete numbers.
+private struct NumericLogField: View {
+    @Binding var text: String
+    let placeholder: String
 
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.roundedBorder)
             .multilineTextAlignment(.center)
             .font(StrandFont.bodyNumber)
-            .focused($focused)
-            .onAppear { text = value.map(Self.format) ?? "" }
-            .onChangeCompat(of: value) { v in if !focused { text = v.map(Self.format) ?? "" } }
-            .onChangeCompat(of: focused) { active in if !active { text = value.map(Self.format) ?? "" } }
-            .onChangeCompat(of: text) { _ in commit() }
-            .onSubmit { commit() }
         #if os(iOS)
             .keyboardType(.decimalPad)
         #endif
     }
 
-    private func commit() {
-        let cleaned = text.replacingOccurrences(of: ",", with: ".")
-        if cleaned.trimmingCharacters(in: .whitespaces).isEmpty { onClear() }
-        else if let v = Double(cleaned) { onCommit(v) }
-    }
-
-    private static func format(_ v: Double) -> String {
+    static func format(_ v: Double) -> String {
         guard v.isFinite else { return "—" }
-        return String(format: v == v.rounded() ? "%.0f" : "%.1f", v)
+        let integral = v == v.rounded()
+        let rounded = integral ? v : (v * 10).rounded(.toNearestOrEven) / 10
+        return String(format: integral ? "%.0f" : "%.1f", locale: Locale(identifier: "en_US_POSIX"), rounded)
     }
 }

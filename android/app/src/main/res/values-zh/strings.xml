@@ -2942,4 +2942,5 @@
     <string name="whoop_nav_weekly_plan">每周计划</string>
     <string name="whoop_plan_local_title">每周计划尚不可用</string>
     <string name="whoop_plan_local_detail">日记和趋势仍可用于查看本地习惯和进度。</string>
+    <string name="plan_numeric_invalid">输入有效数字后即可保存。</string>
 </resources>

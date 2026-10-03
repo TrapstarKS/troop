@@ -2966,4 +2966,5 @@
     <string name="whoop_nav_weekly_plan">Plano semanal</string>
     <string name="whoop_plan_local_title">O planeamento semanal ainda não está disponível</string>
     <string name="whoop_plan_local_detail">O diário e as tendências continuam disponíveis para rever os seus hábitos e progresso locais.</string>
+    <string name="plan_numeric_invalid">Introduz um número válido para guardar.</string>
 </resources>

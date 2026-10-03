@@ -2973,4 +2973,5 @@
     <string name="whoop_nav_weekly_plan">Plan hebdomadaire</string>
     <string name="whoop_plan_local_title">La planification hebdomadaire est encore indisponible</string>
     <string name="whoop_plan_local_detail">Le journal et les tendances restent disponibles pour consulter vos habitudes et vos progrès locaux.</string>
+    <string name="plan_numeric_invalid">Saisissez un nombre valide pour enregistrer.</string>
 </resources>

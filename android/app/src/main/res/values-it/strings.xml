@@ -2940,4 +2940,5 @@
     <string name="whoop_nav_weekly_plan">Piano settimanale</string>
     <string name="whoop_plan_local_title">La pianificazione settimanale non è ancora disponibile</string>
     <string name="whoop_plan_local_detail">Diario e tendenze restano disponibili per esaminare abitudini e progressi locali.</string>
+    <string name="plan_numeric_invalid">Inserisci un numero valido per salvare.</string>
 </resources>
