@@ -48,8 +48,9 @@ class MoreNavigationContractTest {
             moreSource.contains("MoreHubRow(uiString(destination.titleRes), destination.icon) { onNavigate(if (destination.route == \"coach\" && !AiKeyStore.hasKey(context)) \"local_briefing\" else destination.route) }"),
         )
         assertTrue(
-            "Bottom-tab selections must return to their root or use top-level navigation",
-            source.contains("if (dest.route != currentRoute) { if (dest == Destination.Coach) openCoach() else if (!nav.popBackStack(dest.route, false)) nav.navigateTopLevel(dest.route) }"),
+            "Only reselecting the owning tab pops its root; tab switches retain top-level state save/restore",
+            source.contains("val reselected = dest != Destination.Coach && dest.route == selectedTabRoute if (dest != Destination.Coach) selectedTabRoute = dest.route if (reselected && nav.popBackStack(dest.route, false))") &&
+                source.contains("if (dest == Destination.Coach) openCoach() else nav.navigateTopLevel(dest.route)"),
         )
         assertTrue(
             "The Coach orb must preserve the selected primary tab",
