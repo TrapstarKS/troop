@@ -19,6 +19,7 @@ public enum NoopMetrics {
     public static let scoreDialDiameter: CGFloat = 260
     public static let fullScoreDialWidthFraction: CGFloat = 0.662
     public static let compactScoreDialDiameter: CGFloat = 90
+    public static let compactScoreDialWidthFraction: CGFloat = 0.232
     public static let scoreDialStroke: CGFloat = 15
     public static let compactScoreDialStroke: CGFloat = 5
     public static let scoreDisplaySize: CGFloat = 68
@@ -28,6 +29,7 @@ public enum NoopMetrics {
     public static let scoreTargetWidth: CGFloat = 2
     public static let tabIconSize: CGFloat = 22
     public static let tabLabelSize: CGFloat = 10
+    public static let tabLabelMinimumScale: CGFloat = 0.55
     public static let chartLineWidth: CGFloat = 2
     public static let chartBarRadius: CGFloat = 3
     public static let tileHeight: CGFloat = 96   // Design Reset: tighter metric tile
