@@ -670,6 +670,7 @@ public enum Baselines {
 
 public extension Baselines {
     /// Local labelled R-R day encoded as UTC midnight, with the later manual cut retained.
+    /// Kotlin twin: `Baselines.effectiveHrvEpoch`.
     static func effectiveHrvEpoch(manualEpoch: Double, firstScorableTimestamp: Int?,
                                    isWhoop5: Bool, offsetSec: Int) -> Double {
         guard isWhoop5, let firstScorableTimestamp else { return manualEpoch }
@@ -678,6 +679,7 @@ public extension Baselines {
     }
 
     /// Calendar keys use the same UTC-midnight convention as the baseline fold.
+    /// Kotlin twin: `Baselines.isInHrvEra`.
     static func isInHrvEra(day: String, epoch: Double) -> Bool {
         guard let epochDay = isoEpochDay(day) else { return false }
         return Double(epochDay) * 86_400 >= epoch

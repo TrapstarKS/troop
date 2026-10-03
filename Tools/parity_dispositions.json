@@ -291,6 +291,94 @@
       "identity_sha256": "28fa51ec52e1a418a0c8bd500cceb13c529cf8dc7e8bbe290003fe97602e6dff",
       "platform": "kotlin",
       "rationale": "Formats the reading's day for the Settings caption of the Health Connect weight sync. Apple platforms have no Health Connect, so the opt-in 'Use weight from Health Connect' profile sync exists only on Android and there is no Swift counterpart to pair with, now or later."
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-function",
+      "identity": "swift\u0000Packages/StrandImport/Sources/StrandImport/HealthWriteback.swift::authorizationTypeSignature/2#1",
+      "identity_sha256": "6e0b0937dcf71cc73b720cd0ea36b2fdd076dcc02feeed6ddb87c0e8ecfb3b2d",
+      "platform": "swift",
+      "rationale": "HealthKit read/share permission roles are Apple-specific; Android Health Connect has separate authorization types. Refs ryanbr/noop#2644 and ryanbr/noop#2514."
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::importedDailyUnion/3#1",
+      "identity_sha256": "87eb8b4a1f861f1bcf8f7a112890edba54e9e6362fd3bc8a52dd30935846d08c",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.unionDailyMetrics performs the same active/canonical imported bucket read in the excluded app layer. Stored-row Charge histories have actual engine/SQLite regression twins. Refs ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::importedDailyUnionFlow/3#1",
+      "identity_sha256": "a1b8ac6c0842e6925e91e66bfb292e599945dff1dcb8e5eb3080e17951c16e21",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.refresh publishes the same imported bucket through ObservableObject rather than Flow, in the excluded app layer. Refs ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::effectiveHrvEpoch/4#1",
+      "identity_sha256": "b222c28c9cad61cbfefec8380ffddff5e7749848da80f0d3bdf594396b786355",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.effectiveHrvEpoch performs the same active/canonical scorable-RR lookup in the excluded app layer. The pure Baselines twin is oracle-guarded and repository lookups have actual SQLite twins. Refs ryanbr/noop#2126.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/ingest/WhoopCsvImporter.kt::withSkinTempDeviations/2#1",
+      "identity_sha256": "8431f85376351488f3136fc0536cee7e9151c53961bc0e0166c3916c2082d464",
+      "platform": "kotlin",
+      "rationale": "Swift WhoopImporter.withSkinTempDeviations performs the same preceding-absolute-night fold in the excluded app layer, with actual rounding oracle and import regressions. Refs ryanbr/noop#2285.",
+      "twin_path": "Strand/Data/WhoopImporter.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/ingest/WhoopCsvImporter.kt::skinTempRepair/3#1",
+      "identity_sha256": "b5ca7277c7f07a07fc69683213779a7549b69a522f65c79141f3f8a434b4b97e",
+      "platform": "kotlin",
+      "rationale": "Swift WhoopImporter.skinTempRepair uses the same canonical series origin proof in the excluded app layer; false-origin/idempotency regressions guard both. Refs ryanbr/noop#2285.",
+      "twin_path": "Strand/Data/WhoopImporter.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/ingest/WhoopCsvImporter.kt::repairAbsoluteSkinTempIfNeeded/4#1",
+      "identity_sha256": "479a15d4f55eb6de209bcaec93dd2cb09abfb67b81c6e810782647b92a416351",
+      "platform": "kotlin",
+      "rationale": "Swift WhoopImporter.repairAbsoluteSkinTempIfNeeded performs the same successful-write-only repair flag logic in the excluded app layer; defaults and injected Android preferences have distinct dependencies. Refs ryanbr/noop#2285.",
+      "twin_path": "Strand/Data/WhoopImporter.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-constant",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/ingest/WhoopCsvImporter.kt::importerVersion",
+      "identity_sha256": "e7b871f983fd868ec5ec2694994760eca3c84f4ce5524b93ad8f66b9e3064ddb",
+      "platform": "kotlin",
+      "rationale": "Swift WhoopImporter.importerVersion is the same version2 import contract in the excluded app layer. Both actual import traces and temperature regressions preserve it. Refs ryanbr/noop#2285.",
+      "twin_path": "Strand/Data/WhoopImporter.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-constant",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/ingest/WhoopCsvImporter.kt::skinTempRepairFlagKey",
+      "identity_sha256": "b050a42b6ab4e34234708aceb457deca97e8914f5526e9919bd656b481787a30",
+      "platform": "kotlin",
+      "rationale": "Swift WhoopImporter.skinTempRepairFlagKey is the identical successful-write-only repair preference key in the excluded app layer. Actual origin/idempotency tests guard both. Refs ryanbr/noop#2285.",
+      "twin_path": "Strand/Data/WhoopImporter.swift"
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDatabase.kt::migrate/1#40",
+      "identity_sha256": "f2fcc9a538bee8eaef0fa7a5ada1eb2eb27a1d63ddcd443355b4086ca78cbc0c",
+      "platform": "kotlin",
+      "rationale": "Room MIGRATION_41_42 implements Migration.migrate; GRDB registers v48-daily-active-energy as an inline closure. Shared schema_oracle.json and actual migration/roundtrip tests pin the same appended nullable REAL column, with no historical backfill. Refs ryanbr/noop#2608."
     }
   ]
 }
