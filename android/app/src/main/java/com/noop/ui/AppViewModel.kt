@@ -59,7 +59,6 @@ import com.noop.notif.hasImportedNotificationInputs
 import com.noop.notif.notificationComputedSources
 import com.noop.notif.StrainTargetNotifier
 import com.noop.notif.ScheduledReportPolicy
-import com.noop.notif.scorePctOrNull
 import com.noop.protocol.CommandNumber
 import com.noop.widget.WidgetSnapshot
 import com.noop.widget.WidgetSnapshotStore
@@ -827,7 +826,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val importedInputs = computedSources?.isEmpty() == true &&
                     hasImportedNotificationInputs(it, imported, wakeSources, importedIds, currentStreak, importedStreak)
                 val state = ble.state.value
-                LocalNotificationSnapshot(it.day, wake, it.recovery.scorePctOrNull(),
+                LocalNotificationSnapshot(it.day, wake, RecoveryStrainDetailLogic.recoveryPercent(it.recovery),
                     it.totalSleepMin?.roundToInt(), it.strain?.let { value ->
                         (UnitFormatter.effortValue(value, EffortScale.WHOOP) * 10).roundToInt()
                     }, currentStreak, state.backfilling || state.historyPendingSync || state.analyzingHistory ||
