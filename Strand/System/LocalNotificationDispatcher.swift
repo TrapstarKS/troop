@@ -140,64 +140,60 @@ final class LocalNotificationDispatcher {
                 sessions.map { SleepStageTotals.NightBlock(start: $0.effectiveStartTs, end: $0.endTs) },
                 offsetSec: offset, habitualMidsleepSec: habitual) ?? []
             if let wake = group.map({ sessions[$0].endTs }).max(), wake <= nowSec, nowSec - wake <= 86_400 {
-                let summary = LocalBriefingCopy.summary(
-                    recovery: row.recovery.map { Int($0.rounded()) },
-                    sleepMinutes: row.totalSleepMin.map { Int($0.rounded()) },
-                    strainTenths: row.strain.map { Int(($0 * 2.1).rounded()) }, streak: streak)
-                let key = row.day
-                if row.recovery != nil {
-                    await post(.recoveryReady, event: key, occurrence: wake, now: nowSec,
-                               title: String(localized: "Recovery is ready"), body: summary)
-                }
-                if row.totalSleepMin != nil {
-                    await post(.sleepReady, event: key, occurrence: wake, now: nowSec,
-                               title: String(localized: "Sleep is ready"), body: summary)
-                }
-                if row.recovery != nil || row.totalSleepMin != nil {
-                    await post(.morningRecap, event: key, occurrence: wake, now: nowSec,
-                               title: String(localized: "Your recorded night"), body: summary)
-                    await post(.dailyOutlook, event: key, occurrence: wake, now: nowSec,
-                               title: String(localized: "Daily Outlook"), body: summary)
-                }
+                let report = LocalRecordedReport(day: row.day, recovery: row.recovery.map { Int($0.rounded()) },
+                    sleepMinutes: row.totalSleepMin.map { Int($0.rounded()) }, strainTenths: nil, streak: streak,
+                    sleepNeedMinutes: model.repo.importedSleep[row.day]?.needMin.map { Int($0.rounded()) },
+                    sleepDebtMinutes: model.repo.importedSleep[row.day]?.debtMin.map { Int($0.rounded()) })
+                var available: Set<String> = []
+                if row.recovery != nil { available.insert(LocalNotificationFamily.recoveryReady.rawValue) }
+                if row.totalSleepMin != nil { available.insert(LocalNotificationFamily.sleepReady.rawValue) }
+                if !available.isEmpty { available.formUnion(["morningRecap", "dailyOutlook"]) }
+                await postReport(group: .night, report: report, available: available,
+                                 occurrence: wake, now: nowSec)
+
             }
         }
 
         if minute >= 20 * 60, let row = model.repo.days.last(where: { $0.day == today }) {
             let occurrence = Int((Calendar.current.date(bySettingHour: 20, minute: 0, second: 0, of: now) ?? now).timeIntervalSince1970)
-            let summary = LocalBriefingCopy.summary(
-                recovery: row.recovery.map { Int($0.rounded()) },
+            let report = LocalRecordedReport(day: row.day, recovery: row.recovery.map { Int($0.rounded()) },
                 sleepMinutes: row.totalSleepMin.map { Int($0.rounded()) },
-                strainTenths: row.strain.map { Int(($0 * 2.1).rounded()) }, streak: streak)
-            if row.strain != nil {
-                await post(.strainReady, event: today, occurrence: occurrence, now: nowSec,
-                           title: String(localized: "Today's saved Strain"), body: summary)
-            }
-            if row.recovery != nil || row.totalSleepMin != nil || row.strain != nil {
-                await post(.dayInReview, event: today, occurrence: occurrence, now: nowSec,
-                           title: String(localized: "Day in Review"), body: summary)
-            }
-            if streak > 0 {
-                await post(.streakSummary, event: today, occurrence: occurrence, now: nowSec,
-                           title: String(localized: "Your recorded streak"), body: summary)
-            }
+                strainTenths: row.strain.map { Int(($0 * 2.1).rounded()) }, streak: streak,
+                sleepNeedMinutes: model.repo.importedSleep[row.day]?.needMin.map { Int($0.rounded()) },
+                sleepDebtMinutes: model.repo.importedSleep[row.day]?.debtMin.map { Int($0.rounded()) })
+            var available: Set<String> = []
+            if row.strain != nil { available.insert("strainReady") }
+            if streak > 0 { available.insert("streakSummary") }
+            if row.recovery != nil || row.totalSleepMin != nil || !available.isEmpty { available.insert("dayInReview") }
+            await postReport(group: .evening, report: report, available: available,
+                             occurrence: occurrence, now: nowSec)
+
         }
         if defaults.bool(forKey: LocalNotificationFamily.workoutReady.enabledKey),
            let workout = await model.repo.workoutRows(days: 1).max(by: { $0.startTs < $1.startTs }),
            workout.endTs <= nowSec {
             await post(.workoutReady, event: String(workout.startTs), occurrence: workout.endTs, now: nowSec,
                        title: String(localized: "Workout ready"),
-                       body: String(localized: "Your recorded activity is available in Workouts after the data refresh."))
+                       body: String(localized: "Your recorded activity is available in Workouts after the data refresh."),
+                       context: LocalNotificationContext(route: "workouts", eventID: "workoutReady:\(workout.startTs)",
+                           day: Repository.localDayKey(Date(timeIntervalSince1970: Double(workout.startTs))),
+                           workoutStartSec: workout.startTs,
+                           message: String(localized: "Your recorded activity is available in Workouts after the data refresh.")))
         }
         if let plan = weeklyPlanProvider?.notificationSummary(now: now), minute >= 17 * 60 {
             let weekday = Calendar.current.component(.weekday, from: now)
             let occurrence = Int((Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: now) ?? now).timeIntervalSince1970)
             if weekday == 6, let body = plan.checkIn {
                 await post(.weeklyCheckIn, event: plan.weekKey, occurrence: occurrence, now: nowSec,
-                           title: String(localized: "Weekly Plan check-in"), body: body)
+                           title: String(localized: "Weekly Plan check-in"), body: body,
+                           context: LocalNotificationContext(route: "weekly_plan", eventID: "weeklyCheckIn:\(plan.weekKey)",
+                               family: "weeklyCheckIn", day: today, weekKey: plan.weekKey, message: body))
             }
             if weekday == 2, let body = plan.recap {
                 await post(.weeklyRecap, event: plan.weekKey, occurrence: occurrence, now: nowSec,
-                           title: String(localized: "Weekly Plan recap"), body: body)
+                           title: String(localized: "Weekly Plan recap"), body: body,
+                           context: LocalNotificationContext(route: "weekly_plan", eventID: "weeklyRecap:\(plan.weekKey)",
+                               family: "weeklyRecap", day: today, weekKey: plan.weekKey, message: body))
             }
         }
     }
@@ -216,34 +212,76 @@ final class LocalNotificationDispatcher {
         }
     }
 
+    private func postReport(group: LocalNotificationReportGroup, report: LocalRecordedReport,
+                            available: Set<String>, occurrence: Int, now: Int) async {
+        let lock = "\(group):\(report.day)"
+        guard !inFlight.contains(lock) else { return }
+        inFlight.insert(lock)
+        defer { inFlight.remove(lock) }
+        let enabled = Set(group.families.filter {
+            defaults.bool(forKey: "localNotifications.\($0).enabled")
+        })
+        let delivered = Set(group.families.filter {
+            defaults.string(forKey: "localNotifications.\($0).lastEventKey") == "\($0):\(report.day)"
+        })
+        let accepted = await LocalNotificationDeliveryPlan.deliver(group: group, availableFamilies: available,
+            enabledFamilies: enabled, deliveredFamilies: delivered, authorized: true, quiet: false,
+            occurrenceSec: occurrence, nowSec: now) { plan in
+                guard let family = LocalNotificationFamily(rawValue: plan.primaryFamily) else { return false }
+                let body = LocalBriefingCopy.summary(recovery: report.recovery, sleepMinutes: report.sleepMinutes,
+                    strainTenths: report.strainTenths, streak: report.streak)
+                return await self.post(family, event: report.day, occurrence: occurrence, now: now,
+                    title: self.reportTitle(family), body: body,
+                    context: LocalNotificationContext(route: "local_briefing", eventID: "\(group):\(report.day)",
+                        family: family.rawValue, report: report))
+            }
+        guard let accepted else { return }
+        for family in accepted.coveredFamilies {
+            defaults.set("\(family):\(report.day)", forKey: "localNotifications.\(family).lastEventKey")
+        }
+    }
+
+    private func reportTitle(_ family: LocalNotificationFamily) -> String {
+        switch family {
+        case .recoveryReady: return String(localized: "Recovery is ready")
+        case .sleepReady: return String(localized: "Sleep is ready")
+        case .strainReady: return String(localized: "Today's saved Strain")
+        case .morningRecap: return String(localized: "Your recorded night")
+        case .dailyOutlook: return String(localized: "Daily Outlook")
+        case .dayInReview: return String(localized: "Day in Review")
+        default: return String(localized: "Your recorded streak")
+        }
+    }
+
+    @discardableResult
     private func post(_ family: LocalNotificationFamily, event: String, occurrence: Int,
-                      now: Int, title: String, body: String) async {
+                      now: Int, title: String, body: String, context: LocalNotificationContext? = nil) async -> Bool {
         let key = "\(family.rawValue):\(event)"
         guard !inFlight.contains(key), LocalNotificationPolicy.shouldDeliver(
             enabled: defaults.bool(forKey: family.enabledKey), authorized: true, quiet: false,
             eventKey: key, lastEventKey: defaults.string(forKey: family.lastEventKey),
-            occurrenceSec: occurrence, nowSec: now) else { return }
+            occurrenceSec: occurrence, nowSec: now) else { return false }
         inFlight.insert(key)
         defer { inFlight.remove(key) }
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        guard LocalNotificationPreferences.isAuthorized(settings.authorizationStatus),
+              !LocalNotificationPreferences.isQuiet(now: clock(), defaults: defaults),
+              defaults.bool(forKey: family.enabledKey) else { return false }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         content.categoryIdentifier = "local-report"
-        let route: String
-        switch family {
-        case .disconnected, .wearReminder: route = "devices"
-        case .workoutReady: route = "workouts"
-        case .weeklyCheckIn, .weeklyRecap: route = "weekly_plan"
-        default: route = "local_briefing"
-        }
-        content.userInfo = ["localNotificationRoute": route]
+        content.userInfo = (context ?? LocalNotificationContext(route: "devices", eventID: key,
+            family: family.rawValue, day: event, message: body)).wireFields
         do {
             try await UNUserNotificationCenter.current().add(
                 UNNotificationRequest(identifier: key, content: content, trigger: nil))
             defaults.set(key, forKey: family.lastEventKey)
+            return true
         } catch {
             model?.live.append(log: "Local notification delivery failed: \(error.localizedDescription)")
+            return false
         }
     }
 }

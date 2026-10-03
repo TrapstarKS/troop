@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.noop.R
@@ -22,7 +23,20 @@ import java.time.ZoneId
 const val LOCAL_NOTIFICATION_ROUTE = "localNotificationRoute"
 
 fun localNotificationLaunchIntent(context: Context, route: String): Intent =
-    appLaunchIntent(context).putExtra(LOCAL_NOTIFICATION_ROUTE, route)
+    localNotificationLaunchIntent(context, LocalNotificationContext(route, route))
+
+fun localNotificationLaunchIntent(context: Context, notification: LocalNotificationContext): Intent =
+    appLaunchIntent(context).apply {
+        notification.wireFields.forEach { (key, value) -> putExtra(key, value) }
+        // Intent.filterEquals includes data: retained dates cannot share UPDATE_CURRENT extras.
+        data = Uri.Builder().scheme("noop").authority("local-notification")
+            .appendPath(notification.route).appendQueryParameter("event", notification.eventID).build()
+    }
+
+fun localNotificationContext(intent: Intent): LocalNotificationContext? =
+    LocalNotificationContext.fromWireFields(intent.extras?.keySet()?.mapNotNull { key ->
+        intent.getStringExtra(key)?.let { key to it }
+    }?.toMap().orEmpty())
 
 enum class LocalNotificationFamily(val key: String) {
     RECOVERY_READY("recoveryReady"), SLEEP_READY("sleepReady"), STRAIN_READY("strainReady"),
@@ -123,31 +137,26 @@ class LocalNotificationDispatcher(private val context: Context) {
                 context.getString(R.string.local_notify_wear), context.getString(R.string.local_notify_wear_body))
         }
         if (snapshot != null && !snapshot.syncPending) {
-            val summary = LocalBriefingCopy.summary(context, snapshot.recovery, snapshot.sleepMinutes,
-                snapshot.strainTenths, snapshot.streak)
             snapshot.wakeSec?.let { wake ->
-                if (snapshot.sleepMinutes != null) {
-                    deliver(LocalNotificationFamily.SLEEP_READY, snapshot.day, wake, nowSec,
-                        context.getString(R.string.local_notify_sleep), summary)
+                val available = buildSet {
+                    if (snapshot.sleepMinutes != null) add("sleepReady")
+                    if (snapshot.recovery != null) add("recoveryReady")
+                    if (isNotEmpty()) addAll(listOf("morningRecap", "dailyOutlook"))
                 }
-                if (snapshot.recovery != null) deliver(LocalNotificationFamily.RECOVERY_READY, snapshot.day, wake,
-                    nowSec, context.getString(R.string.local_notify_recovery), summary)
-                if (snapshot.recovery != null || snapshot.sleepMinutes != null) {
-                    deliver(LocalNotificationFamily.MORNING_RECAP, snapshot.day, wake, nowSec,
-                        context.getString(R.string.local_notify_morning), summary)
-                    deliver(LocalNotificationFamily.DAILY_OUTLOOK, snapshot.day, wake, nowSec,
-                        context.getString(R.string.local_outlook), summary)
-                }
+                val report = LocalRecordedReport(snapshot.day, snapshot.recovery, snapshot.sleepMinutes,
+                    null, snapshot.streak)
+                deliverReport(LocalNotificationReportGroup.NIGHT, report, available, wake, nowSec)
             }
             if (snapshot.day == today.toString() && now.toLocalTime() >= LocalTime.of(20, 0)) {
                 val evening = today.atTime(20, 0).atZone(zone).toEpochSecond()
-                if (snapshot.strainTenths != null) deliver(LocalNotificationFamily.STRAIN_READY, snapshot.day,
-                    evening, nowSec, context.getString(R.string.local_notify_strain), summary)
-                if (snapshot.recovery != null || snapshot.sleepMinutes != null || snapshot.strainTenths != null)
-                    deliver(LocalNotificationFamily.DAY_IN_REVIEW, snapshot.day, evening, nowSec,
-                        context.getString(R.string.local_review), summary)
-                if (snapshot.streak > 0) deliver(LocalNotificationFamily.STREAK, snapshot.day, evening, nowSec,
-                    context.getString(R.string.local_notify_streak), summary)
+                val available = buildSet {
+                    if (snapshot.strainTenths != null) add("strainReady")
+                    if (snapshot.streak > 0) add("streakSummary")
+                    if (snapshot.recovery != null || snapshot.sleepMinutes != null || isNotEmpty()) add("dayInReview")
+                }
+                val report = LocalRecordedReport(snapshot.day, snapshot.recovery, snapshot.sleepMinutes,
+                    snapshot.strainTenths, snapshot.streak)
+                deliverReport(LocalNotificationReportGroup.EVENING, report, available, evening, nowSec)
             }
         }
         if (now.toLocalTime() < LocalTime.of(17, 0)) return
@@ -155,46 +164,82 @@ class LocalNotificationDispatcher(private val context: Context) {
         val occurrence = today.atTime(17, 0).atZone(zone).toEpochSecond()
         if (today.dayOfWeek == DayOfWeek.FRIDAY) plan.fridayCheckIn?.let {
             deliver(LocalNotificationFamily.FRIDAY_CHECK_IN, plan.weekKey, occurrence, nowSec,
-                context.getString(R.string.local_notify_friday), it)
+                context.getString(R.string.local_notify_friday), it,
+                notification = LocalNotificationContext("weekly_plan", "weeklyCheckIn:${plan.weekKey}",
+                    family = "weeklyCheckIn", day = today.toString(), weekKey = plan.weekKey, message = it))
         }
         if (today.dayOfWeek == DayOfWeek.MONDAY) plan.mondayRecap?.let {
             deliver(LocalNotificationFamily.MONDAY_RECAP, plan.weekKey, occurrence, nowSec,
-                context.getString(R.string.local_notify_monday), it)
+                context.getString(R.string.local_notify_monday), it,
+                notification = LocalNotificationContext("weekly_plan", "weeklyRecap:${plan.weekKey}",
+                    family = "weeklyRecap", day = today.toString(), weekKey = plan.weekKey, message = it))
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private fun deliver(family: LocalNotificationFamily, day: String, occurrence: Long, now: Long, title: String, body: String) {
-        val key = "${family.key}:$day"
-        val lastKey = LocalNotificationPrefs.lastEventKey(context, family)
+    private fun lastEventKey(family: LocalNotificationFamily): String? =
+        LocalNotificationPrefs.lastEventKey(context, family)
             ?: if (family == LocalNotificationFamily.MORNING_RECAP)
                 NoopPrefs.reportMorningDay(context)?.let { "${family.key}:$it" } else null
+
+    private fun deliverReport(group: LocalNotificationReportGroup, report: LocalRecordedReport,
+                              available: Set<String>, occurrence: Long, now: Long) {
+        val families = LocalNotificationFamily.entries.associateBy { it.key }
+        val enabled = group.families.filter { LocalNotificationPrefs.enabled(context, families.getValue(it)) }.toSet()
+        val delivered = group.families.filter { lastEventKey(families.getValue(it)) == "$it:${report.day}" }.toSet()
+        val minute = Instant.ofEpochSecond(now).atZone(ZoneId.systemDefault()).let { it.hour * 60 + it.minute }
+        val accepted = LocalNotificationDeliveryPlan.deliver(group, available, enabled, delivered,
+            NotificationManagerCompat.from(context).areNotificationsEnabled(), LocalNotificationPrefs.quiet(context, minute),
+            occurrence, now) { plan ->
+            val family = families.getValue(plan.primaryFamily)
+            val title = when (family) {
+                LocalNotificationFamily.RECOVERY_READY -> R.string.local_notify_recovery
+                LocalNotificationFamily.SLEEP_READY -> R.string.local_notify_sleep
+                LocalNotificationFamily.STRAIN_READY -> R.string.local_notify_strain
+                LocalNotificationFamily.MORNING_RECAP -> R.string.local_notify_morning
+                LocalNotificationFamily.DAILY_OUTLOOK -> R.string.local_outlook
+                LocalNotificationFamily.DAY_IN_REVIEW -> R.string.local_review
+                else -> R.string.local_notify_streak
+            }
+            val summary = LocalBriefingCopy.summary(context, report.recovery, report.sleepMinutes, report.strainTenths, report.streak)
+            deliver(family, report.day, occurrence, now, context.getString(title), summary,
+                LocalNotificationContext("local_briefing", "${group.name.lowercase()}:${report.day}", family.key,
+                    day = report.day, report = report))
+        } ?: return
+        // Commit coverage in one preferences edit only after NotificationManager accepted the post.
+        NoopPrefs.of(context).edit().apply {
+            accepted.coveredFamilies.forEach {
+                putString("localNotifications.$it.lastEventKey", "$it:${report.day}")
+            }
+        }.apply()
+        if ("morningRecap" in accepted.coveredFamilies) NoopPrefs.setReportMorningDay(context, report.day)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun deliver(family: LocalNotificationFamily, day: String, occurrence: Long, now: Long,
+                        title: String, body: String, notification: LocalNotificationContext? = null): Boolean {
+        val key = "${family.key}:$day"
         val minute = Instant.ofEpochSecond(now).atZone(ZoneId.systemDefault()).let { it.hour * 60 + it.minute }
         val manager = NotificationManagerCompat.from(context)
         if (!LocalNotificationPolicy.shouldDeliver(LocalNotificationPrefs.enabled(context, family),
-                manager.areNotificationsEnabled(), LocalNotificationPrefs.quiet(context, minute), key, lastKey,
-                occurrence, now)) return
-        runCatching {
+                manager.areNotificationsEnabled(), LocalNotificationPrefs.quiet(context, minute), key, lastEventKey(family),
+                occurrence, now)) return false
+        return runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val system = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 system.createNotificationChannel(NotificationChannel(CHANNEL,
                     context.getString(R.string.local_summary), NotificationManager.IMPORTANCE_LOW))
-                if (system.getNotificationChannel(CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE) return
+                if (system.getNotificationChannel(CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE) return false
             }
-            val route = when (family) {
-                LocalNotificationFamily.DISCONNECTED, LocalNotificationFamily.WEAR -> "devices"
-                LocalNotificationFamily.FRIDAY_CHECK_IN, LocalNotificationFamily.MONDAY_RECAP -> "weekly_plan"
-                else -> "local_briefing"
-            }
-            val open = PendingIntent.getActivity(context, 4220 + family.ordinal, localNotificationLaunchIntent(context, route),
+            val payload = notification ?: LocalNotificationContext("devices", key, family.key, day, message = body)
+            val open = PendingIntent.getActivity(context, 4220 + family.ordinal, localNotificationLaunchIntent(context, payload),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-            manager.notify(4220 + family.ordinal, NotificationCompat.Builder(context, CHANNEL)
+            manager.notify(payload.identity, 4220 + family.ordinal, NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_heart).setContentTitle(title).setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body)).setContentIntent(open)
                 .setAutoCancel(true).setPriority(NotificationCompat.PRIORITY_LOW).build())
             LocalNotificationPrefs.setLastEventKey(context, family, key)
-            if (family == LocalNotificationFamily.MORNING_RECAP) NoopPrefs.setReportMorningDay(context, day)
-        }
+            true
+        }.getOrDefault(false)
     }
 
     private companion object { const val CHANNEL = "noop_local_summaries" }

@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import StrandAnalytics
 
 // MARK: - Target-strain notification (#593)
 //
@@ -77,8 +78,11 @@ enum StrainTargetNotifier {
             content.body = copy.body
             content.sound = .default
             content.categoryIdentifier = "local-report"
-            content.userInfo = ["localNotificationRoute": "local_briefing"]
-            center.add(UNNotificationRequest(identifier: "strain-target", content: content, trigger: nil)) { error in
+            content.userInfo = LocalNotificationContext(route: "local_briefing", eventID: "strainTarget:\(day)",
+                family: "strainTarget", day: day, message: copy.body,
+                report: LocalRecordedReport(day: day, recovery: nil, sleepMinutes: nil,
+                    strainTenths: dayStrain21.map { Int(($0 * 10).rounded()) }, streak: 0)).wireFields
+            center.add(UNNotificationRequest(identifier: "strain-target:\(day)", content: content, trigger: nil)) { error in
                 if error == nil { UserDefaults.standard.set(day, forKey: lastDayKey) }
             }
         }
