@@ -48,6 +48,7 @@ import com.noop.data.WeeklyPlanPreset
 import com.noop.data.WeeklyPlanProgress
 import com.noop.data.seedWeeklyPlanDemo
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 @Composable
 fun WeeklyPlanScreen(vm: AppViewModel) {
@@ -64,6 +65,8 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
     var journal by remember { mutableStateOf<List<WeeklyPlanJournalDay>>(emptyList()) }
     var goals by remember { mutableStateOf(WeeklyPlanGoals()) }
     var draft by remember { mutableStateOf(WeeklyPlanGoals()) }
+    var editingWeek by remember { mutableStateOf("") }
+    var editingBaseline by remember { mutableStateOf(WeeklyPlanGoals()) }
     var loaded by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
@@ -102,7 +105,12 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
     val items = remember(catalogItems, journal) {
         resolveJournalItems(journal.map { it.question }.distinct().sorted(), catalogItems).filter { !it.kind.isNumeric }
     }
-    fun openEditor() { draft = goals; editing = true }
+    fun openEditor() {
+        editingWeek = selectedWeek
+        editingBaseline = goals
+        draft = goals
+        editing = true
+    }
     fun moveWeek(offset: Int) {
         val next = weekOffset + offset
         val week = WeeklyPlanCalendar.adding(next * 7, currentWeek) ?: currentWeek
@@ -199,7 +207,9 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
             text = {
                 Column(Modifier.heightIn(max = Metrics.dialogScrollableMaxHeight).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(Metrics.space16)) {
-                    Text(stringResource(if (preferences.hasPlan(currentWeek) && draft.normalized == goals) R.string.weekly_plan_saved else R.string.weekly_plan_unsaved), style = NoopType.caption)
+                    Text(stringResource(R.string.weekly_plan_week_format, editingWeek, WeeklyPlanCalendar.adding(6, editingWeek) ?: editingWeek),
+                        style = NoopType.captionNumber, color = Palette.textPrimary)
+                    Text(stringResource(if (preferences.hasPlan(editingWeek) && draft.normalized == editingBaseline) R.string.weekly_plan_saved else R.string.weekly_plan_unsaved), style = NoopType.caption)
                     Text(stringResource(R.string.weekly_plan_presets_heading), style = NoopType.overline)
                     val selectedPreset = WeeklyPlanPreset.entries.firstOrNull { it.goals == draft.normalized }
                     Text(stringResource(selectedPreset?.let(::weeklyPlanPresetLabel) ?: R.string.weekly_plan_custom), style = NoopType.caption)
@@ -242,8 +252,9 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
             confirmButton = {
                 TextButton(onClick = {
                     goals = draft.normalized
-                    preferences.save(goals, currentWeek)
-                    notice?.let { dismiss(it) }
+                    preferences.save(goals, editingWeek)
+                    if (editingWeek == currentWeek) notice?.let { dismiss(it) }
+                    weekOffset = ChronoUnit.WEEKS.between(LocalDate.parse(currentWeek), LocalDate.parse(editingWeek)).toInt()
                     saved = true
                     editing = false
                 }) { Text(stringResource(R.string.weekly_plan_save)) }
