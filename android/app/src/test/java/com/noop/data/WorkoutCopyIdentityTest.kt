@@ -1,8 +1,7 @@
 package com.noop.data
 
-import android.content.Context
 import androidx.room.Room
-import androidx.test.core.app.ApplicationProvider
+import org.robolectric.RuntimeEnvironment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -18,7 +17,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class WorkoutCopyIdentityTest {
     private suspend fun withDatabase(block: suspend (WhoopDao) -> Unit) {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context = RuntimeEnvironment.getApplication()
         val db = Room.inMemoryDatabaseBuilder(context, WhoopDatabase::class.java).allowMainThreadQueries().build()
         try { block(db.whoopDao()) } finally { db.close() }
     }
@@ -69,6 +68,35 @@ class WorkoutCopyIdentityTest {
                 assertEquals(original.copy(sport = copy.sport, source = WorkoutCopyIdentity.SOURCE), copy)
             }
         }
+    }
+
+    @Test fun movedCopyCollisionPreservesOriginalAndExistingCopies() = runBlocking {
+        withDatabase { dao ->
+            val original = WorkoutRow("my-whoop", 1_000, 2_000, "Cycling", "whoop",
+                durationS = 1000.25, energyKcal = 296.8, avgHr = 139, maxHr = 167, strain = 52.25,
+                distanceM = 8723.6, notes = "Original import", routePolyline = "recorded-route", steps = 1_234)
+            dao.upsertWorkouts(listOf(original))
+            val first = dao.insertManualWorkoutCopy(original)
+            dao.insertManualWorkoutCopy(original)
+            val before = dao.workouts("my-whoop", 0, 10_000, 100)
+            val repo = WhoopRepository(dao)
+            for (target in listOf(original.sport, "Cycling (manual copy 2)")) {
+                val moved = first.copy(sport = target, energyKcal = 999.0, notes = "Edited copy")
+                var rejected = false
+                try { repo.saveManualWorkout(moved, replacing = first) } catch (_: Exception) { rejected = true }
+                org.junit.Assert.assertTrue("A moved copy cannot replace another activity", rejected)
+                assertEquals(before, dao.workouts("my-whoop", 0, 10_000, 100))
+            }
+        }
+    }
+
+    @Test fun movedKeysMatchStandaloneSwiftOracle() {
+        val pairs = listOf("" to "", "Running" to "Running", "Running" to "Cycling",
+            "Café" to "Cafe\u0301", "跑步" to "跑步", "Cycling (manual copy)" to "Cycling")
+        val output = listOf(1_000L, 1_001L).flatMap { start ->
+            pairs.map { (old, new) -> if (WorkoutCopyIdentity.keyMoved(1_000L, old, start, new)) "1" else "0" }
+        }.joinToString("|")
+        assertEquals("0|0|1|1|0|1|1|1|1|1|1|1", output)
     }
 
     @Test fun concurrentCopiesCannotClobberOriginalOrAnotherCopy() = runBlocking {

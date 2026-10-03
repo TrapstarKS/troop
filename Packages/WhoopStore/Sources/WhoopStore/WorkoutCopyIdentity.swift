@@ -4,6 +4,10 @@ public enum WorkoutCopyIdentity {
 
     public static func isCopy(_ source: String) -> Bool { source.lowercased() == Self.source }
 
+    public static func keyMoved(oldStart: Int, oldSport: String, newStart: Int, newSport: String) -> Bool {
+        oldStart != newStart || !oldSport.utf8.elementsEqual(newSport.utf8)
+    }
+
     public static func sport(_ original: String, occupied: [String]) -> String {
         // SQLite compares these keys bytewise, without Unicode normalization.
         let keys = Set(occupied.map { Array($0.utf8) })

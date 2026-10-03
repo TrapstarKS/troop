@@ -6,6 +6,9 @@ object WorkoutCopyIdentity {
 
     fun isCopy(source: String): Boolean = source.lowercase() == SOURCE
 
+    fun keyMoved(oldStart: Long, oldSport: String, newStart: Long, newSport: String): Boolean =
+        oldStart != newStart || oldSport != newSport
+
     fun sport(original: String, occupied: List<String>): String {
         val keys = occupied.toSet()
         var ordinal = 1

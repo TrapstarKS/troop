@@ -575,13 +575,13 @@ interface WhoopDao : DeviceRegistryDao {
     suspend fun workoutSportsAtStart(deviceId: String, startTs: Long): List<String>
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
-    suspend fun insertWorkoutCopy(row: WorkoutRow)
+    suspend fun insertWorkout(row: WorkoutRow)
 
     @Transaction
     suspend fun insertManualWorkoutCopy(row: WorkoutRow): WorkoutRow {
         val copy = row.copy(source = WorkoutCopyIdentity.SOURCE,
             sport = WorkoutCopyIdentity.sport(row.sport, workoutSportsAtStart(row.deviceId, row.startTs)))
-        insertWorkoutCopy(copy)
+        insertWorkout(copy)
         return copy
     }
 

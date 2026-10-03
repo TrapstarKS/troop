@@ -47,6 +47,39 @@ final class WorkoutCopyIdentityTests: XCTestCase {
         }
     }
 
+    func testMovedCopyCollisionPreservesOriginalAndExistingCopies() async throws {
+        let store = try await WhoopStore.inMemory()
+        let original = WorkoutRow(startTs: 1_000, endTs: 2_000, sport: "Cycling", source: "whoop",
+            durationS: 1000.25, energyKcal: 296.8, avgHr: 139, maxHr: 167, strain: 52.25,
+            distanceM: 8723.6, zonesJSON: nil, notes: "Original import", steps: 1_234)
+        try await store.upsertWorkouts([original], deviceId: "my-whoop")
+        let first = try await store.insertManualWorkoutCopy(original, deviceId: "my-whoop")
+        _ = try await store.insertManualWorkoutCopy(original, deviceId: "my-whoop")
+        let before = try await store.workouts(deviceId: "my-whoop", from: 0, to: 10_000, limit: 100)
+        for target in [original.sport, "Cycling (manual copy 2)"] {
+            let moved = WorkoutRow(startTs: first.startTs, endTs: first.endTs, sport: target,
+                source: WorkoutCopyIdentity.source, durationS: first.durationS, energyKcal: 999,
+                avgHr: first.avgHr, maxHr: first.maxHr, strain: first.strain, distanceM: first.distanceM,
+                zonesJSON: first.zonesJSON, notes: "Edited copy", steps: first.steps)
+            do {
+                try await store.insertWorkout(moved, deviceId: "my-whoop")
+                XCTFail("A moved copy cannot replace another activity")
+            } catch { }
+            let after = try await store.workouts(deviceId: "my-whoop", from: 0, to: 10_000, limit: 100)
+            XCTAssertEqual(after, before)
+        }
+    }
+
+    func testMovedKeysMatchStandaloneSwiftOracle() {
+        let pairs = [("", ""), ("Running", "Running"), ("Running", "Cycling"),
+                     ("Café", "Cafe\u{301}"), ("跑步", "跑步"), ("Cycling (manual copy)", "Cycling")]
+        let output = [1_000, 1_001].flatMap { start in
+            pairs.map { WorkoutCopyIdentity.keyMoved(oldStart: 1_000, oldSport: $0.0,
+                newStart: start, newSport: $0.1) ? "1" : "0" }
+        }.joined(separator: "|")
+        XCTAssertEqual(output, "0|0|1|1|0|1|1|1|1|1|1|1")
+    }
+
     func testConcurrentCopiesCannotClobberOriginalOrAnotherCopy() async throws {
         let store = try await WhoopStore.inMemory()
         let original = WorkoutRow(startTs: 1_000, endTs: 2_000, sport: "Running", source: "whoop",

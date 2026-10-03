@@ -93,7 +93,7 @@ class WorkoutReplacementDataSafetyTest {
 
         repo.saveManualWorkout(moved, replacing = original)
 
-        assertEquals(listOf("upsertWorkouts", "deleteWorkoutByKey"), calls.map { it.name })
+        assertEquals(listOf("insertWorkout", "deleteWorkoutByKey"), calls.map { it.name })
     }
 
     @Test fun movedManualWriteFailureLeavesOriginalUntouched() = runBlocking {
@@ -114,7 +114,7 @@ class WorkoutReplacementDataSafetyTest {
 
         assertTrue("the failed replacement write must be reported", threw)
         assertTrue("the original manual row must survive a failed replacement write", originalPresent)
-        assertEquals(listOf("upsertWorkouts"), calls.map { it.name })
+        assertEquals(listOf("insertWorkout"), calls.map { it.name })
     }
 
     private fun dao(
@@ -128,7 +128,7 @@ class WorkoutReplacementDataSafetyTest {
     ) { _, method, args ->
         calls += Call(method.name, args?.toList().orEmpty())
         when (method.name) {
-            "upsertWorkouts" -> if (failUpsert) throw IllegalStateException("write failed") else Unit
+            "upsertWorkouts", "insertWorkout" -> if (failUpsert) throw IllegalStateException("write failed") else Unit
             "insertDismissed" -> Unit
             "deleteWorkoutsBySport" -> {
                 onDeleteBySport()

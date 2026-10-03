@@ -179,6 +179,22 @@ extension WhoopStore {
         }
     }
 
+    /// Insert a new workout key, rejecting collisions without modifying existing history.
+    public func insertWorkout(_ row: WorkoutRow, deviceId: String) async throws {
+        try syncWrite { db in try Self.insertWorkoutRow(row, deviceId: deviceId, db: db) }
+    }
+
+    private static func insertWorkoutRow(_ row: WorkoutRow, deviceId: String, db: Database) throws {
+        try db.execute(sql: """
+                INSERT INTO workout
+                    (deviceId, startTs, endTs, sport, source, durationS, energyKcal,
+                     avgHr, maxHr, strain, distanceM, zonesJSON, notes, steps)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, arguments: [deviceId, row.startTs, row.endTs, row.sport, row.source, row.durationS,
+                    row.energyKcal, row.avgHr, row.maxHr, row.strain, row.distanceM, row.zonesJSON,
+                    row.notes, row.steps])
+    }
+
     /// Allocate and insert a distinct manual copy in one transaction. Existing rows are never updated.
     public func insertManualWorkoutCopy(_ row: WorkoutRow, deviceId: String) async throws -> WorkoutRow {
         try syncWrite { db in
@@ -189,14 +205,7 @@ extension WhoopStore {
                 sport: WorkoutCopyIdentity.sport(row.sport, occupied: occupied), source: WorkoutCopyIdentity.source,
                 durationS: row.durationS, energyKcal: row.energyKcal, avgHr: row.avgHr, maxHr: row.maxHr,
                 strain: row.strain, distanceM: row.distanceM, zonesJSON: row.zonesJSON, notes: row.notes, steps: row.steps)
-            try db.execute(sql: """
-                INSERT INTO workout
-                    (deviceId, startTs, endTs, sport, source, durationS, energyKcal,
-                     avgHr, maxHr, strain, distanceM, zonesJSON, notes, steps)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, arguments: [deviceId, copy.startTs, copy.endTs, copy.sport, copy.source, copy.durationS,
-                    copy.energyKcal, copy.avgHr, copy.maxHr, copy.strain, copy.distanceM, copy.zonesJSON,
-                    copy.notes, copy.steps])
+            try Self.insertWorkoutRow(copy, deviceId: deviceId, db: db)
             return copy
         }
     }

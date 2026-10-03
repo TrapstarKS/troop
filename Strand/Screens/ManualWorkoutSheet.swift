@@ -330,12 +330,12 @@ struct ManualWorkoutSheet: View {
                 .background(StrandPalette.effortColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(isCopy ? "Edit a copy" : editing == nil ? "Add Workout" : "Edit Workout")
+                Text(LocalizedStringKey(isCopy ? "Edit a copy" : editing == nil ? "Add Workout" : "Edit Workout"))
                     .font(StrandFont.title2)
                     .foregroundStyle(StrandPalette.textPrimary)
-                Text(isCopy ? "Create a separate manual copy. It stays on this device and does not replace the original." : editing == nil
+                Text(LocalizedStringKey(isCopy ? "Create a separate manual copy. It stays on this device and does not replace the original." : editing == nil
                      ? "Log a session you tracked elsewhere."
-                     : "Adjust this session's details.")
+                     : "Adjust this session's details."))
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
             }
