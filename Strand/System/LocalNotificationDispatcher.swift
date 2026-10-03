@@ -44,25 +44,52 @@ final class LocalNotificationDispatcher {
     private var offWristAt: Date?
     private var hadConnection = false
     private let defaults: UserDefaults
+    private let clock: () -> Date
 
-    init(model: AppModel, defaults: UserDefaults = .standard) {
+    init(model: AppModel, defaults: UserDefaults = .standard, clock: @escaping () -> Date = Date.init) {
         self.model = model
         self.defaults = defaults
+        self.clock = clock
         model.repo.$refreshSeq.sink { [weak self] _ in
             Task { @MainActor in await self?.evaluate() }
         }.store(in: &observers)
-        model.live.$connected.sink { [weak self] connected in
-            guard let self else { return }
+        model.live.$connected.sink { [weak self, weak model] connected in
+            guard let self, let model else { return }
+            guard model.live.activeIsWhoop else {
+                self.hadConnection = false
+                self.disconnectedAt = nil
+                self.offWristAt = nil
+                return
+            }
             if connected {
                 self.hadConnection = true
                 self.disconnectedAt = nil
-            } else if self.hadConnection, self.disconnectedAt == nil {
-                self.disconnectedAt = Date()
+            } else {
+                self.offWristAt = nil
+                if self.hadConnection, self.disconnectedAt == nil { self.disconnectedAt = self.clock() }
             }
         }.store(in: &observers)
-        model.live.$worn.sink { [weak self] worn in
-            guard let self else { return }
-            self.offWristAt = worn ? nil : self.offWristAt ?? Date()
+        model.live.$worn.dropFirst().sink { [weak self, weak model] worn in
+            guard let self, let model else { return }
+            guard model.live.connected, model.live.activeIsWhoop else {
+                self.offWristAt = nil
+                return
+            }
+            self.offWristAt = worn ? nil : self.offWristAt ?? self.clock()
+        }.store(in: &observers)
+        model.live.$activeIsWhoop.sink { [weak self, weak model] active in
+            guard let self, let model else { return }
+            if active, model.live.connected { self.hadConnection = true }
+            if !active {
+                self.offWristAt = nil
+                self.disconnectedAt = nil
+                self.hadConnection = false
+            }
+        }.store(in: &observers)
+        model.registry.$activeDeviceId.dropFirst().sink { [weak self] _ in
+            self?.offWristAt = nil
+            self?.disconnectedAt = nil
+            self?.hadConnection = false
         }.store(in: &observers)
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.evaluate() }
@@ -71,8 +98,9 @@ final class LocalNotificationDispatcher {
 
     deinit { timer?.invalidate() }
 
-    func evaluate(now: Date = Date()) async {
+    func evaluate(now: Date? = nil) async {
         guard let model else { return }
+        let now = now ?? clock()
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         let authorized = [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus)
         guard authorized, !LocalNotificationPreferences.isQuiet(now: now, defaults: defaults) else { return }
@@ -162,12 +190,13 @@ final class LocalNotificationDispatcher {
     }
 
     private func evaluateDevice(model: AppModel, now: Date, today: String, nowSec: Int) async {
+        guard model.live.activeIsWhoop else { return }
         if let disconnectedAt, !model.live.connected, now.timeIntervalSince(disconnectedAt) >= 300 {
             await post(.disconnected, event: today, occurrence: Int(disconnectedAt.timeIntervalSince1970) + 300,
                        now: nowSec, title: String(localized: "Device disconnected"),
                        body: String(localized: "The app has been out of contact for five minutes. Open Devices to check the connection."))
         }
-        if let offWristAt, model.live.connected, !model.live.worn, now.timeIntervalSince(offWristAt) >= 1800 {
+        if let offWristAt, model.live.connected, model.live.activeIsWhoop, !model.live.worn, now.timeIntervalSince(offWristAt) >= 1800 {
             await post(.wearReminder, event: today, occurrence: Int(offWristAt.timeIntervalSince1970) + 1800,
                        now: nowSec, title: String(localized: "Wear reminder"),
                        body: String(localized: "The connected strap reported off-wrist for thirty minutes. Put it on when you are ready to record."))

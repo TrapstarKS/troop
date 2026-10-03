@@ -76,18 +76,44 @@ class LocalNotificationDispatcher(private val context: Context) {
     private var hasConnected = false
     private var disconnectedSince: Long? = null
     private var offWristSince: Long? = null
+    private var observedDeviceId: String? = null
+    private var observedWhoop: Boolean? = null
+    private var previousWorn: Boolean? = null
 
-    fun evaluate(snapshot: LocalNotificationSnapshot?, connected: Boolean, worn: Boolean, nowSec: Long) {
-        val zone = ZoneId.systemDefault()
-        val now = Instant.ofEpochSecond(nowSec).atZone(zone)
-        val today = now.toLocalDate()
+    fun resetDeviceObservation() {
+        hasConnected = false
+        disconnectedSince = null
+        offWristSince = null
+        previousWorn = null
+        observedDeviceId = null
+        observedWhoop = null
+    }
+
+    fun observeDeviceState(connected: Boolean, worn: Boolean, nowSec: Long, activeWhoop: Boolean, activeDeviceId: String) {
+        if (observedDeviceId != activeDeviceId || observedWhoop != activeWhoop) resetDeviceObservation()
+        observedDeviceId = activeDeviceId
+        observedWhoop = activeWhoop
+        if (!activeWhoop) return
         if (connected) {
             hasConnected = true
             disconnectedSince = null
         } else if (hasConnected && disconnectedSince == null) disconnectedSince = nowSec
-        if (connected && !worn) {
-            if (offWristSince == null) offWristSince = nowSec
-        } else offWristSince = null
+        if (!connected) {
+            offWristSince = null
+            previousWorn = null
+            return
+        }
+        if (previousWorn == true && !worn) offWristSince = nowSec
+        if (worn) offWristSince = null
+        previousWorn = worn
+    }
+
+    fun evaluate(snapshot: LocalNotificationSnapshot?, connected: Boolean, worn: Boolean, nowSec: Long,
+                 activeWhoop: Boolean, activeDeviceId: String) {
+        observeDeviceState(connected, worn, nowSec, activeWhoop, activeDeviceId)
+        val zone = ZoneId.systemDefault()
+        val now = Instant.ofEpochSecond(nowSec).atZone(zone)
+        val today = now.toLocalDate()
         disconnectedSince?.takeIf { nowSec - it >= 300 }?.let {
             deliver(LocalNotificationFamily.DISCONNECTED, today.toString(), it + 300, nowSec,
                 context.getString(R.string.local_notify_disconnect), context.getString(R.string.local_notify_disconnect_body))

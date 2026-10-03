@@ -770,7 +770,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         val state = ble.state.value
         _localBriefing.value = snapshot
-        localNotificationDispatcher.evaluate(snapshot, state.connected, state.worn, now.epochSecond)
+        localNotificationDispatcher.evaluate(snapshot, state.connected, state.worn, now.epochSecond,
+            ble.activeDeviceIsWhoop, activeStrapId)
     }
 
     /**
@@ -956,9 +957,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (state.heartRate == null && state.rr.isEmpty()) resetSmoothing()
                 coachZone(state)
                 dispatchDoubleTap(state)
-                localNotificationDispatcher.evaluate(_localBriefing.value?.copy(
-                    syncPending = state.backfilling || state.historyPendingSync || state.analyzingHistory),
-                    state.connected, state.worn, java.time.Instant.now().epochSecond)
+                localNotificationDispatcher.observeDeviceState(state.connected, state.worn, java.time.Instant.now().epochSecond,
+                    ble.activeDeviceIsWhoop, activeStrapId)
                 if (state.bonded && !lastBonded) {
                     // #59/#536: re-arm the strap on (re)bond. One reconcile covers BOTH the smart wake-alarm
                     // and the Buzz-WHOOP companion, arming the single slot to the earliest either wants (#5).
@@ -986,6 +986,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             ble.connectedPeripheralAddress
                 .collect { addr -> noopApp.sourceCoordinator.connectedPeripheralChanged(addr) }
+        }
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(activeStrapIdFlow, activeIsWhoop) { _, _ -> Unit }.collect {
+                localNotificationDispatcher.resetDeviceObservation()
+            }
         }
         // #1303: the 5/MG DIS read hands up the strap's OWN serial, so re-point this pairing from its
         // transient address-based id onto a stable `whoop-<serial>` id, through the SAME migration the ring
