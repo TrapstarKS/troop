@@ -839,7 +839,7 @@ struct SleepView: View {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                         Text("Stage breakdown").strandOverline()
                         Text(subtitle).font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
-                        SleepStageInspectionChart(intervals: intervals, nightStart: night.onsetDate,
+                        SleepStageInspectionChart(intervals: recordedIntervals(intervals, night: night), nightStart: night.onsetDate,
                                                   span: TimeInterval(night.session.endTs - night.session.effectiveStartTs),
                                                   highlightedStage: selectedStage)
                         stageBreakdownRows(s)
@@ -897,6 +897,19 @@ struct SleepView: View {
             nightHR = await repo.hrBuckets(from: night.session.startTs,
                                            to: night.session.endTs,
                                            bucketSeconds: 60)
+        }
+    }
+
+    private func recordedIntervals(_ intervals: [SleepInterval], night: Night) -> [SleepInterval] {
+        let group = Self.mainNightGroup(night.sourceBlocks, habitualMidsleepSec: habitualMidsleepSec)
+        let gaps = zip(group, group.dropFirst()).compactMap { previous, next -> Range<TimeInterval>? in
+            guard next.effectiveStartTs > previous.endTs else { return nil }
+            let start = TimeInterval(previous.endTs - night.session.effectiveStartTs)
+            let end = TimeInterval(next.effectiveStartTs - night.session.effectiveStartTs)
+            return start..<end
+        }
+        return intervals.filter { interval in
+            !gaps.contains { $0.lowerBound == interval.start && $0.upperBound == interval.end }
         }
     }
 
