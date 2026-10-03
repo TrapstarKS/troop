@@ -422,7 +422,8 @@ private fun DetailHrChart(hr: List<HrBucket>, title: String, bucketSeconds: Long
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
             TrackedSectionHeader(title)
             if (hr.isEmpty()) DetailEmpty(uiString(R.string.d2b_no_hr)) else {
-                Text(uiString(R.string.d2b_hr_window, detailClock(hr.first().bucket), detailClock(hr.last().bucket)),
+                val is24Hour = ClockPrefs.uses24Hour(LocalContext.current)
+                Text(uiString(R.string.d2b_hr_window, clockTimeLabel(hr.first().bucket, is24Hour), clockTimeLabel(hr.last().bucket, is24Hour)),
                     style = NoopType.caption, color = Palette.textSecondary)
                 LineChart(hr.map { it.avgBpm }, Modifier.fillMaxWidth().height(Metrics.chartHeight),
                     color = Palette.strainPrimary, selectionEnabled = true, timestamps = hr.map { it.bucket },
@@ -460,9 +461,13 @@ private fun DetailEmpty(text: String) {
 
 private fun detailDate(key: String): LocalDate = runCatching { LocalDate.parse(key) }.getOrDefault(logicalDayNow())
 private fun detailDateLabel(date: LocalDate): String = date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
-private fun detailClock(ts: Long): String = Instant.ofEpochSecond(ts).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
-private fun detailWorkoutTime(row: WorkoutRow): String = uiString(R.string.d2b_activity_time,
-    detailDateLabel(Instant.ofEpochSecond(row.startTs).atZone(ZoneId.systemDefault()).toLocalDate()), detailClock(row.startTs), detailClock(row.endTs))
+@Composable
+private fun detailWorkoutTime(row: WorkoutRow): String {
+    val is24Hour = ClockPrefs.uses24Hour(LocalContext.current)
+    return uiString(R.string.d2b_activity_time,
+        detailDateLabel(Instant.ofEpochSecond(row.startTs).atZone(ZoneId.systemDefault()).toLocalDate()),
+        clockTimeLabel(row.startTs, is24Hour), clockTimeLabel(row.endTs, is24Hour))
+}
 private fun detailNumber(value: Double?, decimals: Int = 1): String = value?.takeIf { it.isFinite() }
     ?.let { String.format(Locale.getDefault(), "%.${decimals}f", it) } ?: uiString(R.string.d2b_no_value)
 private fun detailRecoveryNumber(score: Double?): String =
