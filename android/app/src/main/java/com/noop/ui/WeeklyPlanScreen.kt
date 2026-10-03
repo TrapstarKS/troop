@@ -175,9 +175,7 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
                         Spacer(Modifier.weight(1f))
                         if (weekOffset == 0) NoopButton(stringResource(if (preferences.hasPlan(selectedWeek)) R.string.weekly_plan_edit else R.string.weekly_plan_create), kind = NoopButtonKind.Secondary, onClick = { openEditor() })
                     }
-                    if (!preferences.hasPlan(selectedWeek)) {
-                        Text(stringResource(R.string.weekly_plan_suggestion_body), style = NoopType.subhead, color = Palette.textSecondary)
-                    } else {
+                    if (preferences.hasPlan(selectedWeek)) {
                         snapshot.overallPercent?.let { WeeklyPlanBar(it, Palette.accent) }
                             ?: Text(stringResource(R.string.weekly_plan_waiting), style = NoopType.subhead, color = Palette.textSecondary)
                     }

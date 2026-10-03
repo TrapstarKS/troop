@@ -48,14 +48,13 @@ struct WeeklyPlanView: View {
                                 NoopButton(preferences.hasPlan(weekStart: selectedWeek) ? "Edit goals" : "Create plan", systemImage: "pencil", kind: .secondary) { openEditor() }
                             }
                         }
-                        if !preferences.hasPlan(weekStart: selectedWeek) {
-                            Text("Suggested targets use the last 30 days of available data. Save to start your plan.")
-                                .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
-                        } else if let percent = snapshot.overallPercent {
-                            ProgressView(value: Double(percent), total: 100).tint(StrandPalette.accent)
-                        } else {
-                            Text("Progress appears when sleep, strain and selected journal data are available.")
-                                .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
+                        if preferences.hasPlan(weekStart: selectedWeek) {
+                            if let percent = snapshot.overallPercent {
+                                ProgressView(value: Double(percent), total: 100).tint(StrandPalette.accent)
+                            } else {
+                                Text("Progress appears when sleep, strain and selected journal data are available.")
+                                    .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
+                            }
                         }
                     }
                 }
