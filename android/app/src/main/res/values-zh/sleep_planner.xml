@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sleep_planner_title">睡眠计划</string>
+    <string name="sleep_planner_subtitle">规划睡眠，设置最晚唤醒时间。</string>
+    <string name="sleep_planner_next_plan">下一次睡眠计划</string>
+    <string name="sleep_planner_peak" formatted="false">100%\n最佳</string>
+    <string name="sleep_planner_perform" formatted="false">85%\n表现</string>
+    <string name="sleep_planner_get_by" formatted="false">70%\n最低</string>
+    <string name="sleep_planner_bedtime">建议就寝时间</string>
+    <string name="sleep_planner_sleep_target">睡眠目标</string>
+    <string name="sleep_planner_need">睡眠需求（含睡眠债）</string>
+    <string name="sleep_planner_debt">增加的睡眠债</string>
+    <string name="sleep_planner_ready">基于睡眠历史的本地估算。</string>
+    <string name="sleep_planner_learning">估算需要至少 3 个有记录的夜晚。</string>
+    <string name="sleep_planner_haptic">触觉闹钟</string>
+    <string name="sleep_planner_enable">启用手环闹钟</string>
+    <string name="sleep_planner_exact">准确时间</string>
+    <string name="sleep_planner_goal_mode">睡眠目标</string>
+    <string name="sleep_planner_recovery_mode">恢复</string>
+    <string name="sleep_planner_adaptive_unavailable">此版本不支持提前唤醒。手环使用最晚唤醒时间；只有当晚的新鲜睡眠或恢复数据才能提前该时间。绝不使用昨天的恢复值。</string>
+    <string name="sleep_planner_exact_time">准确唤醒时间</string>
+    <string name="sleep_planner_latest_time">最晚唤醒时间</string>
+    <string name="sleep_planner_wake">唤醒时间</string>
+    <string name="sleep_planner_day_plan">每日目标与周末时间</string>
+    <string name="sleep_planner_default_goal">默认睡眠目标</string>
+    <string name="sleep_planner_use_default">使用默认值</string>
+    <string name="sleep_planner_save">保存闹钟</string>
+    <string name="sleep_planner_reported">手环报告了此时间。此回读仅用于诊断，不保证唤醒。</string>
+    <string name="sleep_planner_sent">时间已发送，正在等待手环确认。</string>
+    <string name="sleep_planner_off">手环闹钟已在 NOOP 中禁用。</string>
+    <string name="sleep_planner_local">已本地保存，手环时间尚未确认。</string>
+    <string name="sleep_planner_saved_deadline">已保存的唤醒时间</string>
+    <string name="sleep_planner_countdown">距离闹钟还有 %1$s</string>
+    <string name="sleep_planner_reconnect_error">无法保存。请重新连接并重试；现有闹钟未改变。</string>
+    <string name="sleep_planner_unsupported">此闹钟需要受支持的 WHOOP 连接。WHOOP 5/MG 还需要实验性协议探测。</string>
+    <string name="sleep_planner_permission">通知已被阻止。请在系统设置中启用以接收提醒。</string>
+    <string name="sleep_planner_send_error">未记录到命令发送。请重新连接并重试。</string>
+    <string name="sleep_planner_reconnect">重新连接手环</string>
+    <string name="sleep_planner_skip">跳过下一次闹钟</string>
+    <string name="sleep_planner_awake">我已醒来 — 取消下一次闹钟</string>
+    <string name="sleep_planner_skipped">已跳过 %1$s。未来闹钟日期仍然启用。</string>
+    <string name="sleep_planner_restore">恢复跳过的闹钟</string>
+    <string name="sleep_planner_skip_saved">已跳过下一次闹钟。</string>
+    <string name="sleep_planner_strap_battery" formatted="false">手环电量低于 20%。依赖闹钟前请充电。</string>
+    <string name="sleep_planner_phone_battery" formatted="false">手机电量为 20% 或更低。这是 NOOP 的本地警告阈值。</string>
+    <string name="sleep_planner_backup">重要唤醒请保留独立备用闹钟。手环需与应用保持连接，才能在以后的日期重复闹钟。</string>
+    <string name="sleep_planner_reminders">晚间提醒</string>
+    <string name="sleep_planner_wind_down">提醒我放松</string>
+    <string name="sleep_planner_reminder_time">建议提醒时间</string>
+    <string name="sleep_planner_debt_reminder">包含睡眠债提醒</string>
+    <string name="sleep_planner_reminder_help">可选提醒采用此计划和每日目标。睡眠债建议是为 NOOP 新撰写的，默认关闭。</string>
+    <string name="sleep_planner_phone_alarm">手机唤醒窗口与备用闹钟</string>
+    <string name="sleep_planner_previous_day">前一天</string>
+    <string name="sleep_planner_back">返回睡眠计划</string>
+    <string name="sleep_planner_reminder_title">该放松了</string>
+    <string name="sleep_planner_reminder_notification">睡眠计划建议放松，准备在 %1$s 就寝。</string>
+    <string name="sleep_planner_debt_notification">为今晚的睡眠留出时间。本地计划建议在 %1$s 就寝，睡眠需求已包含近期睡眠债。</string>
+    <string name="sleep_planner_cancel_requested">已请求取消，手环尚未确认。</string>
+    <string name="sleep_planner_notification_settings">通知设置</string>
+    <string name="sleep_planner_phone_help">手机浅睡检测，设有准确的最晚唤醒时间。</string>
+    <string name="sleep_planner_update_requested">已请求更新闹钟，手环确认仍在等待中。</string>
+</resources>

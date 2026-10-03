@@ -1,0 +1,74 @@
+package com.noop.analytics
+
+/**
+ * Pure policy for advancing an alarm within its final hour. The caller supplies only
+ * a recovery value from the current night; this helper cannot establish freshness.
+ * Only recovery percentages in 67..100 can advance the alarm.
+ */
+object PlannerAlarmPolicy {
+    fun shouldWakeEarly(
+        mode: String,
+        targetSleepMinutes: Int,
+        observedSleepMinutes: Int?,
+        currentNightRecoveryPercent: Int?,
+        minutesUntilDeadline: Int,
+    ): Boolean {
+        if (minutesUntilDeadline !in 1..60) return false
+
+        return when (mode) {
+            "sleepGoal" -> targetSleepMinutes > 0 &&
+                observedSleepMinutes != null && observedSleepMinutes >= targetSleepMinutes
+            "recovery" -> currentNightRecoveryPercent != null && currentNightRecoveryPercent in 67..100
+            else -> false
+        }
+    }
+
+    /**
+     * Stable identity for a resolved local alarm date and minute. Calendar resolution
+     * belongs to the caller; supplied components are preserved rather than normalized.
+     */
+    fun occurrenceKey(year: Int, month: Int, day: Int, minutes: Int): String =
+        "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-" +
+            "${day.toString().padStart(2, '0')}|$minutes"
+
+    /**
+     * Advice quiet hours with an inclusive start and exclusive end. Equal bounds
+     * disable the quiet window; wake-alarm deadlines are exempt at the caller.
+     */
+    fun isQuietMinute(minute: Int, enabled: Boolean, startMinutes: Int, endMinutes: Int): Boolean {
+        if (!enabled) return false
+        val currentMinute = minute.coerceIn(0, 1439)
+        val start = startMinutes.coerceIn(0, 1439)
+        val end = endMinutes.coerceIn(0, 1439)
+        if (start == end) return false
+        return if (start < end) currentMinute >= start && currentMinute < end else currentMinute >= start || currentMinute < end
+    }
+
+    /**
+     * Pending through the saved local minute. Scheduling still matches the exact
+     * occurrence key; this comparison only gates the pending status and duplicate skip.
+     */
+    fun isSkipPending(skippedOccurrence: String, currentOccurrence: String): Boolean {
+        val skipped = occurrenceParts(skippedOccurrence) ?: return false
+        val current = occurrenceParts(currentOccurrence) ?: return false
+        return skipped.first > current.first || (skipped.first == current.first && skipped.second >= current.second)
+    }
+
+    private fun occurrenceParts(key: String): Pair<String, Int>? {
+        val parts = key.split('|')
+        if (parts.size != 2) return null
+        val day = parts[0]
+        if (day.length != 10 || !day.withIndex().all { (index, character) ->
+                if (index == 4 || index == 7) character == '-' else character in '0'..'9'
+            }) return null
+        val year = day.substring(0, 4).toInt()
+        val month = day.substring(5, 7).toInt()
+        val date = day.substring(8, 10).toInt()
+        val minutes = parts[1].toIntOrNull() ?: return null
+        if (year <= 0 || month !in 1..12 || minutes !in 0..1439 || minutes.toString() != parts[1]) return null
+        val leapYear = year % 400 == 0 || (year % 4 == 0 && year % 100 != 0)
+        val days = intArrayOf(31, if (leapYear) 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+        if (date !in 1..days[month - 1]) return null
+        return day to minutes
+    }
+}

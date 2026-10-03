@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sleep_planner_title">Планировщик сна</string>
+    <string name="sleep_planner_subtitle">Планируйте сон. Задайте крайнее время подъёма.</string>
+    <string name="sleep_planner_next_plan">Следующий план сна</string>
+    <string name="sleep_planner_peak" formatted="false">100%\nМаксимум</string>
+    <string name="sleep_planner_perform" formatted="false">85%\nЭффективность</string>
+    <string name="sleep_planner_get_by" formatted="false">70%\nМинимум</string>
+    <string name="sleep_planner_bedtime">Рекомендуемое время сна</string>
+    <string name="sleep_planner_sleep_target">Цель сна</string>
+    <string name="sleep_planner_need">Потребность во сне с учётом долга</string>
+    <string name="sleep_planner_debt">Добавленный долг сна</string>
+    <string name="sleep_planner_ready">Локальная оценка по истории сна.</string>
+    <string name="sleep_planner_learning">Для оценки нужны хотя бы 3 записанные ночи.</string>
+    <string name="sleep_planner_haptic">Тактильный будильник</string>
+    <string name="sleep_planner_enable">Включить будильник браслета</string>
+    <string name="sleep_planner_exact">Точное время</string>
+    <string name="sleep_planner_goal_mode">Цель сна</string>
+    <string name="sleep_planner_recovery_mode">Восстановление</string>
+    <string name="sleep_planner_adaptive_unavailable">Ранний подъём недоступен в этой версии. Браслет использует крайнее время; перенести его раньше могут только свежие данные сна или восстановления текущей ночи. Вчерашнее восстановление никогда не используется.</string>
+    <string name="sleep_planner_exact_time">Точное время подъёма</string>
+    <string name="sleep_planner_latest_time">Крайнее время подъёма</string>
+    <string name="sleep_planner_wake">Время подъёма</string>
+    <string name="sleep_planner_day_plan">Цели по дням и выходные</string>
+    <string name="sleep_planner_default_goal">Цель сна по умолчанию</string>
+    <string name="sleep_planner_use_default">По умолчанию</string>
+    <string name="sleep_planner_save">Сохранить будильник</string>
+    <string name="sleep_planner_reported">Браслет сообщает это крайнее время. Диагностическое чтение не гарантирует пробуждение.</string>
+    <string name="sleep_planner_sent">Время отправлено; ожидается подтверждение браслета.</string>
+    <string name="sleep_planner_off">Будильник браслета отключён в NOOP.</string>
+    <string name="sleep_planner_local">Сохранено локально; время не подтверждено.</string>
+    <string name="sleep_planner_saved_deadline">Сохранённое время подъёма</string>
+    <string name="sleep_planner_countdown">Будильник через %1$s</string>
+    <string name="sleep_planner_reconnect_error">Не удалось сохранить. Подключитесь и повторите; прежний будильник не изменён.</string>
+    <string name="sleep_planner_unsupported">Нужно поддерживаемое соединение WHOOP. Для WHOOP 5/MG также нужны экспериментальные проверки протокола.</string>
+    <string name="sleep_planner_permission">Уведомления заблокированы. Включите их в системных настройках для напоминаний.</string>
+    <string name="sleep_planner_send_error">Отправка команды не записана. Подключитесь и повторите.</string>
+    <string name="sleep_planner_reconnect">Подключить браслет</string>
+    <string name="sleep_planner_skip">Пропустить следующий будильник</string>
+    <string name="sleep_planner_awake">Я уже проснулся — отменить следующий будильник</string>
+    <string name="sleep_planner_skipped">%1$s пропущено. Будущие дни остаются включены.</string>
+    <string name="sleep_planner_restore">Вернуть пропущенный будильник</string>
+    <string name="sleep_planner_skip_saved">Следующее срабатывание уже пропущено.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">Заряд браслета ниже 20%. Зарядите его, прежде чем полагаться на будильник.</string>
+    <string name="sleep_planner_phone_battery" formatted="false">Заряд телефона 20% или ниже. Это локальный порог предупреждения NOOP.</string>
+    <string name="sleep_planner_backup">Для важного подъёма используйте отдельный будильник. Для повторения в следующие дни браслету нужна активная связь с приложением.</string>
+    <string name="sleep_planner_reminders">Вечерние напоминания</string>
+    <string name="sleep_planner_wind_down">Напоминать о подготовке ко сну</string>
+    <string name="sleep_planner_reminder_time">Рекомендуемое напоминание</string>
+    <string name="sleep_planner_debt_reminder">Добавить напоминание о долге сна</string>
+    <string name="sleep_planner_reminder_help">Необязательные напоминания используют этот план и цели по дням. Советы о долге сна написаны для NOOP и по умолчанию выключены.</string>
+    <string name="sleep_planner_phone_alarm">Окно подъёма и резервный будильник телефона</string>
+    <string name="sleep_planner_previous_day">Предыдущий день</string>
+    <string name="sleep_planner_back">Вернуться к планировщику</string>
+    <string name="sleep_planner_reminder_title">Время готовиться ко сну</string>
+    <string name="sleep_planner_reminder_notification">План рекомендует подготовиться ко сну к %1$s.</string>
+    <string name="sleep_planner_debt_notification">Выделите время для сна сегодня. Локальный план рекомендует лечь в %1$s и учитывает недавний долг сна в вашей потребности.</string>
+    <string name="sleep_planner_cancel_requested">Отмена запрошена; браслет её не подтвердил.</string>
+    <string name="sleep_planner_notification_settings">Настройки уведомлений</string>
+    <string name="sleep_planner_phone_help">Определение лёгкого сна телефоном с точным крайним временем подъёма.</string>
+    <string name="sleep_planner_update_requested">Обновление будильника запрошено; подтверждение браслета ещё ожидается.</string>
+</resources>

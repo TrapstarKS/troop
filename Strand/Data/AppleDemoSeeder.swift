@@ -35,6 +35,7 @@ enum AppleDemoSeeder {
     static func seedIfRequested(into store: WhoopStore) async {
         guard requested else { return }
         seedDemoDeviceIfNeeded(into: store)
+        seedSleepPlannerPreferencesIfNeeded()
         let existing = (try? await store.dailyMetrics(deviceId: whoop, from: "0000-00-00", to: "9999-99-99")) ?? []
         guard existing.isEmpty else { return }
         do { try await seed(into: store) }
@@ -56,6 +57,19 @@ enum AppleDemoSeeder {
             sourceKind: .liveBLE, capabilities: [.hr, .hrv], status: .paired,
             addedAt: now - 86_400, lastSeenAt: now - 3_600)
         try? registry.add(polar)
+    }
+
+    private static func seedSleepPlannerPreferencesIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: "sleepPlanner.goalPercent") == nil else { return }
+        defaults.set(100, forKey: "sleepPlanner.goalPercent")
+        defaults.set(85, forKey: "sleepPlanner.goal.6")
+        defaults.set(70, forKey: "sleepPlanner.goal.7")
+        defaults.set(420, forKey: "behavior.smartAlarmMinutes")
+        defaults.set("exact", forKey: "sleepPlanner.alarmMode")
+        defaults.set(480, forKey: "sleepPlanner.baseNeedMinutes")
+        defaults.set(75, forKey: "sleepPlanner.debtMinutes")
+        defaults.set(14, forKey: "sleepPlanner.historyNights")
     }
 
     private static func seed(into store: WhoopStore) async throws {

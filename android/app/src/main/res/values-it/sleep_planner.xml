@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sleep_planner_title">Pianificatore del sonno</string>
+    <string name="sleep_planner_subtitle">Pianifica il sonno. Imposta l’ora limite.</string>
+    <string name="sleep_planner_next_plan">Prossimo piano del sonno</string>
+    <string name="sleep_planner_peak" formatted="false">100%\nAl massimo</string>
+    <string name="sleep_planner_perform" formatted="false">85%\nRendimento</string>
+    <string name="sleep_planner_get_by" formatted="false">70%\nMinimo</string>
+    <string name="sleep_planner_bedtime">Ora di coricarsi suggerita</string>
+    <string name="sleep_planner_sleep_target">Obiettivo di sonno</string>
+    <string name="sleep_planner_need">Sonno necessario, debito incluso</string>
+    <string name="sleep_planner_debt">Debito di sonno aggiunto</string>
+    <string name="sleep_planner_ready">Stima locale dalla cronologia del sonno.</string>
+    <string name="sleep_planner_learning">Servono almeno 3 notti registrate per la stima.</string>
+    <string name="sleep_planner_haptic">Sveglia aptica</string>
+    <string name="sleep_planner_enable">Attiva sveglia del bracciale</string>
+    <string name="sleep_planner_exact">Ora esatta</string>
+    <string name="sleep_planner_goal_mode">Obiettivo di sonno</string>
+    <string name="sleep_planner_recovery_mode">Recupero</string>
+    <string name="sleep_planner_adaptive_unavailable">Il risveglio anticipato non è disponibile in questa versione. Il bracciale usa l’ora limite; solo dati recenti sul sonno o recupero di questa notte possono anticiparla. Il recupero di ieri non viene mai usato.</string>
+    <string name="sleep_planner_exact_time">Ora esatta di risveglio</string>
+    <string name="sleep_planner_latest_time">Ultima ora di risveglio</string>
+    <string name="sleep_planner_wake">Ora di risveglio</string>
+    <string name="sleep_planner_day_plan">Obiettivi giornalieri e fine settimana</string>
+    <string name="sleep_planner_default_goal">Obiettivo predefinito</string>
+    <string name="sleep_planner_use_default">Usa predefinito</string>
+    <string name="sleep_planner_save">Salva sveglia</string>
+    <string name="sleep_planner_reported">Il bracciale segnala questa ora limite. La lettura è diagnostica e non garantisce il risveglio.</string>
+    <string name="sleep_planner_sent">Ora limite inviata; in attesa di conferma del bracciale.</string>
+    <string name="sleep_planner_off">Sveglia del bracciale disattivata in NOOP.</string>
+    <string name="sleep_planner_local">Salvato localmente; ora limite non confermata.</string>
+    <string name="sleep_planner_saved_deadline">Ora limite salvata</string>
+    <string name="sleep_planner_countdown">Sveglia tra %1$s</string>
+    <string name="sleep_planner_reconnect_error">Impossibile salvare. Riconnetti e riprova; la sveglia precedente non è cambiata.</string>
+    <string name="sleep_planner_unsupported">Questa sveglia richiede una connessione WHOOP supportata. WHOOP 5/MG richiede anche le prove di protocollo sperimentali.</string>
+    <string name="sleep_planner_permission">Notifiche bloccate. Abilitale nelle impostazioni di sistema per ricevere promemoria.</string>
+    <string name="sleep_planner_send_error">L’invio del comando non è stato registrato. Riconnetti e riprova.</string>
+    <string name="sleep_planner_reconnect">Riconnetti bracciale</string>
+    <string name="sleep_planner_skip">Salta prossima sveglia</string>
+    <string name="sleep_planner_awake">Sono sveglio — annulla prossima sveglia</string>
+    <string name="sleep_planner_skipped">%1$s saltato. I giorni futuri restano attivi.</string>
+    <string name="sleep_planner_restore">Ripristina sveglia saltata</string>
+    <string name="sleep_planner_skip_saved">La prossima occorrenza è già saltata.</string>
+    <string name="sleep_planner_strap_battery" formatted="false">Batteria del bracciale sotto il 20%. Carica prima di affidarti alla sveglia.</string>
+    <string name="sleep_planner_phone_battery" formatted="false">Batteria del telefono al 20% o meno. È la soglia di avviso locale di NOOP.</string>
+    <string name="sleep_planner_backup">Mantieni una sveglia indipendente per risvegli importanti. Per ripetere la sveglia nei giorni successivi serve una connessione attiva con l’app.</string>
+    <string name="sleep_planner_reminders">Promemoria serali</string>
+    <string name="sleep_planner_wind_down">Ricordami di rilassarmi</string>
+    <string name="sleep_planner_reminder_time">Promemoria suggerito</string>
+    <string name="sleep_planner_debt_reminder">Includi avviso sul debito di sonno</string>
+    <string name="sleep_planner_reminder_help">I promemoria facoltativi seguono questo piano e gli obiettivi giornalieri. I consigli sul debito sono nuovi testi per NOOP e sono disattivati per impostazione predefinita.</string>
+    <string name="sleep_planner_phone_alarm">Finestra di risveglio e riserva del telefono</string>
+    <string name="sleep_planner_previous_day">Giorno precedente</string>
+    <string name="sleep_planner_back">Torna al pianificatore</string>
+    <string name="sleep_planner_reminder_title">È ora di rilassarsi</string>
+    <string name="sleep_planner_reminder_notification">Il piano suggerisce di rilassarti per coricarti alle %1$s.</string>
+    <string name="sleep_planner_debt_notification">Riserva tempo al sonno stanotte. Il piano locale suggerisce di coricarti alle %1$s, includendo il recente debito di sonno nel tuo fabbisogno.</string>
+    <string name="sleep_planner_cancel_requested">Annullamento richiesto; il bracciale non ha confermato.</string>
+    <string name="sleep_planner_notification_settings">Impostazioni notifiche</string>
+    <string name="sleep_planner_phone_help">Rilevamento del sonno leggero sul telefono con ora limite esatta.</string>
+    <string name="sleep_planner_update_requested">Aggiornamento sveglia richiesto; conferma del bracciale ancora in attesa.</string>
+</resources>

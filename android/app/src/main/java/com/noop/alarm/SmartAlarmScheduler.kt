@@ -59,6 +59,7 @@ object SmartAlarmScheduler {
             weekdays = weekdays,
             windowMinutes = store.windowMinutes,
             afterFire = afterFire,
+            skippedOccurrence = SleepPlannerStore.from(context).read().skippedOccurrence,
         ) { store.targetFor(it) } ?: run {
             // No day is reachable, so there IS no next wake — clear the persisted edges rather than
             // leaving the previous ones behind. The watcher reads exactly those two fields to decide it is
@@ -84,12 +85,15 @@ object SmartAlarmScheduler {
 
     /**
      * Re-arm the EXACT same hard deadline that was previously persisted (used by the boot receiver so
-     * the alarm survives a restart). No-op if nothing is scheduled or it's already in the past.
+     * the alarm survives a restart). A missing or past deadline is re-derived from the saved schedule.
      */
     fun rearmPersisted(context: Context, store: SmartAlarmStore) {
         if (!store.enabled) return
         val deadlineMs = store.scheduledDeadlineMs
-        if (deadlineMs <= System.currentTimeMillis()) return
+        if (deadlineMs <= System.currentTimeMillis()) {
+            arm(context, store)
+            return
+        }
         if (!canScheduleExact(context)) return
         scheduleExact(context, deadlineMs)
     }
@@ -173,9 +177,10 @@ object SmartAlarmScheduler {
         weekdays: Set<Int>,
         windowMinutes: Int,
         defaultTarget: Int,
+        skippedOccurrence: String = "",
         targetForDay: (Int) -> Int,
     ): Int {
-        val deadline = nextDeadline(now, weekdays, windowMinutes, afterFire = false, targetForDay)
+        val deadline = nextDeadline(now, weekdays, windowMinutes, afterFire = false, skippedOccurrence = skippedOccurrence, targetForDay = targetForDay)
             ?: return defaultTarget
         val deadlineMin = deadline.get(Calendar.HOUR_OF_DAY) * 60 + deadline.get(Calendar.MINUTE)
         return (deadlineMin - windowMinutes + SmartAlarmStore.MINUTES_PER_DAY) %
@@ -213,21 +218,26 @@ object SmartAlarmScheduler {
         weekdays: Set<Int>,
         windowMinutes: Int,
         afterFire: Boolean = false,
+        skippedOccurrence: String = "",
         targetForDay: (Int) -> Int,
     ): Calendar? {
-        for (offset in 0..7) {
+        for (offset in 0..14) {
             if (afterFire && offset == 0) continue
-            val candidate = (now.clone() as Calendar).apply {
+            var candidate = (now.clone() as Calendar).apply {
                 add(Calendar.DAY_OF_YEAR, offset)
             }
             val dow = candidate.get(Calendar.DAY_OF_WEEK)
             if (weekdays.isNotEmpty() && dow !in weekdays) continue
             val deadlineMin =
                 (targetForDay(dow) + windowMinutes) % SmartAlarmStore.MINUTES_PER_DAY
-            candidate.set(Calendar.HOUR_OF_DAY, deadlineMin / 60)
-            candidate.set(Calendar.MINUTE, deadlineMin % 60)
-            candidate.set(Calendar.SECOND, 0)
-            candidate.set(Calendar.MILLISECOND, 0)
+            candidate = com.noop.analytics.SleepPlanner.wakeDate(deadlineMin, candidate)
+            val resolvedTarget = com.noop.analytics.SleepPlanner.wakeDate(targetForDay(dow), candidate)
+            val occurrence = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(
+                candidate.get(Calendar.YEAR), candidate.get(Calendar.MONTH) + 1,
+                candidate.get(Calendar.DAY_OF_MONTH),
+                resolvedTarget.get(Calendar.HOUR_OF_DAY) * 60 + resolvedTarget.get(Calendar.MINUTE),
+            )
+            if (occurrence == skippedOccurrence) continue
             if (candidate.timeInMillis > now.timeInMillis) return candidate
         }
         return null

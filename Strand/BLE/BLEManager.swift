@@ -1004,7 +1004,7 @@ public final class BLEManager: NSObject, ObservableObject {
     /// persisted `alarm.lastArmConnected` diagnostic key off THIS, not merely a non-nil
     /// `connectedPeripheralUUID`, so an arm attempted before characteristic discovery finishes (e.g. mid
     /// state-restoration) is reported "queued" — matching whether `send()` dropped it — not a false "armed".
-    private var commandChannelReady: Bool {
+    var commandChannelReady: Bool {
         state.connected && peripheral?.state == .connected && cmdCharacteristic != nil
     }
     /// #730: a DISABLE_ALARM that `send` dropped because the link wasn't up. The connect-settle hook
