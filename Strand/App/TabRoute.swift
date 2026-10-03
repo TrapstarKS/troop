@@ -89,7 +89,7 @@ extension View {
                 case .healthMonitor: HealthMonitorView()
                 case .healthspan: HealthspanView()
                 case .stressMonitor: StressMonitorView()
-                case .weeklyPlan: TabRoutePlaceholder(title: "Weekly Plan")
+                case .weeklyPlan: WeeklyPlanView()
                 case .journal: InsightsView()
                 }
             }

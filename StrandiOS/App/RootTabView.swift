@@ -694,7 +694,7 @@ private enum MoreDestination: Hashable {
         case .settings:        SettingsView()
         case .devices:         DevicesView()
         case .trends:          TrendsView()
-        case .weeklyPlan:      TabRoutePlaceholder(title: "Weekly Plan")
+        case .weeklyPlan:      WeeklyPlanView()
         case .sleep:           SleepView()
         case .sleepPlanner:    SmartAlarmView()
         case .healthMonitor:   HealthMonitorView()

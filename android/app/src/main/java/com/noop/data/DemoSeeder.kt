@@ -45,11 +45,14 @@ object DemoSeeder {
         "Running", "Cycling", "Strength", "HIIT", "Swimming", "Yoga", "Walking", "Rowing"
     )
 
-    /** Seed daily history only when empty, then add the raw demo fixture once. Safe on every launch. */
-    suspend fun seedIfEmpty(repo: WhoopRepository) {
+    /** Seed daily history only when empty, then add independent demo fixtures once. */
+    suspend fun seedIfEmpty(repo: WhoopRepository, context: android.content.Context? = null) {
         val seededNow = repo.days(WHOOP).isEmpty()
         val pristineBeforeBaseSeed = seededNow && HealthspanStressDemoSeed.hasEmptyStreams(repo)
-        if (seededNow) seed(repo)
+        if (seededNow) {
+            seed(repo)
+            context?.let { seedWeeklyPlanDemo(it, LocalDate.now().toString()) }
+        }
         HealthspanStressDemoSeed.seedIfDemo(repo, seededNow, pristineBeforeBaseSeed)
     }
 
@@ -300,6 +303,21 @@ object DemoSeeder {
         repo.upsertAppleDaily(apple)
         if (workouts.isNotEmpty()) repo.upsertWorkouts(workouts)
         if (journal.isNotEmpty()) repo.upsertJournal(journal)
+        seedPlanJournal(repo)
+    }
+
+    // Swift twin: `AppleDemoSeeder.seedPlanJournal`.
+    private suspend fun seedPlanJournal(repo: WhoopRepository) {
+        val today = LocalDate.now()
+        val rows = (1..90).flatMap { offset ->
+            val day = today.minusDays(offset.toLong()).toString()
+            listOf(
+                JournalEntry("noop-journal", day, "Did you read before bed?", offset % 3 != 0),
+                JournalEntry("noop-journal", day, "Did you drink any alcohol?", offset % 4 == 0),
+                JournalEntry("noop-journal", day, "How much caffeine did you consume?", true, numericValue = (50 + offset % 4 * 50).toDouble()),
+            )
+        }
+        repo.upsertJournal(rows)
     }
 
     /** Swift twin: `AppleDemoSeeder.seedHealthMonitor`. */
