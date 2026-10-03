@@ -984,6 +984,7 @@ public final class BLEManager: NSObject, ObservableObject {
     /// Non-nil signals that `centralManagerDidUpdateState` should reconnect this
     /// specific peripheral rather than starting a fresh scan.
     private var restoredPeripheral: CBPeripheral?
+    private var restoredStartupToken: BLEStartupGate.RestorationToken?
     /// #280: true while `lastSyncError` currently holds a radio-state message (off / unauthorized /
     /// unsupported) that `centralManagerDidUpdateState` set. Lets the poweredOn transition clear ONLY
     /// that message, never a genuine mid-sync error (e.g. "Sync interrupted").
@@ -1181,6 +1182,15 @@ public final class BLEManager: NSObject, ObservableObject {
     /// `connectFromSystem`'s targeted path already makes: no new outbound command, nothing written to the
     /// strap, so the BLE safety contract is unaffected. Twin of `OuraLiveSource.issueStandingConnect`.
     private func issueStandingConnect(whilePausedForBondLoop: Bool = false) {
+        guard collector != nil && registryStore != nil else {
+            Task { @MainActor in
+                await self.startupGate.resume(prepare: { await self.prepareStoreForStartup() },
+                    isAllowed: { self.central.state == .poweredOn && !self.intentionalDisconnect }) {
+                    self.issueStandingConnect(whilePausedForBondLoop: whilePausedForBondLoop)
+                }
+            }
+            return
+        }
         guard whoopConnectAllowed("standing-connect") else { return }
         guard !intentionalDisconnect else { return }
         // #1539: the bond-loop pause suppresses this by default, but the paused paths deliberately opt in —
@@ -1642,6 +1652,15 @@ public final class BLEManager: NSObject, ObservableObject {
     /// path schedules nothing afterwards, so the hammer loop cannot restart. A genuine bond still fully
     /// resets via the didWriteValueFor path, so a strap freed since the give-up self-heals.
     func connectFromSystem(model: WhoopModel = .persisted) {
+        guard collector != nil && registryStore != nil else {
+            Task { @MainActor in
+                await self.startupGate.resume(prepare: { await self.prepareStoreForStartup() },
+                    isAllowed: { self.central.state == .poweredOn && !self.intentionalDisconnect }) {
+                    self.connectFromSystem(model: model)
+                }
+            }
+            return
+        }
         // #1881: the gate belongs HERE, not in the shared `connectCore`. This file already draws the line
         // the fix needs — `connect()` is the user's explicit Connect button, and every system-initiated
         // path "MUST use connectFromSystem()" — and the report's complaint is only ever about NOOP acting
@@ -1936,6 +1955,8 @@ public final class BLEManager: NSObject, ObservableObject {
     /// second epitaph, the paused disconnect path schedules nothing). Re-stamps `bondLoopPausedAt` so
     /// back-to-back foregrounds can't chain probes.
     func salvageProbeIfBondLoopPaused(now: Date = Date()) {
+        // Failed startup preparation must not spend the salvage budget or consult the launch default.
+        guard collector != nil && registryStore != nil else { return }
         let since = bondLoopPausedAt.map { now.timeIntervalSince($0) }
         guard BLEManager.shouldSalvageProbe(pausedForBondLoop: autoReconnectPausedForBondLoop,
                                             connected: state.connected,
@@ -5100,31 +5121,67 @@ public final class BLEManager: NSObject, ObservableObject {
 
     /// Resume radio-driven startup only after the registry has seeded the active-device gate.
     private func resumeSystemConnection(reason: String) async {
+        let token = restoredStartupToken
         await startupGate.resume(
             prepare: { await self.prepareStoreForStartup() },
             isAllowed: {
-                self.central.state == .poweredOn && !self.intentionalDisconnect
-                    && self.whoopConnectAllowed("startup/\(reason)")
+                token == self.restoredStartupToken && self.central.state == .poweredOn
+                    && !self.intentionalDisconnect && self.whoopConnectAllowed("startup/\(reason)")
             },
+            onDenied: { self.releaseInactiveRestoration(token: token) },
             action: {
-                if let p = self.restoredPeripheral {
-                    self.adoptSourceIdentity(for: p)
-                    if p.state == .connected {
+                if let p = self.restoredPeripheral, let token {
+                    switch p.state {
+                    case .connected:
+                        guard self.startupGate.claimRestoration(.discover, token: token) else { return }
+                        p.delegate = self
+                        self.adoptSourceIdentity(for: p)
                         self.state.connected = true
-                        // Inherited subscriptions need a real off→on cycle (#613), after the gate opens.
+                        self.state.bonded = true
+                        self.didBond = true
+                        // Publish identity before the genuine restored bond, matching normal adoption.
+                        self.state.encryptedBond = false
+                        self.connectedPeripheralUUID = p.identifier.uuidString
+                        self.state.encryptedBond = true
+                        self.noteGenuineBond(of: p)
+                        self.clockRequested = false
+                        self.clockRetries = 0
                         self.restoreNeedsResubscribe = true
                         self.log("Restored CONNECTED peripheral \(p.identifier) — re-discovering services (\(reason))")
                         self.discoverPrimaryServices(on: p)
-                    } else {
+                    case .disconnected:
+                        guard self.startupGate.claimRestoration(.connect, token: token) else { return }
+                        p.delegate = self
+                        self.adoptSourceIdentity(for: p)
                         self.state.connected = false
                         self.connectRestored(p, reason: reason)
+                    case .connecting, .disconnecting:
+                        break
+                    @unknown default:
+                        break
                     }
-                } else {
-                    // Radio-driven startup retains the bond-loop give-up; it is not a manual retry (#78).
+                } else if token == nil {
                     self.connectFromSystem()
                 }
             }
         )
+    }
+
+    private func releaseInactiveRestoration(token: BLEStartupGate.RestorationToken?) {
+        // A failed store or an off radio is retryable. Only a positively inactive WHOOP is released.
+        guard !whoopIsActiveDevice, token == restoredStartupToken,
+              let p = restoredPeripheral else { return }
+        p.delegate = nil
+        central.cancelPeripheralConnection(p)
+        restoredPeripheral = nil
+        restoredStartupToken = nil
+        if peripheral?.identifier == p.identifier { peripheral = nil }
+        resetCharacteristics()
+        connectedPeripheralUUID = nil
+        state.connected = false
+        state.bonded = false
+        state.encryptedBond = false
+        didBond = false
     }
 
     /// Issue a direct connect to a restored peripheral and arm the pending-connect probe (#730).
@@ -5926,17 +5983,26 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
     public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         // A restored pending connection can complete while the database is still opening. It must
         // pass the same startup gate before publishing/adopting its identity or discovering services.
-        if restoredPeripheral?.identifier == peripheral.identifier {
+        guard self.peripheral?.identifier == peripheral.identifier else {
+            central.cancelPeripheralConnection(peripheral)
+            return
+        }
+        if restoredPeripheral?.identifier == peripheral.identifier, let token = restoredStartupToken {
             Task { @MainActor in
                 await startupGate.resume(
                     prepare: { await self.prepareStoreForStartup() },
                     isAllowed: {
                         self.central.state == .poweredOn && !self.intentionalDisconnect
+                            && token == self.restoredStartupToken
                             && self.restoredPeripheral?.identifier == peripheral.identifier
                             && peripheral.state == .connected
                             && self.whoopConnectAllowed("startup/restored-didConnect")
                     },
-                    action: { self.completeConnect(peripheral) }
+                    onDenied: { self.releaseInactiveRestoration(token: token) },
+                    action: {
+                        guard self.startupGate.claimRestoration(.discover, token: token) else { return }
+                        self.completeConnect(peripheral)
+                    }
                 )
             }
             return
@@ -6102,6 +6168,9 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
     public func centralManager(_ central: CBCentralManager,
                                didDisconnectPeripheral peripheral: CBPeripheral,
                                error: Error?) {
+        guard self.peripheral?.identifier == peripheral.identifier else { return }
+        restoredStartupToken = nil
+
         Task { @MainActor in await collector?.flush() }
         // Reboot trail: if a user reboot is in flight, this drop is the strap acting on it. Log how long
         // the link stayed up (a real reboot drops within ~1-2 s) and cancel the no-disconnect watchdog. The
@@ -6410,6 +6479,9 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
     public func centralManager(_ central: CBCentralManager,
                                didFailToConnect peripheral: CBPeripheral,
                                error: Error?) {
+        guard self.peripheral?.identifier == peripheral.identifier else { return }
+        restoredStartupToken = nil
+
         cancelPendingConnectProbe()   // #730: it FAILED rather than pending — this log is the answer
         log("Failed to connect\(error.map { " — \($0.localizedDescription)" } ?? "")\(BLEManager.bleErrorSuffix(error))")
         // The strap wiped its bond (a firmware update, or the official WHOOP app re-bonding it). macOS keeps
@@ -6482,9 +6554,15 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
             log("Restore: no peripherals in state dict")
             return
         }
+        if let previous = self.restoredPeripheral, previous.identifier != p.identifier {
+            previous.delegate = nil
+            central.cancelPeripheralConnection(previous)
+        }
         self.peripheral = p
         self.restoredPeripheral = p
-        p.delegate = self
+        self.restoredStartupToken = startupGate.beginRestoration(identifier: p.identifier.uuidString)
+        // Inherited notifications must not write or adopt data before the persisted source is known.
+        p.delegate = nil
         resetCharacteristics()
         // Re-derive the inbound-decode family from the persisted model. connect()/startScan() set the
         // reassembler + router family, but NEITHER runs on the restore path — so without this a restored
@@ -6496,23 +6574,6 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
         router.family = selectedModel.deviceFamily
         router.deviceId = deviceId   // #1706: attribute this connection's alarm readback
         configureCollectorFamily()
-        // Collection only runs post-bond, so a restored link was already bonded;
-        // seed those flags now. `didWriteValueFor` won't re-fire on its own.
-        state.bonded = true
-        didBond = true
-        // #613: didConnect never fires for an ALREADY-connected restored peripheral, so publish the strap
-        // identity HERE — BEFORE encryptedBond flips true — so SourceCoordinator sees the ordinary
-        // (encryptedBond == false) identity semantics `didConnect` uses (adopt-if-unknown / never clobber a
-        // different registered strap), NOT the #52 post-bond re-adoption seam. Without it
-        // connectedPeripheralUUID stays nil the whole session: no identity to SourceCoordinator, and the
-        // alarm diagnostics read "strap not connected" though the link is up.
-        if p.state == .connected { connectedPeripheralUUID = p.identifier.uuidString }
-        state.encryptedBond = true   // a restored link was genuinely encrypted-bonded before (#69)
-        noteGenuineBond(of: p)   // #52: a restored link was genuinely bonded; eligible as a re-adopt target
-        // clockRef is nil in the fresh process after restore, so we must re-request it.
-        // Reset the flag so the post-restore didWriteValueFor issues exactly one getClock.
-        clockRequested = false
-        clockRetries = 0
         // Even an already-connected restored link must await the active-device seed before discovery.
         // poweredOn may arrive while the store opens; both callbacks share the same preparation (#2604).
         Task { @MainActor in await resumeSystemConnection(reason: "willRestoreState") }
