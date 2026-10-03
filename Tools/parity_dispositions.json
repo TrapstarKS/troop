@@ -611,6 +611,15 @@
       "platform": "kotlin",
       "rationale": "WeeklyPlanNotice.id constructs the same check-in or recap identifier in the excluded Swift app layer. Paired WeeklyPlan tests cover those identifiers; this disposition records only the inventory boundary.",
       "twin_path": "Strand/Data/WeeklyPlan.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::daysMergedRangeFlow/3#1",
+      "identity_sha256": "cdd2e595ff78a8e1eacb2738e627f5af076820bd5965d15a286e54b8f579e26d",
+      "platform": "kotlin",
+      "rationale": "Swift HealthspanView consumes the bounded dated/source-resolved history from app-layer Repository.refresh inline. This Android Room Flow facade uses the incumbent source and edited-sleep merge over explicit dates and preserves the dashboard cap. It is an app-layer read role, not a new stored calculation; this disposition alone makes no byte-parity claim. The full read-spine suite, historical source/range test and paired eligibility oracle verify the consumers.",
+      "twin_path": "Strand/Data/Repository.swift"
     }
   ]
 }
