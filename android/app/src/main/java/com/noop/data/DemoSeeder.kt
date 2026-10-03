@@ -324,7 +324,7 @@ object DemoSeeder {
         val napTimeline = JSONArray().put(JSONObject().put("start", napStart).put("end", napStart + 30 * 60)
             .put("stage", "light"))
         sleeps.add(SleepSession(deviceId = WHOOP, startTs = napStart, endTs = napStart + 30 * 60,
-            efficiency = 1.0, stagesJSON = napTimeline.toString(), userEdited = true))
+            efficiency = 100.0, stagesJSON = napTimeline.toString(), userEdited = true))
     }
 
     /** Box–Muller normal sample. */
