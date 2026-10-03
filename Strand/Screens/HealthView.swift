@@ -55,6 +55,8 @@ private struct HealthLandingContent: View {
 
             StressMonitorPreviewCard()
             HealthSupportingMetricCards()
+            FitnessAgeSection()
+            VitalitySection()
             SkinTempSection()
             HealthHubLinksSection()
             NavigationLink(value: TabRoute.dataSources) {

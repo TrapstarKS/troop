@@ -143,6 +143,8 @@ fun HealthScreen(
         item { HealthMonitorPreview(vm, days, onOpenHealthMonitor) }
         item { StressMonitorPreviewCard(vm, onOpenStress) }
         item { HealthSupportingMetricCards(vm) }
+        item { FitnessAgeSection(vm, days, profile, onOpenSettings) }
+        item { VitalitySection(vm, days, profile) }
         item { SyncStatusSection(vm = vm, onSyncNow = { vm.syncNow() }) }
         item {
             SkinTempSuiteSection(
