@@ -1622,7 +1622,7 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
             zoneMinutes?.let { z ->
                 val total = z.sum()
                 if (z.size == 5 && z.all { RecoveryStrainDetailLogic.wholeNumber(it) != null } &&
-                    RecoveryStrainDetailLogic.wholeNumber(total)?.let { it > 0 } == true) {
+                    total > 0.0 && RecoveryStrainDetailLogic.wholeNumber(total) != null) {
                     CardDivider()
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Overline("HR zones", modifier = Modifier.weight(1f))

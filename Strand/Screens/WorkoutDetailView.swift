@@ -481,7 +481,7 @@ struct WorkoutDetailView: View {
     @ViewBuilder private var zonesCard: some View {
         if let z = zoneMinutes, z.count == 5,
            z.allSatisfy({ RecoveryStrainDetailLogic.wholeNumber($0) != nil }),
-           let totalMinutes = RecoveryStrainDetailLogic.wholeNumber(z.reduce(0, +)), totalMinutes > 0 {
+           let totalMinutes = RecoveryStrainDetailLogic.wholeNumber(z.reduce(0, +)), z.reduce(0, +) > 0 {
             let total = z.reduce(0, +)
             let busiest = z.indices.max(by: { z[$0] < z[$1] }) ?? 0
             VStack(alignment: .leading, spacing: NoopMetrics.gap) {
