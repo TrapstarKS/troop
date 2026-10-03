@@ -61,6 +61,8 @@ object IntelligenceEngine {
      */
     private val analyzeGate = Mutex()
 
+    val scoringReadiness = ScoringReadiness()
+
     /** #1816: optional sink for whether the strap banked ANY motion in the calibration scan window.
      *  Set by the caller (AppViewModel / WhoopBleClient) before calling [analyzeRecent] and cleared
      *  after, so the Today tile can distinguish "Need N more phone-step days" (motion exists, phone
@@ -503,72 +505,78 @@ object IntelligenceEngine {
         stepsMotionCacheGet: (() -> String?)? = null,
         stepsMotionCacheSet: ((String) -> Unit)? = null,
         preserveUnscoredHistory: Boolean = false,
-    ): List<Computed> = withContext(Dispatchers.Default) {
-        // #1005: time the whole pass so a re-score STORM is visible in the strap log (the trigger lines
-        // record WHY each pass runs; this records how many nights and how long — the CPU cost per run).
-        val reScoreStart = System.nanoTime()
-        // Serialise the whole pass so overlapping callers never run two rescores in parallel (see
-        // [analyzeGate]). The heavy scoring already ran off the caller's thread via withContext above; the
-        // lock is held only for this engine's own passes, never across an unrelated suspension.
-        val scored = analyzeGate.withLock {
-            // Seed the fold cache from storage on the first pass of the process. Without this the sixty-day
-            // fold is re-paid in full after every relaunch — the cache's whole win is a repeat, and a
-            // relaunch is a repeat the process boundary hid. Nothing pass-global feeds the fold, so a
-            // payload written by a previous launch is as good as one written by the previous pass; see
-            // [StepsMotionCache]. Inside the lock because it writes the gate-guarded cache.
-            // Zero the per-day probe counters so the line below describes THIS pass and never accumulates
-            // across the back-to-back passes an offload storm is made of. Reset and emit both live in this
-            // wrapper, never in `analyzeRecentOnCpu`, whose ratchet margin has no room for either.
-            StoreProbeTally.reset()
-            preserveUnscoredHistoryForRun = preserveUnscoredHistory
-            if (!stepsMotionCacheLoaded && stepsMotionCacheGet != null) {
-                stepsMotionCacheLoaded = true
-                val raw = stepsMotionCacheGet()
-                if (raw != null) {
-                    stepsMotionCache = StepsMotionCache.deserialize(raw)
-                    // Seed the write guard with what is actually stored. A payload this build renders
-                    // identically then costs no write; one carrying a line we dropped is rewritten clean.
-                    stepsMotionCachePersisted = raw
+    ): List<Computed> = scoringReadiness.track(
+        sourceId = importedDeviceId,
+        inputFingerprint = { repo.analysisFingerprint() },
+        completedDays = { scored: List<Computed> -> scored.mapTo(HashSet()) { it.day } },
+    ) {
+        withContext(Dispatchers.Default) {
+            // #1005: time the whole pass so a re-score STORM is visible in the strap log (the trigger lines
+            // record WHY each pass runs; this records how many nights and how long — the CPU cost per run).
+            val reScoreStart = System.nanoTime()
+            // Serialise the whole pass so overlapping callers never run two rescores in parallel (see
+            // [analyzeGate]). The heavy scoring already ran off the caller's thread via withContext above; the
+            // lock is held only for this engine's own passes, never across an unrelated suspension.
+            val scored = analyzeGate.withLock {
+                // Seed the fold cache from storage on the first pass of the process. Without this the sixty-day
+                // fold is re-paid in full after every relaunch — the cache's whole win is a repeat, and a
+                // relaunch is a repeat the process boundary hid. Nothing pass-global feeds the fold, so a
+                // payload written by a previous launch is as good as one written by the previous pass; see
+                // [StepsMotionCache]. Inside the lock because it writes the gate-guarded cache.
+                // Zero the per-day probe counters so the line below describes THIS pass and never accumulates
+                // across the back-to-back passes an offload storm is made of. Reset and emit both live in this
+                // wrapper, never in `analyzeRecentOnCpu`, whose ratchet margin has no room for either.
+                StoreProbeTally.reset()
+                preserveUnscoredHistoryForRun = preserveUnscoredHistory
+                if (!stepsMotionCacheLoaded && stepsMotionCacheGet != null) {
+                    stepsMotionCacheLoaded = true
+                    val raw = stepsMotionCacheGet()
+                    if (raw != null) {
+                        stepsMotionCache = StepsMotionCache.deserialize(raw)
+                        // Seed the write guard with what is actually stored. A payload this build renders
+                        // identically then costs no write; one carrying a line we dropped is rewritten clean.
+                        stepsMotionCachePersisted = raw
+                    }
                 }
-            }
-            val (out, healed) = analyzeRecentOnCpu(repo, profile, maxDays, importedDeviceId, maxHROverride,
-                nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, baselineEpoch,
-                recoveryEpoch, diag, useExperimentalSleepV2, useMotionAwareWake, sleepTraceSink, recoveryTraceSink,
-                stepsTraceSink, universalSink, workoutsTraceSink, hrvTraceSink, deepHrvWindow,
-                spo2CandidateDisplay, effortMethod, dayCycleMode)
-            val result = if (healed == 0) out
-            // #899 heal re-pass: the pass above deleted overlapping duplicate sleep sessions AFTER its days
-            // were scored, and the read-side dedup those days consumed had no bank-recency witness (the fresh
-            // detections weren't banked yet), so its survivor can differ from the heal's. ONE bounded re-pass
-            // re-scores the window against the cleaned store; its own heal then finds nothing (the duplicates
-            // are gone), so this can never loop. Mirrors the Swift pendingForcedRescore re-arm.
-            else analyzeRecentOnCpu(repo, profile, maxDays, importedDeviceId, maxHROverride,
-                nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, baselineEpoch,
-                recoveryEpoch, diag, useExperimentalSleepV2, useMotionAwareWake, sleepTraceSink, recoveryTraceSink,
-                stepsTraceSink, universalSink, workoutsTraceSink, hrvTraceSink, deepHrvWindow,
-                spo2CandidateDisplay, effortMethod, dayCycleMode).first
-            // Write the pruned cache back, after the heal re-pass so the payload reflects whichever pass ran
-            // last, and only when it moved. `serialize` renders sorted, so a pass that reused every day
-            // produces the string already stored and skips the write entirely.
-            if (stepsMotionCacheSet != null) {
-                val payload = StepsMotionCache.serialize(stepsMotionCache)
-                if (payload != stepsMotionCachePersisted) {
-                    stepsMotionCachePersisted = payload
-                    stepsMotionCacheSet(payload)
+                val (out, healed) = analyzeRecentOnCpu(repo, profile, maxDays, importedDeviceId, maxHROverride,
+                    nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, baselineEpoch,
+                    recoveryEpoch, diag, useExperimentalSleepV2, useMotionAwareWake, sleepTraceSink, recoveryTraceSink,
+                    stepsTraceSink, universalSink, workoutsTraceSink, hrvTraceSink, deepHrvWindow,
+                    spo2CandidateDisplay, effortMethod, dayCycleMode)
+                val result = if (healed == 0) out
+                // #899 heal re-pass: the pass above deleted overlapping duplicate sleep sessions AFTER its days
+                // were scored, and the read-side dedup those days consumed had no bank-recency witness (the fresh
+                // detections weren't banked yet), so its survivor can differ from the heal's. ONE bounded re-pass
+                // re-scores the window against the cleaned store; its own heal then finds nothing (the duplicates
+                // are gone), so this can never loop. Mirrors the Swift pendingForcedRescore re-arm.
+                else analyzeRecentOnCpu(repo, profile, maxDays, importedDeviceId, maxHROverride,
+                    nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, baselineEpoch,
+                    recoveryEpoch, diag, useExperimentalSleepV2, useMotionAwareWake, sleepTraceSink, recoveryTraceSink,
+                    stepsTraceSink, universalSink, workoutsTraceSink, hrvTraceSink, deepHrvWindow,
+                    spo2CandidateDisplay, effortMethod, dayCycleMode).first
+                // Write the pruned cache back, after the heal re-pass so the payload reflects whichever pass ran
+                // last, and only when it moved. `serialize` renders sorted, so a pass that reused every day
+                // produces the string already stored and skips the write entirely.
+                if (stepsMotionCacheSet != null) {
+                    val payload = StepsMotionCache.serialize(stepsMotionCache)
+                    if (payload != stepsMotionCachePersisted) {
+                        stepsMotionCachePersisted = payload
+                        stepsMotionCacheSet(payload)
+                    }
                 }
+                // What the pass spent on its per-day probe queries, beside the `stepsMotion reused=N/M` line.
+                // Together they say whether a warm pass that folded nothing still went into the round trips.
+                diag(StoreProbeTally.line())
+                result
             }
-            // What the pass spent on its per-day probe queries, beside the `stepsMotion reused=N/M` line.
-            // Together they say whether a warm pass that folded nothing still went into the round trips.
-            diag(StoreProbeTally.line())
-            result
+            diag("re-score: done — scored ${scored.size} night(s) in ${(System.nanoTime() - reScoreStart) / 1_000_000} ms (#1005)")
+            // #2013: what the pass actually CARRIES, beside how many nights it touched. "scored N nights" is
+            // silent about a day that was scored and came back empty, which is exactly the shape reported: the
+            // detail screen omitted days the log showed being scored, and nothing in between said which half
+            // lost them. A census of the results makes that answerable from one shared log.
+            diag(reScoreCensusLine(scored))
+            scored
         }
-        diag("re-score: done — scored ${scored.size} night(s) in ${(System.nanoTime() - reScoreStart) / 1_000_000} ms (#1005)")
-        // #2013: what the pass actually CARRIES, beside how many nights it touched. "scored N nights" is
-        // silent about a day that was scored and came back empty, which is exactly the shape reported: the
-        // detail screen omitted days the log showed being scored, and nothing in between said which half
-        // lost them. A census of the results makes that answerable from one shared log.
-        diag(reScoreCensusLine(scored))
-        scored
     }
 
     /** History span for the one-shot Effort rescore , large enough to cover any real wear history,

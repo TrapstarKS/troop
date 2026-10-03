@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import StrandAnalytics
 
 /// Foreground presentation delegate for the app's local notifications (wind-down nudge, smart-alarm
 /// backup, battery/illness alerts).
@@ -22,14 +23,12 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     /// is a safe no-op (the tap is simply not routed) rather than a crash if this ever fires before the
     /// root has wired it.
     var onCoachBriefTapped: (() -> Void)?
-    private var pendingLocalRoute: String?
-    var onLocalNotificationTapped: ((String) -> Void)? {
-        didSet {
-            guard let route = pendingLocalRoute, let onLocalNotificationTapped else { return }
-            pendingLocalRoute = nil
-            onLocalNotificationTapped(route)
-        }
+    private let localTapBuffer = LocalNotificationTapBuffer()
+    var onLocalNotificationContextTapped: ((LocalNotificationContext) -> Void)? {
+        didSet { localTapBuffer.handler = onLocalNotificationContextTapped }
     }
+    // Compatibility for existing route-only notifications. New dated reports use the complete handler.
+    var onLocalNotificationTapped: ((String) -> Void)?
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
@@ -48,10 +47,14 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     ) {
         let content = response.notification.request.content
         if content.categoryIdentifier == "local-report",
-           let route = content.userInfo["localNotificationRoute"] as? String {
+           let notification = LocalNotificationContext(wireFields: content.userInfo.reduce(into: [String: String]()) {
+               if let key = $1.key as? String, let value = $1.value as? String { $0[key] = value }
+           }) {
             DispatchQueue.main.async {
-                if let handler = self.onLocalNotificationTapped { handler(route) }
-                else { self.pendingLocalRoute = route }
+                if content.userInfo["localNotificationEvent"] == nil,
+                   self.onLocalNotificationContextTapped == nil, let handler = self.onLocalNotificationTapped {
+                    handler(notification.route)
+                } else { self.localTapBuffer.receive(notification) }
             }
         } else if content.categoryIdentifier == CoachBriefScheduler.notificationCategoryId {
             onCoachBriefTapped?()

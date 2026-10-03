@@ -72,7 +72,7 @@ fun MoreHubScreen(
         }
         MoreHubSection(uiString(R.string.more_integrations)) {
             MoreHubRow(uiString(R.string.l10n_data_sources_screen_health_connect_be6bca3e), Icons.Filled.Storage) { onNavigate("data_sources") }
-            MoreHubRow(uiString(R.string.nav_apple_health), Icons.Filled.Storage) { onNavigate("data_sources") }
+            MoreHubRow(uiString(R.string.nav_apple_health), Icons.Filled.Storage) { onNavigate("apple_health") }
             MoreHubRow(uiString(R.string.nav_data_sources), Icons.Filled.Storage) { onNavigate("data_sources") }
             MoreHubRow(uiString(R.string.coach_settings), Icons.Filled.AutoAwesome) { onNavigate("coach_settings") }
             MoreHubRow(uiString(R.string.nav_coach), Icons.Filled.AutoAwesome) {

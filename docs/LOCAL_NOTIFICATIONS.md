@@ -8,10 +8,10 @@ All new briefing and notification copy is **newly authored**. It is a clean-room
 
 | Family | Local rule | Deduplication |
 | --- | --- | --- |
-| Recovery / Sleep ready | A resolved daily reading, the canonical recorded main-night wake, completed sync and scoring | Family plus recorded day |
-| Morning recap / Daily Outlook | Recorded wake plus at least one available Recovery or Sleep reading | Family plus recorded day |
-| Strain ready / Day in Review | Today's saved reading, after 20:00 local time; Strain is the value saved so far | Family plus local day |
-| Streak summary | At least one consecutive recorded Recovery day, after 20:00 | Family plus local day |
+| Recovery / Sleep ready | A resolved daily reading, the canonical recorded main-night wake, completed sync and scoring | Recorded-night group coverage |
+| Morning recap / Daily Outlook | Recorded wake plus at least one available Recovery or Sleep reading | Recorded-night group coverage |
+| Strain ready / Day in Review | Today's saved reading, after 20:00 local time; Strain is the value saved so far | Recorded-evening group coverage |
+| Streak summary | At least one consecutive recorded Recovery day, after 20:00 | Recorded-evening group coverage |
 | Post-workout summary | A completed recorded activity; existing Android frontier behavior is preserved | Workout start timestamp |
 | Device disconnected | A previously observed active-WHOOP connection remains absent for five minutes | Local day |
 | Wear reminder | Observed active-WHOOP on-wrist → off-wrist transition remains connected for thirty minutes | Local day |
@@ -36,3 +36,19 @@ New settings use canonical `localNotifications.<family>.enabled` keys. Delivery 
 The existing Apple `--demo-seed` and Android DemoSeeder daily readings, sleep blocks, workout history and streak days populate these screens. They exercise presentation and local policy inputs; they do not validate Bluetooth behavior or physiological accuracy.
 
 Apple battery delivery retains the latest attempt generation after its asynchronous OS callback finishes. An older accepted callback cannot remove a newer accepted notification under the same identifier. Android posts synchronously through NotificationManager and has no equivalent delayed delivery callback; its accepted-post markers preserve the same eligibility semantics.
+
+## Overlapping report families
+
+One recorded night produces at most one enabled report, in priority order: Daily Outlook, morning recap, Sleep ready, Recovery ready. One recorded evening produces at most one enabled report: Day in Review, Strain ready, streak summary. Available fields gate selection. An accepted report stores the same dated coverage for every family in its group, so changing opt-ins, app restart, or a previously delivered granular report cannot create a richer duplicate. Groups remain independent. Apple additionally holds a group/event lock while the OS post is suspended.
+
+Android captures the active source, local clock, row, input fingerprint and scoring generation before resolving the report. Only the latest unchanged refresh may publish or post. Every daily-scoring entry goes through the shared IntelligenceEngine readiness witness. Queued, running, failed, unrelated-source or unrelated-day passes cannot release cached computed data. A cold computed row waits for a successful process-local pass. Imported readiness requires matching original fields, wake-session sources and streak provenance. These witnesses are in memory; no new schema or backup setting is introduced.
+
+## Dated payload contract
+
+`LocalNotificationContext` is mirrored in StrandAnalytics and Kotlin. Its flat string fields retain route, event ID, family, calendar day, optional plan week and workout start, original notice copy, and an optional immutable `LocalRecordedReport`. The report retains missing readings as absent values. The field names start with `localNotification`; `localNotificationReport=1` distinguishes a captured report from a route-only notice. Both codecs have tests against actual compiled Swift stdout.
+
+The Apple shell attaches `NotificationPresenter.onLocalNotificationContextTapped`; a cold-start tap is held until that complete-context callback exists. Android decodes the original launch or `onNewIntent` using `localNotificationContext(intent)`. Intent data includes route and event identity, and notification tags distinguish retained dates. A later post cannot change an older PendingIntent's extras.
+
+The shell passes report context to `LocalBriefingView(notificationContext:)` or `LocalBriefingScreen(..., notificationContext=)`. These resolve the saved report, rather than the latest database row. Saved weekly-plan or workout notices use `LocalRecordedNoticeView(notificationContext:)` or `LocalRecordedNoticeScreen(context)`, which preserve the original week/activity and copy. A missing captured report never silently resolves live data. Normal Coach/offline destinations without context continue to show current local data.
+
+Weekly Plan delivery calls a nullable saved-plan provider. With no provider or saved copy, it remains silent. Charging-fault status remains unavailable because no reliable strap signal is exposed. No background timing guarantee or physical strap validation is claimed by these interfaces.

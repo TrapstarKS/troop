@@ -49,6 +49,8 @@ import com.noop.notif.IllnessAlertNotifier
 import com.noop.notif.ScheduledReportNotifier
 import com.noop.notif.LocalNotificationDispatcher
 import com.noop.notif.LocalNotificationSnapshot
+import com.noop.notif.LocalNotificationRefresh
+import com.noop.notif.hasImportedNotificationInputs
 import com.noop.notif.StrainTargetNotifier
 import com.noop.notif.ScheduledReportPolicy
 import com.noop.notif.scorePctOrNull
@@ -65,6 +67,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -725,6 +729,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val today: StateFlow<DailyMetric?> = _today.asStateFlow()
 
     private val localNotificationDispatcher = LocalNotificationDispatcher(appContext)
+    private val localNotificationRefresh = LocalNotificationRefresh()
     private val _localBriefing = MutableStateFlow<LocalNotificationSnapshot?>(null)
     val localBriefing: StateFlow<LocalNotificationSnapshot?> = _localBriefing.asStateFlow()
 
@@ -733,52 +738,85 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun refreshLocalNotifications(
-        days: List<DailyMetric> = recentDays.value,
         localNow: java.time.ZonedDateTime = java.time.ZonedDateTime.now(),
     ) {
+        val sourceId = activeStrapId
+        val activeWhoop = ble.activeDeviceIsWhoop
+        val scoring = IntelligenceEngine.scoringReadiness.state.value
         val now = localNow.toInstant()
         val zone = localNow.zone
-        val row = resolveTodayRow(days, logicalDay(localNow).toString(), localNow.toLocalDate().toString())
-        _today.value = row
-        val snapshot = row?.let {
-            val day = java.time.LocalDate.parse(it.day)
-            val sessions = withContext(Dispatchers.IO) {
-                val from = day.minusDays(120).atStartOfDay(zone).toEpochSecond()
-                val to = day.plusDays(1).atStartOfDay(zone).toEpochSecond()
-                WhoopRepository.mergeSleepRichness(
-                    repository.sleepSessionsUnion(activeStrapId, from, to, 120),
-                    repository.computedSleepSessionsUnion(activeStrapId, from, to, 120),
-                ) { session -> java.time.Instant.ofEpochSecond(session.endTs).atZone(zone).toLocalDate().toString() }
-                    .filter { session -> session.endTs > session.effectiveStartTs }
-            }
-            val history = withContext(Dispatchers.IO) { repository.daysMerged(activeStrapId) }
-            val currentStreak = com.noop.analytics.StreakCalculator.streaks(
-                history.map { metric -> metric.day }, history.map { metric -> metric.recovery != null },
-                localNow.toLocalDate().toString()).current
-            val offset = now.atZone(zone).offset.totalSeconds.toLong()
-            val habitual = com.noop.analytics.SleepStageTotals.habitualMidsleepSec(sessions.map { session ->
-                val start = session.effectiveStartTs
-                val middle = start + (session.endTs - start) / 2
-                com.noop.analytics.SleepStageTotals.HistoryBlock(start, session.endTs,
-                    java.time.Instant.ofEpochSecond(middle).atZone(zone).toLocalDate().toString())
-            }, offset)
-            val tonight = sessions.filter { session ->
-                java.time.Instant.ofEpochSecond(session.endTs).atZone(zone).toLocalDate() == day
-            }
-            val selected = com.noop.analytics.SleepStageTotals.mainNightGroupIndices(tonight.map { session ->
-                com.noop.analytics.SleepStageTotals.NightBlock(session.effectiveStartTs, session.endTs)
-            }, offset, habitual)
-            val wake = selected?.maxOfOrNull { index -> tonight[index].endTs }
-            val state = ble.state.value
-            LocalNotificationSnapshot(it.day, wake, it.recovery.scorePctOrNull(),
-                it.totalSleepMin?.roundToInt(), it.strain?.let { value ->
-                    (UnitFormatter.effortValue(value, EffortScale.WHOOP) * 10).roundToInt()
-                }, currentStreak, state.backfilling || state.historyPendingSync || state.analyzingHistory)
+        val logicalKey = logicalDay(localNow).toString()
+        val localKey = localNow.toLocalDate().toString()
+        if (scoring.pending != 0 || scoring.failedGeneration != null) {
+            _localBriefing.value = _localBriefing.value?.copy(syncPending = true)
         }
-        val state = ble.state.value
-        _localBriefing.value = snapshot
-        localNotificationDispatcher.evaluate(snapshot, state.connected, state.worn, now.epochSecond,
-            ble.activeDeviceIsWhoop, activeStrapId)
+        var inputStable = false
+        localNotificationRefresh.run(read = {
+            val fingerprint = repository.analysisFingerprint()
+            val history = withContext(Dispatchers.IO) { repository.daysMerged(sourceId) }
+            val row = resolveTodayRow(history, logicalKey, localKey)
+            val snapshot = row?.let {
+                val day = java.time.LocalDate.parse(it.day)
+                val sessions = withContext(Dispatchers.IO) {
+                    val from = day.minusDays(120).atStartOfDay(zone).toEpochSecond()
+                    val to = day.plusDays(1).atStartOfDay(zone).toEpochSecond()
+                    WhoopRepository.mergeSleepRichness(
+                        repository.sleepSessionsUnion(sourceId, from, to, 120),
+                        repository.computedSleepSessionsUnion(sourceId, from, to, 120),
+                    ) { session -> java.time.Instant.ofEpochSecond(session.endTs).atZone(zone).toLocalDate().toString() }
+                        .filter { session -> session.endTs > session.effectiveStartTs }
+                }
+                val currentStreak = com.noop.analytics.StreakCalculator.streaks(
+                    history.map { metric -> metric.day }, history.map { metric -> metric.recovery != null },
+                    localNow.toLocalDate().toString()).current
+                val offset = now.atZone(zone).offset.totalSeconds.toLong()
+                val habitual = com.noop.analytics.SleepStageTotals.habitualMidsleepSec(sessions.map { session ->
+                    val start = session.effectiveStartTs
+                    val middle = start + (session.endTs - start) / 2
+                    com.noop.analytics.SleepStageTotals.HistoryBlock(start, session.endTs,
+                        java.time.Instant.ofEpochSecond(middle).atZone(zone).toLocalDate().toString())
+                }, offset)
+                val tonight = sessions.filter { session ->
+                    java.time.Instant.ofEpochSecond(session.endTs).atZone(zone).toLocalDate() == day
+                }
+                val selected = com.noop.analytics.SleepStageTotals.mainNightGroupIndices(tonight.map { session ->
+                    com.noop.analytics.SleepStageTotals.NightBlock(session.effectiveStartTs, session.endTs)
+                }, offset, habitual)
+                val wake = selected?.maxOfOrNull { index -> tonight[index].endTs }
+                val importedIds = repository.importedSourceIds(sourceId)
+                val imported = WhoopRepository.unionByDay(importedIds.map { id ->
+                    val from = minOf(day, localNow.toLocalDate().minusDays(currentStreak.toLong() + 1)).toString()
+                    repository.dailyMetrics(id, from, localKey)
+                })
+                val importedStreak = com.noop.analytics.StreakCalculator.streaks(
+                    imported.map { metric -> metric.day }, imported.map { metric -> metric.recovery != null }, localKey).current
+                val importedInputs = hasImportedNotificationInputs(it, imported,
+                    selected?.map { index -> tonight[index].deviceId } ?: emptyList(),
+                    importedIds, currentStreak, importedStreak)
+                val state = ble.state.value
+                LocalNotificationSnapshot(it.day, wake, it.recovery.scorePctOrNull(),
+                    it.totalSleepMin?.roundToInt(), it.strain?.let { value ->
+                        (UnitFormatter.effortValue(value, EffortScale.WHOOP) * 10).roundToInt()
+                    }, currentStreak, state.backfilling || state.historyPendingSync || state.analyzingHistory ||
+                        !scoring.ready(importedInputs, fingerprint, it.day, importedIds))
+            }
+            val currentRows = repository.recentDaysMergedFlow(sourceId).first()
+            inputStable = fingerprint == repository.analysisFingerprint() &&
+                row == resolveTodayRow(currentRows, logicalKey, localKey)
+            snapshot
+        }, isCurrent = {
+            inputStable && sourceId == activeStrapId && activeWhoop == ble.activeDeviceIsWhoop &&
+                zone == java.time.ZoneId.systemDefault()
+        }, publish = { snapshot ->
+            IntelligenceEngine.scoringReadiness.ifCurrent(scoring) {
+                val state = ble.state.value
+                val current = snapshot?.copy(syncPending = snapshot.syncPending || state.backfilling ||
+                    state.historyPendingSync || state.analyzingHistory)
+                _localBriefing.value = current
+                localNotificationDispatcher.evaluate(current, state.connected, state.worn, now.epochSecond,
+                    activeWhoop, sourceId)
+            }
+        })
     }
 
     /**
@@ -996,6 +1034,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(activeStrapIdFlow, activeIsWhoop) { _, _ -> Unit }.collect {
+                localNotificationRefresh.invalidate()
+                _localBriefing.value = null
                 localNotificationDispatcher.resetDeviceObservation()
             }
         }
@@ -1064,6 +1104,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 refreshLocalNotifications()
             }
         }
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        viewModelScope.launch {
+            combine(activeStrapIdFlow, IntelligenceEngine.scoringReadiness.state) { activeId, _ ->
+                effectiveActiveStrapId(activeId, deviceId)
+            }.flatMapLatest { sourceId -> repository.recentDaysMergedFlow(sourceId) }
+                .collectLatest { refreshLocalNotifications() }
+        }
         viewModelScope.launch {
             recentDays.collect { days ->
                 // Only treat a row as "today" if its date is the phone's ACTUAL local calendar day.
@@ -1082,7 +1129,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val localNow = java.time.ZonedDateTime.now()
                 val logicalKey = logicalDay(localNow).toString()
                 val localKey = localNow.toLocalDate().toString()
-                refreshLocalNotifications(days, localNow)
+                _today.value = resolveTodayRow(days, logicalKey, localKey)
                 _healthAlert.value =
                     (if (_illnessWatchEnabled.value && _today.value != null &&
                         days.lastOrNull()?.day == _today.value?.day
@@ -1272,13 +1319,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // trigger line at all — a "re-score: done" with nothing before it — so a strap log could not
                 // be read by pairing trigger->done, and a stalled background pass was easy to misattribute to
                 // the post-offload caller. Only logged when the gate lets the pass through, so a skipped tick
-                // stays silent and the 15-min cadence does not pad the log. newData is necessarily yes here:
-                // the gate IS the fingerprint-changed test. Twin of the Swift analyzeRecent(force:)
-                // attribution. Read the watermark ONCE — the gate and the log line must agree, and a second
+                // stays silent and the 15-min cadence does not pad the log. A missing or failed process-local
+                // completion also runs this pass, including when the persisted raw watermark still matches.
+                // Read the watermark ONCE — the gate and the log line must agree, and a second
                 // read could straddle a concurrent write from a completing pass.
+                val readiness = IntelligenceEngine.scoringReadiness.state.value
+                val needsCompletion = readiness.pending == 0 &&
+                    (readiness.computedInputFingerprint != analyzeFp || readiness.failedGeneration != null)
                 val analyzeHasNewData = analyzeFp != NoopPrefs.analyzeWatermark(appContext)
-                if (analyzeHasNewData) ble.externalLog("re-score: trigger=idle newData=yes")
-                if (analyzeHasNewData) runCatching {
+                if (analyzeHasNewData || needsCompletion) ble.externalLog(
+                    "re-score: trigger=idle newData=${if (analyzeHasNewData) "yes" else "no"} completionNeeded=$needsCompletion")
+                if (analyzeHasNewData || needsCompletion) runCatching {
                     // #1816: set the motion sink before the pass so the Today tile can name the right
                     // missing half (motion, not phone steps) when none has arrived yet. Cleared after.
                     IntelligenceEngine.stepsHasMotionSink = { hasMotion ->

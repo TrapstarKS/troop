@@ -152,13 +152,14 @@ object ScheduledReportNotifier {
                 lastWorkoutTs = NoopPrefs.reportLastWorkoutTs(context),
             )
         ) return
+        val workoutStart = newestWorkoutTs ?: return
         runCatching {
             if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
             val time = java.time.LocalTime.now()
             if (LocalNotificationPrefs.quiet(context, time.hour * 60 + time.minute)) return
             ensureChannel(context)
-            post(context, WORKOUT_NOTIF_ID, title, body)
-            newestWorkoutTs?.let { NoopPrefs.setReportLastWorkoutTs(context, it) }
+            post(context, WORKOUT_NOTIF_ID, title, body, workoutStart)
+            NoopPrefs.setReportLastWorkoutTs(context, workoutStart)
         }
     }
 
@@ -174,10 +175,11 @@ object ScheduledReportNotifier {
     }
 
     @SuppressLint("MissingPermission")
-    private fun post(context: Context, id: Int, title: String, body: String) {
+    private fun post(context: Context, id: Int, title: String, body: String, workoutStart: Long) {
         val openApp = PendingIntent.getActivity(
             context, id,
-            localNotificationLaunchIntent(context, "workouts"),
+            localNotificationLaunchIntent(context, LocalNotificationContext("workouts", "workoutReady:$workoutStart",
+                workoutStartSec = workoutStart, message = body)),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -190,7 +192,7 @@ object ScheduledReportNotifier {
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-        NotificationManagerCompat.from(context).notify(id, n)
+        NotificationManagerCompat.from(context).notify("workoutReady:$workoutStart", id, n)
     }
 
     private fun ensureChannel(context: Context) {
