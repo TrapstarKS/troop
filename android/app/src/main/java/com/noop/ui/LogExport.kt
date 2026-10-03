@@ -7,6 +7,10 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.noop.BuildConfig
 import com.noop.ble.PuffinExperiment
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -83,25 +87,73 @@ object LogExport {
      * multi-MB bundle doesn't stall the caller's dispatcher; only the chooser intent fires back on
      * whatever dispatcher the caller resumed on (Main, for every UI call site today).
      */
-    suspend fun exportBundle(context: Context, entries: List<Pair<String, ByteArray>>, suggestedName: String): File? =
-        runCatching {
+    suspend fun exportBundle(
+        context: Context,
+        entries: List<Pair<String, ByteArray>>,
+        suggestedName: String,
+        write: (suspend (File, ByteArray) -> Unit)? = null,
+        share: ((File) -> Unit)? = null,
+    ): File? = exportPreparedFile(context, suggestedName, "application/zip", "Share report bundle",
+        bytes = { zipEntries(entries) }, write = write, share = share)
+
+    internal suspend fun exportReviewedText(
+        context: Context,
+        bytes: ByteArray,
+        suggestedName: String,
+        write: (suspend (File, ByteArray) -> Unit)? = null,
+        share: ((File) -> Unit)? = null,
+    ): File? = exportPreparedFile(context, suggestedName, "text/plain", "Share log",
+        bytes = { bytes }, write = write, share = share)
+
+    private suspend fun exportPreparedFile(
+        context: Context,
+        suggestedName: String,
+        contentType: String,
+        chooserTitle: String,
+        bytes: () -> ByteArray?,
+        write: (suspend (File, ByteArray) -> Unit)?,
+        share: ((File) -> Unit)?,
+    ): File? {
+        var staged: File? = null
+        try {
+            currentCoroutineContext().ensureActive()
             val file = withContext(Dispatchers.IO) {
-                zipEntries(entries)?.let { bytes ->
-                    val dir = File(context.cacheDir, "logs").apply { mkdirs() }
-                    File(dir, suggestedName).also { it.writeBytes(bytes) }
+                bytes()?.let { data ->
+                    val dir = File(exportDir(context), "share-${java.util.UUID.randomUUID()}").apply { mkdirs() }
+                    File(dir, suggestedName).also { out ->
+                        staged = out
+                        if (write != null) write(out, data) else out.writeBytes(data)
+                    }
                 }
             } ?: return null
-            val send = Intent(Intent.ACTION_SEND).apply {
-                type = "application/zip"
-                putExtra(Intent.EXTRA_STREAM, fileUri(context, file))
-                putExtra(Intent.EXTRA_SUBJECT, suggestedName)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            currentCoroutineContext().ensureActive()
+            if (share != null) share(file) else {
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = contentType
+                    putExtra(Intent.EXTRA_STREAM, fileUri(context, file))
+                    putExtra(Intent.EXTRA_SUBJECT, suggestedName)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(send, chooserTitle))
             }
-            context.startActivity(Intent.createChooser(send, "Share report bundle"))
-            file
-        }.onFailure {
-            Toast.makeText(context, "Couldn't export the bundle: ${it.message}", Toast.LENGTH_LONG).show()
-        }.getOrNull()
+            // ACTION_SEND has no consumer-completion receipt. Retain its unique cache artifact for reads.
+            return file
+        } catch (cancelled: CancellationException) {
+            discardBundle(staged)
+            throw cancelled
+        } catch (error: Throwable) {
+            discardBundle(staged)
+            Toast.makeText(context, "Couldn't export the file: ${error.message}", Toast.LENGTH_LONG).show()
+            return null
+        }
+    }
+
+    private suspend fun discardBundle(file: File?) {
+        if (file != null) withContext(Dispatchers.IO + NonCancellable) {
+            file.delete()
+            file.parentFile?.delete()
+        }
+    }
 
     /**
      * Mirror the latest strap-log tail into the durable [StrapLogBuffer] (#510). Called from the same UI
@@ -328,15 +380,7 @@ object LogExport {
             if (bundle) {
                 exportBundle(context, prepared, suggestedName)
             } else {
-                val out = withContext(Dispatchers.IO) {
-                    File(exportDir(context), suggestedName).apply { writeBytes(prepared.single().second) }
-                }
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_STREAM, fileUri(context, out))
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                context.startActivity(Intent.createChooser(send, "Share log"))
+                exportReviewedText(context, prepared.single().second, suggestedName)
             }
         }
     }

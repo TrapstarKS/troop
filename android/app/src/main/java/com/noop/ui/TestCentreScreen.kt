@@ -69,6 +69,7 @@ import com.noop.testcentre.TestReportFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -120,7 +121,8 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
 
     // A report awaiting the mandatory review-before-share gate (spec section 12). Non-null shows the
     // review dialog; confirming runs TestReportFlow.run.
-    var pendingReport by remember { mutableStateOf<PendingReport?>(null) }
+    val reports = remember { PendingReportReview() }
+    val pendingReport = reports.pending
 
     // #646/#651: TestReportFlow.run now awaits LogExport.exportBundle's off-main zip build instead of
     // blocking the caller, so a re-entrancy guard is needed on the dialog's Share button — without it a
@@ -141,7 +143,7 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
                 vm.ble.externalLog(line, TestDomain.DISPLAY)
             }
         }
-        onDispose { DisplayPerformanceMonitor.stop() }
+        onDispose { DisplayPerformanceMonitor.stop(); reports.cancel() }
     }
     // CAPTURE-D: emit the data-volume line once when the Display mode is active on entry. Kept off the
     // (non-suspend) DisposableEffect: the read hits the store, so it runs from a coroutine.
@@ -217,7 +219,9 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
                         },
                         onReport = {
                             // Launched (#1002): buildPending is now suspend (storage probe reads the store).
-                            scope.launch { pendingReport = buildPending(context, mode, vm.ble.exportLogText(), vm) }
+                            scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                                reports.prepare { buildPending(context, mode, vm.ble.exportLogText(), vm) }
+                            }
                         },
                     )
                 }
@@ -454,7 +458,9 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
             vm = vm,
             onReport = {
                 // Launched (#1002): buildPending is now suspend (storage probe reads the store).
-                scope.launch { pendingReport = buildPending(context, MASTER_REPORT_MODE, vm.ble.exportLogText(), vm) }
+                scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    reports.prepare { buildPending(context, MASTER_REPORT_MODE, vm.ble.exportLogText(), vm) }
+                }
             },
         )
 
@@ -466,11 +472,11 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
         ReportReviewDialog(
             previewText = p.gate.previewText,
             modeInactive = p.modeInactive,
-            onCancel = { pendingReport = null },
+            onCancel = { reports.cancel() },
             onShare = {
                 // Guard against a fast double-tap firing TestReportFlow.run twice before the dialog
                 // dismisses (#646/#651 — run() now awaits the off-main zip build instead of blocking).
-                if (!reportShareBusy) {
+                if (!reportShareBusy && reports.take(p)) {
                     reportShareBusy = true
                     p.gate.confirm()
                     scope.launch {
@@ -490,7 +496,6 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
                             reportShareBusy = false
                         }
                     }
-                    pendingReport = null
                 }
             },
         )
@@ -522,13 +527,38 @@ private fun DeveloperToggleRow(
  *  hand TestReportFlow.run the same list it reviews. [modeInactive] (#1002): the selected profile's test
  *  mode is not on at report time, so the bundle carries no capture for the very thing being reported -
  *  the review dialog warns off it (the #812 capture_check only grades ACTIVE modes, so it can't). */
-private class PendingReport(
+internal class PendingReport(
     val profile: TestDomain,
     val title: String,
     val entries: List<Pair<String, ByteArray>>,
     val gate: ReportReviewGate,
     val modeInactive: Boolean = false,
 )
+
+internal class PendingReportReview {
+    private val preparations = DebugExportReview()
+    var pending by mutableStateOf<PendingReport?>(null)
+        private set
+
+    suspend fun prepare(build: suspend () -> PendingReport?) {
+        val ticket = preparations.beginPreparation()
+        pending = null
+        val report = build()
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        if (preparations.isCurrentPreparation(ticket)) pending = report
+    }
+
+    fun cancel() {
+        preparations.cancel()
+        pending = null
+    }
+
+    fun take(report: PendingReport): Boolean {
+        if (pending !== report) return false
+        cancel()
+        return true
+    }
+}
 
 /** The "whole app" report profile for the section-3 manual Report button. MASTER is not a registry mode
  *  (it has no wear-and-capture flow), so the deep-link self-applies the test:all label via this. */

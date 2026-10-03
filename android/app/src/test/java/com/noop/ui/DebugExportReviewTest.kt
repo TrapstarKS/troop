@@ -331,6 +331,41 @@ class DebugExportReviewTest {
         }
     }
 
+    @Test fun completedSessionPreparationIsDeletedIfItsReturnIsCancelled() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val collector = com.noop.testcentre.GroundTruthCollector.from(context)
+        val startedAt = 1_700_000_030_000L
+        val id = requireNotNull(collector.start("private-strap", startedAt).sessionId)
+        collector.stop(startedAt + 5_000)
+        val source = File(context.filesDir, "ground-truth/session-$id.jsonl")
+        val sourceBytes = source.readBytes()
+        val before = collector.sessions().single { it.id == id }
+        val preparation = File(context.cacheDir, "logs/noop-5mg-raw-$id.zip")
+        try {
+            val error = runCatching {
+                collector.writePreparation(preparation) { zip ->
+                    zip.putNextEntry(java.util.zip.ZipEntry("meta.json"))
+                    zip.write("private metadata".toByteArray())
+                    zip.closeEntry()
+                    zip.finish()
+                    zip.flush()
+                    java.util.zip.ZipFile(preparation).use { completed ->
+                        assertEquals("private metadata", completed.getInputStream(completed.getEntry("meta.json"))
+                            .reader().readText())
+                    }
+                    kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]!!.cancel()
+                }
+            }.exceptionOrNull()
+            assertTrue(error is kotlinx.coroutines.CancellationException)
+            assertFalse(preparation.exists())
+            assertEquals(before, collector.sessions().single { it.id == id })
+            assertFalse(collector.snapshot().exported)
+            assertArrayEquals(sourceBytes, source.readBytes())
+        } finally {
+            collector.deleteSession(id)
+        }
+    }
+
     @Test fun logSourceReadCannotUndoCancellationOrReplaceNewerReview() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val oldFile = File(context.cacheDir, "old-review.txt").apply { writeText("old report") }
