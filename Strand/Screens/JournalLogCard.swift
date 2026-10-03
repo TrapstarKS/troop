@@ -63,7 +63,7 @@ struct JournalLogCard: View {
     private var invalidNumeric: Bool {
         draftNumericText.contains { question, text in
             !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-                journalNumericValue(text, allowNegative: JournalFactor.find(question)?.unit == "°C") == nil
+                journalNumericValue(text, allowNegative: journalAllowsNegative(question)) == nil
         }
     }
     private var selectedDate: Date {
@@ -358,7 +358,7 @@ struct JournalLogCard: View {
     private func numericField(_ item: JournalCatalogItem) -> some View {
         let current = draftNumeric[item.canonical]
         return HStack(spacing: NoopMetrics.space2) {
-            stepperButton("minus", q: item.canonical, current: current)
+            stepperButton("minus", q: item.canonical, current: current, unitLabel: item.kind.unitLabel)
             NumericLogField(
                 text: Binding(get: { draftNumericText[item.canonical] ?? draftNumeric[item.canonical].map(NumericLogField.format) ?? "" },
                               set: { editNumeric(item.canonical, text: $0) }),
@@ -369,7 +369,7 @@ struct JournalLogCard: View {
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
             }
-            stepperButton("plus", q: item.canonical, current: current)
+            stepperButton("plus", q: item.canonical, current: current, unitLabel: item.kind.unitLabel)
             if current != nil {
                 Button {
                     draftNumeric.removeValue(forKey: item.canonical)
@@ -386,10 +386,10 @@ struct JournalLogCard: View {
         }
     }
 
-    private func stepperButton(_ symbol: String, q: String, current: Double?) -> some View {
+    private func stepperButton(_ symbol: String, q: String, current: Double?, unitLabel: String?) -> some View {
         Button {
             let base = current ?? 0
-            let next = JournalFactor.find(q)?.unit == "°C" ? (symbol == "plus" ? base + 1 : base - 1) : max(0, symbol == "plus" ? base + 1 : base - 1)
+            let next = symbol == "plus" ? base + 1 : (unitLabel == "°C" ? base - 1 : max(0, base - 1))
             commitNumeric(q, value: next)
         } label: {
             Image(systemName: "\(symbol).circle")
@@ -401,7 +401,7 @@ struct JournalLogCard: View {
     }
 
     private func commitNumeric(_ q: String, value: Double) {
-        guard value.isFinite, value >= 0 || JournalFactor.find(q)?.unit == "°C" else { return }
+        guard value.isFinite, value >= 0 || journalAllowsNegative(q) else { return }
         draftNumericText.removeValue(forKey: q)
         draftNumeric[q] = value
         draftAnswers[q] = true
@@ -414,7 +414,7 @@ struct JournalLogCard: View {
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             draftNumeric.removeValue(forKey: q)
             draftAnswers.removeValue(forKey: q)
-        } else if let value = journalNumericValue(text, allowNegative: JournalFactor.find(q)?.unit == "°C") {
+        } else if let value = journalNumericValue(text, allowNegative: journalAllowsNegative(q)) {
             draftNumeric[q] = value
             draftAnswers[q] = true
         }
@@ -583,6 +583,11 @@ struct JournalLogCard: View {
         }
         .buttonStyle(.plain)
     }
+}
+
+private func journalAllowsNegative(_ question: String) -> Bool {
+    let unit = JournalFactor.find(question)?.unit
+    return unit == nil || unit == "°C"
 }
 
 private func journalNumericValue(_ text: String, allowNegative: Bool) -> Double? {

@@ -210,7 +210,7 @@ fun JournalLogCard(
         text != (baselineNumeric[question]?.let(::formatNumeric) ?: "")
     }
     val invalidNumeric = draftNumericText.any { (question, text) ->
-        text.isNotBlank() && journalNumericValue(text, allowNegative = JournalFactor.find(question)?.unit == "°C") == null
+        text.isNotBlank() && journalNumericValue(text, allowNegative = journalAllowsNegative(question)) == null
     }
     val answersReady = answersDayKey == selectedDay
     LaunchedEffect(dirty) { onDirtyChanged(dirty) }
@@ -237,7 +237,7 @@ fun JournalLogCard(
         draftNumericText = draftNumericText + (question to text)
         if (text.isBlank()) {
             draftNumeric = draftNumeric - question; draftAnswers = draftAnswers - question
-        } else journalNumericValue(text, allowNegative = JournalFactor.find(question)?.unit == "°C")?.let { value ->
+        } else journalNumericValue(text, allowNegative = journalAllowsNegative(question))?.let { value ->
             draftNumeric = draftNumeric + (question to value); draftAnswers = draftAnswers + (question to true)
         }
         saveFailed = false
@@ -331,7 +331,7 @@ fun JournalLogCard(
                             numericText = draftNumericText,
                             onNumericText = ::editNumeric,
                             onAnswer = { q, yes -> if (!saving && answersReady) { draftAnswers = draftAnswers + (q to yes); draftNumeric = draftNumeric - q; draftNumericText = draftNumericText - q } },
-                            onNumeric = { q, value -> if (!saving && answersReady && value.isFinite() && (value >= 0 || JournalFactor.find(q)?.unit == "°C")) {
+                            onNumeric = { q, value -> if (!saving && answersReady && value.isFinite() && (value >= 0 || journalAllowsNegative(q))) {
                                 draftNumeric = draftNumeric + (q to value); draftAnswers = draftAnswers + (q to true)
                                 draftNumericText = draftNumericText - q
                             } },
@@ -505,6 +505,10 @@ private fun JournalNumericField(
         }
     }
 }
+
+// Swift twin: `journalAllowsNegative`.
+private fun journalAllowsNegative(question: String): Boolean =
+    JournalFactor.find(question)?.unit.let { it == null || it == "°C" }
 
 // Swift twin: `journalNumericValue`.
 private fun journalNumericValue(text: String, allowNegative: Boolean): Double? =
