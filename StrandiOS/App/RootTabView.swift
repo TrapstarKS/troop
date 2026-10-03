@@ -346,7 +346,7 @@ struct RootTabView: View {
                 // re-presents cleanly (avoids dismiss/re-present races). Calm easing on re-present.
                 quickAction = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    guard !pendingCoach, routedPillar == nil, !showDevices else { return }
+                    guard quickAction == nil, !pendingCoach, routedPillar == nil, !showDevices else { return }
                     withAnimation(Self.sheetEase) { quickAction = picked }
                 }
             }
