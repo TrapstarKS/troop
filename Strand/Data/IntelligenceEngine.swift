@@ -788,11 +788,11 @@ final class IntelligenceEngine: ObservableObject {
             runningPassStart = nil
             if pendingForcedRescore {
                 pendingForcedRescore = false
-                // Preserve the current pass's scope and persistence callback on the re-pass.
+                // A forced update queued during the upgrade repair owes a normal recent pass,
+                // not another full-history repair (#2606). Its completion belongs to this pass.
+                let followUpDays = preserveUnscoredHistory ? 21 : maxDays
                 Task {
-                    await self.analyzeRecent(maxDays: maxDays, force: true,
-                                             preserveUnscoredHistory: preserveUnscoredHistory,
-                                             onPersisted: onPersisted)
+                    await self.analyzeRecent(maxDays: followUpDays, force: true)
                 }
             }
         }
@@ -3039,7 +3039,9 @@ final class IntelligenceEngine: ObservableObject {
             diagnosticSink?("re-score: debt NOT settled — a newer re-score was recorded while this pass "
                             + "was running, so the mark stays and another pass will run (#1681)", nil)
         }
-        if !Task.isCancelled && !pendingForcedRescore { onPersisted?() }
+        // New-data debt does not invalidate the repair writes that just succeeded (#2606).
+        // Cancellation and persistence failures still leave the repair flags unset.
+        if !Task.isCancelled { onPersisted?() }
     }
 
     /// UserDefaults key for the #836 idle-tick gate: the complete raw-analysis fingerprint the last completed
