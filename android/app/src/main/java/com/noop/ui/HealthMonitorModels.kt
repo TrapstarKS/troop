@@ -27,6 +27,9 @@ internal fun healthMonitorDisplayValue(key: String, value: Double?): Double? {
     return value?.takeIf { it.isFinite() && it >= cfg.minVal && it <= cfg.maxVal }
 }
 
+internal fun healthMonitorReportSkinKind(value: Double?, preferred: SkinTempDisplay.Kind): SkinTempDisplay.Kind =
+    healthMonitorDisplayValue("skin", value)?.let(SkinTempDisplay::kind) ?: preferred
+
 internal fun healthMonitorCurrentDay(days: List<DailyMetric>, day: String): DailyMetric? =
     days.lastOrNull { it.day == day }
 

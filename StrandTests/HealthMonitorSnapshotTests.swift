@@ -25,6 +25,31 @@ final class HealthMonitorSnapshotTests: XCTestCase {
         let hrv = result.first { $0.id == "hrv" }!
         XCTAssertTrue(hrv.isCurrent)
         XCTAssertEqual(hrv.reading.value, 70)
+        XCTAssertEqual(HealthMonitorSnapshot.dayLabel(hrv.reading.day!, todayKey: "2026-06-20"), String(localized: "Today"))
+    }
+
+    func testHistoricalDayLabelPreservesTheCivilDate() {
+        XCTAssertEqual(HealthMonitorSnapshot.dayLabel("2026-06-19", todayKey: "2026-06-20", locale: Locale(identifier: "en_US_POSIX")), "19 Jun")
+    }
+
+    func testMissingCurrentSkinUsesThePreferenceForHistoricalReportValues() {
+        let values = [SourcedDailyMetric(metric: metric(day: "2026-06-01", skinTempDevC: 0.2), source: .whoopImport),
+                      SourcedDailyMetric(metric: metric(day: "2026-06-02", skinTempDevC: 0.4), source: .whoopImport)]
+        let result = HealthMonitorSnapshot.rows(sourceRows: values, now: now, skinTempPreferred: .deviation,
+                                                hrvBaselineEpoch: 0, recoveryBaselineEpoch: 0)
+        let skin = result.first { $0.id == "skin" }!
+        XCTAssertNil(skin.reading.value)
+        let kind = HealthMonitorSnapshot.reportSkinKind(value: skin.isCurrent ? skin.reading.value : nil, preferred: .deviation)
+        XCTAssertEqual(kind, .deviation)
+        XCTAssertEqual(HealthMonitorSnapshot.resolvedValues(key: "skin", sourceRows: values, absoluteSkin: kind == .absolute),
+                       ["2026-06-01": 0.2, "2026-06-02": 0.4])
+    }
+
+    func testReportSkinKindUsesOnlyPlausibleCurrentValues() {
+        XCTAssertEqual(HealthMonitorSnapshot.reportSkinKind(value: 34, preferred: .deviation), .absolute)
+        XCTAssertEqual(HealthMonitorSnapshot.reportSkinKind(value: 0.2, preferred: .absolute), .deviation)
+        XCTAssertEqual(HealthMonitorSnapshot.reportSkinKind(value: .nan, preferred: .deviation), .deviation)
+        XCTAssertEqual(HealthMonitorSnapshot.reportSkinKind(value: 500, preferred: .absolute), .absolute)
     }
 
     func testUnbankedLocalDayKeepsLogicalDayAndRolloverDoesNotPromoteOldVital() {

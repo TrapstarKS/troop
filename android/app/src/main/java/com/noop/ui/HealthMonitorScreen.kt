@@ -37,7 +37,6 @@ import com.noop.R
 import com.noop.analytics.HealthMonitorAssessment
 import com.noop.analytics.Baselines
 import com.noop.analytics.SkinTempDisplay
-import com.noop.analytics.VitalBands
 import com.noop.data.DailyMetric
 import com.noop.data.IllnessHistory
 import java.time.LocalDate
@@ -55,9 +54,7 @@ fun HealthMonitorScreen(
     val readings = rememberHealthMonitorReadings(vm, days, day, evidence)
     val context = androidx.compose.ui.platform.LocalContext.current
     val skinPreference = UnitPrefs.skinTempPreferred(context)
-    val skinKind = readings.last().vital.value?.let {
-        if (VitalBands.isAbsoluteSkinTemp(it)) SkinTempDisplay.Kind.ABSOLUTE else SkinTempDisplay.Kind.DEVIATION
-    } ?: skinPreference
+    val skinKind = healthMonitorReportSkinKind(readings.last().vital.value, skinPreference)
     val reliability = evidence?.hrvReliabilityByDay
     val respReliability = evidence?.respReliabilityByDay
     val scope = rememberCoroutineScope()

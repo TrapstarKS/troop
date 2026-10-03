@@ -24,6 +24,24 @@ enum HealthMonitorSnapshot {
         return Repository.resolveToday(days: days, logicalKey: logical, localKey: Repository.localDayKey(now))?.day ?? logical
     }
 
+    static func dayLabel(_ day: String, todayKey: String, locale: Locale = .current) -> String {
+        if day == todayKey { return String(localized: "Today") }
+        guard let date = BodyVitalSigns.dayParser.date(from: day) else { return day }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "d MMM"
+        return formatter.string(from: date)
+    }
+
+    static func reportSkinKind(value: Double?, preferred: SkinTempDisplay.Kind) -> SkinTempDisplay.Kind {
+        guard let value, value.isFinite else { return preferred }
+        let absolute = VitalBands.isAbsoluteSkinTemp(value)
+        let cfg = config(key: "skin", absoluteSkin: absolute)
+        guard value >= cfg.minVal, value <= cfg.maxVal else { return preferred }
+        return absolute ? .absolute : .deviation
+    }
+
     static func rows(sourceRows: [SourcedDailyMetric],
                      temperatureUnit: TemperatureUnit = .celsius,
                      now: Date = Date(),

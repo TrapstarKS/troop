@@ -35,7 +35,7 @@ struct HealthMonitorView: View {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                 NoopCard {
                     VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
-                        Text(BodyVitalReading.dayLabel(day))
+                        Text(HealthMonitorSnapshot.dayLabel(day, todayKey: day))
                             .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                         HealthMonitorSummary(rows: rows)
                         Text("Your overnight measurements compared with your personal normal range.")
@@ -43,7 +43,7 @@ struct HealthMonitorView: View {
                     }
                 }
                 VStack(spacing: NoopMetrics.gap) {
-                    ForEach(rows) { row in HealthMonitorMetricRow(row: row) }
+                    ForEach(rows) { row in HealthMonitorMetricRow(row: row, todayKey: day) }
                 }
                 if rows.contains(where: { $0.assessment.status == .calibrating }) {
                     InsightCallout(text: String(localized: "Your personal range needs 14 trusted nights. Missing or unverified readings do not count as within range."))
@@ -108,8 +108,12 @@ struct HealthMonitorView: View {
     private func exportReport(rows: [HealthMonitorRow], now: Date, evidence: [String: HealthSignalReliability.Record]?, respEvidence: [String: HealthSignalReliability.Record]?) {
         let end = HealthMonitorSnapshot.dayKey(days: repo.days, now: now)
         let start = Baselines.cutoffKey(todayKey: end, carryDays: reportDays - 1)
+        let skin = rows.first { $0.id == "skin" }
+        let skinKind = HealthMonitorSnapshot.reportSkinKind(value: skin?.isCurrent == true ? skin?.reading.value : nil,
+                                                            preferred: SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute)
         let page = HealthReportPage(rows: rows, sourceRows: repo.vitalMetricRows, start: start, end: end,
-                                    hrvReliability: evidence, respReliability: respEvidence)
+                                    hrvReliability: evidence, respReliability: respEvidence,
+                                    skinKind: skinKind, temperatureUnit: temperatureUnit)
         let name = FileExport.timestampedName("noop-health-report-\(reportDays)d", ext: "pdf")
         guard let url = TrendsReportRenderer.makePDF(page: page, fileName: name) else {
             reportFailed = true
@@ -174,6 +178,7 @@ struct HealthMonitorSummary: View {
 
 private struct HealthMonitorMetricRow: View {
     let row: HealthMonitorRow
+    let todayKey: String
 
     var body: some View {
         NavigationLink(value: TabRoute.metric(row.reading.key == "skin" ? "skin_temp" : (row.reading.key == "resp" ? "resp_rate" : row.reading.key))) {
@@ -197,7 +202,7 @@ private struct HealthMonitorMetricRow: View {
                                 Text("Personal range not available")
                             }
                             if let day = row.reading.day {
-                                Text(BodyVitalReading.dayLabel(day))
+                                Text(HealthMonitorSnapshot.dayLabel(day, todayKey: todayKey))
                             }
                         }.font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
                         Spacer(minLength: NoopMetrics.space2)
@@ -239,6 +244,8 @@ private struct HealthReportPage: View {
     let end: String
     let hrvReliability: [String: HealthSignalReliability.Record]?
     let respReliability: [String: HealthSignalReliability.Record]?
+    let skinKind: SkinTempDisplay.Kind
+    let temperatureUnit: TemperatureUnit
 
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
@@ -246,17 +253,23 @@ private struct HealthReportPage: View {
             Text("\(start) – \(end)").font(StrandFont.subhead)
             Text("Local wellness summary. Not a diagnosis.").font(StrandFont.footnote)
             ForEach(rows) { row in
-                let absolute = row.reading.key == "skin" && (row.reading.value.map(VitalBands.isAbsoluteSkinTemp) ?? true)
+                let isSkin = row.reading.key == "skin"
+                let absolute = skinKind == .absolute
                 let cfg = HealthMonitorSnapshot.config(key: row.reading.key, absoluteSkin: absolute)
+                let label = isSkin ? (absolute ? String(localized: "Skin Temp") : String(localized: "Skin Temp Δ")) : row.reading.label
+                let unit = isSkin ? SkinTempDisplay.unitSymbol(kind: skinKind, fahrenheit: temperatureUnit == .fahrenheit) : row.reading.unit
+                let format: (Double) -> String = isSkin
+                    ? { SkinTempDisplay.numberString($0, kind: skinKind, fahrenheit: temperatureUnit == .fahrenheit, decimals: 1) }
+                    : row.reading.format
                 let values = HealthMonitorSnapshot.resolvedValues(key: row.reading.key, sourceRows: sourceRows,
                                                                   absoluteSkin: absolute, hrvReliabilityByDay: hrvReliability, respReliabilityByDay: respReliability)
                     .filter { $0.key >= start && $0.key <= end && $0.value >= cfg.minVal && $0.value <= cfg.maxVal }
                     .map(\.value)
                 VStack(alignment: .leading, spacing: NoopMetrics.space2) {
-                    Text(row.reading.label).font(StrandFont.headline)
+                    Text(label).font(StrandFont.headline)
                     if let low = values.min(), let high = values.max() {
                         let average = values.reduce(0, +) / Double(values.count)
-                        Text("Mean \(row.reading.format(average)) · Min \(row.reading.format(low)) · Max \(row.reading.format(high)) \(row.reading.unit)")
+                        Text("Mean \(format(average)) · Min \(format(low)) · Max \(format(high)) \(unit)")
                         Text("\(values.count) recorded nights")
                     } else {
                         Text("Unavailable")

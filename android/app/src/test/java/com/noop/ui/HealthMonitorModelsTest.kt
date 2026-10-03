@@ -14,6 +14,27 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class HealthMonitorModelsTest {
+    @Test fun absentCurrentSkinUsesThePreferenceForHistoricalReportValues() {
+        val days = listOf(
+            DailyMetric("strap", "2026-06-01", skinTempDevC = 0.2),
+            DailyMetric("strap", "2026-06-02", skinTempDevC = 0.4),
+        )
+        val current = healthMonitorCurrentDay(days, "2026-06-20")
+        val kind = healthMonitorReportSkinKind(current?.skinTempDevC, SkinTempDisplay.Kind.DEVIATION)
+        val report = healthMonitorReport(days, LocalDate.parse("2026-06-20"), 30, kind)
+        val skin = report.rows.first { it.key == "skin" }
+        assertEquals(SkinTempDisplay.Kind.DEVIATION, kind)
+        assertEquals(2, skin.nights)
+        assertEquals(0.3, skin.mean!!, 1e-12)
+    }
+
+    @Test fun reportSkinKindUsesOnlyPlausibleCurrentValues() {
+        assertEquals(SkinTempDisplay.Kind.ABSOLUTE, healthMonitorReportSkinKind(34.0, SkinTempDisplay.Kind.DEVIATION))
+        assertEquals(SkinTempDisplay.Kind.DEVIATION, healthMonitorReportSkinKind(0.2, SkinTempDisplay.Kind.ABSOLUTE))
+        assertEquals(SkinTempDisplay.Kind.DEVIATION, healthMonitorReportSkinKind(Double.NaN, SkinTempDisplay.Kind.DEVIATION))
+        assertEquals(SkinTempDisplay.Kind.ABSOLUTE, healthMonitorReportSkinKind(500.0, SkinTempDisplay.Kind.ABSOLUTE))
+    }
+
     @Test fun bankedLocalNightBeforeRolloverMatchesHome() {
         val now = ZonedDateTime.parse("2026-06-20T02:00:00-03:00")
         val prior = DailyMetric("strap", "2026-06-19", avgHrv = 80.0)
