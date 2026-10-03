@@ -530,6 +530,43 @@ class Whoop5RRSqliteTest {
         assertEquals(12_345.0, repo.effectiveHrvEpoch("four", id, 12_345.0, 0), 0.0)
     }
 
+    @Test fun sourceOnlyWearableFoldReplacesStaleFreshMarker() = runBlocking {
+        registry("4.0")
+        activate(id)
+        val now = 1_780_272_000L
+        val offset = java.util.TimeZone.getDefault().getOffset(now * 1000L) / 1000L
+        val anchor = AnalyticsEngine.dayString(now, offset)
+        val source = "garmin-import"
+        val imported = (9L downTo 0L).map { back ->
+            DailyMetric(source, java.time.LocalDate.parse(anchor).minusDays(back).toString(),
+                avgHrv = 44.0, restingHr = 60, totalSleepMin = 480.0, efficiency = 0.9)
+        }
+        imported.forEach { days[it.deviceId to it.day] = it }
+        val computedId = "$id-noop"
+        days[computedId to anchor] = DailyMetric(computedId, anchor,
+            avgHrv = 77.25, restingHr = 55, recovery = 0.42)
+        freshMarker(anchor, 1.0)
+        assertEquals(ChargeHrvProof(anchor, 77.25, 1.0),
+            dao.chargeHrvProof(computedId, anchor, anchor).single())
+        val registry = DeviceRegistry(dao, object : DeviceRegistry.Transactor {
+            override suspend fun <R> run(block: suspend () -> R): R = block()
+        })
+        val result = IntelligenceEngine.analyzeRecent(repo, maxDays = 10, importedDeviceId = id,
+            nowSeconds = now, ownerSource = RegistryDayOwnerSource(registry), dayCycleMode = DayCycleMode.MIDNIGHT)
+        val latest = days.getValue(computedId to anchor)
+        assertEquals(44.0, latest.avgHrv!!, 0.0)
+        assertNotNull(latest.recovery)
+        assertEquals(latest.avgHrv, result.single { it.day == anchor }.hrv)
+        assertEquals(latest.recovery, result.single { it.day == anchor }.recovery)
+        assertEquals(ChargeHrvProof(anchor, 44.0, 0.0),
+            dao.chargeHrvProof(computedId, anchor, anchor).single())
+        assertEquals(latest, repo.computedDailyUnionFlow(id, anchor, anchor).first().single())
+        assertNull(repo.chargeComputedDailyUnion(id, anchor, anchor).single().avgHrv)
+        assertNull(repo.chargeComputedDailyUnion(id, anchor, anchor, anchor).single().avgHrv)
+        assertEquals(imported, repo.dailyMetrics(source, imported.first().day, anchor))
+        assertTrue(repo.hrSamplesForDevice(id, now - 10 * 86_400L, now).isEmpty())
+    }
+
     @Test fun chargeComputedAdapterHandlesEmptyHistoryAndPreservesDisplayCells() = runBlocking {
         val day = "2026-09-04"
         assertTrue(repo.chargeComputedDailyUnion(id, day, day).isEmpty())

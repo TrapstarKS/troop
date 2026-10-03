@@ -2505,6 +2505,8 @@ final class IntelligenceEngine: ObservableObject {
                 let scored = row.with(recovery: recovery, skinTempDevC: row.skinTempDevC,
                                       skinTempC: row.skinTempC)
                 dailies.append(scored)
+                // This imported aggregate did not produce a fresh raw R-R score; replace any older proof.
+                restPoints.append(MetricPoint(day: w.day, key: "hrv_fresh_scoring_valid", value: 0))
                 importScoredDays.insert(w.day)
                 resolvedScoreOwnerByDay[w.day] = source
                 if let rest = AnalyticsEngine.Rest.composite(daily: scored) {

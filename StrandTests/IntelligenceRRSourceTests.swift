@@ -93,6 +93,45 @@ final class IntelligenceRRSourceTests: XCTestCase {
         }
     }
 
+    func testImportedRewriteCannotInheritRawFreshness() async throws {
+        try await withPreferences {
+            for preserve in [false, true] {
+                let store = try await WhoopStore.inMemory()
+                try register(DeviceRegistryStore(dbQueue: store.registryWriter), canonicalModel: "4.0")
+                let now = Int(Date().timeIntervalSince1970)
+                let offset = TimeZone.current.secondsFromGMT()
+                let day = AnalyticsEngine.dayString(now, offsetSec: offset)
+                let dayNumber = Baselines.isoEpochDay(day)!
+                let source = Repository.wearableImportSources.first!
+                let imported = (0..<10).map { back -> DailyMetric in
+                    let key = AnalyticsEngine.dayString((dayNumber - back) * 86_400, offsetSec: 0)
+                    let row = chargeDay(key, hrv: 50)
+                    return row.with(recovery: nil, skinTempDevC: row.skinTempDevC, skinTempC: row.skinTempC)
+                }
+                _ = try await store.upsertDailyMetrics(imported, deviceId: source)
+                _ = try await store.upsertDailyMetrics([chargeDay(day, hrv: 44)], deviceId: canonical + "-noop")
+                _ = try await store.upsertMetricSeries([MetricPoint(day: day,
+                    key: "hrv_fresh_scoring_valid", value: 1)], deviceId: canonical + "-noop")
+                _ = try await store.insert(Streams(rr: [RRInterval(ts: now - 10, rrMs: 1000,
+                    srcChannel: .whoop5Historical)]), deviceId: active)
+                let repo = Repository(deviceId: canonical)
+                repo.setStoreForTesting(store)
+                let engine = IntelligenceEngine(repo: repo, profile: ProfileStore(), deviceId: canonical)
+                await engine.analyzeRecent(maxDays: 10, force: true, preserveUnscoredHistory: preserve)
+                let proof = try await store.chargeHrvProof(deviceId: canonical + "-noop", from: day, to: day)
+                XCTAssertEqual(proof, [ChargeHrvProof(day: day, value: 50, freshScoringValid: 0)])
+                let display = await repo.unionComputedDailyMetrics(store: store, from: day, to: day)
+                XCTAssertEqual(display.first?.avgHrv, 50)
+                XCTAssertNotNil(display.first?.recovery, "the imported recovery remains available for display")
+                for boundary: String? in [nil, day] {
+                    let own = await repo.unionChargeComputedDailyMetrics(store: store, from: day, to: day,
+                        requiredFreshDay: boundary)
+                    XCTAssertNil(own.first?.avgHrv, "an imported rewrite cannot inherit the earlier raw proof")
+                }
+            }
+        }
+    }
+
     private func withPreferences(_ body: () async throws -> Void) async throws {
         let defaults = UserDefaults.standard
         let keys = [
