@@ -2826,4 +2826,42 @@
     <string name="raw_diag_ecg_probe_start">开始心电图采集</string>
     <string name="raw_diag_ecg_probe_stop">停止心电图采集</string>
     <string name="raw_diag_ecg_probe_running">此腕带上可能仍在采集。结论会写入 strap log。</string>
+
+    <!-- Local firmware guidance and isolated mock simulation. -->
+    <string name="firmware_guidance_title">如何更新固件</string>
+    <string name="firmware_reported">手环报告的固件：%1$s</string>
+    <string name="firmware_last_reported">上次报告的固件：%1$s</string>
+    <string name="firmware_not_reported">尚未报告固件</string>
+    <string name="firmware_guidance_intro">固件更新由 WHOOP 官方应用安装。WHOOP 决定更新是否可用，并可能要求登录账户。</string>
+    <string name="firmware_guidance_handoff">导出本地 .noopbak 备份并等待同步完成。切换应用前使用现有断开连接功能，确保只有一个应用连接手环。</string>
+    <string name="firmware_guidance_steps">先更新 WHOOP 应用。在 WHOOP 中打开：设备设置 → 高级设置 → 固件检查 → 立即更新。手环电量至少为 20%，距手机不超过 3 米，并保持良好的 Wi-Fi 或移动网络连接。更新可能需要最多 10 分钟，短暂断开连接属于正常现象。</string>
+    <string name="firmware_guidance_return">WHOOP 完成后，返回此处并使用现有功能重新连接，查看手环报告的版本。如有需要，请按照现有指南重新配对。</string>
+    <string name="firmware_guide_link">打开 WHOOP 更新指南</string>
+    <string name="firmware_reference_label">您的参考版本（可选）</string>
+    <string name="firmware_reference_detail">仅在此对话框打开期间保留。请使用相同设备系列的点分数字版本。这是您的参考值，并非最新版本来源。</string>
+    <string name="firmware_reference_older">报告的版本比您的参考版本旧。请在 WHOOP 中检查是否提供更新。</string>
+    <string name="firmware_reference_equal">报告的版本与您的参考版本一致。这不能说明是否有可用更新。</string>
+    <string name="firmware_reference_newer">报告的版本比您的参考版本新。这不能说明是否有可用更新。</string>
+    <string name="firmware_reference_unknown">无法与此参考版本安全比较。请在 WHOOP 中检查更新是否可用。</string>
+    <string name="firmware_sim_title">固件更新模拟 · 实验功能</string>
+    <string name="firmware_sim_banner">模拟——不会更改任何手环。所有阶段和进度均为虚拟内容。</string>
+    <string name="firmware_sim_enable">仅本次访问启用</string>
+    <string name="firmware_sim_next">下一模拟步骤</string>
+    <string name="firmware_sim_fail">模拟失败</string>
+    <string name="firmware_sim_start">运行模拟</string>
+    <string name="firmware_sim_progress">模拟进度：%1$d%%</string>
+    <string name="firmware_sim_idle">模拟尚未开始</string>
+    <string name="firmware_sim_check">模拟前提条件检查</string>
+    <string name="firmware_sim_download">模拟下载</string>
+    <string name="firmware_sim_verify">模拟验证</string>
+    <string name="firmware_sim_transfer">模拟传输</string>
+    <string name="firmware_sim_reboot">模拟重启</string>
+    <string name="firmware_sim_done">模拟完成</string>
+    <string name="firmware_sim_failed">模拟失败</string>
+    <string name="firmware_sim_cancelled">模拟已取消</string>
+    <string name="firmware_sim_prerequisites_failure">模拟前提条件失败</string>
+    <string name="firmware_sim_verification_failure">模拟验证失败</string>
+    <string name="firmware_sim_timeout_failure">模拟超时</string>
+    <string name="firmware_sim_disconnected_failure">模拟断开连接</string>
+    <string name="firmware_sim_mock_failure">触发的测试故障</string>
 </resources>

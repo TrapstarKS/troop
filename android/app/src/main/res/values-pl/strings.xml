@@ -2872,4 +2872,42 @@
     <string name="raw_diag_ecg_probe_start">Rozpocznij zapis EKG</string>
     <string name="raw_diag_ecg_probe_stop">Zatrzymaj zapis EKG</string>
     <string name="raw_diag_ecg_probe_running">Na tym pasku może nadal trwać zapis. Werdykt trafia do strap log.</string>
+
+    <!-- Local firmware guidance and isolated mock simulation. -->
+    <string name="firmware_guidance_title">Jak zaktualizować oprogramowanie</string>
+    <string name="firmware_reported">Oprogramowanie zgłoszone przez opaskę: %1$s</string>
+    <string name="firmware_last_reported">Ostatnio zgłoszone oprogramowanie: %1$s</string>
+    <string name="firmware_not_reported">Oprogramowanie nie zostało jeszcze zgłoszone</string>
+    <string name="firmware_guidance_intro">Aktualizacje oprogramowania instaluje oficjalna aplikacja WHOOP. WHOOP określa ich dostępność i może wymagać dostępu do konta.</string>
+    <string name="firmware_guidance_handoff">Wyeksportuj lokalną kopię .noopbak i poczekaj na koniec synchronizacji. Przed zmianą aplikacji użyj przycisku rozłączenia, aby tylko jedna aplikacja łączyła się z opaską.</string>
+    <string name="firmware_guidance_steps">Najpierw zaktualizuj aplikację WHOOP. W WHOOP: Ustawienia urządzenia → Ustawienia zaawansowane → Sprawdź oprogramowanie → Aktualizuj teraz. Opaska musi mieć co najmniej 20% baterii i być w odległości do 3 m od telefonu. Zapewnij dobre Wi-Fi lub internet komórkowy. Może to potrwać do 10 minut; krótkie rozłączenie jest oczekiwane.</string>
+    <string name="firmware_guidance_return">Gdy WHOOP skończy, wróć tutaj i połącz się ponownie za pomocą istniejących przycisków, aby zobaczyć zgłoszoną wersję. W razie potrzeby skorzystaj z instrukcji ponownego parowania.</string>
+    <string name="firmware_guide_link">Otwórz instrukcję WHOOP</string>
+    <string name="firmware_reference_label">Twoja wersja odniesienia (opcjonalna)</string>
+    <string name="firmware_reference_detail">Przechowywana tylko podczas otwarcia tego okna. Użyj wersji liczbowej rozdzielonej kropkami z tej samej rodziny urządzeń. To Twoje odniesienie, a nie źródło najnowszych wersji.</string>
+    <string name="firmware_reference_older">Zgłoszona wersja jest starsza od Twojego odniesienia. Sprawdź w WHOOP, czy oferuje aktualizację.</string>
+    <string name="firmware_reference_equal">Zgłoszona wersja odpowiada Twojemu odniesieniu. Nie określa to dostępności aktualizacji.</string>
+    <string name="firmware_reference_newer">Zgłoszona wersja jest nowsza od Twojego odniesienia. Nie określa to dostępności aktualizacji.</string>
+    <string name="firmware_reference_unknown">Nie można bezpiecznie porównać z tym odniesieniem. Sprawdź dostępność aktualizacji w WHOOP.</string>
+    <string name="firmware_sim_title">Symulacja aktualizacji oprogramowania · Eksperymentalna</string>
+    <string name="firmware_sim_banner">SYMULACJA — żadna opaska nie jest zmieniana. Wszystkie etapy i postępy są sztuczne.</string>
+    <string name="firmware_sim_enable">Włącz na czas tej wizyty</string>
+    <string name="firmware_sim_next">Następny symulowany krok</string>
+    <string name="firmware_sim_fail">Symuluj błąd</string>
+    <string name="firmware_sim_start">Uruchom symulację</string>
+    <string name="firmware_sim_progress">Symulowany postęp: %1$d%%</string>
+    <string name="firmware_sim_idle">Symulacja nierozpoczęta</string>
+    <string name="firmware_sim_check">Symulowane sprawdzenie wymagań</string>
+    <string name="firmware_sim_download">Symulowane pobieranie</string>
+    <string name="firmware_sim_verify">Symulowana weryfikacja</string>
+    <string name="firmware_sim_transfer">Symulowane przesyłanie</string>
+    <string name="firmware_sim_reboot">Symulowany restart</string>
+    <string name="firmware_sim_done">Symulacja zakończona</string>
+    <string name="firmware_sim_failed">Symulacja nieudana</string>
+    <string name="firmware_sim_cancelled">Symulacja anulowana</string>
+    <string name="firmware_sim_prerequisites_failure">Symulowany błąd wymagań</string>
+    <string name="firmware_sim_verification_failure">Symulowany błąd weryfikacji</string>
+    <string name="firmware_sim_timeout_failure">Symulowane przekroczenie czasu</string>
+    <string name="firmware_sim_disconnected_failure">Symulowane rozłączenie</string>
+    <string name="firmware_sim_mock_failure">Wywołany błąd testowy</string>
 </resources>

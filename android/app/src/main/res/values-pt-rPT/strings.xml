@@ -2848,4 +2848,42 @@
     <string name="raw_diag_ecg_probe_start">Iniciar captura de ECG</string>
     <string name="raw_diag_ecg_probe_stop">Parar captura de ECG</string>
     <string name="raw_diag_ecg_probe_running">Pode ainda estar a decorrer uma captura nesta pulseira. O veredicto vai para o strap log.</string>
+
+    <!-- Local firmware guidance and isolated mock simulation. -->
+    <string name="firmware_guidance_title">Como atualizar o firmware</string>
+    <string name="firmware_reported">Firmware comunicado pela pulseira: %1$s</string>
+    <string name="firmware_last_reported">Último firmware comunicado: %1$s</string>
+    <string name="firmware_not_reported">Firmware ainda não comunicado</string>
+    <string name="firmware_guidance_intro">A aplicação oficial WHOOP instala as atualizações de firmware. A WHOOP controla a disponibilidade e pode exigir acesso a uma conta.</string>
+    <string name="firmware_guidance_handoff">Exporte uma cópia local .noopbak e deixe terminar a sincronização. Use os controlos de desligação antes de mudar de aplicação, para que só uma se ligue à pulseira.</string>
+    <string name="firmware_guidance_steps">Atualize primeiro a aplicação WHOOP. Na WHOOP: Definições do dispositivo → Definições avançadas → Verificar firmware → Atualizar agora. Mantenha a pulseira com pelo menos 20% de carga, a menos de 3 m do telemóvel, com boa ligação Wi-Fi ou móvel. Pode demorar até 10 minutos; é esperada uma breve desligação.</string>
+    <string name="firmware_guidance_return">Quando a WHOOP terminar, volte aqui e ligue novamente com os controlos existentes para ver a versão comunicada. Se necessário, siga o guia para voltar a emparelhar.</string>
+    <string name="firmware_guide_link">Abrir o guia da WHOOP</string>
+    <string name="firmware_reference_label">A sua versão de referência (opcional)</string>
+    <string name="firmware_reference_detail">Conservada apenas enquanto esta janela estiver aberta. Use uma versão numérica separada por pontos da mesma família de dispositivos. É a sua referência, não uma fonte das versões mais recentes.</string>
+    <string name="firmware_reference_older">A versão comunicada é anterior à sua referência. Consulte a WHOOP para saber se é oferecida uma atualização.</string>
+    <string name="firmware_reference_equal">A versão comunicada corresponde à sua referência. Isto não determina a disponibilidade de atualizações.</string>
+    <string name="firmware_reference_newer">A versão comunicada é posterior à sua referência. Isto não determina a disponibilidade de atualizações.</string>
+    <string name="firmware_reference_unknown">Não é possível comparar com segurança com esta referência. Verifique a disponibilidade de atualizações na WHOOP.</string>
+    <string name="firmware_sim_title">Simulação de atualização de firmware · Experimental</string>
+    <string name="firmware_sim_banner">SIMULAÇÃO — nenhuma pulseira é alterada. Todas as etapas e o progresso são fictícios.</string>
+    <string name="firmware_sim_enable">Ativar durante esta visita</string>
+    <string name="firmware_sim_next">Próximo passo simulado</string>
+    <string name="firmware_sim_fail">Simular falha</string>
+    <string name="firmware_sim_start">Iniciar simulação</string>
+    <string name="firmware_sim_progress">Progresso simulado: %1$d%%</string>
+    <string name="firmware_sim_idle">Simulação não iniciada</string>
+    <string name="firmware_sim_check">Verificação simulada dos requisitos</string>
+    <string name="firmware_sim_download">Transferência simulada da Internet</string>
+    <string name="firmware_sim_verify">Verificação simulada</string>
+    <string name="firmware_sim_transfer">Envio simulado</string>
+    <string name="firmware_sim_reboot">Reinício simulado</string>
+    <string name="firmware_sim_done">Simulação concluída</string>
+    <string name="firmware_sim_failed">Simulação falhou</string>
+    <string name="firmware_sim_cancelled">Simulação cancelada</string>
+    <string name="firmware_sim_prerequisites_failure">Falha simulada dos requisitos</string>
+    <string name="firmware_sim_verification_failure">Falha simulada da verificação</string>
+    <string name="firmware_sim_timeout_failure">Tempo de espera simulado excedido</string>
+    <string name="firmware_sim_disconnected_failure">Desligação simulada</string>
+    <string name="firmware_sim_mock_failure">Falha de teste provocada</string>
 </resources>

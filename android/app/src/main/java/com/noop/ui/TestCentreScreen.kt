@@ -460,6 +460,7 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
 
         // --- Section 4: Experimental algorithms ---
         ExperimentalAlgorithmsCard(vm)
+        FirmwareSimulationCard()
     }
 
     pendingReport?.let { p ->
@@ -1332,7 +1333,7 @@ private fun SettingsSectionTC(
 }
 
 @Composable
-private fun settingsSwitchColors() = SwitchDefaults.colors(
+internal fun settingsSwitchColors() = SwitchDefaults.colors(
     checkedThumbColor = Palette.surfaceBase,
     checkedTrackColor = Palette.accent,
     uncheckedThumbColor = Palette.textSecondary,

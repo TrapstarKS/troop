@@ -2869,4 +2869,42 @@
     <string name="raw_diag_ecg_probe_start">EKG-Aufzeichnung starten</string>
     <string name="raw_diag_ecg_probe_stop">EKG-Aufzeichnung stoppen</string>
     <string name="raw_diag_ecg_probe_running">Auf diesem Strap läuft möglicherweise noch eine Aufzeichnung. Das Ergebnis steht im Strap-Log.</string>
+
+    <!-- Local firmware guidance and isolated mock simulation. -->
+    <string name="firmware_guidance_title">Firmware aktualisieren</string>
+    <string name="firmware_reported">Vom Band gemeldete Firmware: %1$s</string>
+    <string name="firmware_last_reported">Zuletzt gemeldete Firmware: %1$s</string>
+    <string name="firmware_not_reported">Firmware noch nicht gemeldet</string>
+    <string name="firmware_guidance_intro">Firmware-Updates werden von der offiziellen WHOOP-App installiert. WHOOP bestimmt die Verfügbarkeit und kann einen Kontozugang verlangen.</string>
+    <string name="firmware_guidance_handoff">Eine lokale .noopbak-Sicherung exportieren und die Synchronisierung abschließen lassen. Vor dem App-Wechsel die vorhandene Verbindungstrennung nutzen, damit nur eine App mit dem Band verbunden ist.</string>
+    <string name="firmware_guidance_steps">Zuerst die WHOOP-App aktualisieren. In WHOOP: Geräteeinstellungen → Erweiterte Einstellungen → Firmware-Prüfung → Jetzt aktualisieren. Das Band muss mindestens 20% geladen und höchstens 3 m vom Telefon entfernt sein. Eine gute WLAN- oder Mobilfunkverbindung verwenden. Bis zu 10 Minuten einplanen; eine kurze Trennung ist zu erwarten.</string>
+    <string name="firmware_guidance_return">Nach Abschluss in WHOOP hierher zurückkehren und über die vorhandenen Bedienelemente erneut verbinden, um die gemeldete Version zu sehen. Bei Bedarf der Anleitung zum erneuten Koppeln folgen.</string>
+    <string name="firmware_guide_link">WHOOP-Anleitung öffnen</string>
+    <string name="firmware_reference_label">Eigene Referenzversion (optional)</string>
+    <string name="firmware_reference_detail">Nur gespeichert, solange dieser Dialog geöffnet ist. Eine numerische, durch Punkte getrennte Version derselben Gerätefamilie verwenden. Dies ist eine eigene Referenz, keine Quelle für die neueste Version.</string>
+    <string name="firmware_reference_older">Die gemeldete Version ist älter als die eigene Referenz. In WHOOP prüfen, ob ein Update angeboten wird.</string>
+    <string name="firmware_reference_equal">Die gemeldete Version entspricht der eigenen Referenz. Daraus folgt keine Update-Verfügbarkeit.</string>
+    <string name="firmware_reference_newer">Die gemeldete Version ist neuer als die eigene Referenz. Daraus folgt keine Update-Verfügbarkeit.</string>
+    <string name="firmware_reference_unknown">Ein sicherer Vergleich mit dieser Referenz ist nicht möglich. Die Update-Verfügbarkeit in WHOOP prüfen.</string>
+    <string name="firmware_sim_title">Firmware-Update-Simulation · Experimentell</string>
+    <string name="firmware_sim_banner">SIMULATION — das Band wird nicht verändert. Alle Phasen und Fortschritte sind künstlich.</string>
+    <string name="firmware_sim_enable">Für diesen Besuch aktivieren</string>
+    <string name="firmware_sim_next">Nächster simulierter Schritt</string>
+    <string name="firmware_sim_fail">Fehler simulieren</string>
+    <string name="firmware_sim_start">Simulation starten</string>
+    <string name="firmware_sim_progress">Simulierter Fortschritt: %1$d%%</string>
+    <string name="firmware_sim_idle">Simulation nicht gestartet</string>
+    <string name="firmware_sim_check">Simulierte Voraussetzungsprüfung</string>
+    <string name="firmware_sim_download">Simulierter Download</string>
+    <string name="firmware_sim_verify">Simulierte Überprüfung</string>
+    <string name="firmware_sim_transfer">Simulierte Übertragung</string>
+    <string name="firmware_sim_reboot">Simulierter Neustart</string>
+    <string name="firmware_sim_done">Simulation abgeschlossen</string>
+    <string name="firmware_sim_failed">Simulation fehlgeschlagen</string>
+    <string name="firmware_sim_cancelled">Simulation abgebrochen</string>
+    <string name="firmware_sim_prerequisites_failure">Simulierter Voraussetzungsfehler</string>
+    <string name="firmware_sim_verification_failure">Simulierter Überprüfungsfehler</string>
+    <string name="firmware_sim_timeout_failure">Simulierte Zeitüberschreitung</string>
+    <string name="firmware_sim_disconnected_failure">Simulierte Verbindungstrennung</string>
+    <string name="firmware_sim_mock_failure">Ausgelöster Testfehler</string>
 </resources>

@@ -286,6 +286,8 @@ fun DevicesScreen(
                         device.brand.equals("WHOOP", ignoreCase = true)) NoopPrefs.lastFirmware(context) else null,
                     pairedCount = all.size,
                 ),
+                firmwareIsCurrent = device.status == DeviceStatus.active.name && live.connected &&
+                    !live.strapFirmware.isNullOrBlank(),
                 // Historical record layout from the current backfill, distinct from strap firmware.
                 liveHistoryLayout = if (device.status == DeviceStatus.active.name && live.connected)
                     live.historyLayoutVersion else null,
@@ -746,6 +748,7 @@ private fun DeviceCard(
     /** The active+connected strap's firmware version (from the connect handshake). null when not
      *  active/connected, or for a source that reports no firmware (e.g. a non-WHOOP strap). */
     liveFirmware: String? = null,
+    firmwareIsCurrent: Boolean = false,
     /** The active+connected strap's observed banked-history record layout (`hist_version`). */
     liveHistoryLayout: Int? = null,
     onMakeActive: () -> Unit,
@@ -873,7 +876,6 @@ private fun DeviceCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     lastSeenLine(device, isLiveConnected, bondRefused) +
-                        (liveFirmware?.let { " · FW $it" } ?: "") +
                         voltsSuffix +
                         packSuffix +
                         (historyLayoutLine(liveHistoryLayout)?.let { " · $it" } ?: ""),
@@ -904,6 +906,9 @@ private fun DeviceCard(
                 onAbortSync = onAbortSync,
                     onDeviceConfigProbe = onDeviceConfigProbe,
                 )
+            }
+            if (SourceCoordinator.isWhoop(device) && !dimmed) {
+                FirmwareGuidanceRow(liveFirmware, firmwareIsCurrent)
             }
         }
     }
@@ -1708,7 +1713,7 @@ internal object SignalBars {
 // MARK: - Field colours
 
 @Composable
-private fun devicesFieldColors() = OutlinedTextFieldDefaults.colors(
+internal fun devicesFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = Palette.textPrimary,
     unfocusedTextColor = Palette.textPrimary,
     cursorColor = Palette.accent,

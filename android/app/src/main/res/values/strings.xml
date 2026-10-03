@@ -2885,4 +2885,42 @@
     <string name="raw_diag_ecg_probe_start">Start ECG capture</string>
     <string name="raw_diag_ecg_probe_stop">Stop ECG capture</string>
     <string name="raw_diag_ecg_probe_running">A capture may still be running on this strap. The verdict goes to the strap log.</string>
+
+    <!-- Local firmware guidance and isolated mock simulation. -->
+    <string name="firmware_guidance_title">How to update firmware</string>
+    <string name="firmware_reported">Firmware reported by strap: %1$s</string>
+    <string name="firmware_last_reported">Firmware last reported: %1$s</string>
+    <string name="firmware_not_reported">Firmware not reported yet</string>
+    <string name="firmware_guidance_intro">Firmware updates are installed by the official WHOOP app. WHOOP controls availability and may require account access.</string>
+    <string name="firmware_guidance_handoff">Export a local .noopbak backup and let any sync finish. Use the existing disconnect controls before switching apps so only one app connects to the strap.</string>
+    <string name="firmware_guidance_steps">Update the WHOOP app first. In WHOOP, open Device Settings → Advanced Settings → Firmware Check → Update Now. Keep the strap at least 20% charged, within 10 feet (3 m) of the phone, with strong Wi-Fi or cellular internet. Allow up to 10 minutes; a brief disconnect is expected.</string>
+    <string name="firmware_guidance_return">After WHOOP finishes, return here and reconnect using the existing controls to observe the reported version. If needed, follow the existing re-pair guide.</string>
+    <string name="firmware_guide_link">Open WHOOP’s update guide</string>
+    <string name="firmware_reference_label">Your reference version (optional)</string>
+    <string name="firmware_reference_detail">Kept only while this dialog is open. Use a numeric, dot-separated version from the same device family. This is your reference, not a source of latest versions.</string>
+    <string name="firmware_reference_older">The reported version is older than your reference. Check WHOOP to see whether an update is offered.</string>
+    <string name="firmware_reference_equal">The reported version matches your reference. This does not establish update availability.</string>
+    <string name="firmware_reference_newer">The reported version is newer than your reference. This does not establish update availability.</string>
+    <string name="firmware_reference_unknown">No safe comparison can be made with this reference. Check update availability in WHOOP.</string>
+    <string name="firmware_sim_title">Firmware update simulation · Experimental</string>
+    <string name="firmware_sim_banner">SIMULATION — no strap is changed. All stages and progress are synthetic.</string>
+    <string name="firmware_sim_enable">Enable for this visit</string>
+    <string name="firmware_sim_next">Next simulated step</string>
+    <string name="firmware_sim_fail">Simulate failure</string>
+    <string name="firmware_sim_start">Run simulation</string>
+    <string name="firmware_sim_progress">Simulated progress: %1$d%%</string>
+    <string name="firmware_sim_idle">Simulation not started</string>
+    <string name="firmware_sim_check">Simulated prerequisite check</string>
+    <string name="firmware_sim_download">Simulated download</string>
+    <string name="firmware_sim_verify">Simulated verification</string>
+    <string name="firmware_sim_transfer">Simulated transfer</string>
+    <string name="firmware_sim_reboot">Simulated reboot</string>
+    <string name="firmware_sim_done">Simulation complete</string>
+    <string name="firmware_sim_failed">Simulation failed</string>
+    <string name="firmware_sim_cancelled">Simulation cancelled</string>
+    <string name="firmware_sim_prerequisites_failure">Simulated prerequisite failure</string>
+    <string name="firmware_sim_verification_failure">Simulated verification failure</string>
+    <string name="firmware_sim_timeout_failure">Simulated timeout</string>
+    <string name="firmware_sim_disconnected_failure">Simulated disconnection</string>
+    <string name="firmware_sim_mock_failure">Injected mock failure</string>
 </resources>
