@@ -1163,7 +1163,9 @@ private fun GlassBottomBar(
             onSelect = { route -> onTabSelected(Destination.forRoute(route)) },
             modifier = Modifier.weight(1f).widthIn(max = Metrics.tabMaxWidth),
         )
-        CoachOrb(label = stringResource(R.string.nav_coach), onTap = { onTabSelected(Destination.Coach) })
+        if (BottomBarStyleStore.coachEnabled) {
+            CoachOrb(label = stringResource(R.string.nav_coach), onTap = { onTabSelected(Destination.Coach) })
+        }
     }
 }
 
