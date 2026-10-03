@@ -181,7 +181,11 @@ struct DetailZoneBars: View {
             TrackedSectionHeader(title: String(localized: "Heart rate zones"), microLabel: imported ? String(localized: "Imported distribution") : String(localized: "From recorded heart rate"))
             NoopCard {
                 if let minutes, let displayedMinutes {
+                    let classifiedMinutes = minutes.reduce(0, +)
                     VStack(spacing: NoopMetrics.space4) {
+                        Text("Share of classified time in Zones 1–5")
+                            .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         ForEach((0..<5).reversed(), id: \.self) { index in
                             VStack(alignment: .leading, spacing: NoopMetrics.space2) {
                                 HStack(spacing: NoopMetrics.space2) {
@@ -199,16 +203,16 @@ struct DetailZoneBars: View {
                                     ZStack(alignment: .leading) {
                                         Capsule().fill(StrandPalette.ringTrack)
                                         Capsule().fill(StrandPalette.hrZoneColor(index + 1))
-                                            .frame(width: geometry.size.width * min(1, max(0, minutes[index] / max(minutes.reduce(0, +), 1))))
+                                            .frame(width: geometry.size.width * (classifiedMinutes > 0 ? minutes[index] / classifiedMinutes : 0))
                                     }
                                 }.frame(height: NoopMetrics.indicatorTrackHeight)
                             }.accessibilityElement(children: .combine)
                         }
                         if let belowZoneMinutes, belowZoneMinutes > 0,
                            let displayedBelowZone = RecoveryStrainDetailLogic.wholeNumber(belowZoneMinutes) {
-                            ContributorRow(label: String(localized: "Below Zone 1"), value: String(displayedBelowZone), unit: String(localized: "min"))
+                            DetailContributorRow(label: String(localized: "Below Zone 1"), value: String(displayedBelowZone), unit: String(localized: "min"))
                         }
-                        Text(imported ? String(localized: "Zone times use the split saved with this activity.") : String(localized: "Zone times use your configured heart-rate zones and available recording coverage. Gaps are not filled."))
+                        Text(imported ? String(localized: "Zone minutes use the saved split and recorded duration.") : String(localized: "Zone times use your configured heart-rate zones and available recording coverage. Gaps are not filled."))
                             .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                     }
                 } else {

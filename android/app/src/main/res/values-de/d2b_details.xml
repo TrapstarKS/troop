@@ -45,7 +45,7 @@
     <string name="d2b_hr_zones">Herzfrequenzzonen</string>
     <string name="d2b_no_zones">Für dieses Zeitfenster sind keine Zeiten in den Zonen 1–5 verfügbar.</string>
     <string name="d2b_strap_zones_note">Zeit in den bestehenden persönlichen %HRmax-Zonen, geschätzt aus der Herzfrequenz des Straps unter Berücksichtigung der Quelle. Lücken zählen nicht als aufgezeichnetes Training.</string>
-    <string name="d2b_imported_zones_note">Importierte Prozentsätze pro Zone für diese Aktivität, gewichtet nach ihrer aufgezeichneten Dauer.</string>
+    <string name="d2b_imported_zones_note">Die Zonenminuten verwenden die gespeicherte Verteilung und aufgezeichnete Dauer.</string>
     <string name="d2b_zone">Zone %1$d</string>
     <string name="d2b_below_zone_one">Unter Zone 1</string>
     <string name="d2b_minutes">min</string>
@@ -73,4 +73,5 @@
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">Für diesen Bereich sind keine gespeicherten Werte verfügbar.</string>
     <string name="d2b_labeled_percent">%1$s %2$s%%</string>
+    <string name="d2b_classified_zone_share">Anteil der in die Zonen 1–5 eingeteilten Zeit</string>
 </resources>

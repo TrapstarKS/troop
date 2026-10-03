@@ -157,7 +157,7 @@ fun RecoveryDetailScreen(
                                 else UnitFormatter.temperatureDeltaFromCelsius(reading.value, unit)
                             DetailDivider()
                             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-                                ContributorRow(uiString(R.string.d2b_skin_temperature), value, icon = Icons.Filled.Thermostat)
+                                DetailContributorRow(uiString(R.string.d2b_skin_temperature), value, icon = Icons.Filled.Thermostat)
                                 Text(uiString(if (kind == SkinTempDisplay.Kind.ABSOLUTE) R.string.d2b_absolute_temperature else R.string.d2b_temperature_deviation),
                                     style = NoopType.caption, color = Palette.textSecondary, textAlign = TextAlign.End)
                             }
@@ -348,8 +348,8 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
         item {
             NoopCard {
                 Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
-                    ContributorRow(uiString(R.string.d2b_average_hr), detailNumber(current.avgHr?.toDouble(), 0), "bpm")
-                    ContributorRow(uiString(R.string.d2b_maximum_hr), detailNumber(current.maxHr?.toDouble(), 0), "bpm")
+                    DetailContributorRow(uiString(R.string.d2b_average_hr), detailNumber(current.avgHr?.toDouble(), 0), "bpm")
+                    DetailContributorRow(uiString(R.string.d2b_maximum_hr), detailNumber(current.maxHr?.toDouble(), 0), "bpm")
                     val traceMean = hr.map { it.avgBpm }.takeIf { it.isNotEmpty() }?.average()
                     if ((current.strain != null || !current.zonesJSON.isNullOrEmpty()) && current.avgHr != null &&
                         traceMean != null && kotlin.math.abs(current.avgHr - traceMean) > 3.0) {
@@ -357,9 +357,9 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
                             style = NoopType.caption, color = Palette.textSecondary)
                     }
                     current.distanceM?.takeIf { it.isFinite() && it >= 0 }?.let { distance ->
-                        ContributorRow(uiString(R.string.d2b_distance), UnitFormatter.distanceFromMeters(distance, UnitPrefs.distanceSystem(LocalContext.current)))
+                        DetailContributorRow(uiString(R.string.d2b_distance), UnitFormatter.distanceFromMeters(distance, UnitPrefs.distanceSystem(LocalContext.current)))
                     }
-                    ContributorRow(uiString(R.string.d2b_recorded_energy),
+                    DetailContributorRow(uiString(R.string.d2b_recorded_energy),
                         detailWholeNumber(current.energyKcal), "kcal")
                     if (current.energyKcal != null) Text(uiString(R.string.d2b_energy_note),
                         style = NoopType.caption, color = Palette.textSecondary)
@@ -421,7 +421,7 @@ private fun DetailContributor(
         detailDate(selectedKey).minusDays(30).toString(), selectedKey)
     val delta = RecoveryStrainDetailLogic.comparisonDelta(current, mean, decimals)
     val favorable = if (delta != null && delta != 0.0 && higherFavorable != null) (delta > 0) == higherFavorable else null
-    ContributorRow(label, detailNumber(current, decimals), unit, icon = icon,
+    DetailContributorRow(label, detailNumber(current, decimals), unit, icon = icon,
         comparison = mean?.let { detailNumber(it, decimals) + " " + unit },
         comparisonIcon = when { delta == null || delta == 0.0 -> Icons.Filled.Circle
             delta > 0 -> Icons.Filled.ArrowDropUp; else -> Icons.Filled.ArrowDropDown },
@@ -453,11 +453,11 @@ private fun DetailStrainSummary(minutes: List<Double>?, row: DailyMetric?, days:
     }
     NoopCard {
         Column {
-            ContributorRow(uiString(R.string.d2b_zone_group_low), duration(0..2), icon = Icons.Filled.FavoriteBorder)
+            DetailContributorRow(uiString(R.string.d2b_zone_group_low), duration(0..2), icon = Icons.Filled.FavoriteBorder)
             DetailDivider()
-            ContributorRow(uiString(R.string.d2b_zone_group_high), duration(3..4), icon = Icons.Filled.MonitorHeart)
+            DetailContributorRow(uiString(R.string.d2b_zone_group_high), duration(3..4), icon = Icons.Filled.MonitorHeart)
             DetailDivider()
-            ContributorRow(uiString(R.string.d2b_strength_duration), uiString(R.string.d2b_no_value), icon = Icons.Filled.FitnessCenter)
+            DetailContributorRow(uiString(R.string.d2b_strength_duration), uiString(R.string.d2b_no_value), icon = Icons.Filled.FitnessCenter)
             DetailDivider()
             DetailContributor(uiString(R.string.today_metric_steps), row?.steps?.toDouble(), "", days, selectedKey,
                 { it.steps?.toDouble() }, decimals = 0, icon = Icons.Filled.DirectionsWalk)
@@ -540,16 +540,17 @@ private fun DetailZones(minutes: List<Double>?, note: String, belowZone1: Double
             val validMinutes = minutes?.takeIf { it.size == 5 && it.all { value -> RecoveryStrainDetailLogic.wholeNumber(value) != null } }
             val total = validMinutes?.sum() ?: 0.0
             if (validMinutes == null) DetailEmpty(uiString(R.string.d2b_no_zones)) else {
+                Text(uiString(R.string.d2b_classified_zone_share), style = NoopType.caption, color = Palette.textSecondary)
                 if (total > 0) SegmentBar(validMinutes.mapIndexed { index, value -> Palette.hrZoneColor(index + 1) to (value / total).toFloat() },
                     Modifier.fillMaxWidth(), height = Metrics.segmentBarHeight)
                 validMinutes.forEachIndexed { index, value ->
-                    ContributorRow(uiString(R.string.d2b_zone, index + 1), detailWholeNumber(value), uiString(R.string.d2b_minutes),
+                    DetailContributorRow(uiString(R.string.d2b_zone, index + 1), detailWholeNumber(value), uiString(R.string.d2b_minutes),
                         comparison = if (total > 0) "${detailNumber(value / total * 100, 0)}%" else null,
                         comparisonColor = Palette.hrZoneColor(index + 1))
                 }
             }
             belowZone1?.takeIf { it > 0 && RecoveryStrainDetailLogic.wholeNumber(it) != null }?.let {
-                ContributorRow(uiString(R.string.d2b_below_zone_one), detailWholeNumber(it), uiString(R.string.d2b_minutes))
+                DetailContributorRow(uiString(R.string.d2b_below_zone_one), detailWholeNumber(it), uiString(R.string.d2b_minutes))
             }
             Text(note, style = NoopType.caption, color = Palette.textSecondary)
         }

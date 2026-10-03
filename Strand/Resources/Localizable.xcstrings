@@ -274672,6 +274672,134 @@
           }
         }
       }
+    },
+    "Share of classified time in Zones 1–5": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share of classified time in Zones 1–5"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anteil der in die Zonen 1–5 eingeteilten Zeit"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proporción del tiempo clasificado en las zonas 1–5"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Part du temps classé dans les zones 1–5"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quota del tempo classificato nelle zone 1–5"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Udział czasu sklasyfikowanego w strefach 1–5"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Percentagem do tempo classificado nas zonas 1–5"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доля времени, отнесённого к зонам 1–5"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1–5 区间内已分类时间的占比"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 1–5 區間已分類時間的佔比"
+          }
+        }
+      }
+    },
+    "Zone minutes use the saved split and recorded duration.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zone minutes use the saved split and recorded duration."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Zonenminuten verwenden die gespeicherte Verteilung und aufgezeichnete Dauer."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los minutos por zona usan la distribución guardada y la duración registrada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les minutes par zone utilisent la répartition enregistrée et la durée de l’activité."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I minuti per zona usano la ripartizione salvata e la durata registrata."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minuty w strefach korzystają z zapisanego podziału i zarejestrowanego czasu trwania."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Os minutos por zona usam a distribuição guardada e a duração registada."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Минуты по зонам используют сохранённое распределение и записанную длительность."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "各区间分钟数使用已保存的分布和记录时长。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "各區間分鐘數使用已儲存的分布和記錄時長。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

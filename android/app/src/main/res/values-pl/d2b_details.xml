@@ -45,7 +45,7 @@
     <string name="d2b_hr_zones">Strefy tętna</string>
     <string name="d2b_no_zones">Brak dostępnego czasu w strefach 1–5 w tym przedziale.</string>
     <string name="d2b_strap_zones_note">Czas w istniejących osobistych strefach %HRmax, oszacowany z tętna opaski z uwzględnieniem źródła. Luki nie liczą się jako zapisany wysiłek.</string>
-    <string name="d2b_imported_zones_note">Zaimportowane udziały procentowe stref dla tej aktywności, ważone zapisanym czasem trwania.</string>
+    <string name="d2b_imported_zones_note">Minuty w strefach korzystają z zapisanego podziału i zarejestrowanego czasu trwania.</string>
     <string name="d2b_zone">Strefa %1$d</string>
     <string name="d2b_below_zone_one">Poniżej strefy 1</string>
     <string name="d2b_minutes">min</string>
@@ -73,4 +73,5 @@
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">Brak zapisanych wyników dla tego zakresu.</string>
     <string name="d2b_labeled_percent">%1$s %2$s%%</string>
+    <string name="d2b_classified_zone_share">Udział czasu sklasyfikowanego w strefach 1–5</string>
 </resources>

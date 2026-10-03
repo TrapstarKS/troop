@@ -31,7 +31,7 @@ struct DetailComparisonRow: View {
     }
 
     var body: some View {
-        ContributorRow(label: label, value: detailComparisonNumber(value, decimals: decimals), unit: unit,
+        DetailContributorRow(label: label, value: detailComparisonNumber(value, decimals: decimals), unit: unit,
                        systemImage: systemImage,
                        comparison: baseline.map { detailComparisonNumber($0, decimals: decimals) + " " + unit },
                        comparisonSystemImage: direction, comparisonColor: comparisonColor)
@@ -72,11 +72,11 @@ struct DetailStrainContributors: View {
     var body: some View {
         NoopCard {
             VStack(spacing: NoopMetrics.spaceHalf) {
-                ContributorRow(label: String(localized: "Time in Zones 1–3"), value: duration(0..<3), systemImage: "heart")
+                DetailContributorRow(label: String(localized: "Time in Zones 1–3"), value: duration(0..<3), systemImage: "heart")
                 Divider().overlay(StrandPalette.hairline)
-                ContributorRow(label: String(localized: "Time in Zones 4–5"), value: duration(3..<5), systemImage: "heart.fill")
+                DetailContributorRow(label: String(localized: "Time in Zones 4–5"), value: duration(3..<5), systemImage: "heart.fill")
                 Divider().overlay(StrandPalette.hairline)
-                ContributorRow(label: String(localized: "Strength duration"), value: "—", systemImage: "dumbbell")
+                DetailContributorRow(label: String(localized: "Strength duration"), value: "—", systemImage: "dumbbell")
                 Divider().overlay(StrandPalette.hairline)
                 let baseline = RecoveryStrainDetailLogic.priorMean(dayKeys: history.map(\.day),
                     values: history.map { $0.steps.map(Double.init) },

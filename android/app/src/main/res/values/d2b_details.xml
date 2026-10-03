@@ -45,7 +45,7 @@
     <string name="d2b_hr_zones">Heart rate zones</string>
     <string name="d2b_no_zones">No time in Zones 1–5 is available for this window.</string>
     <string name="d2b_strap_zones_note">Time in the existing personal %HRmax zones, estimated from source-aware strap heart rate. Gaps do not count as recorded exercise.</string>
-    <string name="d2b_imported_zones_note">Imported per-zone percentages for this activity, weighted by its recorded duration.</string>
+    <string name="d2b_imported_zones_note">Zone minutes use the saved split and recorded duration.</string>
     <string name="d2b_zone">Zone %1$d</string>
     <string name="d2b_below_zone_one">Below Zone 1</string>
     <string name="d2b_minutes">min</string>
@@ -73,4 +73,5 @@
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">No stored scores are available for this range.</string>
     <string name="d2b_labeled_percent">%1$s %2$s%%</string>
+    <string name="d2b_classified_zone_share">Share of classified time in Zones 1–5</string>
 </resources>

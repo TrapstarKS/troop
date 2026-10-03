@@ -22,12 +22,21 @@ import androidx.core.view.WindowCompat
 @Composable
 internal fun DetailFullScreenDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     Dialog(onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        // Let the window supply measurement bounds. Compose 1.6 caps the alternate measurement
+        // path at screenHeightDp, which excludes system bars even for an edge-to-edge window.
+        properties = DialogProperties(usePlatformDefaultWidth = true, decorFitsSystemWindows = false)) {
         val view = LocalView.current
         val background = Palette.canvasBottom.toArgb()
         val light = Palette.isLight
         SideEffect {
             (view.parent as? DialogWindowProvider)?.window?.let { window ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    window.attributes = window.attributes.apply {
+                        setFitInsetsTypes(0)
+                        setFitInsetsSides(0)
+                    }
+                }
+                window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
                 window.setBackgroundDrawable(ColorDrawable(background))
                 window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
                 window.navigationBarColor = background

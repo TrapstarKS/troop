@@ -106,7 +106,7 @@ struct RecoveryDetailView: View {
                     let unit = UnitPrefs.resolveTemperature(system: UnitSystem(rawValue: unitSystem) ?? .metric, override: temperature)
                     Divider().overlay(StrandPalette.hairline)
                     VStack(alignment: .trailing, spacing: NoopMetrics.space2) {
-                        ContributorRow(label: String(localized: "Skin temperature"),
+                        DetailContributorRow(label: String(localized: "Skin temperature"),
                                        value: kind == .absolute ? UnitFormatter.temperatureFromCelsius(reading.value, unit: unit) : UnitFormatter.temperatureDeltaFromCelsius(reading.value, unit: unit),
                                        systemImage: "thermometer")
                         Text(kind == .absolute ? String(localized: "Wrist temperature") : String(localized: "From your baseline"))
