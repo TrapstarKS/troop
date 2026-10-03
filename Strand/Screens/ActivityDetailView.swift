@@ -92,7 +92,7 @@ struct ActivityDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $showMore) { NavigationStack { WorkoutDetailView(row: row) } }
+        .sheet(isPresented: $showMore) { NavigationStack { WorkoutDetailView(row: row, expandedDetails: true) } }
     }
 
     private func load() async {

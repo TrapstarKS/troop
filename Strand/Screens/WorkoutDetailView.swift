@@ -10,7 +10,8 @@ import MapKit
 
 // MARK: - Workout detail (#410)
 //
-// A READ-ONLY drill-down for one tapped session, built ONLY from the locked Noop component system
+// The default host presents ActivityDetailView. This extended drill-down remains reachable from its
+// More activity details action, built from the existing Noop component system
 // (NoopCard / ChartCard / SectionHeader / StatTile / SegmentBar idiom) so it sits in the same
 // instrument-grade, Effort-amber colour world as the Workouts list it opens from.
 //
@@ -29,6 +30,7 @@ import MapKit
 
 struct WorkoutDetailView: View {
     let row: WorkoutRow
+    var expandedDetails = false
 
     @EnvironmentObject private var repo: Repository
     @StateObject private var profile = ProfileStore()
@@ -70,7 +72,20 @@ struct WorkoutDetailView: View {
     private struct StepReadout { let count: Int; let fromStrap: Bool }
     @State private var steps: StepReadout?
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        if expandedDetails {
+            detailedContent
+        } else {
+            ActivityDetailView(row: row)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+        }
+    }
+
+    private var detailedContent: some View {
         ScreenScaffold(title: "\(WorkoutSource.displaySport(row.sport))",
                        subtitle: "\(dateLabel(row.startTs))",
                        // PERF: chart/map-heavy column (a MapKit route map, the session HR curve, the

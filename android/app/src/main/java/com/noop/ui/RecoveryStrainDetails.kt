@@ -310,7 +310,7 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
             onBack()
         },
     )
-    if (moreDetails) WorkoutDetailSheet(vm, current) { moreDetails = false }
+    if (moreDetails) WorkoutDetailSheet(vm, current, onDismiss = { moreDetails = false }, expandedDetails = true)
 }
 
 @Composable

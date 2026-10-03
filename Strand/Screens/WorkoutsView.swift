@@ -281,7 +281,7 @@ struct WorkoutsView: View {
             // detail rides its own NavigationStack inside the sheet (the Done toolbar item + iOS
             // grabber give the dismiss affordances). Mirrors HealthView presenting MetricDetailView.
             NavigationStack {
-                ActivityDetailView(row: target.row)
+                WorkoutDetailView(row: target.row)
                     .environmentObject(repo)
             }
             #if os(iOS)
