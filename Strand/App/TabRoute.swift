@@ -1,5 +1,12 @@
 import SwiftUI
 import StrandDesign
+import StrandAnalytics
+
+struct LocalNotificationRoutePayload: Hashable {
+    let context: LocalNotificationContext
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.context == rhs.context }
+    func hash(into hasher: inout Hasher) { hasher.combine(context.identity) }
+}
 
 // MARK: - TabRoute
 //
@@ -42,6 +49,7 @@ enum TabRoute: Hashable {
     case strainDetailForDay(dayKey: String?, effortOverride: Double?, windowDayKey: String? = nil)
     case sleepDetailForDay(dayKey: String?)
     case localBriefing
+    case localNotice(LocalNotificationRoutePayload)
     case sleepDetail
     case sleepPlanner
     case healthMonitor
@@ -92,6 +100,12 @@ extension View {
                 case .strainDetailForDay(let dayKey, let effortOverride, let windowDayKey): StrainDetailView(dayKey: dayKey, effortOverride: effortOverride, windowDayKey: windowDayKey)
                 case .sleepDetailForDay(let dayKey): SleepView(initialDayKey: dayKey)
                 case .localBriefing: LocalBriefingView()
+                case .localNotice(let payload):
+                    if payload.context.route == "local_briefing" {
+                        LocalBriefingView(notificationContext: payload.context)
+                    } else {
+                        LocalRecordedNoticeView(notificationContext: payload.context)
+                    }
                 case .sleepDetail: SleepView()
                 case .sleepPlanner: SmartAlarmView()
                 case .healthMonitor: HealthMonitorView()

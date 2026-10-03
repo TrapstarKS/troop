@@ -172,6 +172,7 @@ struct RootTabView: View {
         // Honour a router request: Devices keeps its dedicated sheet; the v5 pillars route through the
         // shared pillar sheet. Cleared so the same tap can fire again later.
         .onChange(of: router.requestedDestination) { _, _ in consumeRouterRequest() }
+        .onChange(of: router.requestedLocalNotificationContext) { _, _ in consumeRouterRequest() }
         // A screen's top-bar "+" routes here: open the quick-action sheet, then clear the flag.
         .onChange(of: router.quickActionsRequested) { _, req in
             if req {
@@ -236,6 +237,7 @@ struct RootTabView: View {
         if [.devices, .workouts, .weeklyPlan, .localBriefing].contains(dest) {
             if dest == .devices && showDevices {
                 router.requestedDestination = nil
+                router.requestedLocalNotificationContext = nil
                 return
             }
             guard !waitingForRouteDismissal else { return }
@@ -249,6 +251,19 @@ struct RootTabView: View {
                 routedPillar = nil
                 return
             }
+        }
+        if let context = router.requestedLocalNotificationContext {
+            if dest == .devices {
+                showDevices = true
+            } else {
+                let tab = dest == .weeklyPlan ? 2 : 3
+                selectedTab = tab
+                tabPaths[tab] = NavigationPath()
+                tabPaths[tab].append(TabRoute.localNotice(LocalNotificationRoutePayload(context: context)))
+            }
+            router.requestedLocalNotificationContext = nil
+            router.requestedDestination = nil
+            return
         }
         switch dest {
         case .devices:

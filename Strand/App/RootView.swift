@@ -1,5 +1,6 @@
 import SwiftUI
 import StrandDesign
+import StrandAnalytics
 
 enum NavItem: String, CaseIterable, Identifiable, Hashable {
     case today = "Today"
@@ -217,6 +218,7 @@ struct RootView: View {
     @AppStorage("noop.coachEnabled") private var coachEnabled = true
 
     @State private var selection: NavItem? = .today
+    @State private var retainedNotificationContext: LocalNotificationContext?
     /// Which sidebar groups are expanded (S1, #805). Default = the group owning the launch selection
     /// (`.today`). The single-item Today/Sleep sections always read expanded so their one row shows; the
     /// multi-item groups (Body / Insights / Data & App) collapse to just their header until tapped.
@@ -328,6 +330,11 @@ struct RootView: View {
         // then clear it so the same tap can fire again later. Devices maps to the `.devices` sidebar item.
         .onAppear { consumeRouterRequest() }
         .onChangeCompat(of: router.requestedDestination) { _ in consumeRouterRequest() }
+        .onChangeCompat(of: router.requestedLocalNotificationContext) { _ in consumeRouterRequest() }
+        .onChangeCompat(of: selection) { _ in
+            if let context = retainedNotificationContext,
+               context.route != notificationRoute(for: selection) { retainedNotificationContext = nil }
+        }
         .onChangeCompat(of: externalNavigationEnabled) { _ in consumeRouterRequest() }
         // Whenever the selection moves (a cross-screen route, or restoring a deep destination), make sure
         // the group that owns it is expanded so the selected row is actually visible, not hidden inside a
@@ -437,7 +444,10 @@ struct RootView: View {
                 SleepView().tabRouteDestinations()
             }
         case .trends: TrendsView()
-        case .workouts: WorkoutsView()
+        case .workouts:
+            if let context = retainedNotificationContext, context.route == "workouts" {
+                NavigationStack { LocalRecordedNoticeView(notificationContext: context) }.id(context.identity)
+            } else { WorkoutsView() }
         case .health:
             NavigationStack {
                 HealthView().tabRouteDestinations()
@@ -459,13 +469,29 @@ struct RootView: View {
         case .settings: settingsDetail
         case .testCentre: TestCentreView()
         case .more: NavigationStack { MoreHubView().tabRouteDestinations() }
-        case .weeklyPlan: NavigationStack { WeeklyPlanView() }
-        case .localBriefing: NavigationStack { LocalBriefingView() }
+        case .weeklyPlan:
+            if let context = retainedNotificationContext, context.route == "weekly_plan" {
+                NavigationStack { LocalRecordedNoticeView(notificationContext: context) }.id(context.identity)
+            } else { NavigationStack { WeeklyPlanView() } }
+        case .localBriefing:
+            NavigationStack { LocalBriefingView(notificationContext: retainedNotificationContext) }
+                .id(retainedNotificationContext?.identity ?? "live")
+        }
+    }
+
+    private func notificationRoute(for item: NavItem?) -> String? {
+        switch item {
+        case .workouts: return "workouts"
+        case .weeklyPlan: return "weekly_plan"
+        case .localBriefing: return "local_briefing"
+        default: return nil
         }
     }
 
     private func consumeRouterRequest() {
         guard externalNavigationEnabled, router.requestedDestination != nil else { return }
+        retainedNotificationContext = router.requestedLocalNotificationContext
+        router.requestedLocalNotificationContext = nil
         switch router.requestedDestination {
         case .devices: selection = .devices
         case .insightsHub: selection = .insightsHub

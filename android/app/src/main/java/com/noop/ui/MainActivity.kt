@@ -43,6 +43,8 @@ import com.noop.ble.WhoopModel
 import com.noop.data.DemoSeeder
 import com.noop.data.WhoopRepository
 import com.noop.notif.LOCAL_NOTIFICATION_ROUTE
+import com.noop.notif.LocalNotificationContext
+import com.noop.notif.localNotificationContext
 import com.noop.push.SelfHostedPushScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -58,9 +60,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  */
 class MainActivity : ComponentActivity() {
     private var pendingLocalNotificationRoute by mutableStateOf<String?>(null)
+    private var pendingLocalNotificationContext by mutableStateOf<LocalNotificationContext?>(null)
 
     private fun stageLocalNotification(intent: Intent?) {
-        intent?.getStringExtra(LOCAL_NOTIFICATION_ROUTE)?.let { pendingLocalNotificationRoute = it }
+        if (intent == null) return
+        val typed = if (intent.hasExtra("localNotificationEvent")) localNotificationContext(intent) else null
+        pendingLocalNotificationContext = typed
+        pendingLocalNotificationRoute = if (typed == null) intent.getStringExtra(LOCAL_NOTIFICATION_ROUTE) else null
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -168,6 +174,13 @@ class MainActivity : ComponentActivity() {
             NoopTheme {
                 NoopRoot(
                     localNotificationRoute = pendingLocalNotificationRoute,
+                    notificationContext = pendingLocalNotificationContext,
+                    onNotificationContextConsumed = { context ->
+                        if (pendingLocalNotificationContext == context) {
+                            pendingLocalNotificationContext = null
+                            context.wireFields.keys.forEach { intent.removeExtra(it) }
+                        }
+                    },
                     onLocalNotificationRouteConsumed = { route ->
                         if (pendingLocalNotificationRoute == route) {
                             pendingLocalNotificationRoute = null
@@ -1622,6 +1635,8 @@ object NoopPrefs {
 fun NoopRoot(
     localNotificationRoute: String? = null,
     onLocalNotificationRouteConsumed: (String) -> Unit = {},
+    notificationContext: LocalNotificationContext? = null,
+    onNotificationContextConsumed: (LocalNotificationContext) -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs = remember { NoopPrefs.of(context) }
@@ -1713,6 +1728,8 @@ fun NoopRoot(
         viewModel = appViewModel,
         localNotificationRoute = localNotificationRoute,
         onLocalNotificationRouteConsumed = onLocalNotificationRouteConsumed,
+        notificationContext = notificationContext,
+        onNotificationContextConsumed = onNotificationContextConsumed,
     )
 
     DebugExportReviewHost()

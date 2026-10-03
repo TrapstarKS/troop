@@ -1,6 +1,8 @@
 package com.noop.ui
 
 import android.content.Context
+import com.noop.notif.LocalNotificationContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -524,6 +526,8 @@ fun AppRoot(
     viewModel: AppViewModel = viewModel(),
     localNotificationRoute: String? = null,
     onLocalNotificationRouteConsumed: (String) -> Unit = {},
+    notificationContext: LocalNotificationContext? = null,
+    onNotificationContextConsumed: (LocalNotificationContext) -> Unit = {},
 ) {
     val nav = rememberNavController()
     val coachOwner = requireNotNull(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current)
@@ -553,6 +557,18 @@ fun AppRoot(
                 nav.navigateShellDetail(target)
             }
             onLocalNotificationRouteConsumed(route)
+        }
+    }
+    LaunchedEffect(notificationContext) {
+        notificationContext?.let { notice ->
+            datedNotificationDestination(notice.route)?.let { target ->
+                selectedTabRoute = target.root
+                nav.navigateShellDetail(target)
+                if (target.detail == LOCAL_NOTICE_ROUTE) {
+                    nav.currentBackStackEntry?.savedStateHandle?.set("localNotificationContext", HashMap(notice.wireFields))
+                }
+                onNotificationContextConsumed(notice)
+            }
         }
     }
     val updateStore = remember { UpdateStore.from(context) }
@@ -822,6 +838,22 @@ fun AppRoot(
                         onOpenAutomations = { nav.navigate(Destination.Automations.route) },
                         onOpenAlarms = { nav.navigate(WhoopRoute.sleepPlanner) },
                         onOpenCoachSettings = { nav.navigate(Destination.CoachSettings.route) })
+                }
+                composable(LOCAL_NOTICE_ROUTE) { entry ->
+                    val fields by entry.savedStateHandle
+                        .getStateFlow<HashMap<String, String>?>("localNotificationContext", null)
+                        .collectAsStateWithLifecycle()
+                    val notice = remember(fields) { fields?.let { LocalNotificationContext.fromWireFields(it) } }
+                    notice?.let {
+                        if (it.route == "local_briefing") {
+                            LocalBriefingScreen(viewModel,
+                                onOpenCoach = { nav.navigate(Destination.Coach.route) },
+                                onOpenCoachSettings = { nav.navigate(Destination.CoachSettings.route) },
+                                onOpenAlarms = { nav.navigate(WhoopRoute.sleepPlanner) }, notificationContext = it)
+                        } else {
+                            LocalRecordedNoticeScreen(it)
+                        }
+                    }
                 }
                 composable(Destination.LocalBriefing.route) {
                     LocalBriefingScreen(viewModel,

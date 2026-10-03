@@ -24,4 +24,14 @@ class ShellNotificationRoutesTest {
         assertEquals(ShellDetailDestination("plan", "trends"), updatesDestination("trends"))
         assertNull(updatesDestination("unknown"))
     }
+    @Test fun `dated notifications install recorded host in the owning tab`() {
+        assertEquals(ShellDetailDestination("plan", LOCAL_NOTICE_ROUTE), datedNotificationDestination("weekly_plan"))
+        for (key in listOf("workouts", "local_briefing")) {
+            assertEquals(ShellDetailDestination("more", LOCAL_NOTICE_ROUTE), datedNotificationDestination(key))
+        }
+        assertEquals(ShellDetailDestination("more", "devices"), datedNotificationDestination("devices"))
+        assertNull(datedNotificationDestination("coach"))
+        assertNull(datedNotificationDestination("active_workout"))
+    }
+
 }
