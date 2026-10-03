@@ -20,6 +20,11 @@ Apple's [calendar matching policy](https://developer.apple.com/documentation/fou
 and the Android calendar resolver supply those local-time rules. The timezone-free pure plan carries
 ordinary clock minutes; displayed and scheduled dates use the resolved instants.
 
+Apple time-only controls use a fixed UTC reference day to display and edit clock minutes without
+normalizing them through today's daylight saving gap. This reference does not schedule an alarm;
+the actual occurrence still uses the local calendar resolver. Android's time controls edit minutes
+directly.
+
 One resolved date and one clock feed each alarm summary. The selected weekdays describe the local
 wake day. A skip is persisted as `yyyy-MM-dd|minute` for the resolved wake occurrence. It survives
 relaunch and follows the same civil wake date after a timezone change. It does not disable future

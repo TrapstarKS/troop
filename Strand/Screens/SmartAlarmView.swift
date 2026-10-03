@@ -145,6 +145,7 @@ struct SmartAlarmView: View {
                     Spacer(minLength: 0)
                     DatePicker("", selection: minuteBinding($wakeMinutes), displayedComponents: .hourAndMinute)
                         .labelsHidden().accessibilityLabel("Alarm deadline")
+                        .environment(\.timeZone, Self.alarmClockTimeZone)
                 }
                 if mode != "exact" {
                     Text("The wake window is the final hour before your deadline. This build cannot observe fresh sleep-goal or Recovery progress overnight, so the strap uses the deadline. Adaptive waking is unavailable.")
@@ -179,6 +180,7 @@ struct SmartAlarmView: View {
                                 set: { _ in weekdays = Self.alarmToggledWeekday(day, in: weekdays) }))
                             DatePicker(String(localized: "Day's deadline"), selection: dayTimeBinding(day),
                                        displayedComponents: .hourAndMinute)
+                                .environment(\.timeZone, Self.alarmClockTimeZone)
                             Picker(String(localized: "Day's sleep goal"), selection: Binding(
                                 get: { planner.goalOverrides[day] ?? planner.goalPercent },
                                 set: { planner.goalOverrides[day] = $0; WindDownNudge.reschedule() })) {
@@ -277,13 +279,24 @@ struct SmartAlarmView: View {
 
     private func minuteBinding(_ binding: Binding<Int>) -> Binding<Date> {
         Binding(get: {
-            Calendar.current.date(bySettingHour: binding.wrappedValue / 60, minute: binding.wrappedValue % 60,
-                                  second: 0, of: Date()) ?? Date()
+            Self.alarmClockDate(minutes: binding.wrappedValue)
         }, set: { date in
-            let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
-            binding.wrappedValue = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+            binding.wrappedValue = Self.alarmClockMinutes(date)
             savedMessage = false
         })
+    }
+
+    nonisolated static var alarmClockTimeZone: TimeZone { TimeZone(secondsFromGMT: 0)! }
+
+    nonisolated static func alarmClockDate(minutes: Int) -> Date {
+        Date(timeIntervalSinceReferenceDate: TimeInterval(min(max(minutes, 0), 1439) * 60))
+    }
+
+    nonisolated static func alarmClockMinutes(_ date: Date) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = alarmClockTimeZone
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
     }
 
     private func dayTimeBinding(_ day: Int) -> Binding<Date> {
@@ -291,11 +304,11 @@ struct SmartAlarmView: View {
     }
 
     private func timeLabel(_ minutes: Int) -> String {
-        let date = Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
         let formatter = DateFormatter()
         formatter.locale = AppLanguage.activeLocale
+        formatter.timeZone = Self.alarmClockTimeZone
         formatter.setLocalizedDateFormatFromTemplate("j:mm")
-        return formatter.string(from: date)
+        return formatter.string(from: Self.alarmClockDate(minutes: minutes))
     }
 
     private func duration(_ minutes: Int) -> String {

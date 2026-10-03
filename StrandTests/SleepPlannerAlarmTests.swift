@@ -77,6 +77,18 @@ final class SleepPlannerAlarmTests: XCTestCase {
         XCTAssertEqual(AppModel.smartAlarmOccurrenceKey(next, calendar: local), "2026-03-08|210")
     }
 
+    func testTimeOnlyControlPreservesConfiguredGapAndFoldMinutes() {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = SmartAlarmView.alarmClockTimeZone
+        formatter.dateFormat = "HH:mm"
+        XCTAssertEqual(formatter.string(from: SmartAlarmView.alarmClockDate(minutes: 150)), "02:30")
+        XCTAssertEqual(formatter.string(from: SmartAlarmView.alarmClockDate(minutes: 90)), "01:30")
+        for minute in 0..<1440 {
+            XCTAssertEqual(SmartAlarmView.alarmClockMinutes(SmartAlarmView.alarmClockDate(minutes: minute)), minute)
+        }
+    }
+
     func testWakeInFallFoldUsesLaterOccurrence() throws {
         var local = calendar
         local.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
