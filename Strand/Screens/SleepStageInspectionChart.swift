@@ -92,7 +92,7 @@ struct SleepStageInspectionChart: View {
                             }
                         }
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(Text("Stage breakdown"))
+                        .accessibilityLabel(Text(String(localized: "Stage breakdown") + ": " + readout))
                         .accessibilityValue(Text(readout))
                         .accessibilityAdjustableAction { direction in
                             let fraction = selectionFraction ?? 0

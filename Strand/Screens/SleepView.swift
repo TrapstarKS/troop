@@ -14,6 +14,7 @@ struct SleepView: View {
     @State private var initialSelectionApplied: Bool
     @State private var pendingInitialDayKey: String?
     @State private var consumedInitialDayKey: String?
+    @State private var selectedDayKey: String?
     @State private var unavailableRequestedDay: String?
     @EnvironmentObject var repo: Repository
     @EnvironmentObject private var router: NavRouter
@@ -137,7 +138,7 @@ struct SleepView: View {
 
     private var requestedSelectionReady: Bool {
         initialSelectionApplied && consumedInitialDayKey == initialDayKey
-            && (pendingInitialDayKey == nil || loadedSleepRefresh == repo.refreshSeq)
+            && ((pendingInitialDayKey ?? selectedDayKey) == nil || loadedSleepRefresh == repo.refreshSeq)
     }
 
     var body: some View {
@@ -193,15 +194,16 @@ struct SleepView: View {
                 modelKey = newKey
                 navDaysCache = SleepModel.navDays(navSessions: navSessions)
                 model = buildModel()
-                // New data invalidates a navigated offset — the same offset would silently
-                // point at a different session. Snap back to last night. (#160)
+                // New data can shift offsets; resolve the selected wake-day again. (#160)
                 nightOffset = 0
                 navNight = nil
+                applyRequestedDaySelection()
             }
             .onChangeCompat(of: initialDayKey) { day in
                 initialSelectionApplied = day == nil
                 pendingInitialDayKey = day
                 consumedInitialDayKey = nil
+                selectedDayKey = nil
                 unavailableRequestedDay = nil
                 nightOffset = 0
                 navNight = nil
@@ -220,6 +222,7 @@ struct SleepView: View {
                     model = buildModel()
                     nightOffset = 0
                     navNight = nil
+                    applyRequestedDaySelection()
                 }
             }
             .onChangeCompat(of: intelligence.computing) { _ in observeResultChange() }
@@ -234,7 +237,7 @@ struct SleepView: View {
             // browse split-sleep days the dashboard collapses — including Bluetooth-only nights,
             // whose blocks live under the computed source. Re-runs whenever a sync/import bumps
             // refreshSeq; rebuilds the model and re-resolves an active requested day against the new blocks.
-            // No-argument browsing retains its reset to the newest day. (#170)
+            // A manually selected wake-day is re-resolved after edits and new nights arrive. (#170)
             .task(id: repo.refreshSeq) {
                 let refresh = repo.refreshSeq
                 let sessions = await repo.allSleepSessions()
@@ -570,9 +573,12 @@ struct SleepView: View {
     }
 
     private func sleepContributors(_ detail: SleepModel?, night: Night) -> some View {
-        NoopCard(tint: StrandPalette.sleepPrimary) {
+        let sufficiency = selectedAsleepMinutes(night).flatMap { asleep in
+            selectedNeedMinutes(night, detail: detail).flatMap { $0 > 0 ? asleep / $0 * 100 : nil }
+        }
+        return NoopCard(tint: StrandPalette.sleepPrimary) {
             VStack(spacing: 0) {
-                sleepFactorRow(label: String(localized: "Hours vs Needed"), value: selectedValue(detail?.hoursVsNeeded),
+                sleepFactorRow(label: String(localized: "Hours vs Needed"), value: sufficiency,
                                icon: "moon", sufficient: 70, optimal: 85)
                 Divider().overlay(StrandPalette.hairline)
                 sleepFactorRow(label: String(localized: "Consistency"), value: selectedValue(detail?.consistency),
@@ -626,14 +632,30 @@ struct SleepView: View {
         return latest
     }
 
+    static func selectedAsleepMinutes(stages: Stages, daily: Double?) -> Double? {
+        if stages.asleep > 0 { return stages.asleep }
+        return daily.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    private func selectedAsleepMinutes(_ night: Night) -> Double? {
+        let day = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
+        return Self.selectedAsleepMinutes(stages: night.stages,
+                                         daily: repo.days.last(where: { $0.day == day })?.totalSleepMin)
+    }
+
+    private func selectedNeedMinutes(_ night: Night, detail: SleepModel?) -> Double? {
+        let day = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
+        return repo.importedSleep[day]?.needMin
+            ?? (selectedValue(detail?.hoursVsNeeded) != nil
+                ? SleepModel.sleepNeedMin(days: repo.days.filter { $0.day <= day }) : nil)
+    }
+
     private func selectedNightMetrics(_ model: SleepModel, detail: SleepModel?) -> some View {
         let night = displayedNight(model)
         let day = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
-        let days = repo.days.filter { $0.day <= day }
-        let need: Double? = repo.importedSleep[day]?.needMin
-            ?? (selectedValue(detail?.hoursVsNeeded) != nil ? SleepModel.sleepNeedMin(days: days) : nil)
+        let need = selectedNeedMinutes(night, detail: detail)
         let dailyAsleep = repo.days.last(where: { $0.day == day })?.totalSleepMin
-        let asleep = dailyAsleep ?? (night.stages.asleep > 0 ? night.stages.asleep : nil)
+        let asleep = selectedAsleepMinutes(night)
         let debt = Self.selectedDebtMin(imported: repo.importedSleep[day]?.debtMin,
                                         asleep: dailyAsleep, latest: selectedValue(detail?.sleepDebt))
         return VStack(spacing: NoopMetrics.gap) {
@@ -752,8 +774,8 @@ struct SleepView: View {
         let naps = night.sourceBlocks
             .filter { !groupStarts.contains($0.startTs) }
             .sorted { $0.effectiveStartTs < $1.effectiveStartTs }
-        let mainMin = night.stages.total
-        let napMin = naps.reduce(0.0) { $0 + Double($1.endTs - $1.effectiveStartTs) / 60.0 }
+        let mainMin = selectedAsleepMinutes(night)
+        let napMin = Self.selectedNapAsleepMinutes(naps)
         NoopCard(padding: NoopMetrics.cardInnerPadding, tint: StrandPalette.restColor) {
             VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
                 HStack {
@@ -792,13 +814,13 @@ struct SleepView: View {
     /// The Main / Naps / Total split for a day that has at least one nap, so what drives the day's Rest
     /// total is explainable at a glance. Minutes formatted with the shared `durationText`. (#518)
     @ViewBuilder
-    private func napSummaryRow(mainMin: Double, napMin: Double) -> some View {
+    private func napSummaryRow(mainMin: Double?, napMin: Double?) -> some View {
         HStack(spacing: 0) {
-            napSummaryCell(label: "Main sleep", value: durationText(mainMin))
+            napSummaryCell(label: "Main sleep", value: mainMin.map(durationText) ?? "—")
             Spacer(minLength: 8)
-            napSummaryCell(label: "Nap(s)", value: durationText(napMin))
+            napSummaryCell(label: "Nap(s)", value: napMin.map(durationText) ?? "—")
             Spacer(minLength: 8)
-            napSummaryCell(label: "Total", value: durationText(mainMin + napMin))
+            napSummaryCell(label: "Total", value: mainMin.flatMap { main in napMin.map { durationText(main + $0) } } ?? "—")
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
@@ -825,7 +847,7 @@ struct SleepView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: NoopMetrics.spaceHalf) {
                 Text(napWindowText(nap)).font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
-                Text(durationText(Double(nap.endTs - nap.effectiveStartTs) / 60.0))
+                Text("\(durationText(Double(nap.endTs - nap.effectiveStartTs) / 60.0)) in bed")
                     .strandOverline()
             }
             Spacer(minLength: NoopMetrics.space2)
@@ -885,7 +907,7 @@ struct SleepView: View {
             ? String(localized: "raw on-device stages")
             : String(localized: "stages approximate (on-device)")
         let subtitle = isPersisted
-            ? String(localized: "\(durationText(night.timeInBed)) in bed · \(efficiencyText(night)) efficiency · \(stageCaption)")
+            ? String(localized: "\(durationText(night.timeInBed)) recorded · \(efficiencyText(night)) efficiency") + " · " + stageCaption
             : String(localized: "\(durationText(night.timeInBed)) in bed · \(efficiencyText(night)) efficiency")
         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
             if isPersisted {
@@ -2006,6 +2028,17 @@ struct SleepView: View {
         return idx.map { sessions[$0] }.sorted { $0.effectiveStartTs < $1.effectiveStartTs }
     }
 
+    static func selectedNapAsleepMinutes(_ naps: [CachedSleepSession]) -> Double? {
+        var minutes = 0.0
+        for nap in naps {
+            guard let asleep = decodeStages(nap.stagesJSON)?.asleep
+                ?? decodeSegments(nap.stagesJSON, sessionStart: nap.effectiveStartTs)?.stages.asleep
+            else { return nil }
+            minutes += asleep
+        }
+        return minutes
+    }
+
     /// Actual asleep minutes in blocks outside a day's canonical main-night group. The Repository's
     /// all-session union has already removed cross-namespace duplicates; this helper only applies the
     /// same main-vs-nap classification the hero uses and decodes persisted stages. A stage-less nap
@@ -2143,14 +2176,26 @@ struct SleepView: View {
 
     private func applyRequestedDaySelection() {
         guard loadedSleepRefresh == repo.refreshSeq,
-              let pendingInitialDayKey else { return }
-        let offset = SleepModel.requestedNightOffset(navDays: navDays, dayKey: pendingInitialDayKey)
-        unavailableRequestedDay = offset == nil ? pendingInitialDayKey : nil
+              let targetDay = pendingInitialDayKey ?? selectedDayKey else { return }
+        let offset = SleepModel.requestedNightOffset(navDays: navDays, dayKey: targetDay)
+        unavailableRequestedDay = offset == nil ? targetDay : nil
         nightOffset = offset ?? 0
         navNight = offset.flatMap { $0 == 0 ? nil : decodedNight(at: $0) }
-        consumedInitialDayKey = pendingInitialDayKey
-        initialSelectionApplied = true
+        if pendingInitialDayKey != nil {
+            consumedInitialDayKey = pendingInitialDayKey
+            initialSelectionApplied = true
+        }
         resetResultNotice()
+    }
+
+    private func selectNight(at offset: Int) {
+        guard offset >= 0, offset < navDays.count else { return }
+        pendingInitialDayKey = nil
+        unavailableRequestedDay = nil
+        selectedDayKey = offset == 0 ? nil : navDays[offset].first.map {
+            Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval($0.endTs)))
+        }
+        nightOffset = offset
     }
 
     /// A synthetic session for the DAY `offset` stops back, spanning the MAIN block's window (not the
@@ -2185,8 +2230,7 @@ struct SleepView: View {
             HStack(spacing: NoopMetrics.space3) {
                 Button {
                     guard nightOffset < lastIndex else { return }
-                    pendingInitialDayKey = nil
-                    nightOffset += 1
+                    selectNight(at: nightOffset + 1)
                 } label: {
                     Image(systemName: "chevron.left").font(StrandFont.headline)
                         .frame(minWidth: NoopMetrics.touchTarget, minHeight: NoopMetrics.touchTarget)
@@ -2205,8 +2249,7 @@ struct SleepView: View {
                 .multilineTextAlignment(.center)
                 Button {
                     guard nightOffset > 0 else { return }
-                    pendingInitialDayKey = nil
-                    nightOffset -= 1
+                    selectNight(at: nightOffset - 1)
                 } label: {
                     Image(systemName: "chevron.right").font(StrandFont.headline)
                         .frame(minWidth: NoopMetrics.touchTarget, minHeight: NoopMetrics.touchTarget)
@@ -2241,6 +2284,7 @@ struct SleepView: View {
             ComingSoon(what: "No sleep data for this day.")
             Button("Last night") {
                 pendingInitialDayKey = nil
+                selectedDayKey = nil
                 self.unavailableRequestedDay = nil
                 nightOffset = 0
                 navNight = nil

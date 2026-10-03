@@ -64,6 +64,36 @@ final class SleepStageInspectionTests: XCTestCase {
         XCTAssertEqual(SleepView.selectedDebtMin(imported: nil, asleep: 420, latest: 90), 90)
     }
 
+    func testSelectedStagesWinOverDailyTotalsAndMissingStagesKeepDailyFallback() {
+        let stages = Stages(awake: 30, light: 300, deep: 60, rem: 60)
+        XCTAssertEqual(SleepView.selectedAsleepMinutes(stages: stages, daily: 480), 420)
+        let missing = Stages(awake: 0, light: 0, deep: 0, rem: 0)
+        XCTAssertEqual(SleepView.selectedAsleepMinutes(stages: missing, daily: 480), 480)
+        XCTAssertNil(SleepView.selectedAsleepMinutes(stages: missing, daily: nil))
+        XCTAssertNil(SleepView.selectedAsleepMinutes(stages: missing, daily: 0))
+    }
+
+    func testFragmentedMainAndNapSummaryCountSleepInsteadOfElapsedWindows() {
+        func session(_ start: String, _ end: String, _ stages: String?) -> CachedSleepSession {
+            CachedSleepSession(startTs: timestamp("2026-10-01 \(start)"),
+                endTs: timestamp("2026-10-01 \(end)"), efficiency: nil, restingHr: nil,
+                avgHrv: nil, stagesJSON: stages)
+        }
+        let first = session("00:00", "02:00", #"{"awake":10,"light":60,"deep":20,"rem":10}"#)
+        let second = session("02:20", "05:20", #"{"awake":5,"light":90,"deep":30,"rem":30}"#)
+        let nap = session("14:15", "15:00", #"{"awake":5,"light":25,"deep":0,"rem":10}"#)
+        let blocks = [first, second, nap]
+        let night = SleepModel.mergeDay(blocks, habitualMidsleepSec: nil, motionByStart: [:])
+        XCTAssertNotNil(night)
+        guard let night else { return }
+        XCTAssertEqual(night.mainGroupStarts, Set([first.startTs, second.startTs]))
+        XCTAssertEqual(SleepView.selectedAsleepMinutes(stages: night.stages, daily: 330), 240)
+        let naps = night.sourceBlocks.filter { !night.mainGroupStarts.contains($0.startTs) }
+        XCTAssertEqual(SleepView.selectedNapAsleepMinutes(naps), 35)
+        XCTAssertEqual(SleepView.napSleepMinutes(blocks), 35)
+        XCTAssertNil(SleepView.selectedNapAsleepMinutes([session("14:15", "15:00", nil)]))
+    }
+
     func testExactStageBoundariesAndMissingIntervals() {
         let intervals = [SleepInterval(stage: .light, start: 0, end: 60),
                          SleepInterval(stage: .deep, start: 60, end: 120),
