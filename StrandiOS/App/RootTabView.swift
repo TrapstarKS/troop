@@ -28,6 +28,7 @@ struct RootTabView: View {
     /// A routed v5 pillar screen (Insights hub / Lab Book / fused record / Rhythm) presented as a sheet
     /// when a hub row deep-links to it via NavRouter. nil = closed.
     @State private var routedPillar: NavRouter.Destination?
+    @State private var pendingCoach = false
     /// Selected tab — bound so tab switches can crossfade (README §Motion: ~240ms opacity swap
     /// between tab roots, calm easing). Defaults to Today.
     @State private var selectedTab: Int = 0
@@ -125,7 +126,10 @@ struct RootTabView: View {
         .toolbar(.hidden, for: .tabBar)
         .tint(StrandPalette.accent)
         .onChangeCompat(of: coachEnabled) { enabled in
-            if !enabled && routedPillar == .coach { routedPillar = nil }
+            if !enabled {
+                pendingCoach = false
+                if routedPillar == .coach { routedPillar = nil }
+            }
         }
         .simultaneousGesture(tabSwipeGesture,
                              including: tabPaths[selectedTab].isEmpty ? .all : .subviews)
@@ -141,12 +145,12 @@ struct RootTabView: View {
         // Quick-action sheet presents with the calm easing (~0.42s) per the README sheet spec —
         // the easing is applied where `quickAction` is set (see `presentQuickAction`), keeping the
         // animation scoped to the sheet rather than the whole shell.
-        .sheet(item: $quickAction) { action in
+        .sheet(item: $quickAction, onDismiss: presentPendingCoach) { action in
             quickActionDestination(action)
         }
         // Live's "Manage devices" affordance (and any future cross-screen link to Devices) routes here:
         // present the Devices manager in its own nav stack, the same way the quick-action screens do.
-        .sheet(isPresented: $showDevices) {
+        .sheet(isPresented: $showDevices, onDismiss: presentPendingCoach) {
             devicesScreen
         }
         // v5 pillar deep-links (Insights hub / Lab Book / fused record / Rhythm) present as a sheet in
@@ -165,7 +169,7 @@ struct RootTabView: View {
                 routedPillar = dest
                 router.requestedDestination = nil
             case .coach:
-                if coachEnabled { routedPillar = .coach }
+                presentCoach()
                 router.requestedDestination = nil
             case .trends:
                 selectedTab = 2
@@ -226,7 +230,7 @@ struct RootTabView: View {
                         }
                     }
                     if coachEnabled {
-                        CoachOrb(label: String(localized: "Coach")) { routedPillar = .coach }
+                        CoachOrb(label: String(localized: "Coach"), onTap: presentCoach)
                     }
                 }
             }
@@ -241,6 +245,23 @@ struct RootTabView: View {
         .sheet(isPresented: $liftSession.isPresented) {
             LiftSessionView { }
         }
+    }
+
+    private func presentCoach() {
+        guard coachEnabled else { return }
+        if quickAction != nil || showDevices {
+            pendingCoach = true
+            quickAction = nil
+            showDevices = false
+        } else {
+            routedPillar = .coach
+        }
+    }
+
+    private func presentPendingCoach() {
+        guard pendingCoach else { return }
+        pendingCoach = false
+        if coachEnabled { routedPillar = .coach }
     }
 
     /// Mandatory launch gates defer an external action. Once the shell is available, an explicit Home
@@ -258,6 +279,7 @@ struct RootTabView: View {
         }
         homeScreenQuickActions.consume(action)
         withAnimation(Self.sheetEase) {
+            pendingCoach = false
             showDevices = false
             routedPillar = nil
             quickAction = destination
@@ -288,10 +310,6 @@ struct RootTabView: View {
                 // .journal opens through the quick-action Journal sheet (handled above); this keeps the
                 // switch exhaustive and falls back to the journal's Insights host if it ever reaches here.
                 case .journal: InsightsView()
-                // .coach switches to the Coach tab (handled above — the morning-brief tap-through and the
-                // #1862 launcher both arrive that way, the launcher's question riding on
-                // `AICoachEngine.pendingPrompt`); this keeps the switch exhaustive and falls back to Coach if
-                // it ever reaches the host.
                 case .coach: CoachView()
                 case .alarms: SmartAlarmView()
                 }
@@ -328,6 +346,7 @@ struct RootTabView: View {
                 // re-presents cleanly (avoids dismiss/re-present races). Calm easing on re-present.
                 quickAction = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    guard !pendingCoach, routedPillar == nil, !showDevices else { return }
                     withAnimation(Self.sheetEase) { quickAction = picked }
                 }
             }
