@@ -25,6 +25,7 @@ enum HealthspanStressDemoSeed {
         let latestTs = Int(now.timeIntervalSince1970)
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: now)
+        try await seedDailyStressIfMissing(into: store, today: today, calendar: calendar)
         var hr: [HRSample] = []
         for dayOffset in -1...0 {
             guard let day = calendar.date(byAdding: .day, value: dayOffset, to: today) else { continue }
@@ -40,6 +41,24 @@ enum HealthspanStressDemoSeed {
             }
         }
         _ = try await store.insert(Streams(hr: hr), deviceId: AppleDemoSeeder.whoop)
+    }
+
+    private static func seedDailyStressIfMissing(into store: WhoopStore, today: Date,
+                                                 calendar: Calendar) async throws {
+        let existing = try await store.metricSeries(deviceId: AppleDemoSeeder.whoop, key: "stress",
+                                                    from: "0000-00-00", to: "9999-99-99")
+        guard existing.isEmpty,
+              let yesterday = calendar.date(byAdding: .day, value: -1, to: today) else { return }
+
+        // Synthetic daily preview fixtures, independent of the raw-HR stress analysis.
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        _ = try await store.upsertMetricSeries([
+            MetricPoint(day: formatter.string(from: yesterday), key: "stress", value: 1.8),
+            MetricPoint(day: formatter.string(from: today), key: "stress", value: 1.2),
+        ], deviceId: AppleDemoSeeder.whoop)
     }
 }
 #endif

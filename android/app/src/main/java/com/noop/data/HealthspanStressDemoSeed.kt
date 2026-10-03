@@ -2,6 +2,7 @@ package com.noop.data
 
 import com.noop.BuildConfig
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 object HealthspanStressDemoSeed {
@@ -21,6 +22,7 @@ object HealthspanStressDemoSeed {
         val latestTs = now.epochSecond
         val zone = ZoneId.systemDefault()
         val today = now.atZone(zone).toLocalDate()
+        seedDailyStressIfMissing(repo, today)
         val hr = ArrayList<HrSample>()
         for (dayOffset in -1L..0L) {
             val day = today.plusDays(dayOffset)
@@ -35,5 +37,15 @@ object HealthspanStressDemoSeed {
             }
         }
         repo.insertHr(hr)
+    }
+
+    private suspend fun seedDailyStressIfMissing(repo: WhoopRepository, today: LocalDate) {
+        if (repo.metricSeries("my-whoop", "stress", "0000-00-00", "9999-99-99").isNotEmpty()) return
+
+        // Synthetic daily preview fixtures, independent of the raw-HR stress analysis.
+        repo.upsertMetricSeries(listOf(
+            MetricSeriesRow("my-whoop", today.minusDays(1).toString(), "stress", 1.8),
+            MetricSeriesRow("my-whoop", today.toString(), "stress", 1.2),
+        ))
     }
 }
