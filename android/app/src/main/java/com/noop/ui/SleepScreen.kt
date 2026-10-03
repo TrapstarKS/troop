@@ -223,7 +223,7 @@ fun SleepScreen(
     // reload (new sync / re-import via `days` changing). The optimistic bed/wake edit rewrites
     // `sleeps` in place WITHOUT touching `days`, so it must not reset the browse — keeping the
     // user on the night they just edited. (#160)
-    var nightOffset by remember { mutableIntStateOf(0) }
+    var nightOffset by remember(initialDayKey, vm.activeStrapId) { mutableIntStateOf(0) }
     var initialSelectionApplied by remember(initialDayKey, vm.activeStrapId) {
         mutableStateOf(initialDayKey == null)
     }
