@@ -448,12 +448,8 @@ struct WorkoutDetailView: View {
                         ("Low", String(localized: "\(Int((values.min() ?? 0).rounded())) bpm")),
                     ])
                 }
-                // #18: the row's Avg HR can be EDITED on the manual sheet while the graph, zones and Effort
-                // stay from the recorded session (preservingCaptured keeps the captured strain/zones). When
-                // the typed average disagrees materially with this trace's own mean AND the row carries that
-                // captured strain/zones, say so plainly. We do NOT re-score from the typed number.
-                if avgHrEditedDisclosure(traceMean: values.reduce(0, +) / Double(values.count)) {
-                    Text("The average above was edited. The graph, zones and Effort stay from the recorded session.")
+                if averageDiffersFromTrace(traceMean: values.reduce(0, +) / Double(values.count)) {
+                    Text("The displayed average differs from this trace. Heart rate comes from recorded samples; existing strain and zone values are preserved.")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -466,11 +462,8 @@ struct WorkoutDetailView: View {
         }
     }
 
-    /// #18: whether the displayed Avg HR was edited away from what this HR trace implies. True only when the
-    /// row carries CAPTURED strain or zones (so the graph/zones/Effort are from a real recording, not the
-    /// typed value) AND the row's avgHr differs from the trace mean by more than a small tolerance. The
-    /// tolerance absorbs ordinary rounding/bucketing drift so an unedited session never trips the note.
-    private func avgHrEditedDisclosure(traceMean: Double) -> Bool {
+    // A trace difference does not establish edit provenance or the original recording source.
+    private func averageDiffersFromTrace(traceMean: Double) -> Bool {
         guard let avg = row.avgHr, row.strain != nil || row.zonesJSON != nil else { return false }
         return abs(Double(avg) - traceMean) > 3
     }
@@ -517,6 +510,9 @@ struct WorkoutDetailView: View {
                         Text(zonesFromImport
                              ? "WHOOP's imported per-zone split for this session."
                              : "Time in each %HRmax zone, derived from the strap's heart rate over this window (approximate).")
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.textTertiary)
+                        Text("Bars and percentages show the share of recorded time in Zones 1–5.")
                             .font(StrandFont.footnote)
                             .foregroundStyle(StrandPalette.textTertiary)
                     }

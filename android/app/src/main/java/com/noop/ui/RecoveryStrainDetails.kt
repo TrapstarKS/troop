@@ -380,7 +380,7 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
     if (edit) ManualWorkoutDialog(
         editing = if (editable) current else WorkoutEditing.asManualCopy(current), isCopy = !editable,
         onDismiss = { edit = false }, onSave = { saved, replacing ->
-            vm.saveManualWorkout(saved, replacing)
+            vm.saveManualWorkout(saved, replacing, asCopy = !editable)
             edit = false
             onBack()
         },

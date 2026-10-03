@@ -3,4 +3,6 @@
     <string name="d2b_zone_group_low">Tiempo en zonas 1–3</string>
     <string name="d2b_zone_group_high">Tiempo en zonas 4–5</string>
     <string name="d2b_strength_duration">Duración de fuerza</string>
+    <string name="d2b_zone_denominator">Las barras y los porcentajes muestran la proporción del tiempo registrado en las zonas 1–5.</string>
+    <string name="d2b_copy_note">Crea una copia manual independiente. Se guarda en este dispositivo y no reemplaza el original.</string>
 </resources>

@@ -375,7 +375,7 @@ fun WorkoutsScreen(vm: AppViewModel) {
             isCopy = target.isCopy,
             onDismiss = { dialog = null },
             onSave = { row, replacing ->
-                vm.saveManualWorkout(row, replacing)
+                vm.saveManualWorkout(row, replacing, asCopy = target.isCopy)
                 pendingNoteSport = WorkoutEditing.displaySport(row.sport)
                 dialog = null
             },
@@ -1606,7 +1606,7 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
                 val captured = row.strain != null || !row.zonesJSON.isNullOrEmpty()
                 if (captured && row.avgHr != null && kotlin.math.abs(row.avgHr - traceMean) > 3.0) {
                     Text(
-                        uiString(R.string.l10n_workouts_screen_the_average_above_was_edited_the_0a7881f0),
+                        uiString(R.string.d2b_average_disclosure),
                         style = NoopType.footnote,
                         color = Palette.textTertiary,
                     )
@@ -1641,6 +1641,7 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
                         style = NoopType.footnote,
                         color = Palette.textTertiary,
                     )
+                    Text(uiString(R.string.d2b_zone_denominator), style = NoopType.footnote, color = Palette.textTertiary)
                 }
             }
 
@@ -2042,12 +2043,13 @@ internal fun ManualWorkoutDialog(
                     )
                 }
                 Spacer(Modifier.width(10.dp))
-                Text(if (editing == null) "Add Workout" else "Edit Workout",
+                Text(if (isCopy) uiString(R.string.d2b_copy_activity) else if (editing == null) "Add Workout" else "Edit Workout",
                     style = NoopType.title2, color = Palette.textPrimary)
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (isCopy) Text(uiString(R.string.d2b_copy_note), style = NoopType.footnote, color = Palette.textSecondary)
                 SportPickerField(sport, onChange = { sport = it })
                 SpanTimeField(
                     uiString(R.string.l10n_workouts_screen_started_faa9e7e7),

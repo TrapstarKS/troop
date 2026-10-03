@@ -1587,7 +1587,11 @@ class WhoopRepository(
      *    that case and made a save look successful while changing nothing (#1488);
      *  - an IMPORTED row is never passed here as `replacing` (duplicating one is a pure add).
      */
-    suspend fun saveManualWorkout(row: WorkoutRow, replacing: WorkoutRow? = null) {
+    suspend fun saveManualWorkout(row: WorkoutRow, replacing: WorkoutRow? = null, asCopy: Boolean = false) {
+        if (asCopy) {
+            dao.insertManualWorkoutCopy(row)
+            return
+        }
         if (replacing != null && replacing.source.lowercase().endsWith("-noop")) {
             dao.upsertWorkouts(listOf(row))
             dismissDetected(replacing)

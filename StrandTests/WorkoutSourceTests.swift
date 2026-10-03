@@ -17,6 +17,18 @@ final class WorkoutSourceTests: XCTestCase {
 
     // MARK: - classify
 
+    func testManualCopyRemainsEditableAndRetainsOnDeviceProvenance() {
+        let original = row(start: 1_000, end: 2_000, sport: "Running (manual copy)", source: WorkoutCopyIdentity.source,
+                           maxHr: 170, strain: 52)
+        let edited = row(start: 1_000, end: 2_100, sport: original.sport, source: "manual", avgHr: 140)
+        XCTAssertEqual(WorkoutSource.classify(original.source), .manual)
+        XCTAssertEqual(WorkoutSource.classify("MANUAL-COPY"), .manual)
+        let saved = WorkoutSource.preservingCaptured(edited, from: original)
+        XCTAssertEqual(saved.source, WorkoutCopyIdentity.source)
+        XCTAssertEqual(saved.maxHr, original.maxHr)
+        XCTAssertEqual(saved.strain, original.strain)
+    }
+
     func testClassifyOrdersNoopBeforeWhoop() {
         // "my-whoop-noop" contains "whoop" — the -noop suffix MUST win, else a detected bout
         // would be classified as an imported WHOOP row and become un-dismissable.

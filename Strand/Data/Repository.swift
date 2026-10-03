@@ -2985,8 +2985,17 @@ final class Repository: ObservableObject {
     ///    then retires the stale strap row. A failed write therefore preserves the original;
     ///  - an IMPORTED row is never passed here as `replacing` (duplicating one is a pure add), so its
     ///    history is never touched.
-    func saveManualWorkout(_ row: WorkoutRow, replacing old: WorkoutRow? = nil) async {
+    func saveManualWorkout(_ row: WorkoutRow, replacing old: WorkoutRow? = nil,
+                           asCopy: Bool = false, copying original: WorkoutRow? = nil) async {
         guard let store = await ensureStore() else { return }
+        if asCopy {
+            guard let copy = try? await store.insertManualWorkoutCopy(row, deviceId: deviceId) else { return }
+            let routeKey = original ?? row
+            if let route = RouteStore.loadWithPoints(startTs: routeKey.startTs, sport: routeKey.sport) {
+                RouteStore.store(route, startTs: copy.startTs, sport: copy.sport)
+            }
+            return
+        }
         if let old, WorkoutSource.classify(old.source) == .detected {
             // Write the replacement first. If that insert fails, the grandfathered source row and its
             // visibility remain untouched; a failed explicit edit must not turn into data loss.

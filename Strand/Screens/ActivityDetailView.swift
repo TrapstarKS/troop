@@ -100,10 +100,12 @@ struct ActivityDetailView: View {
         }
         .task(id: "\(row.startTs)|\(row.endTs)|\(row.source)|\(repo.deviceId)|\(repo.refreshSeq)") { await load() }
         .sheet(isPresented: $showEdit) {
-            ManualWorkoutSheet(editing: editRow) { saved, replacing in
+            ManualWorkoutSheet(editing: editRow, isCopy: !canEdit) { saved, replacing in
                 let replacingOriginal = canEdit
+                let original = row
                 Task {
-                    await repo.saveManualWorkout(saved, replacing: replacingOriginal ? replacing : nil)
+                    await repo.saveManualWorkout(saved, replacing: replacingOriginal ? replacing : nil,
+                                                 asCopy: !replacingOriginal, copying: original)
                     await repo.refresh()
                     if let stored = await repo.workoutRows().first(where: {
                         $0.startTs == saved.startTs && $0.sport == saved.sport && WorkoutSource.classify($0.source) == .manual
