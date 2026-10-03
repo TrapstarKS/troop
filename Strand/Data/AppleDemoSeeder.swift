@@ -31,13 +31,15 @@ enum AppleDemoSeeder {
     /// launch … --demo-seed`).
     static var requested: Bool { CommandLine.arguments.contains("--demo-seed") }
 
-    /// Seed only if requested AND the store is empty. Safe to call on every launch.
+    /// Seed daily history only when empty, then add the raw demo fixture once. Safe on every launch.
     static func seedIfRequested(into store: WhoopStore) async {
         guard requested else { return }
         seedDemoDeviceIfNeeded(into: store)
         let existing = (try? await store.dailyMetrics(deviceId: whoop, from: "0000-00-00", to: "9999-99-99")) ?? []
-        guard existing.isEmpty else { return }
-        do { try await seed(into: store) }
+        do {
+            if existing.isEmpty { try await seed(into: store) }
+            try await HealthspanStressDemoSeed.seedIfDemo(into: store)
+        }
         catch { NSLog("AppleDemoSeeder: seed failed — \(error)") }
     }
 
