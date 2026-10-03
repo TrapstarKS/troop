@@ -20,8 +20,15 @@ if (keystorePropsFile.exists()) {
         rootProject.file("fork-debug.keystore").canonicalFile) { "Public staging key cannot be a release signer" }
 }
 val isStagingRelease = project.hasProperty("stagingRelease")
-val requestedReleaseBuild = gradle.startParameter.taskNames.any {
-    it.contains("Release", ignoreCase = true)
+// Inspect resolved tasks so aggregate and abbreviated selectors cannot bypass the signing guard.
+gradle.taskGraph.whenReady {
+    val hasReleaseWork = allTasks.any { it.project == project && it.name.contains("Release", ignoreCase = true) }
+    if (hasReleaseWork && !keystorePropsFile.exists() && !isStagingRelease) {
+        throw GradleException(
+            "Refusing to build a real release without keystore.properties. " +
+                "Use -PstagingRelease for debug-key staging artifacts only."
+        )
+    }
 }
 
 android {
@@ -79,18 +86,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            if (!keystorePropsFile.exists() && !isStagingRelease && requestedReleaseBuild) {
-                throw GradleException(
-                    "Refusing to build a real release without keystore.properties. " +
-                        "Use -PstagingRelease for debug-key staging artifacts only."
-                )
-            }
             // Real release key when keystore.properties is present. The debug-key fallback is allowed
             // only for explicit fork/staging artifacts that install under their own application id.
-            signingConfig = if (keystorePropsFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
+            signingConfig = if (isStagingRelease && !keystorePropsFile.exists()) {
                 signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.getByName("release")
             }
             // Fork staging release: built with -PstagingRelease (the fork testing-build CI only), the
             // release APK gets its own id/name so it installs BESIDE both the official app and the

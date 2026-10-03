@@ -126,9 +126,11 @@ def update_manifest(args):
 
 def apk_certificate(path, apksigner):
     result = subprocess.check_output([apksigner, 'verify', '--verbose', '--print-certs', path], text=True)
-    signers = re.findall(r'Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-fA-F]+)', result)
+    signers = re.findall(r'Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-fA-F:]+)', result)
     require(len(signers) == 1, 'Expected one APK signer')
-    return signers[0].lower()
+    fingerprint = signers[0].replace(':', '').lower()
+    require(re.fullmatch(r'[0-9a-f]{64}', fingerprint), 'Invalid APK certificate fingerprint')
+    return fingerprint
 
 
 def properties_value(value):

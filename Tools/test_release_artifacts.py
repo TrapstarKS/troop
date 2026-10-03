@@ -3,7 +3,9 @@ import importlib.util
 import json
 from pathlib import Path
 import plistlib
+import re
 import struct
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -122,6 +124,13 @@ class StableSigningRegressionTests(unittest.TestCase):
         value = ' é\\alias\t😀 '
         self.assertEqual(release.properties_value(value), r'\u0020\u00e9\u005c\u0061\u006c\u0069\u0061\u0073\u0009\ud83d\ude00\u0020')
 
+    def test_certificate_fingerprint_formats_are_normalized_and_length_checked(self):
+        for fingerprint in ['a'*64, ':'.join(['AA']*32)]:
+            with patch.object(release.subprocess, 'check_output', return_value='Signer #1 certificate SHA-256 digest: '+fingerprint):
+                self.assertEqual(release.apk_certificate('fixture.apk', 'signer'), 'a'*64)
+        with patch.object(release.subprocess, 'check_output', return_value='Signer #1 certificate SHA-256 digest: AA:BB'), self.assertRaises(ValueError):
+            release.apk_certificate('fixture.apk', 'signer')
+
     def test_configured_replacement_signer_cannot_replace_established_signer(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'current.apk'; path.write_bytes(b'fixture')
@@ -136,6 +145,39 @@ class StableSigningRegressionTests(unittest.TestCase):
             outputs[-1] = 'Signer #1 certificate SHA-256 digest: ' + 'b'*64
             with patch.object(release.subprocess, 'check_output', side_effect=outputs):
                 self.assertEqual(release.apk_metadata(args)['certificateSHA256'], 'b'*64)
+
+
+class ReleaseTagRegressionTests(unittest.TestCase):
+    def test_tag_without_release_is_rejected_and_publish_checks_peeled_commit(self):
+        workflow = (Path(__file__).parents[1] / '.github/workflows/fork-release.yml').read_text()
+        creation_guards = re.findall(r'REMOTE_TAG=\$\(git ls-remote[^\n]+\)\n\s*test -z[^\n]+', workflow)
+        self.assertEqual(len(creation_guards), 2)
+        publish_guard = re.search(r'REMOTE_SHA=\$\(git ls-remote[^\n]+\)\n\s*test -z[^\n]+', workflow).group()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def git(*args):
+                return subprocess.check_output(['git', *args], cwd=root, stderr=subprocess.DEVNULL, text=True).strip()
+            git('init', '-q')
+            git('config', 'user.name', 'Test')
+            git('config', 'user.email', 'test@example.invalid')
+            git('config', 'core.hooksPath', '/dev/null')
+            git('commit', '-qm', 'First', '--allow-empty')
+            first = git('rev-parse', 'HEAD')
+            git('commit', '-qm', 'Second', '--allow-empty')
+            second = git('rev-parse', 'HEAD')
+            git('remote', 'add', 'origin', str(root))
+            def run(guard, sha=second):
+                return subprocess.run(['bash', '-c', 'set -euo pipefail\nTAG=v1.2.3\nSOURCE_SHA=' + sha + '\n' + guard],
+                                      cwd=root, capture_output=True, text=True).returncode
+            for guard in creation_guards:
+                self.assertEqual(run(guard), 0)
+            for annotated in [False, True]:
+                git('tag', *(['-a', '-m', 'Fixture'] if annotated else []), 'v1.2.3', first)
+                for guard in creation_guards:
+                    self.assertNotEqual(run(guard), 0)
+                self.assertNotEqual(run(publish_guard), 0)
+                self.assertEqual(run(publish_guard, first), 0)
+                git('tag', '-d', 'v1.2.3')
 
 
 if __name__ == '__main__':

@@ -79,6 +79,8 @@ jobs:
             echo "::error::Release already exists. Use a new version; release assets are immutable."
             exit 1
           fi
+          REMOTE_TAG=$(git ls-remote --tags origin "refs/tags/$TAG" "refs/tags/$TAG^{}")
+          test -z "$REMOTE_TAG" || { echo "::error::Remote tag already exists; refusing source/artifact mismatch"; exit 1; }
           echo "ver=$NEW" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Version: $CUR -> $NEW  (tag $TAG)"
@@ -158,6 +160,8 @@ jobs:
               printf -- '- **macOS** — `NOOP-macos-v%s.zip` (unzip, then right-click → Open)\n' "$NEW"
               printf -- '- **iOS** — `NOOP-ios-unsigned-v%s.ipa` (SideStore / AltStore Classic; user provisioning required)\n' "$NEW"
             } >> "$BODY"
+            REMOTE_TAG=$(git ls-remote --tags origin "refs/tags/$TAG" "refs/tags/$TAG^{}")
+            test -z "$REMOTE_TAG" || { echo "::error::Remote tag appeared during build preparation"; exit 1; }
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" \
               --title "troop ${NEW}" --notes-file "$BODY" --draft
           fi
@@ -171,6 +175,9 @@ jobs:
     defaults:
       run:
         working-directory: android
+    outputs:
+      sha256: ${{ steps.artifact.outputs.sha256 }}
+      metadataSHA256: ${{ steps.artifact.outputs.metadataSHA256 }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -181,6 +188,9 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/wrapper-validation@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
       - name: Configure private release signer
         env:
           KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
@@ -236,11 +246,14 @@ jobs:
         if: always()
         run: rm -f keystore.properties "$RUNNER_TEMP/troop-release.keystore"
       - name: Version the filename + attach
+        id: artifact
         env:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ needs.bump.outputs.ver }}
         run: |
           cp app/build/outputs/apk/full/release/*.apk "NOOP-android-v${VER}.apk"
+          echo "sha256=$(sha256sum "NOOP-android-v${VER}.apk" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "metadataSHA256=$(sha256sum "NOOP-android-v${VER}-metadata.json" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           gh release upload "${{ needs.bump.outputs.tag }}" "NOOP-android-v${VER}.apk" "NOOP-android-v${VER}-metadata.json" \
             --repo "$GITHUB_REPOSITORY"
 
@@ -251,6 +264,8 @@ jobs:
     # Uploads the built .app zip to the release created by the `bump` job.
     permissions:
       contents: write
+    outputs:
+      sha256: ${{ steps.artifact.outputs.sha256 }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -294,6 +309,7 @@ jobs:
           { lipo -archs "$EXE" | grep -qw x86_64 && lipo -archs "$EXE" | grep -qw arm64; } \
             || { echo "::error::macOS binary is not universal (expected x86_64 + arm64)"; exit 1; }
       - name: Package + attach
+        id: artifact
         env:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ needs.bump.outputs.ver }}
@@ -312,6 +328,7 @@ jobs:
           codesign --force --deep --sign - "$APP"
           codesign -dvv "$APP" 2>&1 | grep -Ei 'identifier|signature|flags' || true
           ditto -c -k --keepParent "$APP" "NOOP-macos-v${VER}.zip"
+          echo "sha256=$(shasum -a 256 "NOOP-macos-v${VER}.zip" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           gh release upload "${{ needs.bump.outputs.tag }}" "NOOP-macos-v${VER}.zip" --repo "$GITHUB_REPOSITORY"
 
   ios:
@@ -322,10 +339,15 @@ jobs:
     # Uploads the built .ipa to the release created by the `bump` job.
     permissions:
       contents: write
+    outputs:
+      sha256: ${{ steps.artifact.outputs.sha256 }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ needs.bump.outputs.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
       - name: Install XcodeGen
         # Known unpinned-tooling gap (issue #657): Homebrew core doesn't keep old formula versions
         # around, so `brew install xcodegen@<version>` / a version-pin syntax isn't available here —
@@ -344,6 +366,7 @@ jobs:
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
           build
       - name: Package sideload .ipa (strip watch, preserve app/widget capabilities) + attach
+        id: artifact
         env:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ needs.bump.outputs.ver }}
@@ -351,6 +374,7 @@ jobs:
           APP=$(find build/dd/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -type d | head -1)
           test -n "$APP" || { echo ".app (iphoneos) not found"; exit 1; }
           Tools/package-ios-ipa.sh "$APP" "NOOP-ios-unsigned-v${VER}.ipa" com.trapstarks.troop.noop "$VER"
+          echo "sha256=$(shasum -a 256 "NOOP-ios-unsigned-v${VER}.ipa" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           gh release upload "${{ needs.bump.outputs.tag }}" "NOOP-ios-unsigned-v${VER}.ipa" --repo "$GITHUB_REPOSITORY"
 
   publish:
@@ -362,11 +386,19 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ needs.bump.outputs.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
       - name: Validate complete draft and publish immutable checksums
         env:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ needs.bump.outputs.ver }}
           TAG: ${{ needs.bump.outputs.tag }}
+          SOURCE_SHA: ${{ needs.bump.outputs.sha }}
+          ANDROID_SHA: ${{ needs.android.outputs.sha256 }}
+          METADATA_SHA: ${{ needs.android.outputs.metadataSHA256 }}
+          MACOS_SHA: ${{ needs.macos.outputs.sha256 }}
+          IOS_SHA: ${{ needs.ios.outputs.sha256 }}
         run: |
           set -euo pipefail
           test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = true
@@ -382,7 +414,14 @@ jobs:
           Tools/update-altstore-source.sh --repo "$GITHUB_REPOSITORY" --source altstore-source.json \
             --asset-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/NOOP-ios-unsigned-v${VER}.ipa" \
             --version "$VER" --ipa "artifacts/NOOP-ios-unsigned-v${VER}.ipa"
-          python3 Tools/verify-release-artifacts.py checksums artifacts/* > artifacts/SHA256SUMS
+          printf '%s  %s\n' "$ANDROID_SHA" "NOOP-android-v${VER}.apk" \
+            "$METADATA_SHA" "NOOP-android-v${VER}-metadata.json" \
+            "$MACOS_SHA" "NOOP-macos-v${VER}.zip" \
+            "$IOS_SHA" "NOOP-ios-unsigned-v${VER}.ipa" > artifacts/SHA256SUMS
+          (cd artifacts && sha256sum --check SHA256SUMS)
+          REMOTE_SHA=$(git ls-remote --tags --sort=refname origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | tail -1 | cut -f1)
+          test -z "$REMOTE_SHA" || test "$REMOTE_SHA" = "$SOURCE_SHA" || { echo "::error::Release tag differs from validated source"; exit 1; }
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .target_commitish)" = "$SOURCE_SHA"
           gh release upload "$TAG" artifacts/SHA256SUMS --repo "$GITHUB_REPOSITORY"
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
           test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = false
@@ -396,6 +435,9 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: main
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
       - name: Validate published download and update the Classic source
         env:
           GH_TOKEN: ${{ github.token }}
@@ -407,7 +449,9 @@ jobs:
           URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${IPA}"
           curl --fail --location --retry 3 "$URL" --output "$IPA"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS
-          sha256sum --check --ignore-missing SHA256SUMS
+          CHECKSUM_LINE=$(awk -v file="$IPA" '$2==file {print}' SHA256SUMS)
+          test -n "$CHECKSUM_LINE"
+          printf '%s\n' "$CHECKSUM_LINE" | sha256sum --check
           Tools/update-altstore-source.sh --repo "$GITHUB_REPOSITORY" --source altstore-source.json \
             --asset-url "$URL" --version "$VER" --ipa "$IPA"
           git config user.name 'github-actions[bot]'

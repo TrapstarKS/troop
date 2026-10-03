@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <a href="#download">⬇&nbsp;Download</a> ·
+  <a href="#download-stable-fork-publication-pending">⬇&nbsp;Download</a> ·
   <a href="https://github.com/ryanbr/noop/wiki/FAQ">❓&nbsp;FAQ</a> ·
   <a href="https://discord.com/invite/wKgyqVdjrP">💬&nbsp;Discord</a> ·
   <a href="https://www.reddit.com/r/NoopBand/">👽&nbsp;Reddit</a> ·
@@ -219,7 +219,7 @@ import required.
 |---|---|
 | **macOS** | ✅ Full app (`Strand/`, SwiftUI, macOS 13+). Pairs over BLE, offloads the strap's history, and scores recovery / strain / sleep on-device. The complete feature set above runs here. |
 | **Android** | ✅ Full app (`android/`, Jetpack Compose, Android 8+). Pairs over BLE, persists and scores on-device, and imports WHOOP / Apple Health / Health Connect. After a validated stable fork release is published, grab the APK from [Releases](https://github.com/TrapstarKS/troop/releases). |
-| **iOS** | 📲 **Direct download**: an unsigned `.ipa` you sideload with AltStore/SideStore — it signs on your iPhone with your *own* free Apple ID, so there's an anonymous install path with no App Store / developer account (see [docs/IOS.md](docs/IOS.md)). Also still builds from source in Xcode. Shares the cross-platform Swift packages, so scoring matches macOS. Newer and less battle-tested than macOS/Android — live BLE on a real iPhone is still being validated; Apple Health + Live Activity widgets can be limited under a free signing identity. |
+| **iOS** | Source build today; user-provisioned SideStore IPA/source after the first validated stable fork publication. See [Install](docs/INSTALL.md) for account/setup, expiry, capabilities, and data preservation. No App Store channel is added. |
 
 ### Strap support
 
