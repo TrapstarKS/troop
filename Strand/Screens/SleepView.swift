@@ -154,13 +154,11 @@ struct SleepView: View {
         let detail = resolved.flatMap { detailModel(for: displayedNight($0)) }
         ScreenScaffold(title: resolved == nil ? "Sleep" : nil,
                        subtitle: nil,
-                       // PERF (scroll): lazy column — byte-identical layout (LazyVStack == eager VStack
-                       // alignment/spacing/header), builds trailing trend/ledger cards on demand. Combined
-                       // with dropping the top-level LiveState observation (the sleep-mark card + the
-                       // syncing note now own `live` in their own leaves), so a 1 Hz HR tick no longer
-                       // re-evaluates this heavy body.
+                       // Keep the single content stack eager: selected-day refreshes temporarily shrink
+                       // it to a loading state, and a lazy outer stack can retain an empty scroll viewport
+                       // after the sleep editor dismisses. Live HR observation stays in the leaf views.
                        onRefresh: { await repo.refresh() },
-                       lazy: true) {
+                       lazy: false) {
             Group {
                 if let resolved {
                     // Each top-level section fades + rises in sequence on first appear (Reduce-Motion safe).
