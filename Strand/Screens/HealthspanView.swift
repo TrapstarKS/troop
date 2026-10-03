@@ -1,30 +1,37 @@
 import SwiftUI
 import Charts
+import Combine
 import StrandAnalytics
 import StrandDesign
 import WhoopStore
 
 struct HealthspanView: View {
     @EnvironmentObject private var repo: Repository
+    @EnvironmentObject private var model: AppModel
+    @State private var observedSource: String?
+    @State private var loadedSource: String?
     @EnvironmentObject private var profile: ProfileStore
     @State private var series: [(day: String, value: Double)] = []
     @State private var fitness: [(day: String, value: Double)] = []
+    @State private var days: [DailyMetric] = []
     @State private var reference = Calendar.current.startOfDay(for: Date())
     @State private var showMethod = false
 
+    private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
+    private var sourceLoaded: Bool { loadedSource == sourceID }
     private var earliestReference: Date {
         let today = Calendar.current.startOfDay(for: Date())
-        guard let first = repo.days.compactMap({ healthspanDate($0.day) }).min(),
+        guard let first = days.compactMap({ healthspanDate($0.day) }).min(),
               let completeWindow = Calendar.current.date(byAdding: .day, value: 30, to: first) else { return today }
         return min(today, completeWindow)
     }
     private var chronologicalAge: Int { Calendar.current.dateComponents([.year], from: Calendar.current.startOfDay(for: profile.dateOfBirth), to: reference).year ?? profile.age }
     private var snapshot: HealthspanPresentation.Snapshot {
-        healthspanSnapshot(series: series, days: repo.days, age: chronologicalAge, reference: reference)
+        healthspanSnapshot(series: sourceLoaded ? series : [], days: sourceLoaded ? days : [], age: chronologicalAge, reference: reference)
     }
     private var isCalibrating: Bool { chronologicalAge >= 18 && snapshot.recoveryDays < 21 }
     private var window: [DailyMetric] {
-        repo.days.filter { healthspanDaysAgo($0.day, reference: reference).map { (0..<7).contains($0) } ?? false }
+        (sourceLoaded ? days : []).filter { healthspanDaysAgo($0.day, reference: reference).map { (0..<7).contains($0) } ?? false }
     }
 
     var body: some View {
@@ -52,12 +59,12 @@ struct HealthspanView: View {
                         Button("How this estimate works") { showMethod = true }.font(StrandFont.headline).frame(minHeight: NoopMetrics.touchTarget)
                     }
                 }
-                if !series.isEmpty { ageTrend }
+                if sourceLoaded && !series.isEmpty { ageTrend }
                 VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                     TrackedSectionHeader(title: String(localized: "Contributors"))
                     contributor(String(localized: "Sleep"), symbol: "moon.fill", value: average(window.compactMap(\.totalSleepMin).filter { $0.isFinite && $0 > 0 }).map { healthspanDuration(Int($0.rounded())) })
                     contributor(String(localized: "Strain"), symbol: "figure.run", value: average(window.compactMap(\.strain).filter { $0.isFinite && (0...100).contains($0) }).map { "\(Int($0.rounded())) / 100" })
-                    contributor(String(localized: "Fitness Age"), symbol: "heart.fill", value: fitness.last(where: { $0.value.isFinite && (healthspanDaysAgo($0.day, reference: reference).map { (0...14).contains($0) } ?? false) }).map { String(format: "%.1f", locale: .current, $0.value) })
+                    contributor(String(localized: "Fitness Age"), symbol: "heart.fill", value: (sourceLoaded ? fitness : []).last(where: { $0.value.isFinite && (healthspanDaysAgo($0.day, reference: reference).map { (0...14).contains($0) } ?? false) }).map { String(format: "%.1f", locale: .current, $0.value) })
                     Text("Recent context; not a breakdown of age impact.").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                 }
                 HealthSupportingMetricCards()
@@ -69,9 +76,17 @@ struct HealthspanView: View {
         }
         .background(StrandPalette.surfaceBase)
         .navigationTitle(String(localized: "Healthspan"))
-        .task(id: repo.refreshSeq) {
-            series = await repo.exploreSeries(key: "body_age", source: "my-whoop", days: 4000)
-            fitness = await repo.exploreSeries(key: "fitness_age", source: "my-whoop", days: 4000)
+        .onReceive(healthspanSourcePublisher(model: model, repo: repo)) { observedSource = $0 }
+        .task(id: "\(sourceID)|\(repo.refreshSeq)") {
+            let source = sourceID
+            guard await healthspanAwaitSource(source, repo: repo) else { return }
+            if loadedSource != source { await repo.refresh() }
+            let revision = repo.refreshSeq
+            let resolvedDays = repo.days
+            let resolvedAge = await repo.exploreSeries(key: "body_age", source: "my-whoop", days: 4000)
+            let resolvedFitness = await repo.exploreSeries(key: "fitness_age", source: "my-whoop", days: 4000)
+            guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
+            days = resolvedDays; series = resolvedAge; fitness = resolvedFitness; loadedSource = source
             reference = max(reference, earliestReference)
         }
         .sheet(isPresented: $showMethod) {
@@ -116,10 +131,15 @@ struct HealthspanView: View {
 
 struct HealthspanPreviewCard: View {
     @EnvironmentObject private var repo: Repository
+    @EnvironmentObject private var model: AppModel
+    @State private var observedSource: String?
+    @State private var loadedSource: String?
     @EnvironmentObject private var profile: ProfileStore
     @State private var series: [(day: String, value: Double)] = []
+    @State private var days: [DailyMetric] = []
+    private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     var body: some View {
-        let snapshot = healthspanSnapshot(series: series, days: repo.days, age: profile.age, reference: Date())
+        let snapshot = healthspanSnapshot(series: loadedSource == sourceID ? series : [], days: loadedSource == sourceID ? days : [], age: profile.age, reference: Date())
         NavigationLink { HealthspanView() } label: {
             NoopCard(tint: StrandPalette.positive) {
                 HStack(spacing: NoopMetrics.space4) {
@@ -134,23 +154,43 @@ struct HealthspanPreviewCard: View {
                 }.foregroundStyle(StrandPalette.textPrimary)
             }
         }.buttonStyle(.plain)
-        .task(id: repo.refreshSeq) { series = await repo.exploreSeries(key: "body_age", source: "my-whoop", days: 180) }
+        .onReceive(healthspanSourcePublisher(model: model, repo: repo)) { observedSource = $0 }
+        .task(id: "\(sourceID)|\(repo.refreshSeq)") {
+            let source = sourceID
+            guard await healthspanAwaitSource(source, repo: repo) else { return }
+            if loadedSource != source { await repo.refresh() }
+            let revision = repo.refreshSeq
+            let resolvedDays = repo.days
+            let resolvedAge = await repo.exploreSeries(key: "body_age", source: "my-whoop", days: 180)
+            guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
+            days = resolvedDays; series = resolvedAge; loadedSource = source
+        }
     }
 }
 
 struct HealthSupportingMetricCards: View {
     @EnvironmentObject private var repo: Repository
+    @EnvironmentObject private var model: AppModel
+    @State private var observedSource: String?
+    @State private var loadedSource: String?
     @State private var vo2: MetricSeriesResolution?
     @State private var steps: MetricSeriesResolution?
+    private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     var body: some View {
         VStack(spacing: NoopMetrics.gap) {
-            metric("VO₂max estimate", series: vo2, unit: "ml/kg/min")
-            metric("Steps", series: steps, unit: "")
+            metric("VO₂max estimate", series: loadedSource == sourceID ? vo2 : nil, unit: "ml/kg/min")
+            metric("Steps", series: loadedSource == sourceID ? steps : nil, unit: "")
         }
-        .task(id: repo.refreshSeq) {
-            vo2 = await repo.resolvedSeries(key: "vo2max_est", source: "my-whoop", days: 180)
-            if vo2?.points.contains(where: { $0.value.isFinite && $0.value > 0 }) != true { vo2 = await repo.resolvedSeries(key: "vo2max", source: "apple-health", days: 180) }
-            steps = await repo.resolvedSeries(key: "steps", source: "my-whoop", days: 31)
+        .onReceive(healthspanSourcePublisher(model: model, repo: repo)) { observedSource = $0 }
+        .task(id: "\(sourceID)|\(repo.refreshSeq)") {
+            let source = sourceID
+            guard await healthspanAwaitSource(source, repo: repo) else { return }
+            let revision = repo.refreshSeq
+            var resolvedVO2 = await repo.resolvedSeries(key: "vo2max_est", source: "my-whoop", days: 180)
+            if resolvedVO2.points.contains(where: { $0.value.isFinite && $0.value > 0 }) != true { resolvedVO2 = await repo.resolvedSeries(key: "vo2max", source: "apple-health", days: 180) }
+            let resolvedSteps = await repo.resolvedSeries(key: "steps", source: "my-whoop", days: 31)
+            guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
+            vo2 = resolvedVO2; steps = resolvedSteps; loadedSource = source
         }
     }
     private func metric(_ title: LocalizedStringKey, series: MetricSeriesResolution?, unit: String) -> some View {
@@ -278,4 +318,25 @@ private func healthspanDateLabel(reference: Date, days: Int) -> String {
     formatter.dateStyle = .medium
     formatter.timeStyle = .none
     return formatter.string(from: start, to: reference)
+}
+
+@MainActor func healthspanSourceID(_ registryID: String?, repo: Repository) -> String {
+    let id = registryID?.trimmingCharacters(in: .whitespaces) ?? ""
+    return id.isEmpty ? repo.deviceId : id
+}
+
+@MainActor func healthspanSourcePublisher(model: AppModel, repo: Repository) -> AnyPublisher<String, Never> {
+    model.deviceRegistry?.$activeDeviceId.eraseToAnyPublisher() ?? Just(repo.deviceId).eraseToAnyPublisher()
+}
+
+@MainActor func healthspanAwaitSource(_ source: String, repo: Repository) async -> Bool {
+    while repo.deviceId != source {
+        guard !Task.isCancelled else { return false }
+        do { try await Task.sleep(nanoseconds: 10_000_000) } catch { return false }
+    }
+    return !Task.isCancelled
+}
+
+@MainActor func healthspanSourceIsCurrent(_ source: String, model: AppModel, repo: Repository) -> Bool {
+    !Task.isCancelled && repo.deviceId == source && healthspanSourceID(model.deviceRegistry?.activeDeviceId, repo: repo) == source
 }

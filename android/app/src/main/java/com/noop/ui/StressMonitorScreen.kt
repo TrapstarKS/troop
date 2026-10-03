@@ -222,6 +222,7 @@ private suspend fun loadStressMonitorData(
     val events = (sleep.map { StressRecordedEvent(it.effectiveStartTs, it.endTs, true) } +
         workouts.map { StressRecordedEvent(it.startTs, it.endTs, false) })
         .filter { it.start < end && it.end > window.fromEpochSecond && it.end > it.start }
+        .map { it.copy(start = maxOf(it.start, window.fromEpochSecond), end = minOf(it.end, end)) }
     val stored = readStoredStress(vm, strapId, selectedDay, selectedDay)
     val dailyScore = stored[selectedDay.toString()]
     StressMonitorData(window, daytime, observationFrom, observationTo, events, dailyScore, mode is DaytimeStress.ScoringMode.BaselineRelative)

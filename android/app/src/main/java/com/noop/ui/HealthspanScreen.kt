@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,7 +68,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun HealthspanScreen(vm: AppViewModel) {
-    val days by vm.recentDays.collectAsStateWithLifecycle()
+    val days = healthspanDays(vm)
     val bodyAge = healthspanSeries(vm, "body_age")
     var referenceDay by remember { mutableStateOf(LocalDate.now()) }
     val today = LocalDate.now()
@@ -133,7 +134,7 @@ fun HealthspanScreen(vm: AppViewModel) {
 
 @Composable
 fun HealthspanPreviewCard(vm: AppViewModel, onClick: () -> Unit) {
-    val days by vm.recentDays.collectAsStateWithLifecycle()
+    val days = healthspanDays(vm)
     val bodyAge = healthspanSeries(vm, "body_age")
     val referenceDay = LocalDate.now()
     val age = ProfileStore.from(LocalContext.current.applicationContext).age.toDouble()
@@ -157,7 +158,7 @@ fun HealthspanPreviewCard(vm: AppViewModel, onClick: () -> Unit) {
 
 @Composable
 fun HealthSupportingMetricCards(vm: AppViewModel) {
-    val days by vm.recentDays.collectAsStateWithLifecycle()
+    val days = healthspanDays(vm)
     val computedVo2 = healthspanSeries(vm, "vo2max_est")
     val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val strapId = selectedStrap ?: vm.activeStrapId
@@ -378,13 +379,27 @@ internal fun HealthDateNavigation(day: LocalDate, stepDays: Long = 1, weekly: Bo
 }
 
 @Composable
-private fun healthspanSeries(vm: AppViewModel, key: String): List<MetricSeriesRow> {
+private fun healthspanDays(vm: AppViewModel): List<DailyMetric> {
     val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val strapId = selectedStrap ?: vm.activeStrapId
-    val series by remember(vm, strapId, key) {
-        vm.repo.metricSeriesComputedUnionFlow(strapId, key, "0000-01-01", "9999-12-31")
-    }.collectAsStateWithLifecycle(initialValue = emptyList())
-    return series
+    return key(vm, strapId) {
+        val days by remember(vm, strapId) {
+            vm.repo.recentDaysMergedFlow(strapId)
+        }.collectAsStateWithLifecycle(initialValue = emptyList())
+        days
+    }
+}
+
+@Composable
+private fun healthspanSeries(vm: AppViewModel, metricKey: String): List<MetricSeriesRow> {
+    val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val strapId = selectedStrap ?: vm.activeStrapId
+    return key(vm, strapId, metricKey) {
+        val series by remember(vm, strapId, metricKey) {
+            vm.repo.metricSeriesComputedUnionFlow(strapId, metricKey, "0000-01-01", "9999-12-31")
+        }.collectAsStateWithLifecycle(initialValue = emptyList())
+        series
+    }
 }
 
 internal fun healthspanNumber(value: Double): String = NumberFormat.getNumberInstance().apply {
