@@ -50,6 +50,9 @@ packages:
     path: Packages/WhoopProtocol
   WhoopStore:
     path: Packages/WhoopStore
+  GRDB:
+    url: https://github.com/groue/GRDB.swift.git
+    exactVersion: 6.29.3
   StrandAnalytics:
     path: Packages/StrandAnalytics
   StrandImport:
@@ -187,6 +190,7 @@ targets:
       - target: Strand
       - package: WhoopProtocol
       - package: WhoopStore
+      - package: GRDB
       - package: OuraProtocol
     settings:
       base:
