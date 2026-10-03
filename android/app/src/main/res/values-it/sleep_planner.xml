@@ -18,9 +18,9 @@
     <string name="sleep_planner_goal_mode">Obiettivo di sonno</string>
     <string name="sleep_planner_recovery_mode">Recupero</string>
     <string name="sleep_planner_adaptive_unavailable">Il risveglio anticipato non è disponibile in questa versione. Il bracciale usa l’ora limite; solo dati recenti sul sonno o recupero di questa notte possono anticiparla. Il recupero di ieri non viene mai usato.</string>
-    <string name="sleep_planner_exact_time">Ora esatta di risveglio</string>
-    <string name="sleep_planner_latest_time">Ultima ora di risveglio</string>
-    <string name="sleep_planner_wake">Ora di risveglio</string>
+    <string name="sleep_planner_exact_time">Ora limite predefinita</string>
+    <string name="sleep_planner_latest_time">Ora limite predefinita</string>
+    <string name="sleep_planner_wake">Ora limite predefinita</string>
     <string name="sleep_planner_day_plan">Obiettivi giornalieri e fine settimana</string>
     <string name="sleep_planner_default_goal">Obiettivo predefinito</string>
     <string name="sleep_planner_use_default">Usa predefinito</string>

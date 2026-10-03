@@ -18,9 +18,9 @@
     <string name="sleep_planner_goal_mode">Sleep goal</string>
     <string name="sleep_planner_recovery_mode">Recovery</string>
     <string name="sleep_planner_adaptive_unavailable">Early waking is unavailable in this build. The strap uses your latest deadline; fresh current-night sleep or recovery data is required to advance it. Yesterday’s recovery is never used.</string>
-    <string name="sleep_planner_exact_time">Exact wake time</string>
-    <string name="sleep_planner_latest_time">Latest wake time</string>
-    <string name="sleep_planner_wake">Wake time</string>
+    <string name="sleep_planner_exact_time">Default wake deadline</string>
+    <string name="sleep_planner_latest_time">Default wake deadline</string>
+    <string name="sleep_planner_wake">Default wake deadline</string>
     <string name="sleep_planner_day_plan">Daily goals and weekend times</string>
     <string name="sleep_planner_default_goal">Default sleep goal</string>
     <string name="sleep_planner_use_default">Use default</string>

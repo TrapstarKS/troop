@@ -18,9 +18,9 @@
     <string name="sleep_planner_goal_mode">Schlafziel</string>
     <string name="sleep_planner_recovery_mode">Erholung</string>
     <string name="sleep_planner_adaptive_unavailable">Früheres Wecken ist in dieser Version nicht verfügbar. Das Armband nutzt die späteste Weckzeit; nur aktuelle Schlaf- oder Erholungsdaten dieser Nacht dürfen sie vorziehen. Die Erholung von gestern wird nie verwendet.</string>
-    <string name="sleep_planner_exact_time">Genaue Weckzeit</string>
-    <string name="sleep_planner_latest_time">Späteste Weckzeit</string>
-    <string name="sleep_planner_wake">Weckzeit</string>
+    <string name="sleep_planner_exact_time">Standard-Weckzeit</string>
+    <string name="sleep_planner_latest_time">Standard-Weckzeit</string>
+    <string name="sleep_planner_wake">Standard-Weckzeit</string>
     <string name="sleep_planner_day_plan">Tagesziele und Wochenendzeiten</string>
     <string name="sleep_planner_default_goal">Standard-Schlafziel</string>
     <string name="sleep_planner_use_default">Standard verwenden</string>

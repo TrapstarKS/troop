@@ -73,6 +73,8 @@ struct SmartAlarmView: View {
                 }
                 Text("Target sleep: \(duration(snapshot.plan.targetSleepMinutes)) · Need: \(duration(snapshot.plan.needMinutes))")
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
+                Text(goalLabel(snapshot.plan.goalPercent))
+                    .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                 Text(snapshot.plan.historyReady
                      ? String(localized: "A local estimate from your recent sleep, debt, and selected goal.")
                      : String(localized: "Building your plan. Record at least three nights; this recommendation uses your usual need."))
@@ -115,8 +117,8 @@ struct SmartAlarmView: View {
     private var goalCard: some View {
         StrandCard {
             VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
-                Text("Sleep goal").font(StrandFont.title2).foregroundStyle(StrandPalette.textPrimary)
-                Picker(String(localized: "Sleep goal"), selection: $planner.goalPercent) {
+                Text("Default sleep goal").font(StrandFont.title2).foregroundStyle(StrandPalette.textPrimary)
+                Picker(String(localized: "Default sleep goal"), selection: $planner.goalPercent) {
                     Text("Peak · 100%").tag(100)
                     Text("Perform · 85%").tag(85)
                     Text("Get By · 70%").tag(70)
@@ -140,11 +142,11 @@ struct SmartAlarmView: View {
                     Text("Recovery").tag("recovery")
                 }
                 HStack {
-                    Text(mode == "exact" ? String(localized: "Wake at") : String(localized: "Latest wake deadline"))
+                    Text("Default wake deadline")
                         .font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
                     Spacer(minLength: 0)
                     DatePicker("", selection: minuteBinding($wakeMinutes), displayedComponents: .hourAndMinute)
-                        .labelsHidden().accessibilityLabel("Alarm deadline")
+                        .labelsHidden().accessibilityLabel("Default wake deadline")
                         .environment(\.timeZone, Self.alarmClockTimeZone)
                 }
                 if mode != "exact" {
@@ -258,6 +260,14 @@ struct SmartAlarmView: View {
                     if !model.skipNextSleepPlannerAlarm(from: now) { showSaveError = true }
                 }.buttonStyle(NoopButtonStyle(.secondary, fullWidth: true))
             }
+        }
+    }
+
+    private func goalLabel(_ percent: Int) -> String {
+        switch percent {
+        case 85: return String(localized: "Perform · 85%")
+        case 70: return String(localized: "Get By · 70%")
+        default: return String(localized: "Peak · 100%")
         }
     }
 

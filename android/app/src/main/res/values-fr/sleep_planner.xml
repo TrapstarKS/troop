@@ -18,9 +18,9 @@
     <string name="sleep_planner_goal_mode">Objectif de sommeil</string>
     <string name="sleep_planner_recovery_mode">Récupération</string>
     <string name="sleep_planner_adaptive_unavailable">Le réveil anticipé est indisponible dans cette version. Le bracelet utilise l’heure limite ; seules des données fraîches de sommeil ou de récupération de cette nuit peuvent l’avancer. La récupération d’hier n’est jamais utilisée.</string>
-    <string name="sleep_planner_exact_time">Heure de réveil exacte</string>
-    <string name="sleep_planner_latest_time">Dernière heure de réveil</string>
-    <string name="sleep_planner_wake">Heure de réveil</string>
+    <string name="sleep_planner_exact_time">Heure limite par défaut</string>
+    <string name="sleep_planner_latest_time">Heure limite par défaut</string>
+    <string name="sleep_planner_wake">Heure limite par défaut</string>
     <string name="sleep_planner_day_plan">Objectifs quotidiens et week-ends</string>
     <string name="sleep_planner_default_goal">Objectif par défaut</string>
     <string name="sleep_planner_use_default">Utiliser la valeur par défaut</string>

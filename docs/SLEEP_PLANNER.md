@@ -17,6 +17,9 @@ Displayed planning debt is the amount added to Sleep Need before applying the se
 goal percentage scales the whole estimated need, including debt. Debt guidance names Sleep Need
 so the raw debt amount and target duration remain distinct.
 
+Global goal and wake controls are labelled as defaults. The next-plan summary uses the resolved
+weekday's goal and deadline, including any override, from the same snapshot as its target duration.
+
 Runtime bedtime and reminder dates count elapsed minutes backward from the resolved wake instant,
 so the target duration is preserved across daylight saving changes. A nonexistent wake time moves
 forward while preserving its minute; a repeated wake time uses the later occurrence on both platforms.

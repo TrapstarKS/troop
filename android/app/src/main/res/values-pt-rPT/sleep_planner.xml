@@ -18,9 +18,9 @@
     <string name="sleep_planner_goal_mode">Objetivo de sono</string>
     <string name="sleep_planner_recovery_mode">Recuperação</string>
     <string name="sleep_planner_adaptive_unavailable">O despertar antecipado não está disponível nesta versão. A pulseira usa a hora limite; apenas dados recentes do sono ou recuperação desta noite podem antecipá-la. Nunca se usa a recuperação de ontem.</string>
-    <string name="sleep_planner_exact_time">Hora exata de despertar</string>
-    <string name="sleep_planner_latest_time">Hora limite de despertar</string>
-    <string name="sleep_planner_wake">Hora de despertar</string>
+    <string name="sleep_planner_exact_time">Hora limite predefinida</string>
+    <string name="sleep_planner_latest_time">Hora limite predefinida</string>
+    <string name="sleep_planner_wake">Hora limite predefinida</string>
     <string name="sleep_planner_day_plan">Objetivos diários e fins de semana</string>
     <string name="sleep_planner_default_goal">Objetivo predefinido</string>
     <string name="sleep_planner_use_default">Usar predefinição</string>

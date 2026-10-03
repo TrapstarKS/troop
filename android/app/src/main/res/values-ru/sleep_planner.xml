@@ -18,9 +18,9 @@
     <string name="sleep_planner_goal_mode">Цель сна</string>
     <string name="sleep_planner_recovery_mode">Восстановление</string>
     <string name="sleep_planner_adaptive_unavailable">Ранний подъём недоступен в этой версии. Браслет использует крайнее время; перенести его раньше могут только свежие данные сна или восстановления текущей ночи. Вчерашнее восстановление никогда не используется.</string>
-    <string name="sleep_planner_exact_time">Точное время подъёма</string>
-    <string name="sleep_planner_latest_time">Крайнее время подъёма</string>
-    <string name="sleep_planner_wake">Время подъёма</string>
+    <string name="sleep_planner_exact_time">Время подъёма по умолчанию</string>
+    <string name="sleep_planner_latest_time">Время подъёма по умолчанию</string>
+    <string name="sleep_planner_wake">Время подъёма по умолчанию</string>
     <string name="sleep_planner_day_plan">Цели по дням и выходные</string>
     <string name="sleep_planner_default_goal">Цель сна по умолчанию</string>
     <string name="sleep_planner_use_default">По умолчанию</string>

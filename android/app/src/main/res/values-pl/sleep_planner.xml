@@ -18,9 +18,9 @@
     <string name="sleep_planner_goal_mode">Cel snu</string>
     <string name="sleep_planner_recovery_mode">Regeneracja</string>
     <string name="sleep_planner_adaptive_unavailable">Wcześniejsza pobudka jest niedostępna w tej wersji. Opaska używa granicznej godziny; tylko świeże dane snu lub regeneracji z bieżącej nocy mogą ją przyspieszyć. Wczorajsza regeneracja nigdy nie jest używana.</string>
-    <string name="sleep_planner_exact_time">Dokładna godzina pobudki</string>
-    <string name="sleep_planner_latest_time">Najpóźniejsza pobudka</string>
-    <string name="sleep_planner_wake">Godzina pobudki</string>
+    <string name="sleep_planner_exact_time">Domyślny termin pobudki</string>
+    <string name="sleep_planner_latest_time">Domyślny termin pobudki</string>
+    <string name="sleep_planner_wake">Domyślny termin pobudki</string>
     <string name="sleep_planner_day_plan">Cele dzienne i weekendy</string>
     <string name="sleep_planner_default_goal">Domyślny cel snu</string>
     <string name="sleep_planner_use_default">Użyj domyślnych</string>

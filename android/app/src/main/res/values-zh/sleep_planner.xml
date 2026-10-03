@@ -18,9 +18,9 @@
     <string name="sleep_planner_goal_mode">睡眠目标</string>
     <string name="sleep_planner_recovery_mode">恢复</string>
     <string name="sleep_planner_adaptive_unavailable">此版本不支持提前唤醒。手环使用最晚唤醒时间；只有当晚的新鲜睡眠或恢复数据才能提前该时间。绝不使用昨天的恢复值。</string>
-    <string name="sleep_planner_exact_time">准确唤醒时间</string>
-    <string name="sleep_planner_latest_time">最晚唤醒时间</string>
-    <string name="sleep_planner_wake">唤醒时间</string>
+    <string name="sleep_planner_exact_time">默认唤醒截止时间</string>
+    <string name="sleep_planner_latest_time">默认唤醒截止时间</string>
+    <string name="sleep_planner_wake">默认唤醒截止时间</string>
     <string name="sleep_planner_day_plan">每日目标与周末时间</string>
     <string name="sleep_planner_default_goal">默认睡眠目标</string>
     <string name="sleep_planner_use_default">使用默认值</string>
