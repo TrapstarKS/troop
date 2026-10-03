@@ -14,7 +14,7 @@ final class AlarmWakeTimeLabellingTests: XCTestCase {
     func testControlsDistinguishAlarmDeadlineFromSuggestedBedtime() throws {
         let source = try alarmSource()
         XCTAssertTrue(source.contains("Suggested bedtime"))
-        XCTAssertTrue(source.contains(".accessibilityLabel(\"Alarm deadline\")"))
+        XCTAssertTrue(source.contains(".accessibilityLabel(\"Default wake deadline\")"))
         XCTAssertFalse(source.contains(".accessibilityLabel(\"Wake time\")"))
         XCTAssertTrue(source.contains("These times move your strap alarm AND the evening reminder"))
     }
