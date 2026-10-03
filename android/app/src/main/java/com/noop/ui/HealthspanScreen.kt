@@ -168,7 +168,7 @@ fun HealthSupportingMetricCards(vm: AppViewModel) {
     val reference = LocalDate.now()
     val vo2 = computedVo2.lastOrNull { it.day in reference.minusDays(179).toString()..reference.toString() && it.value.isFinite() && it.value > 0 }
     var importedVo2 by remember(strapId) { mutableStateOf<Pair<String, Double>?>(null) }
-    var steps by remember(strapId) { mutableStateOf<Pair<String, Double>?>(null) }
+    var steps by remember(strapId) { mutableStateOf<HealthspanPresentation.StepSample?>(null) }
     LaunchedEffect(vm, strapId, days, vo2, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
@@ -177,9 +177,17 @@ fun HealthSupportingMetricCards(vm: AppViewModel) {
                     withContext(Dispatchers.Default) {
                         val imported = if (vo2 == null) vm.repo.resolvedSeries("vo2max", "apple-health", through.minusDays(179).toString(),
                             through.toString(), strapDeviceId = strapId).points.lastOrNull { it.value.isFinite() && it.value > 0 } else null
-                        val recordedSteps = vm.repo.resolvedSeries("steps", "my-whoop", through.minusDays(30).toString(), through.toString(),
-                            strapDeviceId = strapId).points.lastOrNull { it.value.isFinite() && it.value >= 0 }
-                        (imported?.let { it.day to it.value }) to (recordedSteps?.let { it.day to it.value })
+                        val from = through.minusDays(30).toString()
+                        val recordedSteps = vm.repo.resolvedSeries("steps", "my-whoop", from, through.toString(), strapDeviceId = strapId).points
+                        val importedSteps = listOf("apple-health", "health-connect").flatMap { source ->
+                            vm.repo.appleDaily(source, from, through.toString()).mapNotNull { row ->
+                                row.steps?.let { HealthspanPresentation.StepSample(row.day, it.toDouble(), source) }
+                            }
+                        }
+                        val stepReading = HealthspanPresentation.latestSteps(
+                            measured = recordedSteps.map { HealthspanPresentation.StepSample(it.day, it.value, it.source) },
+                            imported = importedSteps, fromDay = from, throughDay = through.toString())
+                        (imported?.let { it.day to it.value }) to stepReading
                     }.let { (vo2Reading, stepReading) ->
                         importedVo2 = vo2Reading
                         steps = stepReading
@@ -199,8 +207,11 @@ fun HealthSupportingMetricCards(vm: AppViewModel) {
         MetricCard(stringResource(R.string.healthspan_vo2), vo2Reading?.second?.let(::healthspanNumber) ?: "—", unit = "ml/kg/min",
             detail = vo2Reading?.let { stringResource(if (vo2 != null) R.string.healthspan_estimate_date else R.string.healthspan_recorded_date,
                 healthDateLabel(LocalDate.parse(it.first))) } ?: stringResource(R.string.healthspan_no_value), color = Palette.positive)
-        MetricCard(stringResource(R.string.healthspan_steps), steps?.second?.let { NumberFormat.getIntegerInstance().format(it.roundToInt()) } ?: "—",
-            detail = steps?.let { stringResource(R.string.healthspan_recorded_date, healthDateLabel(LocalDate.parse(it.first))) }
+        MetricCard(stringResource(R.string.healthspan_steps), steps?.count?.let { NumberFormat.getIntegerInstance().format(it) } ?: "—",
+            detail = steps?.let {
+                val date = stringResource(R.string.healthspan_recorded_date, healthDateLabel(LocalDate.parse(it.day)))
+                if (it.source in listOf("apple-health", "health-connect")) stringResource(R.string.l10n_data_sources_screen_imported_434eb26f) + " · " + date else date
+            }
                 ?: stringResource(R.string.healthspan_no_value), color = Palette.strain100)
     }
 }

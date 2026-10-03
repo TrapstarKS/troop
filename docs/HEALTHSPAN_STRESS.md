@@ -34,4 +34,8 @@ All detail and preview loads follow the registry’s active strap. Apple observe
 
 Primary Health-tab preview cards push the shared value routes, so retapping the active tab can return its bound navigation path to the root. The shell owner resolves those routes to the concrete details.
 
+The age chart shows the selected 180-day window and lets its vertical scale follow the valid estimates instead of forcing zero into an age comparison. Stress chart taps and horizontal drags inspect a recorded window; vertical drags remain available to scroll the detail. Apple latches the initial drag direction after the native movement threshold, so a vertical scroll does not change the selected value.
+
+The Steps supporting card reads the latest available day in a bounded 31-day window. A valid recorded WHOOP total wins on its day, including zero. Apple Health and Health Connect daily aggregates fill other days; overlapping imports use their largest total, never their sum. The selected source, date and count travel together, and imported readings are labelled. Estimated steps do not substitute for measured or imported totals. Both platforms use the same pure selection helper and standalone Swift oracle.
+
 D1’s owner-authored route handoff binds the value routes, More destinations and dedicated Debug detail names to these concrete screens. Runtime Demo captures require D6’s startup/transport guards: Apple Debug `--demo-seed` and the dedicated Android Demo build do not construct or start live Bluetooth transports. Normal/Release startup defaults remain with the startup owner. The inert test host is separate from the rendered Demo application.

@@ -3,7 +3,7 @@ package com.noop.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -348,7 +348,7 @@ private fun StressMonitorTimeline(data: StressMonitorData?, selectedTimestamp: L
                     Canvas(Modifier.fillMaxWidth().height(Metrics.chartHeight)
                         .clearAndSetSemantics { contentDescription = accessibility }
                         .pointerInput(data) { detectTapGestures { onSelectTimestamp(timestamp(it.x, size.width.toFloat())) } }
-                        .pointerInput(data) { detectDragGestures(onDragStart = { onSelectTimestamp(timestamp(it.x, size.width.toFloat())) }) { change, _ ->
+                        .pointerInput(data) { detectHorizontalDragGestures(onDragStart = { onSelectTimestamp(timestamp(it.x, size.width.toFloat())) }) { change, _ ->
                             change.consume()
                             onSelectTimestamp(timestamp(change.position.x, size.width.toFloat()))
                         } }) {

@@ -118,6 +118,8 @@ struct HealthspanView: View {
                         }
                     }
                 }.frame(height: NoopMetrics.chartHeight)
+                .chartXScale(domain: Calendar.current.date(byAdding: .day, value: -179, to: reference)!...reference)
+                .chartYScale(domain: .automatic(includesZero: false))
                 .chartYAxisLabel(String(localized: "Age"))
                 .accessibilityLabel(String(localized: "NOOP Age trend"))
             }
@@ -174,32 +176,49 @@ struct HealthSupportingMetricCards: View {
     @State private var observedSource: String?
     @State private var loadedSource: String?
     @State private var vo2: MetricSeriesResolution?
-    @State private var steps: MetricSeriesResolution?
+    @State private var steps: HealthspanPresentation.StepSample?
     private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     var body: some View {
         VStack(spacing: NoopMetrics.gap) {
-            metric("VO₂max estimate", series: loadedSource == sourceID ? vo2 : nil, unit: "ml/kg/min")
-            metric("Steps", series: loadedSource == sourceID ? steps : nil, unit: "")
+            metric("VO₂max estimate", point: loadedSource == sourceID ? vo2?.points.last { $0.value.isFinite && $0.value > 0 } : nil, unit: "ml/kg/min")
+            metric("Steps", point: loadedSource == sourceID ? steps.map { ResolvedMetricPoint(day: $0.day, value: $0.count, source: $0.source, sourceKey: "steps") } : nil, unit: "")
         }
         .onReceive(healthspanSourcePublisher(model: model, repo: repo)) { observedSource = $0 }
         .task(id: "\(sourceID)|\(repo.refreshSeq)") {
             let source = sourceID
             guard await healthspanAwaitSource(source, repo: repo) else { return }
             let revision = repo.refreshSeq
+            let clock = Calendar.current.startOfDay(for: Date())
+            let fromDay = Repository.dayString(Calendar.current.date(byAdding: .day, value: -30, to: clock)!)
+            let throughDay = Repository.dayString(clock)
             var resolvedVO2 = await repo.resolvedSeries(key: "vo2max_est", source: "my-whoop", days: 180)
             if resolvedVO2.points.contains(where: { $0.value.isFinite && $0.value > 0 }) != true { resolvedVO2 = await repo.resolvedSeries(key: "vo2max", source: "apple-health", days: 180) }
-            let resolvedSteps = await repo.resolvedSeries(key: "steps", source: "my-whoop", days: 31)
+            let measuredSteps = await repo.resolvedSeries(key: "steps", source: "my-whoop", days: 31)
+            var importedSteps: [HealthspanPresentation.StepSample] = []
+            if let store = await repo.storeHandle() {
+                for importedSource in ["apple-health", "health-connect"] {
+                    let rows = (try? await store.appleDaily(deviceId: importedSource, from: fromDay, to: throughDay)) ?? []
+                    importedSteps += rows.compactMap { row in row.steps.map { .init(day: row.day, count: Double($0), source: importedSource) } }
+                }
+            }
+            let resolvedSteps = HealthspanPresentation.latestSteps(
+                measured: measuredSteps.points.map { .init(day: $0.day, count: $0.value, source: $0.source) },
+                imported: importedSteps, fromDay: fromDay, throughDay: throughDay)
             guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
             vo2 = resolvedVO2; steps = resolvedSteps; loadedSource = source
         }
     }
-    private func metric(_ title: LocalizedStringKey, series: MetricSeriesResolution?, unit: String) -> some View {
-        let latest = series?.points.last { $0.value.isFinite && (unit.isEmpty ? $0.value >= 0 : $0.value > 0) }
+    private func metric(_ title: LocalizedStringKey, point latest: ResolvedMetricPoint?, unit: String) -> some View {
         return NoopCard {
             HStack {
                 VStack(alignment: .leading, spacing: NoopMetrics.space2) {
                     Text(title).font(StrandFont.headline)
-                    if let latest { Text(latest.day).font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary) }
+                    if let latest {
+                        HStack(spacing: NoopMetrics.space2) {
+                            Text(latest.day)
+                            if ["apple-health", "health-connect"].contains(latest.source) { Text("Imported") }
+                        }.font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                    }
                 }
                 Spacer()
                 if let latest {

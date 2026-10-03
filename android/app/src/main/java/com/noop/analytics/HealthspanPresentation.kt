@@ -2,9 +2,10 @@ package com.noop.analytics
 
 import kotlin.math.floor
 
-/** Presentation of stored Body Age, not a validated biological-age model. */
+/** Stored Body Age and step observations; Body Age is not a validated biological-age model. */
 object HealthspanPresentation {
     data class AgeSample(val daysAgo: Int, val age: Double)
+    data class StepSample(val day: String, val count: Double, val source: String)
     data class Snapshot(val age: Double?, val paceTenths: Int?, val recoveryDays: Int,
                         val recentSamples: Int, val historySamples: Int) {
         val pace: Double? get() = paceTenths?.div(10.0)
@@ -42,5 +43,23 @@ object HealthspanPresentation {
             minutes[zone] += duration
         }
         return minutes
+    }
+
+    /** Uses inclusive canonical ISO day keys and caller-resolved measured WHOOP samples.
+     * Measured rows, including zero, win per day; imported maxima retain the first tied row.
+     * Swift twin: `HealthspanPresentation.latestSteps`. */
+    fun latestSteps(measured: List<StepSample>, imported: List<StepSample>,
+                    fromDay: String, throughDay: String): StepSample? {
+        fun valid(sample: StepSample): Boolean =
+            sample.count.isFinite() && sample.count >= 0 && sample.day >= fromDay && sample.day <= throughDay
+        val byDay = mutableMapOf<String, StepSample>()
+        for (sample in imported) {
+            if (valid(sample) && sample.count > (byDay[sample.day]?.count ?: -1.0)) byDay[sample.day] = sample
+        }
+        // Reverse traversal preserves the first valid measured row for each day.
+        for (sample in measured.asReversed()) {
+            if (valid(sample)) byDay[sample.day] = sample
+        }
+        return byDay.keys.maxOrNull()?.let { byDay[it] }
     }
 }
