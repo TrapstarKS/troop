@@ -253,7 +253,8 @@ final class AppModel: ObservableObject {
         // aren't open yet here, so the registry's active id can't be read synchronously; `bootstrapStore`
         // (write side) and `wireSourceCoordinator → adoptActiveDevice` (read spine, #814) re-point them to
         // the registry active id once the store opens. Single-device install keeps "my-whoop" throughout.
-        self.ble = BLEManager(state: live, deviceId: deviceId)
+        self.ble = BLEManager(state: live, deviceId: deviceId,
+                              allowsLiveTransports: LiveTransportPolicy.enabled)
         self.repo = Repository(deviceId: deviceId)
         self.coach = AICoachEngine(repo: repo)
         self.intelligence = IntelligenceEngine(repo: repo, profile: profile, deviceId: deviceId)
@@ -651,7 +652,8 @@ final class AppModel: ObservableObject {
             straplog: { [weak self] line in
                 self?.live.append(log: "[\(AppModel.logTimeFormatter.string(from: Date()))] \(line)")
             },
-            ouraNightBand: { [weak self] in self?.ouraNightBand() })   // item 27
+            ouraNightBand: { [weak self] in self?.ouraNightBand() },
+            allowsLiveTransports: LiveTransportPolicy.enabled)   // item 27
         coordinator.start()
         self.deviceRegistry = registry
         // #1303: adoption re-points the strap onto its stable `whoop-<serial>` id inside BLEManager (which
