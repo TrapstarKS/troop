@@ -38,7 +38,7 @@ Apple implementations are in `Packages/StrandDesign/Sources/StrandDesign/WhoopCo
 | `ContributorRow` | Label, value, unit, optional icon, comparison text/icon/color. Direction and favorability are supplied independently. |
 | `StatusPill` | Localized state, optional icon and semantic color. Color never carries the state alone. |
 | `InsightCallout` | Local explanation and optional action. Decoration does not imply a cloud service or initiate a provider request. |
-| `TopChrome` | Date label, previous/next/profile/strap accessibility labels, initials, nullable battery percentage, connection state, next-date gate and five callbacks. Use the screen's existing date resolver. Never create a second date state in the shell. |
+| `TopChrome` | Date label, previous/next/profile/strap accessibility labels, initials, nullable battery percentage, connection state, next-date gate and five callbacks. Use the screen's existing date resolver. Never create a second date state in the shell. Apple hosts should use the existing `LiveConsoleReadout.batteryPercent` or `StrapBatteryDisplay.resolve` path, including active-device/connection gates and the `--demo-sync` override, rather than reading a raw cached WHOOP battery field. |
 | `TabCapsule` | Items with stable `id`, localized `label`, platform icon; `selectedID`, selection callback. |
 | `CoachOrb` | Localized accessibility label and tap callback; opens the existing Coach surface. Respects the existing master switch and consent. |
 | Chart styling | `ChartTokens` plus shared domain/stage tokens and existing `TrendChart`, `Hypnogram`, sparklines and bar components. Preserve real timestamps, gaps and discrete sleep stages. |
