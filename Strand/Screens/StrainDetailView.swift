@@ -17,9 +17,9 @@ struct StrainDetailView: View {
 
     private var key: String { dayKey ?? repo.today?.day ?? Repository.logicalDayKey(Date()) }
     private var row: DailyMetric? { repo.days.first { $0.day == key } ?? (repo.today?.day == key ? repo.today : nil) }
-    private var rawEffort: Double? { (effortOverride ?? row?.strain).flatMap { $0.isFinite ? $0 : nil } }
+    private var rawEffort: Double? { (effortOverride ?? row?.strain).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil } }
     private var strain: Double? { rawEffort.map { UnitFormatter.effortValue($0, scale: .whoop) } }
-    private var band: ClosedRange<Int>? { CoupledView.optimalStrainRange(recovery: row?.recovery.flatMap { $0.isFinite ? $0 : nil }) }
+    private var band: ClosedRange<Int>? { CoupledView.optimalStrainRange(recovery: row?.recovery.flatMap { RecoveryStrainDetailLogic.recoveryPercent($0) != nil ? $0 : nil }) }
     private var targetStatus: RecoveryStrainDetailLogic.TargetStatus {
         RecoveryStrainDetailLogic.targetStatus(strain21: strain, lower: band?.lowerBound, upper: band?.upperBound)
     }
@@ -203,7 +203,7 @@ struct DetailActivityRow: View {
                         .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                 }
                 Spacer(minLength: 0)
-                Text(row.strain.flatMap { $0.isFinite ? UnitFormatter.effortDisplay($0, scale: .whoop) : nil } ?? "—")
+                Text(row.strain.flatMap { $0.isFinite && (0...100).contains($0) ? UnitFormatter.effortDisplay($0, scale: .whoop) : nil } ?? "—")
                     .font(StrandFont.title2).foregroundStyle(StrandPalette.strainPrimary)
                 Image(systemName: "chevron.right").font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
             }

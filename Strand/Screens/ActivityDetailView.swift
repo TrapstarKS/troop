@@ -31,7 +31,7 @@ struct ActivityDetailView: View {
     private var energyLabel: String {
         String(localized: "Recorded energy")
     }
-    private var strain: Double? { row.strain.flatMap { $0.isFinite ? $0 : nil } }
+    private var strain: Double? { row.strain.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil } }
     private var energy: Double? { row.energyKcal.flatMap { $0.isFinite ? $0 : nil } }
 
     var body: some View {
@@ -57,7 +57,7 @@ struct ActivityDetailView: View {
                     ContributorRow(label: energyLabel, value: energy.map { String(Int($0.rounded())) } ?? "—", unit: "kcal", systemImage: "flame")
                     Text("The recorded calorie value does not identify active versus total energy. It is shown as recorded, without adding resting energy.")
                         .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
-                    if let distance = row.distanceM, distance.isFinite {
+                    if let distance = row.distanceM, distance.isFinite, distance >= 0 {
                         Divider().overlay(StrandPalette.hairline)
                         ContributorRow(label: String(localized: "Distance"), value: UnitFormatter.distanceFromMeters(distance, system: UnitPrefs.resolveDistance(system: UnitSystem(rawValue: UserDefaults.standard.string(forKey: UnitPrefs.systemKey) ?? "") ?? .metric, override: UserDefaults.standard.string(forKey: UnitPrefs.distanceSystemKey) ?? "")))
                     }

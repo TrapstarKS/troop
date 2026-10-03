@@ -108,11 +108,12 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     }
 
     private var strainDial: some View {
-        NavigationLink {
+        let availableStrain = strain.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }
+        return NavigationLink {
             StrainDetailView(dayKey: dayKey, effortOverride: strain)
         } label: {
-            dial(label: String(localized: "Strain"), value: strain,
-                 display: strain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", unit: "",
+            dial(label: String(localized: "Strain"), value: availableStrain,
+                 display: availableStrain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—", unit: "",
                  color: StrandPalette.strainPrimary, caption: nil)
         }
         .buttonStyle(.plain)
