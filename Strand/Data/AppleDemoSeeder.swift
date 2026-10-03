@@ -237,6 +237,7 @@ enum AppleDemoSeeder {
         guard let onset = calendar.date(bySettingHour: 14, minute: 15, second: 0, of: day) else { return [] }
         let start = Int(onset.timeIntervalSince1970)
         return [CachedSleepSession(startTs: start, endTs: start + 30 * 60, efficiency: 100,
+                                   restingHr: nil, avgHrv: nil,
                                    stagesJSON: segmentsJSON(onset: start, deep: 0, rem: 0, light: 30, awakeMin: 0))]
     }
 

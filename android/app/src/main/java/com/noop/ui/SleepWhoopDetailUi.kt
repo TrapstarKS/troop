@@ -178,7 +178,9 @@ internal fun SleepSupportingMetrics(
         Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
             MetricCard(label = stringResource(R.string.whoop_sleep_restorative),
                 value = stages?.let { durationText(it.deep + it.rem) } ?: "—",
-                detail = detail?.restorative.selectedValue()?.let { "${it.roundToInt()}%" },
+                detail = detail?.restorative.selectedValue()?.let {
+                    uiString(R.string.l10n_sleep_screen_percent_2281d326, it.roundToInt())
+                },
                 color = Palette.sleepREM, modifier = Modifier.weight(1f).clickable { onMetricClick("restorative") })
             MetricCard(label = stringResource(R.string.l10n_trends_explore_screen_sleep_efficiency_b4b5c293),
                 value = efficiencyPct?.roundToInt()?.toString() ?: "—",
