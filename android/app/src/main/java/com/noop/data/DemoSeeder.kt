@@ -296,6 +296,7 @@ object DemoSeeder {
         repo.upsertAppleDaily(apple)
         if (workouts.isNotEmpty()) repo.upsertWorkouts(workouts)
         if (journal.isNotEmpty()) repo.upsertJournal(journal)
+        RecoveryStrainDemoSeed.seed(repo)
     }
 
     // MARK: - helpers

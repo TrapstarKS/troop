@@ -1,0 +1,28 @@
+package com.noop.ui
+
+internal object RecoveryStrainDetailLogic {
+    enum class TargetStatus { Unavailable, Under, Optimal, Over }
+
+    fun priorMean(
+        dayKeys: List<String>,
+        values: List<Double?>,
+        fromDay: String,
+        selectedDay: String,
+    ): Double? {
+        val prior = dayKeys.zip(values).mapNotNull { (day, value) ->
+            value?.takeIf { day >= fromDay && day < selectedDay && it.isFinite() }
+        }
+        return prior.takeIf { it.isNotEmpty() }?.average()
+    }
+
+    fun targetStatus(strain21: Double?, lower: Int?, upper: Int?): TargetStatus {
+        if (strain21 == null || !strain21.isFinite() || lower == null || upper == null || lower > upper) {
+            return TargetStatus.Unavailable
+        }
+        return when {
+            strain21 < lower -> TargetStatus.Under
+            strain21 > upper -> TargetStatus.Over
+            else -> TargetStatus.Optimal
+        }
+    }
+}
