@@ -20,6 +20,7 @@ public enum HealthspanPresentation {
     /// Local calibration: 21 recoveries in 31 days; pace also needs 90 days of history.
     /// Pace = 1 + 2 × (30-day mean Body Age − up-to-180-day mean Body Age), clamped to −1…3.
     /// The factor 2 is a chosen display scale, not an annualized biological-aging rate.
+    /// Kotlin twin: `HealthspanPresentation.snapshot`.
     public static func snapshot(samples: [AgeSample], recoveryDays: Int, chronologicalAge: Double) -> Snapshot {
         var byDay: [Int: Double] = [:]
         for sample in samples where (0..<180).contains(sample.daysAgo) && sample.age.isFinite && (20...90).contains(sample.age) {
@@ -43,6 +44,7 @@ public enum HealthspanPresentation {
     }
 
     /// Zone durations count non-overlapping hourly buckets, never the sliding display timeline.
+    /// Kotlin twin: `HealthspanPresentation.zoneMinutes`.
     public static func zoneMinutes(hours: [(level: Double?, minutes: Int)]) -> [Int] {
         var minutes = [0, 0, 0]
         for hour in hours {
