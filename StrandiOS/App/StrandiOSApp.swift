@@ -471,6 +471,7 @@ private struct iOSRootView: View {
             return AnyView(
                 NavigationStack {
                     demo
+                        .tabRouteDestinations()
                         .background(StrandPalette.surfaceBase.ignoresSafeArea())
                         .navigationBarTitleDisplayMode(.inline)
                 }
