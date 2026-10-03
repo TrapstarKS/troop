@@ -23,7 +23,7 @@ struct SmartAlarmView: View {
     nonisolated private static let weekdayOrder = [2, 3, 4, 5, 6, 7, 1]
 
     var body: some View {
-        ScreenScaffold(title: "Sleep Planner", subtitle: "Plan tonight. Choose how to wake tomorrow.") {
+        ScreenScaffold(title: "Sleep Planner", subtitle: "Plan your sleep. Set your wake deadline.") {
             TimelineView(.periodic(from: .now, by: 60)) { tick in
                 VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                     if let snapshot = model.sleepPlannerSnapshot(from: tick.date) {
