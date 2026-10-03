@@ -46,6 +46,8 @@ final class IntelligenceEngine: ObservableObject {
     /// `defer` re-invokes `analyzeRecent(force: true)` ONCE when it clears. A single re-arm (the flag is
     /// cleared BEFORE the re-invoke) bounds it to one extra pass , no recompute storm.
     private var pendingForcedRescore = false
+    // A dedup heal owes a same-window reconciliation, independently of queued recent-data updates.
+    private var pendingHealRescore = false
     /// Uptime the pass holding `computing` started at, and how many days it covers; nil when none is running.
     private var runningPassStart: UInt64?
     private var runningPassDays = 0
@@ -786,14 +788,17 @@ final class IntelligenceEngine: ObservableObject {
         defer {
             computing = false
             runningPassStart = nil
-            if pendingForcedRescore {
-                pendingForcedRescore = false
-                // A forced update queued during the upgrade repair owes a normal recent pass,
-                // not another full-history repair (#2606). Its completion belongs to this pass.
-                let followUpDays = preserveUnscoredHistory ? 21 : maxDays
+            if pendingHealRescore {
+                pendingHealRescore = false
+                pendingForcedRescore = false // The wide reconciliation also covers queued recent updates.
                 Task {
-                    await self.analyzeRecent(maxDays: followUpDays, force: true)
+                    await self.analyzeRecent(maxDays: maxDays, force: true,
+                        preserveUnscoredHistory: preserveUnscoredHistory, onPersisted: onPersisted)
                 }
+            } else if pendingForcedRescore {
+                pendingForcedRescore = false
+                let followUpDays = preserveUnscoredHistory ? 21 : maxDays
+                Task { await self.analyzeRecent(maxDays: followUpDays, force: true) }
             }
         }
         guard let store = await repo.storeHandle() else { note = String(localized: "No on-device store yet."); return }
@@ -2974,7 +2979,7 @@ final class IntelligenceEngine: ObservableObject {
             // matching the Android one-re-pass bound; the budget restores once a pass heals nothing.
             if !healRearmedThisCycle {
                 healRearmedThisCycle = true
-                pendingForcedRescore = true
+                pendingHealRescore = true
             }
         } else {
             healRearmedThisCycle = false
@@ -3039,9 +3044,9 @@ final class IntelligenceEngine: ObservableObject {
             diagnosticSink?("re-score: debt NOT settled — a newer re-score was recorded while this pass "
                             + "was running, so the mark stays and another pass will run (#1681)", nil)
         }
-        // New-data debt does not invalidate the repair writes that just succeeded (#2606).
-        // Cancellation and persistence failures still leave the repair flags unset.
-        if !Task.isCancelled { onPersisted?() }
+        // New-data debt does not invalidate successful repair writes (#2606). An internal heal does:
+        // its same-window reconciliation must persist before the history flags can be marked complete.
+        if !Task.isCancelled && !pendingHealRescore { onPersisted?() }
     }
 
     /// UserDefaults key for the #836 idle-tick gate: the complete raw-analysis fingerprint the last completed
