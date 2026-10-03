@@ -11460,9 +11460,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld маркеров отслеживается · 1 измерение"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld маркер отслеживается · 1 измерение"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld маркера отслеживаются · 1 измерение"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld маркеров отслеживается · 1 измерение"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld маркеров отслеживается · 1 измерение"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -13977,9 +14001,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld измерений набрано, но недостаточно вариативности, чтобы вычислить связь."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерение набрано, но недостаточно вариативности, чтобы вычислить связь."
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерения набрано, но недостаточно вариативности, чтобы вычислить связь."
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерений набрано, но недостаточно вариативности, чтобы вычислить связь."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерений набрано, но недостаточно вариативности, чтобы вычислить связь."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -14227,9 +14275,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld измерений · ваши собственные записи"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерение · ваши собственные записи"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерения · ваши собственные записи"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерений · ваши собственные записи"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерений · ваши собственные записи"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -19438,9 +19510,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Отслеживается 1 маркер · %lld показаний"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Отслеживается 1 маркер · %lld показание"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Отслеживается 1 маркер · %lld показания"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Отслеживается 1 маркер · %lld показаний"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Отслеживается 1 маркер · %lld показаний"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
