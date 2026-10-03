@@ -1975,7 +1975,7 @@ internal fun ManualWorkoutDialog(
         )
     }
     var avgHr by remember { mutableStateOf(editing?.avgHr?.toString() ?: "") }
-    var kcal by remember { mutableStateOf(editing?.energyKcal?.let { it.roundToInt().toString() } ?: "") }
+    var kcal by remember { mutableStateOf(editing?.energyKcal?.let { RecoveryStrainDetailLogic.wholeNumber(it)?.toString() ?: it.toString() } ?: "") }
     // #1195: distance as ENTERED, in the user's unit (km/mi), converted to stored metres on save. Pre-fill
     // in that unit so an untouched edit round-trips the stored value. Period decimal (Locale.US) to match
     // toDoubleOrNull parsing, exactly as the macOS ManualWorkoutSheet does.

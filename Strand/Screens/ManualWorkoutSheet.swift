@@ -86,7 +86,7 @@ struct ManualWorkoutSheet: View {
         _end = State(initialValue: e.map { Date(timeIntervalSince1970: TimeInterval($0.endTs)) }
                      ?? defaultEnd)
         _avgHrText = State(initialValue: e?.avgHr.map(String.init) ?? "")
-        _kcalText = State(initialValue: e?.energyKcal.map { String(Int($0.rounded())) } ?? "")
+        _kcalText = State(initialValue: e?.energyKcal.map { RecoveryStrainDetailLogic.wholeNumber($0).map(String.init) ?? String($0) } ?? "")
         // Pre-fill the distance in the user's unit so an untouched edit round-trips the stored metres
         // (buildManualRow then re-stores exactly what's shown). @AppStorage isn't usable pre-init, so read
         // the same key directly.

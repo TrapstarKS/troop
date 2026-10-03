@@ -656,4 +656,17 @@ class WorkoutEditingTest {
             assertEquals(actual, WorkoutEditing.dedupCrossSourceTrace(rows).first)
         }
     }
+
+    @Test
+    fun energyValidationMatchesStandaloneSwiftOracle() {
+        val now = 1_700_000_000L
+        val values = listOf<Double?>(null, -1.0, 0.0, 20_000.0, 20_000.01, Double.NaN,
+            Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, 1e300)
+        val accepted = values.joinToString(",") { value ->
+            (WorkoutEditing.buildManualRowFromSpan(deviceId = "my-whoop", startSeconds = now - 7_200,
+                endSeconds = now - 3_600, sport = "Run", avgHr = null, energyKcal = value,
+                nowSeconds = now) != null).toString()
+        }
+        assertEquals("true,false,true,true,false,false,false,false,false", accepted)
+    }
 }
