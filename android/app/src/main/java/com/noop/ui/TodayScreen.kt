@@ -495,7 +495,7 @@ fun TodayScreen(
         // "Today · <today>" over yesterday's values, which disagreed with the Intelligence History row for
         // the same data (#434). iOS/Mac already label by the shown row's day; this brings Android to parity.
         val keyDate = runCatching { LocalDate.parse(selectedDayKey) }.getOrNull() ?: selectedDay
-        val date = keyDate.format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.getDefault()))
+        val date = keyDate.format(DateTimeFormatter.ofPattern(if (keyDate.year == todayDate.year) "EEE, d MMM" else "EEE, d MMM yyyy", Locale.getDefault()))
         when (selectedDayOffset) {
             0 -> uiString(R.string.today_day_with_date, date)
             1 -> uiString(R.string.today_yesterday_with_date, date)
@@ -1367,12 +1367,18 @@ fun TodayScreen(
                 dateLabel = when (selectedDayOffset) {
                     0 -> uiString(R.string.today_day_today)
                     1 -> uiString(R.string.today_day_yesterday)
-                    else -> date.format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()))
+                    else -> date.format(DateTimeFormatter.ofPattern(if (date.year == todayDate.year) "d MMM" else "d MMM yyyy", Locale.getDefault()))
                 },
                 offset = selectedDayOffset, streak = streaks.current,
                 battery = HeaderBatteryDisplay.resolve(activeIsWhoop, liveSnap.connected, liveSnap.batteryPct, ouraBatteryPct),
                 connected = liveSnap.connected,
                 onPick = { selectedDayOffset = it }, onProfile = onOpenSettings, onDevices = onOpenDevices,
+                recordingState = if (selectedDayOffset == 0) homeRecordingState(
+                    connected = liveSnap.connected, scanning = liveSnap.scanning,
+                    backfilling = liveSnap.backfilling, hrStreaming = liveSnap.hrStreaming,
+                    hasSessionHistory = liveSnap.syncChunksThisSession > 0,
+                    historySyncExperimental = liveSnap.historySyncExperimental,
+                ) else null,
             )
         }
         item(key = "home-dials") {
@@ -1384,14 +1390,6 @@ fun TodayScreen(
                     onSleep = openSleepForDisplayedDay,
                     onRecovery = openRecoveryForDisplayedDay, onStrain = openStrainForDisplayedDay,
                 )
-                heroSourceLabel?.let { Text(it, style = NoopType.caption, color = Palette.textSecondary) }
-                if (selectedDayOffset == 0) HomeRecordingStatus(homeRecordingState(
-                    connected = liveSnap.connected, scanning = liveSnap.scanning,
-                    backfilling = liveSnap.backfilling, hrStreaming = liveSnap.hrStreaming,
-                    hasSessionHistory = liveSnap.syncChunksThisSession > 0,
-                    historySyncExperimental = liveSnap.historySyncExperimental,
-                ))
-                scanHint?.let { Text(it, style = NoopType.caption, color = Palette.textSecondary) }
                 if (chargeLegacyRrGap) ChargeLegacyRrGapNote()
                 else if (displayMetric?.recovery == null) ScoreStateNote(scoreState)
                 if (restPendingSync(restScoreForDay, liveSnap.backfilling, live.historyPendingSync, selectedDayOffset == 0)) {
@@ -1439,7 +1437,7 @@ fun TodayScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TrackedSectionHeader(uiString(R.string.home_my_dashboard), modifier = Modifier.weight(1f))
                     TodayEditAction(onClick = { showMetricsEditor = true },
-                        contentDescription = uiString(R.string.l10n_today_screen_edit_key_metrics_f95e61a4))
+                        contentDescription = uiString(R.string.home_my_dashboard))
                 }
                 MetricGrid(
                     d = stepResolvedDisplayMetric, w = window,
@@ -1470,6 +1468,12 @@ fun TodayScreen(
                     color = Palette.textPrimary, modifier = Modifier.weight(1f))
                 Icon(if (homeExtrasExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     null, tint = Palette.textSecondary)
+            }
+        }
+        if (heroSourceLabel != null || scanHint != null) item(key = "home-provenance") {
+            Column(verticalArrangement = Arrangement.spacedBy(Metrics.space4)) {
+                heroSourceLabel?.let { Text(it, style = NoopType.caption, color = Palette.textSecondary) }
+                scanHint?.let { Text(it, style = NoopType.caption, color = Palette.textSecondary) }
             }
         }
         if (homeExtrasExpanded) item(key = "home-extra-dashboard") {
@@ -7684,9 +7688,9 @@ private fun KeyMetricsEditorDialog(
                 verticalArrangement = Arrangement.spacedBy(Metrics.space16),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(Metrics.space2)) {
-                    Text(uiString(R.string.l10n_today_screen_edit_key_metrics_f95e61a4), style = NoopType.title2, color = Palette.textPrimary)
+                    Text(uiString(R.string.home_my_dashboard), style = NoopType.title2, color = Palette.textPrimary)
                     Text(
-                        uiString(R.string.l10n_today_screen_choose_which_tiles_show_on_your_a4e3acfb),
+                        uiString(R.string.home_dashboard_edit_description),
                         style = NoopType.subhead,
                         color = Palette.textSecondary,
                     )
@@ -7698,7 +7702,7 @@ private fun KeyMetricsEditorDialog(
                     label = { if (it) uiString(R.string.nav_trends) else uiString(R.string.nav_today) },
                     onSelect = { detailed = it },
                     modifier = Modifier.fillMaxWidth(),
-                    accessibilityLabel = uiString(R.string.l10n_today_screen_edit_key_metrics_f95e61a4),
+                    accessibilityLabel = uiString(R.string.home_my_dashboard),
                 )
                 // The detailed graphs' trailing window — 1 week / 2 weeks / 1 month (the NOOP signature
                 // segmented pill, same control the trend screens use). Only shown while Detailed is on.

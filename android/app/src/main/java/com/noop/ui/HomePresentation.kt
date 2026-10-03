@@ -2,12 +2,14 @@ package com.noop.ui
 
 import android.app.DatePickerDialog
 import android.content.SharedPreferences
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -31,6 +33,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -93,6 +96,7 @@ internal fun HomeChrome(
     onPick: (Int) -> Unit,
     onProfile: () -> Unit,
     onDevices: () -> Unit,
+    recordingState: HomeRecordingState? = null,
 ) {
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
@@ -124,6 +128,9 @@ internal fun HomeChrome(
             Icon(Icons.Filled.LocalFireDepartment, null, tint = Palette.textSecondary,
                 modifier = Modifier.size(Metrics.iconSmall))
             Text(uiPlural(R.plurals.settings_streak_run, streak, streak), style = NoopType.captionNumber, color = Palette.textSecondary)
+        }
+        recordingState?.let { state ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { HomeRecordingStatus(state) }
         }
     }
 }
@@ -183,8 +190,14 @@ internal fun HomeRecordingStatus(state: HomeRecordingState) {
 
 @Composable
 internal fun HomeGuidance(title: String, detail: String, onCoach: (() -> Unit)?) {
-    NoopCard {
-        Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+    val shape = RoundedCornerShape(Metrics.cardRadius)
+    Box(Modifier.fillMaxWidth().padding(bottom = Metrics.space8)) {
+        Box(Modifier.matchParentSize().padding(horizontal = Metrics.space16)
+            .offset(y = Metrics.space8).background(Palette.surfaceOverlay, shape))
+        Box(Modifier.matchParentSize().padding(horizontal = Metrics.space8)
+            .offset(y = Metrics.space4).background(Palette.surfaceRaised, shape))
+        Column(Modifier.fillMaxWidth().background(Palette.surfaceBase, shape).padding(Metrics.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = NoopType.headline, color = Palette.textPrimary, modifier = Modifier.weight(1f))
                 if (onCoach != null) IconButton(onClick = onCoach, modifier = Modifier.size(Metrics.iconButton)) {

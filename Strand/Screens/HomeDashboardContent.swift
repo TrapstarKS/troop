@@ -37,7 +37,7 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
             scoreRow
-            InsightCallout(text: guidance, actionLabel: onGuidance == nil ? nil : String(localized: "Daily Outlook"), onAction: onGuidance)
+            guidanceCard
             monitorRow
             myDay
             myPlan
@@ -138,6 +138,37 @@ struct HomeDashboardContent<Dashboard: View, Extras: View>: View {
         }
         .frame(minWidth: columnWidth)
         .frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    private var guidanceCard: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+            HStack {
+                Text("Daily Outlook").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+                Spacer(minLength: NoopMetrics.space2)
+                if let onGuidance {
+                    Button(action: onGuidance) {
+                        Image(systemName: "chevron.right").font(StrandFont.headline)
+                            .frame(width: NoopMetrics.touchTarget, height: NoopMetrics.touchTarget)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(StrandPalette.textPrimary)
+                    .accessibilityLabel("Daily Outlook")
+                }
+            }
+            Text(guidance).font(StrandFont.body).foregroundStyle(StrandPalette.textSecondary)
+        }
+        .padding(NoopMetrics.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius).fill(StrandPalette.surfaceBase))
+        .background {
+            RoundedRectangle(cornerRadius: NoopMetrics.cardRadius).fill(StrandPalette.surfaceRaised)
+                .padding(.horizontal, NoopMetrics.space2).offset(y: NoopMetrics.space1)
+        }
+        .background {
+            RoundedRectangle(cornerRadius: NoopMetrics.cardRadius).fill(StrandPalette.surfaceOverlay)
+                .padding(.horizontal, NoopMetrics.space4).offset(y: NoopMetrics.space2)
+        }
+        .padding(.bottom, NoopMetrics.space2)
     }
 
     private var guidance: String {
@@ -304,7 +335,7 @@ struct HomeDateChrome: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.space1) {
-            TopChrome(dateLabel: dateLabel, previousLabel: String(localized: "Previous day"),
+            TopChrome(dateLabel: headerLabel, previousLabel: String(localized: "Previous day"),
                       nextLabel: String(localized: "Next day"), profileLabel: String(localized: "Menu and settings"),
                       strapLabel: live.connected ? String(localized: "Connected") : String(localized: "Disconnected"),
                       batteryPercent: batteryPercent, isConnected: live.connected, canGoNext: selectedOffset > 0,
@@ -336,6 +367,13 @@ struct HomeDateChrome: View {
             .datePickerStyle(.graphical)
             .padding(NoopMetrics.space4)
         }
+    }
+
+    private var headerLabel: String {
+        guard Calendar.current.component(.year, from: selectedDate) != Calendar.current.component(.year, from: Date()) else {
+            return dateLabel
+        }
+        return selectedDate.formatted(.dateTime.day().month(.abbreviated).year().locale(AppLanguage.activeLocale))
     }
 
     private var batteryPercent: Int? {

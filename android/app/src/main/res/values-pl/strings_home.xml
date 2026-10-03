@@ -37,4 +37,5 @@
     <string name="home_metrics_count" translatable="false">%1$d/5</string>
     <string name="home_dial_label" translatable="false">%1$s ›</string>
     <string name="home_status_capture_experimental">Rejestracja na żywo · historia eksperymentalna</string>
+    <string name="home_dashboard_edit_description">Wybierz kafelki dla Mojego panelu. Przeciągnij je, aby zmienić kolejność, lub użyj strzałek.</string>
 </resources>
