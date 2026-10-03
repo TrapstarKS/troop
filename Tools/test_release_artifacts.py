@@ -212,6 +212,23 @@ class ReleaseTagRegressionTests(unittest.TestCase):
 
 
 class IOSAnonymizationRegressionTests(unittest.TestCase):
+    def test_unicode_home_replacement_preserves_utf8_byte_length(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / 'Fixture.app'; bundle.mkdir()
+            binary = bundle / 'fixture'
+            # Exercise the actual Python payload with a fixture argument, without overriding HOME.
+            script = Path(__file__).with_name('anonymize-ios-app.sh').read_text()
+            payload = script.split("<<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
+            for fixture_home in ['/Users/équipe', '/Users/测试用户']:
+                with self.subTest(home=fixture_home):
+                    original = b'\x00' + fixture_home.encode() + b'/source\xff'
+                    binary.write_bytes(original)
+                    result = subprocess.run(['python3', '-', str(bundle), fixture_home],
+                                            input=payload, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(len(binary.read_bytes()), len(original))
+                    self.assertNotIn(fixture_home.encode(), binary.read_bytes())
+
     def test_already_clean_bundle_is_successful(self):
         with tempfile.TemporaryDirectory() as directory:
             bundle = Path(directory) / 'Fixture.app'; bundle.mkdir()

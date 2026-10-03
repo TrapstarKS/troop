@@ -28,14 +28,12 @@ APP="${1:?usage: $0 path/to/App.app}"
 [ -d "$APP" ] || { echo "no such app bundle: $APP" >&2; exit 1; }
 
 HOME_PATH="$HOME"                       # e.g. /Users/alice
-REPL="/Users/builder"                   # generic, anonymous
-# Pad or trim REPL to EXACTLY the length of $HOME so byte offsets are preserved.
-while [ ${#REPL} -lt ${#HOME_PATH} ]; do REPL="${REPL}_"; done
-REPL="${REPL:0:${#HOME_PATH}}"
 
-python3 - "$APP" "$HOME_PATH" "$REPL" <<'PY'
+python3 - "$APP" "$HOME_PATH" <<'PY'
 import sys, os
-app, home, repl = sys.argv[1], sys.argv[2].encode(), sys.argv[3].encode()
+app, home = sys.argv[1], os.fsencode(sys.argv[2])
+# Use byte length rather than shell character length, including for Unicode home paths.
+repl = (b"/Users/builder" + b"_" * len(home))[:len(home)]
 assert len(home) == len(repl), "replacement length must match"
 total = files = 0
 def fail_walk(error):
