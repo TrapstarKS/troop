@@ -10,6 +10,7 @@ import com.noop.alarm.SmartAlarmStore
 import com.noop.alarm.WindDownScheduler
 import com.noop.alarm.WindDownStore
 import com.noop.analytics.Baselines
+import com.noop.ingest.WhoopCsvImporter
 import com.noop.analytics.IllnessSignalEngine
 import com.noop.analytics.IllnessWatch
 import com.noop.analytics.IntelligenceEngine
@@ -1151,6 +1152,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     NoopPrefs.setTsHealDone(appContext)
                     NoopPrefs.setTsHealPending(appContext, false)
                 }
+            }.onFailure { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
+            runCatching {
+                val repairPrefs = NoopPrefs.of(appContext)
+                WhoopCsvImporter.repairAbsoluteSkinTempIfNeeded(
+                    repo = repository,
+                    flagGet = { repairPrefs.getBoolean(WhoopCsvImporter.skinTempRepairFlagKey, false) },
+                    flagSet = { repairPrefs.edit().putBoolean(WhoopCsvImporter.skinTempRepairFlagKey, true).apply() },
+                )
             }.onFailure { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
             // One-shot shared Effort and sleep-wear repair: recompute strain from source across the FULL
             // history and replay pre-fix sleep once. Either pending flag triggers one pass; both flags

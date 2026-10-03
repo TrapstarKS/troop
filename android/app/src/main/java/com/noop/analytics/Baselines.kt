@@ -574,6 +574,12 @@ object Baselines {
         return Deviation(z = z, delta = delta, ratio = ratio, inNormalRange = abs(z) <= 1.0)
     }
 
+    /** Stored skin-temperature delta, rounded to two decimals with ties away from zero. */
+    fun roundedDelta2dp(value: Double, state: BaselineState): Double {
+        val scaled = deviation(value, state).delta * 100.0
+        return (if (scaled >= 0) Math.floor(scaled + 0.5) else Math.ceil(scaled - 0.5)) / 100.0
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Trailing-window mean/SD (simple, auditable)
     // ─────────────────────────────────────────────────────────────────────────

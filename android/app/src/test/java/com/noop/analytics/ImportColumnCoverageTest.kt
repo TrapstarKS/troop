@@ -78,4 +78,14 @@ class ImportColumnCoverageTest {
             ImportTrace.columnCoverageLine("cycles", 0, emptyList()),
         )
     }
+    @Test
+    fun skinCoverageCountsAbsoluteBeforeBaselineWarmupWithoutDoubleCounting() {
+        fun row(day: String, deviation: Double?, celsius: Double?) = com.noop.data.DailyMetric(deviceId = "my-whoop",
+            day = day, totalSleepMin = null, efficiency = null, deepMin = null, remMin = null,
+            lightMin = null, disturbances = null, restingHr = null, avgHrv = null, recovery = null,
+            strain = null, exerciseCount = null, skinTempDevC = deviation, skinTempC = celsius)
+        val rows = listOf(row("2026-06-01", null, 33.4), row("2026-06-02", 0.2, null),
+            row("2026-06-03", 0.2, 33.4), row("2026-06-04", null, null))
+        assertEquals(3, com.noop.ingest.importColumnCoverage(rows).first { it.first == "skin_temp" }.second)
+    }
 }

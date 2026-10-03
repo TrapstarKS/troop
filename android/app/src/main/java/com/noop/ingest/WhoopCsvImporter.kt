@@ -2,6 +2,8 @@ package com.noop.ingest
 
 import android.content.Context
 import android.net.Uri
+import com.noop.analytics.BaselineState
+import com.noop.analytics.Baselines
 import com.noop.data.DailyMetric
 import com.noop.data.ImportSummary
 import com.noop.data.JournalEntry
@@ -44,6 +46,8 @@ object WhoopCsvImporter {
 
     private const val WHOOP_DEVICE = "my-whoop"
     private const val SOURCE_LABEL = "WHOOP"
+    internal const val importerVersion = 2
+    internal const val skinTempRepairFlagKey = "noop.whoopImport.skinTempDeviationRepair.v1.done"
 
     private const val CYCLES_NAME = "physiological_cycles.csv"
     private const val SLEEPS_NAME = "sleeps.csv"
@@ -119,7 +123,17 @@ object WhoopCsvImporter {
         // Merge cycle-derived and sleep-derived daily rows on (deviceId, day): cycle fields
         // (recovery / strain / RHR / HRV / SpO2 / skin-temp / resp) win where present, sleep
         // fields fill the architecture columns. One DailyMetric per day, matching the PK.
-        val daily = mergeDaily(cycles, sleepDaily)
+        val mappedDaily = mergeDaily(cycles.associateBy { it.day }.values.toList(), sleepDaily)
+        val history = if (mappedDaily.isEmpty() || deviceId != WHOOP_DEVICE) emptyList() else {
+            val imported = repo.metricSeries(deviceId, "skin_temp", "0000-01-01", "9999-12-31").associate { it.day to it.value }
+            repo.dailyMetrics(deviceId, "0000-01-01", "9999-12-31")
+                .filter { it.skinTempC != null && imported[it.day] == it.skinTempC }
+        }
+        val incomingDays = mappedDaily.map { it.day }.toSet()
+        val original = history.associateBy { it.day }
+        val recalculated = withSkinTempDeviations(history + mappedDaily)
+        val daily = recalculated.filter { it.day in incomingDays }
+        val historyUpdates = recalculated.filter { it.day !in incomingDays && original[it.day]?.skinTempDevC != it.skinTempDevC }
 
         if (daily.isEmpty() && sleepSessions.isEmpty() && workouts.isEmpty() && journal.isEmpty()) {
             return ImportSummary.failure(SOURCE_LABEL, "Export contained no usable WHOOP rows.")
@@ -127,6 +141,7 @@ object WhoopCsvImporter {
 
         repo.upsertDevice(deviceId, name = "WHOOP")
         if (daily.isNotEmpty()) repo.upsertDailyMetrics(daily)
+        if (historyUpdates.isNotEmpty()) repo.upsertDailyMetrics(historyUpdates)
         if (sleepSessions.isNotEmpty()) repo.upsertSleepSessions(sleepSessions)
         if (workouts.isNotEmpty()) repo.upsertWorkouts(workouts)
         if (journal.isNotEmpty()) {
@@ -326,6 +341,49 @@ object WhoopCsvImporter {
 
     // MARK: - physiological_cycles.csv -> DailyMetric
 
+    /** Incoming rows replace the same stored day before folding preceding absolute nights. */
+    internal fun withSkinTempDeviations(rows: List<DailyMetric>, history: List<DailyMetric> = emptyList()): List<DailyMetric> {
+        val cfg = Baselines.metricCfg["skin_temp"] ?: return rows
+        val byDay = (history + rows).associateBy { it.day }
+        val incomingDays = rows.map { it.day }.toSet()
+        var state: BaselineState? = null
+        return byDay.values.sortedBy { it.day }.map { row ->
+            val celsius = row.skinTempC ?: return@map row
+            val deviation = state?.takeIf { it.usable }?.let { Baselines.roundedDelta2dp(celsius, it) }
+            state = Baselines.update(state, celsius, cfg)
+            row.copy(skinTempDevC = deviation)
+        }.filter { it.day in incomingDays }
+    }
+
+    /** Only a matching canonical WHOOP-import series point proves a legacy absolute-in-deviation row.
+     * Older Android imports have no such marker and remain untouched; reimport supplies the absolute. */
+    internal fun skinTempRepair(rows: List<DailyMetric>, importedTemperatures: List<MetricSeriesRow>,
+                                deviceId: String = WHOOP_DEVICE): List<DailyMetric> {
+        if (deviceId != WHOOP_DEVICE) return emptyList()
+        val imported = importedTemperatures.filter { it.deviceId == WHOOP_DEVICE && it.key == "skin_temp" }
+            .associate { it.day to it.value }
+        val canonical = rows.filter { it.deviceId == WHOOP_DEVICE }
+        val moved = canonical.mapNotNull { row ->
+            val absolute = row.skinTempDevC
+            if (row.skinTempC == null && absolute != null && absolute >= 20 && imported[row.day] == absolute) {
+                row.copy(skinTempDevC = null, skinTempC = absolute)
+            } else null
+        }
+        val history = canonical.filter { it.skinTempC != null && imported[it.day] == it.skinTempC }
+        return withSkinTempDeviations(moved, history)
+    }
+
+    suspend fun repairAbsoluteSkinTempIfNeeded(repo: WhoopRepository, deviceId: String = WHOOP_DEVICE,
+                                               flagGet: () -> Boolean, flagSet: () -> Unit): Boolean {
+        if (deviceId != WHOOP_DEVICE || flagGet()) return false
+        val rows = repo.dailyMetrics(deviceId, "0000-01-01", "9999-12-31")
+        val imported = repo.metricSeries(deviceId, "skin_temp", "0000-01-01", "9999-12-31")
+        val changed = skinTempRepair(rows, imported, deviceId)
+        if (changed.isNotEmpty()) repo.upsertDailyMetrics(changed)
+        flagSet()
+        return changed.isNotEmpty()
+    }
+
     internal fun parseCycles(table: CsvTable, deviceId: String): List<DailyMetric> {
         val out = ArrayList<DailyMetric>(table.rows.size)
         for (row in table.rows) {
@@ -384,7 +442,7 @@ object WhoopCsvImporter {
                     strain = strain?.let { it * DAY_STRAIN_TO_EFFORT_SCALE },
                     exerciseCount = null, // not present in physiological_cycles.csv
                     spo2Pct = spo2,
-                    skinTempDevC = skinTemp,
+                    skinTempC = skinTemp,
                     respRateBpm = resp,
                 )
             )
@@ -414,6 +472,9 @@ object WhoopCsvImporter {
             add("sleep_consistency", row.double("sleep_consistency_pct"))
             add("sleep_need_min", row.double("sleep_need_min"))
             add("sleep_debt_min", row.double("sleep_debt_min"))
+            val skinTemp = row.double("skin_temp_celsius")
+                ?: row.double("skin_temp_f")?.let { (it - 32.0) * 5.0 / 9.0 }
+            add("skin_temp", skinTemp)
         }
         return out
     }

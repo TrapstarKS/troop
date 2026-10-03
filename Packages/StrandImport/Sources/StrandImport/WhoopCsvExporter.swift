@@ -149,7 +149,7 @@ public enum WhoopCsvExporter {
             let s = series[d.day] ?? [:]
             let cols: [String] = [
                 d.day + " 00:00:00", "", "UTC+00:00",
-                num(d.recovery), num(d.restingHr), num(d.avgHrv), num(d.skinTempDevC), num(d.spo2Pct),
+                num(d.recovery), num(d.restingHr), num(d.avgHrv), num(exportedSkinTempCelsius(d)), num(d.spo2Pct),
                 // Day Strain column is WHOOP's 0–21 scale → convert our 0–100 Effort down so the CSV is
                 // WHOOP-format and a NOOP→NOOP round-trip is lossless (importer scales it back up).
                 num(WhoopExportImporter.whoopDayStrainFromEffort(d.strain)), num(s["energy_kcal"]), num(s["max_hr"]), num(s["avg_hr"]),
@@ -268,5 +268,10 @@ public enum WhoopCsvExporter {
                                      e.data.subdata(in: Int(position)..<(Int(position) + size))
                                  })
         }
+    }
+
+    /// The WHOOP column carries an absolute. A true deviation cannot be exported as a temperature.
+    static func exportedSkinTempCelsius(_ daily: DailyMetric) -> Double? {
+        daily.skinTempC ?? daily.skinTempDevC.flatMap { $0 >= 20 ? $0 : nil }
     }
 }

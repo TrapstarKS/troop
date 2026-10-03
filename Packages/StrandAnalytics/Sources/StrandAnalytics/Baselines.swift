@@ -613,6 +613,12 @@ public enum Baselines {
         return Deviation(z: z, delta: delta, ratio: ratio, inNormalRange: abs(z) <= 1.0)
     }
 
+    /// Stored skin-temperature delta, rounded to two decimals with ties away from zero.
+    /// Kotlin twin: `Baselines.roundedDelta2dp`.
+    public static func roundedDelta2dp(_ value: Double, state: BaselineState) -> Double {
+        (deviation(value, state: state).delta * 100.0).rounded() / 100.0
+    }
+
     // MARK: - Trailing-window mean/SD (simple, auditable)
 
     /// Rolling personal baseline from the trailing `window` valid nights, as a

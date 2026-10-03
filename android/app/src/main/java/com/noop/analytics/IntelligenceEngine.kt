@@ -2801,12 +2801,7 @@ object IntelligenceEngine {
     private fun recomputeSkinTempDev(nightly: Double?, base: BaselineState?): Double? {
         val v = nightly ?: return null
         val b = base?.takeIf { it.usable } ?: return null
-        // Round HALF-AWAY-FROM-ZERO to 2 dp to match Swift's Double.rounded()
-        // (IntelligenceEngine.swift:291). Math.round() is half-UP and would diverge on negative
-        // .5 ties (e.g. −2.5 → −2 here vs Swift's −3). (Cross-platform parity.)
-        val scaled = Baselines.deviation(v, b).delta * 100.0
-        val r = if (scaled >= 0) Math.floor(scaled + 0.5) else Math.ceil(scaled - 0.5)
-        return r / 100.0
+        return Baselines.roundedDelta2dp(v, b)
     }
 
     private fun medianOfDoubles(xs: List<Double>): Double {
