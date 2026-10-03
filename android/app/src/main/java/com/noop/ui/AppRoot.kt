@@ -75,6 +75,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.noop.R
 import com.noop.analytics.FusionSource
@@ -121,20 +122,34 @@ import com.noop.push.SelfHostedPushScreen
 
 // MARK: - Navigation model
 //
-// The macOS app's sidebar holds many sections; on Android (mirroring the iOS RootTabView) we surface
-// them through a unified floating "glass" bottom bar (Today · Trends · Sleep · More) for the everyday
-// screens, with a "More" sheet that lists the full grouped set — so every destination is one tap away
-// without a global hamburger/drawer. Destinations are grouped exactly as the sidebar groups them.
-// Routes whose screens belong to later waves point at a ComingSoon placeholder so the app compiles today.
+// Home, Health, Plan and More share one NavHost. Coach is a separate orb.
+// Existing routes remain stable for local feature links and the demo harness.
 
 /** A single drawer destination: stable route, display title (localized via [titleRes]), sidebar icon. */
+object WhoopRoute {
+    const val recoveryDetail = "recovery_detail"
+    const val strainDetail = "strain_detail"
+    const val sleepDetail = "sleep"
+    const val sleepPlanner = "smart_alarm"
+    const val healthMonitor = "vital_signs"
+    const val healthspan = "healthspan"
+    const val stressMonitor = "stress"
+    const val weeklyPlan = "weekly_plan"
+    const val journal = "insights"
+}
+
 internal enum class Destination(
     val route: String,
     @StringRes val titleRes: Int,
     val icon: ImageVector,
 ) {
     // Group: Today
-    Today("today", R.string.nav_today, Icons.Filled.Home),
+    Today("today", R.string.whoop_nav_home, Icons.Filled.Home),
+    Plan("plan", R.string.whoop_nav_plan, Icons.Filled.Edit),
+    RecoveryDetail(WhoopRoute.recoveryDetail, R.string.l10n_health_screen_recovery_ea924f72, Icons.Filled.FavoriteBorder),
+    StrainDetail(WhoopRoute.strainDetail, R.string.nav_workouts, Icons.Filled.FitnessCenter),
+    Healthspan(WhoopRoute.healthspan, R.string.whoop_nav_healthspan, Icons.Filled.MonitorHeart),
+    WeeklyPlan(WhoopRoute.weeklyPlan, R.string.whoop_nav_weekly_plan, Icons.Filled.Edit),
     Intelligence("intelligence", R.string.nav_intelligence, Icons.Filled.Psychology),
     // Optional, default-OFF (task #43): the Coupled view (WHOOP-style day read). Reached ONLY via the
     // Today dashboard "Coupled view" card tap-through, so it is deliberately NOT in any [DrawerGroup].
@@ -229,20 +244,15 @@ internal data class DrawerGroup(
     val defaultExpanded: Boolean,
 )
 
-// Mirrors the iOS RootTabView `moreTab` grouping + order one-for-one. Today / Trends / Sleep / Coach
-// are NOT listed (they're bottom-bar tabs, exactly as on iOS). Android-only screens (Vital Signs, Wake
-// Window, Notifications, Devices) are slotted into the matching iOS group.
+// More retains existing feature destinations after Sleep and Trends move out of the primary tabs.
 internal val drawerGroups: List<DrawerGroup> = listOf(
     DrawerGroup("Insights", R.string.more_group_insights, listOf(
-        // Coach is a bottom-bar tab now and is deliberately absent here, matching iOS: "K3: Coach
-        // promoted to a top-level tab — no longer listed under More." Leaving it would have put the
-        // same destination in two places at once, which is the duplication the note above says this
-        // list exists to avoid. (#2218)
         Destination.InsightsHub, Destination.Intelligence,
-        Destination.Insights, Destination.Explore, Destination.Compare,
+        Destination.Insights, Destination.Trends, Destination.WeeklyPlan, Destination.Explore, Destination.Compare,
     ), defaultExpanded = true),
     DrawerGroup("Body", R.string.more_group_body, listOf(
-        Destination.Live, Destination.Workouts, Destination.Health, Destination.VitalSigns,
+        Destination.Sleep, Destination.RecoveryDetail, Destination.StrainDetail,
+        Destination.Live, Destination.Workouts, Destination.Healthspan, Destination.VitalSigns,
         Destination.LabBook, Destination.Stress, Destination.Breathe, Destination.Intervals,
         Destination.Rhythm,
     ), defaultExpanded = true),
@@ -499,9 +509,8 @@ object BottomBarStyleStore {
 }
 
 /**
- * App shell: a single [Scaffold] with a floating [GlassBottomBar] (Today · Trends · Sleep · Coach · More)
- * driving one [NavHost], mirroring the iOS RootTabView. There is NO global toolbar and no nav drawer
- * — every screen self-titles via [ScreenScaffold], and the "More" sheet (opened from the bar) reaches
+ * App shell: Home, Health, Plan and More with a separate Coach orb, driving one [NavHost].
+ * Every screen self-titles via [ScreenScaffold], and the More index reaches
  * every destination in [drawerGroups], so nothing is lost. A single [AppViewModel] is created here and
  * shared with every screen, so the BLE connection and cached metrics stay app-wide singletons.
  */
@@ -513,6 +522,13 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val current = Destination.forRoute(currentRoute)
+    var selectedTabRoute by rememberSaveable { mutableStateOf(Destination.Today.route) }
+    LaunchedEffect(current) {
+        if (current in listOf(Destination.Today, Destination.Health, Destination.Plan, Destination.More)) {
+            selectedTabRoute = current.route
+        }
+    }
+    val selectedTab = Destination.forRoute(selectedTabRoute)
     var showQuickActions by remember { mutableStateOf(false) }
     // The Updates inbox sheet (opened by the Today header bell). The store is a process singleton so
     // the Today cards and the import path post to the same inbox this sheet renders.
@@ -574,18 +590,17 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
         Scaffold(
             containerColor = Palette.surfaceBase,
             bottomBar = {
-                // One unified "glass" bar: four evenly-spaced tabs — Today · Trends · Sleep · More
-                // (matches the iOS FloatingTabBar). The quick-action "+" lives in the Today header's
-                // top-right (balancing the avatar), so the bar is clean tabs only. "More" navigates to
-                // its own page (mirroring the iOS More tab) that reaches every grouped destination, so no
-                // destination is lost without the drawer.
+                // The capsule and Coach orb share the measured bottom inset in both layout modes.
                 // DEFAULT path: the shipped reserved slot, unchanged. Empty only when the overlay is
                 // on, where the bar is drawn below as a sibling and the slot must reserve nothing.
                 if (!BottomBarStyleStore.overlay) {
                     GlassBottomBar(
-                        current = current,
+                        current = selectedTab,
                         onTabSelected = { dest ->
-                            if (dest.route != currentRoute) nav.navigateTopLevel(dest.route)
+                            if (dest.route != currentRoute) {
+                                if (dest == Destination.Coach) nav.navigate(dest.route)
+                                else nav.navigateTopLevel(dest.route)
+                            }
                         },
                     )
                 }
@@ -672,6 +687,25 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         onOpenJournal = { nav.navigateTopLevel(Destination.Insights.route) },
                     )
                 }
+                composable(Destination.Plan.route) { PlanLanding(onNavigate = { nav.navigate(it) }) }
+                composable(Destination.WeeklyPlan.route) {
+                    ScreenScaffold(title = stringResource(R.string.whoop_nav_weekly_plan),
+                        topBackground = screenBackdropSlot(false, false),
+                        fullBleedBackground = screenBackdropFullBleed(false, false)) {
+                        DataPendingNote(stringResource(R.string.whoop_plan_local_title),
+                            stringResource(R.string.whoop_plan_local_detail))
+                    }
+                }
+                composable(Destination.RecoveryDetail.route) {
+                    CoupledScreen(vm = viewModel, onOpenSleep = { nav.navigate(WhoopRoute.sleepDetail) })
+                }
+                composable(Destination.StrainDetail.route) { WorkoutsScreen(viewModel) }
+                composable(Destination.Healthspan.route) {
+                    HealthScreen(vm = viewModel, onVitalClick = { nav.navigate("vital_detail/$it") },
+                        onOpenLabBook = { nav.navigate(Destination.LabBook.route) },
+                        onOpenFusedRecord = { nav.navigate(Destination.FusedRecord.route) },
+                        onOpenSettings = { nav.navigate(Destination.Settings.route) })
+                }
                 composable(Destination.Live.route) {
                     LiveScreen(
                         viewModel = viewModel,
@@ -717,7 +751,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.Workouts.route) { WorkoutsScreen(viewModel) }
                 composable(Destination.Intelligence.route) { IntelligenceScreen(viewModel) }
 
-                // --- Placeholder routes (later waves fill these in) ---
+                // Existing local feature destinations.
                 composable(Destination.Stress.route) {
                     StressScreen(
                         vm = viewModel,
@@ -939,9 +973,12 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
         // Dropping it at the end of the animation removes both. Safe precisely because it is an overlay —
         // it reserves no space, so composing or not composing it never reflows content.
         if (BottomBarStyleStore.overlay && barPresent) GlassBottomBar(
-            current = current,
+            current = selectedTab,
             onTabSelected = { dest ->
-                if (dest.route != currentRoute) nav.navigateTopLevel(dest.route)
+                if (dest.route != currentRoute) {
+                    if (dest == Destination.Coach) nav.navigate(dest.route)
+                    else nav.navigateTopLevel(dest.route)
+                }
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -1092,48 +1129,20 @@ private fun MoreRow(dest: Destination, onClick: () -> Unit) {
     }
 }
 
-// MARK: - Glass bottom bar
-//
-// The signature bar, ported from iOS's FloatingTabBar: ONE rounded "glass" island holding four
-// evenly-spaced inline slots — Today · Trends · Sleep · More. The quick-action "+" now lives in the
-// Today header's top-right (it left the bar to balance the avatar), so the bar is clean tabs only.
-// The "glass" feel is a translucent raised surface with a low elevation and a subtle hairline border
-// — frosted, not a hard opaque slab and not a glow. Each nav slot is an icon over a small label;
-// active = gold accent, inactive = textSecondary. All routing is unchanged: the four tabs switch the
-// same destinations.
+// MARK: - Four-tab capsule and Coach orb
 
 /** A single bottom-bar nav slot: the destination it switches to, plus the bar-specific icon/label. */
 internal data class BarTab(val dest: Destination, val icon: ImageVector, @StringRes val labelRes: Int)
 
-/** The nav slots in iOS order: Today · Trends · Sleep · Coach · More.
- *  More is special-cased (it opens the sheet rather than a route), so it is appended at the call site. */
 internal val barLeadingTabs = listOf(
-    BarTab(Destination.Today, Icons.Outlined.GridView, R.string.nav_today),
-    // chart.line.uptrend.xyaxis on iOS — the rising-trend glyph, not a flat bar chart.
-    BarTab(Destination.Trends, Icons.AutoMirrored.Filled.TrendingUp, R.string.nav_trends),
+    BarTab(Destination.Today, Icons.Filled.Home, R.string.whoop_nav_home),
+    BarTab(Destination.Health, Icons.Filled.FavoriteBorder, R.string.nav_health),
 )
-/**
- * The trailing tabs, as shipped. [barTrailingTabsFor] is what the bar actually draws: Coach is
- * conditional, so this list is the full set rather than the visible one.
- */
 internal val barTrailingTabs = listOf(
-    BarTab(Destination.Sleep, Icons.Filled.Bedtime, R.string.nav_sleep),
-    // #2218: Coach was promoted to a top-level tab on iOS and this side did not follow, so it sat in
-    // the More list while the comment above claimed the two bars matched. AutoAwesome is the sparkles
-    // glyph iOS uses, and the same one the More row already shows, so the entry a wearer has learned
-    // keeps its face when it moves up.
-    BarTab(Destination.Coach, Icons.Filled.AutoAwesome, R.string.nav_coach),
+    BarTab(Destination.Plan, Icons.Filled.Edit, R.string.whoop_nav_plan),
 )
 
-/**
- * The trailing tabs to draw for a given Coach setting.
- *
- * A function rather than a filter written inline at the bar so the Kotlin unit tests can assert the
- * two shapes directly, and so every surface that needs "which tabs are there" agrees by construction
- * instead of by two copies of the same predicate.
- */
-internal fun barTrailingTabsFor(coachEnabled: Boolean): List<BarTab> =
-    if (coachEnabled) barTrailingTabs else barTrailingTabs.filterNot { it.dest == Destination.Coach }
+internal fun barTrailingTabsFor(coachEnabled: Boolean): List<BarTab> = barTrailingTabs
 
 @Composable
 private fun GlassBottomBar(
@@ -1141,144 +1150,42 @@ private fun GlassBottomBar(
     onTabSelected: (Destination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // One binding, used by BOTH the slots and the More-lit predicate below. #2218's note applies here
-    // twice over: a second copy of "which tabs exist" is what let Coach light two slots at once, and a
-    // conditional tab makes that failure available again to anyone who filters in one place only.
-    val visibleTrailing = barTrailingTabsFor(BottomBarStyleStore.coachEnabled)
-    val barShape = RoundedCornerShape(50)
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            // Clear the gesture-nav bar (home indicator) first, then add breathing room so the capsule
-            // floats free of the bottom edge rather than jamming against it — iOS clears the home-indicator
-            // safe area + 4pt; here navigationBarsPadding + 12dp gives the same lift.
-            .navigationBarsPadding()
-            .padding(horizontal = 22.dp)
-            .padding(top = 4.dp, bottom = Metrics.space12),
-        contentAlignment = Alignment.Center,
-    ) {
-        Surface(
-            shape = barShape,
-            // "Glass": a translucent raised surface — a frosted island, not a hard slab. Compose has no
-            // cheap blur, so translucency (≈0.80) + a hairline rim is the Liquid-Glass stand-in. A soft,
-            // low drop shadow reads as floating without a glow.
-            // The glass alpha is the user's transparency step; 0.80 was the shipped constant and remains
-            // the default (step 6), so an untouched install is unchanged.
-            color = Palette.surfaceRaised.copy(alpha = BottomBarStyleStore.barAlpha),
-            tonalElevation = 2.dp,
-            shadowElevation = 4.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                // Cap the width so the pill stays a centred floating island on tablets, not a full-bleed bar.
-                .widthIn(max = 480.dp)
-                .border(0.5.dp, Palette.hairline.copy(alpha = 0.6f), barShape),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // Scaling the PADDING and the slot contents grows the bar honestly - the touch
-                    // targets grow with it, and `barHeight` is measured afterwards so screens keep
-                    // clearing the bar at any size. A graphics scale would blur it and leave the hit
-                    // areas behind.
-                    .padding(horizontal = 8.dp, vertical = 7.dp * BottomBarStyleStore.scale),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                barLeadingTabs.forEach { tab ->
-                    BarSlot(
-                        icon = tab.icon,
-                        label = stringResource(tab.labelRes),
-                        active = current == tab.dest,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onTabSelected(tab.dest) },
-                    )
+    val tabs = barLeadingTabs + barTrailingTabs + BarTab(Destination.More, Icons.Filled.MoreHoriz, R.string.nav_more)
+    Row(modifier.fillMaxWidth().navigationBarsPadding()
+        .padding(horizontal = Metrics.space16)
+        .padding(top = Metrics.space4, bottom = Metrics.space12),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Metrics.space10)) {
+        TabCapsule(
+            items = tabs.map { TabCapsuleItem(it.dest.route, stringResource(it.labelRes), it.icon) },
+            selectedID = current.route,
+            onSelect = { route -> onTabSelected(Destination.forRoute(route)) },
+            modifier = Modifier.weight(1f).widthIn(max = Metrics.tabMaxWidth),
+        )
+        CoachOrb(label = stringResource(R.string.nav_coach), onTap = { onTabSelected(Destination.Coach) })
+    }
+}
+
+@Composable
+private fun PlanLanding(onNavigate: (String) -> Unit) {
+    ScreenScaffold(title = stringResource(R.string.whoop_nav_plan),
+        topBackground = screenBackdropSlot(false, false),
+        fullBleedBackground = screenBackdropFullBleed(false, false)) {
+        listOf(Destination.WeeklyPlan, Destination.Insights, Destination.Trends, Destination.InsightsHub,
+            Destination.SmartAlarm).forEach { destination ->
+            NoopCard(modifier = Modifier.clickable { onNavigate(destination.route) }) {
+                Row(Modifier.fillMaxWidth().height(Metrics.contributorMinHeight),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                    Icon(destination.icon, null, tint = Palette.textSecondary, modifier = Modifier.size(Metrics.space24))
+                    Text(stringResource(destination.titleRes), style = NoopType.headline,
+                        color = Palette.textPrimary, modifier = Modifier.weight(1f))
+                    Icon(Icons.Filled.ChevronRight, null, tint = Palette.textSecondary)
                 }
-                visibleTrailing.forEach { tab ->
-                    BarSlot(
-                        icon = tab.icon,
-                        label = stringResource(tab.labelRes),
-                        active = current == tab.dest,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onTabSelected(tab.dest) },
-                    )
-                }
-                BarSlot(
-                    icon = Icons.Filled.MoreHoriz,
-                    label = stringResource(R.string.nav_more),
-                    // Selected on the More page itself, and also kept lit whenever the current screen is
-                    // one reached THROUGH More (i.e. not one of the bar's own tabs) — so drilling into
-                    // any grouped destination still reads as "you're in More", never "nowhere".
-                    //
-                    // Derived from the bar's own lists rather than restated. Spelling the tabs out here
-                    // is what made adding Coach a two-part change: the slot alone would have lit Coach
-                    // AND More together, because this predicate had never heard of it. (#2218)
-                    active = barLeadingTabs.none { it.dest == current } &&
-                        visibleTrailing.none { it.dest == current },
-                    modifier = Modifier.weight(1f),
-                    onClick = { onTabSelected(Destination.More) },
-                )
             }
         }
     }
 }
-
-/** One nav slot: an icon over a small label. Active = gold accent (semibold), inactive = textSecondary.
- *  No selection pill, no glow — just the colour swap, matching the iOS bar. */
-@Composable
-private fun BarSlot(
-    icon: ImageVector,
-    label: String,
-    active: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val tint = if (active) Palette.accent else Palette.textSecondary
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(vertical = 3.dp * BottomBarStyleStore.scale)
-            .semantics { contentDescription = label },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        // Icon and label scale together with the padding above, so the slot grows as one piece rather
-        // than a bigger box around the same small glyph.
-        Icon(icon, contentDescription = null, tint = tint,
-             modifier = Modifier.size(Metrics.iconSmall * BottomBarStyleStore.scale))
-        Text(
-            label,
-            style = NoopType.footnote.copy(
-                fontSize = 10.sp * BottomBarStyleStore.scale,
-                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-            ),
-            color = tint,
-            // #2218: one line, always. A fifth slot takes about a fifth off every label's width, and the
-            // bar scale goes to 2x, so the longest of them can no longer be assumed to fit on a narrow
-            // phone. Wrapping would not break anything, since `barHeight` is measured afterwards and
-            // screens clear whatever it comes to, but a two-line nav bar at one size and a one-line bar
-            // at the next is the kind of thing nobody reports and everybody notices.
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/** A centre-FAB quick action: a display title, an icon and the destination route it opens. */
-private data class QuickAction(@StringRes val titleRes: Int, val icon: ImageVector, val route: String)
-
-/** The quick actions on the gold centre FAB, each routing to an existing destination. Live HR leads
- *  — it moved off the bottom bar (so the FAB no longer overlaps a tab) but stays one tap away here. */
-private val quickActions: List<QuickAction> = listOf(
-    QuickAction(R.string.action_live_hr, Destination.Live.icon, Destination.Live.route),
-    QuickAction(R.string.action_start_workout, Icons.Filled.FitnessCenter, Destination.Workouts.route),
-    QuickAction(R.string.action_log_journal, Icons.Filled.Edit, Destination.Insights.route),
-    QuickAction(R.string.action_breathe, Icons.Filled.Air, Destination.Breathe.route),
-)
 
 // MARK: - Navigation motion (README §Motion)
 //
