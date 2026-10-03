@@ -52,6 +52,8 @@ public final class HrBroadcaster: NSObject, ObservableObject {
     // MARK: - CoreBluetooth state (OWN peripheral manager, separate from every WHOOP/central flow)
 
     private var manager: CBPeripheralManager?
+    private let allowsLiveTransports: Bool
+    private let managerFactory: ((CBPeripheralManagerDelegate) -> CBPeripheralManager?)?
     private var hrCharacteristic: CBMutableCharacteristic?
     /// Set true by `start()`; the actual advertise call happens once the radio reports `.poweredOn`.
     private var wantAdvertising = false
@@ -75,7 +77,11 @@ public final class HrBroadcaster: NSObject, ObservableObject {
 
     /// - Parameter log: optional broadcast-lifecycle diagnostics sink, wired at the composition root to the
     ///   same strap log the rest of the app writes to. Defaults to a no-op so existing call sites compile.
-    public init(log: @escaping (String) -> Void = { _ in }) {
+    public init(log: @escaping (String) -> Void = { _ in },
+                allowsLiveTransports: Bool? = nil,
+                managerFactory: ((CBPeripheralManagerDelegate) -> CBPeripheralManager?)? = nil) {
+        self.allowsLiveTransports = allowsLiveTransports ?? LiveTransportPolicy.enabled
+        self.managerFactory = managerFactory
         self.log = log
         super.init()
     }
@@ -86,11 +92,15 @@ public final class HrBroadcaster: NSObject, ObservableObject {
     /// service, and advertise it. Idempotent. The manager is created lazily on first `start()` so a user
     /// who never opts in never triggers the system Bluetooth-permission prompt.
     public func start() {
+        guard allowsLiveTransports else { return }
         wantAdvertising = true
         statusNote = nil
         if manager == nil {
             // Queue-less manager → delegate callbacks arrive on the main queue, matching @MainActor.
-            manager = CBPeripheralManager(delegate: self, queue: nil)
+            manager = LiveTransportPolicy.makeTransport(allowed: allowsLiveTransports) {
+                if let managerFactory { return managerFactory(self) }
+                return CBPeripheralManager(delegate: self, queue: nil)
+            }
         } else if manager?.state == .poweredOn {
             beginAdvertising()
         }

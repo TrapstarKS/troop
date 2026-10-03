@@ -2826,4 +2826,10 @@
     <string name="raw_diag_ecg_probe_start">开始心电图采集</string>
     <string name="raw_diag_ecg_probe_stop">停止心电图采集</string>
     <string name="raw_diag_ecg_probe_running">此腕带上可能仍在采集。结论会写入 strap log。</string>
+    <string name="whoop_nav_home">首页</string>
+    <string name="whoop_nav_plan">计划</string>
+    <string name="whoop_nav_healthspan">健康寿命</string>
+    <string name="whoop_nav_weekly_plan">每周计划</string>
+    <string name="whoop_plan_local_title">每周计划尚不可用</string>
+    <string name="whoop_plan_local_detail">日记和趋势仍可用于查看本地习惯和进度。</string>
 </resources>

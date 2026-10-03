@@ -125,6 +125,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** The process owns the store + BLE client (see [NoopApplication]) so the connection can outlive
      *  this Activity-scoped ViewModel and keep streaming under [WhoopConnectionService]. */
     private val noopApp = app as NoopApplication
+    private val runtimePolicy = noopApp.runtimePolicy
 
     // Offline store — process-wide, shared with the background service.
     private val repository: WhoopRepository = noopApp.repository
@@ -314,6 +315,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun makeStrapScanner(): com.noop.ble.StandardHrSource =
         com.noop.ble.StandardHrSource(
             context = appContext,
+            runtimePolicy = runtimePolicy,
             deviceId = "scan-preview",
             liveSink = { _, _ -> },
             // Discovery-only scanner: nothing is persisted, so the outcome callback never fires.
@@ -333,6 +335,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun makeFtmsScanner(): com.noop.ble.FtmsSource =
         com.noop.ble.FtmsSource(
             context = appContext,
+            runtimePolicy = runtimePolicy,
             liveSink = { },
             // Wizard scan diagnostics → the SAME exported strap log the active path uses (issue #421).
             // The source self-prefixes "FTMS: "; [externalLog] redacts addresses. Statuses / counts only.
@@ -348,6 +351,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun makeHuamiScanner(): com.noop.ble.HuamiHrSource =
         com.noop.ble.HuamiHrSource(
             context = appContext,
+            runtimePolicy = runtimePolicy,
             deviceId = "scan-preview",
             liveSink = { },
             // Wizard scan diagnostics → the SAME exported strap log the active path uses (issue #421).
@@ -370,6 +374,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun makeOuraScanner(): com.noop.ble.OuraLiveSource =
         com.noop.ble.OuraLiveSource(
             context = appContext,
+            runtimePolicy = runtimePolicy,
             deviceId = "scan-preview",
             ringGen = com.noop.oura.OuraRingGen.GEN3,
             liveSink = { _, _ -> },
@@ -1518,6 +1523,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * BLE client itself no-ops if already connected or the runtime permission isn't granted yet.
      */
     private fun autoReconnectOnLaunch() {
+        if (!runtimePolicy.allowsBluetooth) return
         val saved = NoopPrefs.lastDevice(appContext) ?: return
         // No picker restore here any more. This used to assign `_selectedModel` from `saved.second`,
         // which is what let a wrong family survive every restart and re-store itself. `_selectedModel`
@@ -1532,7 +1538,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // APK updates tear down the old foreground service along with the old process. Re-promote it
         // on the first launch after update/restart before reconnecting, so the persistent notification
         // and long-lived connection both come back without the user toggling the setting again.
-        WhoopConnectionService.start(appContext)
+        startConnectionService()
         // The PAIR, deliberately, not the seeded picker value. `setLastDevice` writes address and family
         // in one call, so `saved.second` describes THIS address; the recorded family describes whatever
         // advertised last, which need not be the same strap. `reconnectToAddress` assigns the client's
@@ -1541,6 +1547,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // with a 4.0 and a 5/MG makes them disagree routinely: the 5/MG cannot bond (#1635) so it never
         // becomes the saved device, while every attempt at it re-records WHOOP5_MG.
         ble.reconnectToAddress(saved.first, saved.second)
+    }
+
+    private fun startConnectionService() = runtimePolicy.runBluetooth {
+        WhoopConnectionService.start(appContext)
+    }
+
+    private fun stopConnectionService() = runtimePolicy.runBluetooth {
+        WhoopConnectionService.stop(appContext)
     }
 
     /** Snapshot the user's body profile from SharedPreferences as an analytics [UserProfile]. */
@@ -1647,7 +1661,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // collect it — even if the user hasn't opted into background connection, the route must keep
             // tracking with the screen off (#215). Then mirror the shared route back into the UI state.
             GpsSession.start(startMs, sport.name)
-            WhoopConnectionService.start(appContext)
+            startConnectionService()
             observeGpsSession()
         } else {
             // A non-GPS session has no process-level GpsSession backing it, so make it durable: snapshot
@@ -1749,7 +1763,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         activeWorkoutStore.clear()
         if (w.gpsEnabled) {
             GpsSession.stop()
-            if (!NoopPrefs.backgroundConnection(appContext)) WhoopConnectionService.stop(appContext)
+            if (!NoopPrefs.backgroundConnection(appContext)) stopConnectionService()
         }
         _lastWorkout.value = null
     }
@@ -1774,7 +1788,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // "Connected" notification would outlive the workout. With background-connection on, leave it
         // up. Done here (before the discard early-return) so an empty GPS session tears down too. (#215)
         if (w.gpsEnabled && !NoopPrefs.backgroundConnection(appContext)) {
-            WhoopConnectionService.stop(appContext)
+            stopConnectionService()
         }
         val samples = w.samples
         if (samples.size < 2 && track.size < 2) {
@@ -2369,6 +2383,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // MARK: - Strap controls (thin pass-throughs to the BLE client)
 
     fun connect(promoteService: Boolean = true) {
+        if (!runtimePolicy.allowsBluetooth) return
         // An explicit user-driven Connect must start the reconnect schedule fresh — never inherit a
         // backoff delay accumulated by a prior involuntary-reconnect loop (#48, iOS connect() parity).
         ble.resetReconnectBackoff()
@@ -2382,7 +2397,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Onboarding auto-connects before the user has finished setup and passes promoteService=false
         // so the persistent notification doesn't appear mid-flow; it promotes once on completion.
         if (promoteService && NoopPrefs.backgroundConnection(appContext)) {
-            WhoopConnectionService.start(appContext)
+            startConnectionService()
         }
     }
 
@@ -2391,13 +2406,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun promoteBackgroundConnectionIfActive() {
         if (!NoopPrefs.backgroundConnection(appContext)) return
         if (ble.state.value.connected || ble.state.value.bonded) {
-            WhoopConnectionService.start(appContext)
+            startConnectionService()
         }
     }
 
     fun disconnect() {
         // User asked to disconnect: drop the foreground promotion first, then the link itself.
-        WhoopConnectionService.stop(appContext)
+        stopConnectionService()
         ble.disconnect()
         hrWindow.clear()
         _bpm.value = null
@@ -2477,10 +2492,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         NoopPrefs.setBackgroundConnection(appContext, enabled)
         if (enabled) {
             if (ble.state.value.connected || ble.state.value.bonded) {
-                WhoopConnectionService.start(appContext)
+                startConnectionService()
             }
         } else {
-            WhoopConnectionService.stop(appContext)
+            stopConnectionService()
         }
         // Continuous HRV capture is gated on background connection (it has nothing to stream over without
         // it), so a change here re-reconciles the keep-stream want: turning background off disarms the
@@ -2556,7 +2571,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // WHOOP HR NOOP receives. LOCAL Bluetooth only — nothing leaves the device. The broadcaster is a pure
     // CONSUMER of [ble.state].heartRate (fed in the state-collect loop in init); it never writes back into
     // the WHOOP path, so the strap connection and scoring can't regress.
-    private val broadcaster = HrBroadcaster(appContext, log = { ble.externalLog(it) })
+    private val broadcaster = HrBroadcaster(
+        appContext, log = { ble.externalLog(it) }, runtimePolicy = runtimePolicy,
+    )
 
     private val _hrBroadcast = MutableStateFlow(NoopPrefs.hrBroadcast(appContext))
     /** Whether the "Broadcast heart rate" toggle is on. Default OFF. */
@@ -2577,7 +2594,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         // Resume broadcasting on launch if the user had it on (and the OS permission survives). If the
         // permission was revoked, [HrBroadcaster.start] degrades to a status note rather than crashing.
-        if (_hrBroadcast.value) broadcaster.start()
+        if (runtimePolicy.allowsBluetooth && _hrBroadcast.value) broadcaster.start()
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.noop.ble
 
+import com.noop.DemoRuntimePolicy
+
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -532,6 +534,7 @@ class WhoopBleClient(
     private val gattOpsFactory: (BluetoothGatt) -> GattOps = ::RealGattOps,
     /** Fire-and-forget notification after a true HISTORY_COMPLETE only. The sink must only enqueue. */
     private val successfulOffloadSink: () -> Unit = {},
+    private val runtimePolicy: DemoRuntimePolicy = DemoRuntimePolicy.current,
 ) {
 
     companion object {
@@ -2319,8 +2322,9 @@ class WhoopBleClient(
     }
 
     // MARK: Android Bluetooth handles.
-    private val bluetoothManager: BluetoothManager? =
+    private val bluetoothManager: BluetoothManager? = runtimePolicy.createBluetooth {
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    }
     private val adapter: BluetoothAdapter? = bluetoothManager?.adapter
     private val scanner: BluetoothLeScanner? get() = adapter?.bluetoothLeScanner
 
@@ -3777,6 +3781,7 @@ class WhoopBleClient(
 
     @SuppressLint("MissingPermission")
     private fun connectInternal(model: WhoopModel, userInitiated: Boolean) {
+        if (!runtimePolicy.allowsBluetooth) return
         // #1881: only the SYSTEM path is gated. This class already draws that line — `connect()` is the
         // user's explicit Connect button, `connectFromSystem()` is every automatic path — and the report's
         // complaint is only ever about NOOP acting on its own. Gating both would have made the Connect
@@ -4021,6 +4026,7 @@ class WhoopBleClient(
      * own adapter.isEnabled gate is now satisfied. Called from the ACTION_STATE_CHANGED receiver.
      */
     fun onBluetoothRadioOn() {
+        if (!runtimePolicy.allowsBluetooth) return
         handler.post {
             if (gatt != null || _state.value.connected) return@post   // already (re)connected
             // #1030 (ryanbr): this radio-on reconnect supersedes any pending backoff timer (both branches below (re)connect).
@@ -4319,6 +4325,7 @@ class WhoopBleClient(
      */
     @SuppressLint("MissingPermission")
     fun scanForWhoops(model: WhoopModel) {
+        if (!runtimePolicy.allowsBluetooth) return
         val adp = adapter
         if (adp == null || !adp.isEnabled) {
             log("Add-a-WHOOP scan: Bluetooth not ready")
@@ -4387,6 +4394,7 @@ class WhoopBleClient(
      */
     @SuppressLint("MissingPermission")
     fun reconnectToAddress(address: String, model: WhoopModel) {
+        if (!runtimePolicy.allowsBluetooth) return
         if (gatt != null || _state.value.connected) return
         val adp = adapter ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
