@@ -19,7 +19,7 @@ public enum HealthspanPresentation {
 
     /// Local calibration: 21 recoveries in 31 days; pace also needs 90 days of history.
     /// Pace = 1 + 2 × (30-day mean Body Age − up-to-180-day mean Body Age), clamped to −1…3.
-    /// The factor 2 expresses a six-month projection in years. This is an unvalidated trend proxy.
+    /// The factor 2 is a chosen display scale, not an annualized biological-aging rate.
     public static func snapshot(samples: [AgeSample], recoveryDays: Int, chronologicalAge: Double) -> Snapshot {
         var byDay: [Int: Double] = [:]
         for sample in samples where (0..<180).contains(sample.daysAgo) && sample.age.isFinite && (20...90).contains(sample.age) {
