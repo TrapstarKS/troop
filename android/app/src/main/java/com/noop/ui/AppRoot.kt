@@ -735,12 +735,7 @@ fun AppRoot(
                 composable(Destination.StrainDetail.route) {
                     StrainDetailScreen(vm = viewModel, onBack = { nav.popBackStack() })
                 }
-<<<<<<< HEAD
-                composable(Destination.Healthspan.route) { HealthspanScreen(viewModel) }
-=======
-                composable(Destination.StrainDetail.route) { WorkoutsScreen(viewModel) }
                 composable(Destination.Healthspan.route) { HealthspanScreen(viewModel, onCoach = { nav.navigate(Destination.Coach.route) }) }
->>>>>>> b3df1919e6da49e3ecf807b23e1cdd9b2997e31b
                 composable(Destination.Live.route) {
                     LiveScreen(
                         viewModel = viewModel,
