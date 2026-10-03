@@ -1217,7 +1217,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 .collectLatest { refreshLocalNotifications() }
         }
         viewModelScope.launch {
-            recentDays.collect { days -> refreshLocalNotifications(days) }
+            recentDays.collect { refreshLocalNotifications() }
         }
         viewModelScope.launch {
             illnessHistory.collect { snapshot ->
