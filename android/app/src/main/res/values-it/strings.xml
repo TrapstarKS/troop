@@ -2606,6 +2606,7 @@
     <string name="ground_truth_export">Esporta sessione</string>
     <string name="ground_truth_exporting">Creazione esportazione…</string>
     <string name="ground_truth_export_failed">Impossibile esportare la sessione: %1$s</string>
+    <string name="debug_export_failed">Impossibile esportare il file: %1$s</string>
     <string name="ground_truth_sessions">Sessioni registrate</string>
     <string name="ground_truth_no_sessions">Nessuna sessione registrata.</string>
     <string name="ground_truth_comment">Commento della sessione</string>

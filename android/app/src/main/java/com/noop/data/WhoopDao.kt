@@ -9,6 +9,13 @@ import androidx.room.Update
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
+internal const val CHARGE_HRV_PROOF_SQL =
+    "SELECT d.day, d.avgHrv AS value, fresh.value AS freshScoringValid " +
+        "FROM dailyMetric d LEFT JOIN metricSeries fresh ON fresh.deviceId = d.deviceId " +
+        "AND fresh.day = d.day AND fresh.key = 'hrv_fresh_scoring_valid' " +
+        "WHERE d.deviceId = :deviceId AND d.day >= :from AND d.day <= :to " +
+        "AND d.avgHrv IS NOT NULL ORDER BY d.day ASC"
+
 /** Kept as one compile-time constant so Room and the plain-JVM SQLite regression test execute the exact
  * same statement. Swift's twin lives in WhoopStore.analysisFingerprint(). */
 internal const val ANALYSIS_FINGERPRINT_SQL =
@@ -947,6 +954,12 @@ interface WhoopDao : DeviceRegistryDao {
             "ORDER BY day ASC"
     )
     fun dailyMetricsRangeFlow(deviceId: String, from: String, to: String): Flow<List<DailyMetric>>
+
+    @Query(CHARGE_HRV_PROOF_SQL)
+    suspend fun chargeHrvProof(deviceId: String, from: String, to: String): List<ChargeHrvProof>
+
+    @Query(CHARGE_HRV_PROOF_SQL)
+    fun chargeHrvProofFlow(deviceId: String, from: String, to: String): Flow<List<ChargeHrvProof>>
 
     /**
      * Delete a source's cached daily rows whose day-key is in [from, to] (inclusive, yyyy-MM-dd

@@ -808,23 +808,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val startTz = java.util.TimeZone.getDefault().getOffset(startSec * 1000L) / 1000L
         val from = Baselines.cutoffKey(AnalyticsEngine.dayString(startSec, startTz), ChargeBaselines.windowDays - 1)
         activeStrapIdFlow.flatMapLatest { selected ->
-          val owner = effectiveActiveStrapId(selected, deviceId)
-          combine(
-            repository.importedDailyUnionFlow(owner, from, "9999-12-31"),
-            repository.computedDailyUnionFlow(owner, from, "9999-12-31"),
-            hrvRegimeEpoch,
-        ) { imported, own, regime ->
-            val nowSec = System.currentTimeMillis() / 1000L
-            val tz = java.util.TimeZone.getDefault().getOffset(nowSec * 1000L) / 1000L
-            val prefs = NoopPrefs.of(appContext)
-            ChargeBaselines.resolve(
-                imported = imported,
-                own = own,
-                anchorDay = AnalyticsEngine.dayString(nowSec, tz),
-                hrvEpoch = maxOf(prefs.getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(), regime),
-                recoveryEpoch = prefs.getLong(Baselines.recoveryBaselineEpochKey, 0L).toDouble(),
-            )
-        }
+            val owner = effectiveActiveStrapId(selected, deviceId)
+            hrvRegimeEpoch.flatMapLatest { regime ->
+                val requiredFreshDay = if (regime > 0.0) AnalyticsEngine.dayString(regime.toLong(), 0L) else null
+                combine(
+                    repository.importedDailyUnionFlow(owner, from, "9999-12-31"),
+                    repository.chargeComputedDailyUnionFlow(owner, from, "9999-12-31", requiredFreshDay),
+                ) { imported, own ->
+                    val nowSec = System.currentTimeMillis() / 1000L
+                    val tz = java.util.TimeZone.getDefault().getOffset(nowSec * 1000L) / 1000L
+                    val prefs = NoopPrefs.of(appContext)
+                    ChargeBaselines.resolve(
+                        imported = imported,
+                        own = own,
+                        anchorDay = AnalyticsEngine.dayString(nowSec, tz),
+                        hrvEpoch = maxOf(prefs.getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(), regime),
+                        recoveryEpoch = prefs.getLong(Baselines.recoveryBaselineEpochKey, 0L).toDouble(),
+                    )
+                }
+            }
         }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)

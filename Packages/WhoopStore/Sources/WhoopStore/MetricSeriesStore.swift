@@ -31,6 +31,16 @@ public struct MetricPoint: Equatable, Codable, Sendable {
     }
 }
 
+/// A source/day HRV value and its freshness marker read together. Kotlin twin: `ChargeHrvProof`.
+public struct ChargeHrvProof: Equatable, Sendable {
+    public let day: String
+    public let value: Double
+    public let freshScoringValid: Double?
+    public init(day: String, value: Double, freshScoringValid: Double?) {
+        self.day = day; self.value = value; self.freshScoringValid = freshScoringValid
+    }
+}
+
 extension WhoopStore {
 
     // MARK: - Upsert (idempotent by natural key; latest value wins on conflict)
@@ -86,6 +96,23 @@ extension WhoopStore {
                     HrvProvenanceRow(deviceId: $0["deviceId"], day: $0["day"], value: $0["value"],
                                      freshScoringValid: $0["freshScoringValid"], overcount: $0["overcount"],
                                      respValue: $0["respValue"], respFreshScoringValid: $0["respFreshScoringValid"])
+                }
+        }
+    }
+
+    /// Join before source coalescing; a marker cannot describe a different source or scoring snapshot.
+    /// Kotlin twin: `WhoopDao.chargeHrvProof` and its reactive flow.
+    public func chargeHrvProof(deviceId: String, from: String, to: String) async throws -> [ChargeHrvProof] {
+        try syncRead { db in
+            try Row.fetchAll(db, sql: """
+                SELECT d.day, d.avgHrv AS value, fresh.value AS freshScoringValid
+                FROM dailyMetric d
+                LEFT JOIN metricSeries fresh ON fresh.deviceId = d.deviceId AND fresh.day = d.day
+                    AND fresh.key = 'hrv_fresh_scoring_valid'
+                WHERE d.deviceId = ? AND d.day >= ? AND d.day <= ? AND d.avgHrv IS NOT NULL
+                ORDER BY d.day
+                """, arguments: [deviceId, from, to]).map {
+                    ChargeHrvProof(day: $0["day"], value: $0["value"], freshScoringValid: $0["freshScoringValid"])
                 }
         }
     }

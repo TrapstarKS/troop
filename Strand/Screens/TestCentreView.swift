@@ -1259,7 +1259,7 @@ struct ReportReviewSheet: View {
                             .font(StrandFont.mono)
                             .foregroundStyle(StrandPalette.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
+                            .textSelection(.disabled)
                     }
                     #if os(iOS)
                     .scrollBounceBehavior(.basedOnSize, axes: .horizontal)

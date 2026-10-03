@@ -10,6 +10,89 @@ final class IntelligenceRRSourceTests: XCTestCase {
     private let canonical = "my-whoop"
     private let active = "new-five"
 
+    private func chargeDay(_ day: String, hrv: Double?) -> DailyMetric {
+        DailyMetric(day: day, totalSleepMin: 480, efficiency: 0.9, deepMin: 90, remMin: 90,
+            lightMin: 300, disturbances: 2, restingHr: 60, avgHrv: hrv, recovery: 72,
+            strain: 61, exerciseCount: 2, spo2Pct: 98, skinTempDevC: 0.2, respRateBpm: 14,
+            steps: 42, activeKcalEst: 1840, activeEnergyKcalEst: 420,
+            spo2Red: 10, spo2Ir: 20, avgSdnn: 40, skinTempC: 34.2, sleepHrOnly: true)
+    }
+
+    func testChargeFreshnessBelongsToTheRawWinningSource() async throws {
+        let store = try await WhoopStore.inMemory()
+        let repo = Repository(deviceId: active)
+        repo.setStoreForTesting(store)
+        let day = "2026-10-03"
+        let activeRow = chargeDay(day, hrv: 44)
+        _ = try await store.upsertDailyMetrics([activeRow], deviceId: active + "-noop")
+        _ = try await store.upsertDailyMetrics([chargeDay(day, hrv: 60)], deviceId: canonical + "-noop")
+        _ = try await store.upsertMetricSeries([MetricPoint(day: day, key: "hrv_fresh_scoring_valid", value: 0)],
+            deviceId: active + "-noop")
+        _ = try await store.upsertMetricSeries([MetricPoint(day: day, key: "hrv_fresh_scoring_valid", value: 1)],
+            deviceId: canonical + "-noop")
+        let filtered = await repo.unionChargeComputedDailyMetrics(store: store, from: day, to: day,
+            requiredFreshDay: day)
+        XCTAssertNil(filtered.first?.avgHrv, "canonical proof cannot validate or refill the active snapshot")
+        XCTAssertEqual(filtered.first?.with(avgHrv: 44, recovery: 72, respRateBpm: 14, avgSdnn: 40), activeRow)
+        let display = await repo.unionComputedDailyMetrics(store: store, from: day, to: day)
+        XCTAssertEqual(display.first, activeRow)
+        _ = try await store.upsertDailyMetrics([chargeDay(day, hrv: nil)], deviceId: active + "-noop")
+        let canonicalOwn = await repo.unionChargeComputedDailyMetrics(store: store, from: day, to: day,
+            requiredFreshDay: day)
+        XCTAssertEqual(canonicalOwn.first?.avgHrv, 60, "an absent active value may use the canonical value's own proof")
+    }
+
+    func testUnknownBoundaryHrvDoesNotBlockImportedSeed() async throws {
+        let store = try await WhoopStore.inMemory()
+        let repo = Repository(deviceId: active)
+        repo.setStoreForTesting(store)
+        let day = "2026-10-03"
+        _ = try await store.upsertDailyMetrics([chargeDay(day, hrv: 44), chargeDay("2026-10-02", hrv: 45)],
+            deviceId: active + "-noop")
+        let own = await repo.unionChargeComputedDailyMetrics(store: store, from: "2026-10-02", to: day,
+            requiredFreshDay: day)
+        XCTAssertEqual(own.first?.avgHrv, 45, "unknown older history retains compatibility")
+        XCTAssertNil(own.last?.avgHrv)
+        let resolved = ChargeBaselines.resolve(imported: [chargeDay(day, hrv: 55)], own: [own.last!],
+            anchorDay: day, hrvEpoch: Double(Baselines.isoEpochDay(day)!) * 86_400, recoveryEpoch: 0)
+        XCTAssertEqual(resolved.hrvHistory.ownValidNights, 0)
+        XCTAssertEqual(resolved.hrvHistory.values, [55])
+        XCTAssertTrue(resolved.hrvHistory.seededByImport)
+    }
+
+    func testEmptyAndPreservingPassesCannotReviveBoundaryLegacyHrv() async throws {
+        try await withPreferences {
+            for preserve in [false, true] {
+                for marker: Double? in [nil, 0, 1] {
+                    let store = try await WhoopStore.inMemory()
+                    try register(DeviceRegistryStore(dbQueue: store.registryWriter), canonicalModel: "4.0")
+                    let now = Int(Date().timeIntervalSince1970)
+                    let offset = TimeZone.current.secondsFromGMT()
+                    let day = AnalyticsEngine.dayString(now, offsetSec: offset)
+                    _ = try await store.insert(Streams(rr: [RRInterval(ts: now - 10, rrMs: 1000,
+                        srcChannel: .whoop5Historical)]), deviceId: active)
+                    _ = try await store.upsertDailyMetrics([chargeDay(day, hrv: 44)], deviceId: canonical + "-noop")
+                    if let marker {
+                        _ = try await store.upsertMetricSeries([MetricPoint(day: day,
+                            key: "hrv_fresh_scoring_valid", value: marker)], deviceId: canonical + "-noop")
+                    }
+                    let repo = Repository(deviceId: canonical)
+                    repo.setStoreForTesting(store)
+                    let engine = IntelligenceEngine(repo: repo, profile: ProfileStore(), deviceId: canonical)
+                    var trace: [String] = []
+                    engine.diagnosticSink = { line, _ in trace.append(line) }
+                    await engine.analyzeRecent(maxDays: 2, force: true, preserveUnscoredHistory: preserve)
+                    let expected = marker == 1 ? 1 : 0
+                    XCTAssertTrue(trace.contains { $0.contains("hrv=own/\(expected)") }, "empty-pass baseline: \(trace)")
+                    await repo.refresh()
+                    XCTAssertEqual(repo.chargeBaselines?.hrvHistory.ownValidNights, expected)
+                    let displayed = try await store.dailyMetrics(deviceId: canonical + "-noop", from: day, to: day)
+                    XCTAssertEqual(displayed.first?.avgHrv, 44, "display snapshot must survive")
+                }
+            }
+        }
+    }
+
     private func withPreferences(_ body: () async throws -> Void) async throws {
         let defaults = UserDefaults.standard
         let keys = [
@@ -118,7 +201,7 @@ final class IntelligenceRRSourceTests: XCTestCase {
         try await withPreferences {
             let store = try await WhoopStore.inMemory()
             try register(DeviceRegistryStore(dbQueue: store.registryWriter), canonicalModel: "4.0")
-            let input = night()
+            let input = night(daysAgo: quiet ? 2 : 1)
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
             let anchor = try XCTUnwrap(formatter.date(from: input.day))
@@ -143,6 +226,10 @@ final class IntelligenceRRSourceTests: XCTestCase {
                     deepMin: nil, remMin: nil, lightMin: nil, disturbances: nil, restingHr: 45,
                     avgHrv: 100, recovery: 80, strain: nil, exerciseCount: nil)
                 _ = try await store.upsertDailyMetrics([row], deviceId: canonical + "-noop")
+                let samples = try await store.hrSamples(deviceId: canonical,
+                    from: midnight - StreamReadCap.lookbackSeconds,
+                    to: midnight + StreamReadCap.forwardSeconds, limit: StreamReadCap.hr)
+                XCTAssertEqual(samples.count, 100, "quiet fixture must stay below the scorer's lookback HR floor")
             }
             let repo = Repository(deviceId: canonical)
             repo.setStoreForTesting(store)
@@ -150,8 +237,8 @@ final class IntelligenceRRSourceTests: XCTestCase {
             var logs: [String] = []
             engine.diagnosticSink = { line, _ in logs.append(line) }
             TestCentre.activate(.recovery)
-            await engine.analyzeRecent(maxDays: 2, force: true, preserveUnscoredHistory: preserve)
-            await repo.refresh(days: 2)
+            await engine.analyzeRecent(maxDays: quiet ? 3 : 2, force: true, preserveUnscoredHistory: preserve)
+            await repo.refresh(days: quiet ? 3 : 2)
             let resolved = try XCTUnwrap(repo.chargeBaselines)
             XCTAssertGreaterThanOrEqual(resolved.hrvHistory.ownValidNights, 14)
             XCTAssertFalse(resolved.hrvHistory.seededByImport)
@@ -202,6 +289,9 @@ final class IntelligenceRRSourceTests: XCTestCase {
                 deviceId: canonical + "-noop", from: input.day, to: input.day)
             _ = try await store.insert(Streams(rr: input.rr), deviceId: active)
             let legacy = try await score()
+            let legacyFreshness = try await store.metricSeries(deviceId: canonical + "-noop",
+                key: "hrv_fresh_scoring_valid", from: input.day, to: input.day)
+            XCTAssertEqual(legacyFreshness.first?.value, 0, "legacy restoration must not mark HRV freshly scorable")
             XCTAssertEqual(legacy.avgHrv, legacySnapshot.avgHrv, "the restored HRV cell must survive")
             XCTAssertEqual(legacy.recovery, legacySnapshot.recovery, "HRV and Charge survive as one snapshot")
             XCTAssertEqual(legacy.respRateBpm, legacySnapshot.respRateBpm,
@@ -255,6 +345,9 @@ final class IntelligenceRRSourceTests: XCTestCase {
             let inserted = try await store.insert(Streams(rr: tagged), deviceId: active)
             XCTAssertEqual(inserted.rr, 0, "re-offload changes only source provenance, not row count")
             let restored = try await score()
+            let restoredFreshness = try await store.metricSeries(deviceId: canonical + "-noop",
+                key: "hrv_fresh_scoring_valid", from: input.day, to: input.day)
+            XCTAssertEqual(restoredFreshness.first?.value, 1)
             XCTAssertGreaterThan(try XCTUnwrap(restored.avgHrv), 0)
             XCTAssertNotEqual(restored.avgHrv, legacySnapshot.avgHrv)
             // #2126: the first labelled night restores HRV, but Charge recalibrates against
@@ -283,8 +376,8 @@ final class IntelligenceRRSourceTests: XCTestCase {
     }
 
     // A completed night relative to the test's local day, using the established HR-only sleep fixture.
-    private func night() -> (day: String, hr: [HRSample], rr: [RRInterval]) {
-        let start = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970) - 86_400
+    private func night(daysAgo: Int = 1) -> (day: String, hr: [HRSample], rr: [RRInterval]) {
+        let start = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970) - daysAgo * 86_400
         let day = Repository.localDayKey(Date(timeIntervalSince1970: Double(start)))
         var hr: [HRSample] = []
         var rr: [RRInterval] = []

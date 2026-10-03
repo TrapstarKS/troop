@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
 import kotlin.math.roundToInt
 
 /**
@@ -800,16 +802,47 @@ class WhoopRepository(
         replaceMetricKeys, replaceMetricSourceIds,
     )
 
-    /** Computed-only daily rows; unlike daysMerged this can never substitute imported/calendar steps. */
-    suspend fun computedDailyUnion(activeStrapId: String, from: String, to: String): List<DailyMetric> =
-        unionByDay(computedSourceIds(activeStrapId).map { dao.dailyMetricsRange(it, from, to) })
-
     /** Joins physical-source HRV and evidence before any per-field source coalescing. */
     fun hrvProvenanceFlow(activeStrapId: String, from: String, to: String): Flow<List<HrvProvenanceRow>> =
         dao.hrvProvenanceFlow(importedSourceIds(activeStrapId) + computedSourceIds(activeStrapId), from, to)
 
+    /** Computed-only daily rows; unlike daysMerged this can never substitute imported/calendar steps. */
     fun computedDailyUnionFlow(activeStrapId: String, from: String, to: String): Flow<List<DailyMetric>> =
         unionDaysFlow(computedSourceIds(activeStrapId).map { dao.dailyMetricsRangeFlow(it, from, to) })
+
+    /** Charge-only HRV eligibility; ordinary computed/display rows remain unchanged. */
+    suspend fun chargeComputedDailyUnion(
+        activeStrapId: String, from: String, to: String, requiredFreshDay: String? = null,
+    ): List<DailyMetric> {
+        val sources = computedSourceIds(activeStrapId)
+        val daily = sources.map { dao.dailyMetricsRange(it, from, to) }
+        val markers = sources.map { source ->
+            try {
+                dao.chargeHrvProof(source, from, to).associateBy { it.day }
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                null // A failed metadata read must not permit a preserved HRV.
+            }
+        }
+        return chargeUnionByDay(daily, markers, requiredFreshDay)
+    }
+
+    fun chargeComputedDailyUnionFlow(
+        activeStrapId: String, from: String, to: String, requiredFreshDay: String? = null,
+    ): Flow<List<DailyMetric>> {
+        val flows = computedSourceIds(activeStrapId).map { source ->
+            val markers = dao.chargeHrvProofFlow(source, from, to)
+                .map<List<ChargeHrvProof>, Map<String, ChargeHrvProof>?> { rows -> rows.associateBy { it.day } }
+                .catch { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    emit(null)
+                }
+            combine(dao.dailyMetricsRangeFlow(source, from, to), markers) { daily, marker -> daily to marker }
+        }
+        return combine(flows) { perSource ->
+            chargeUnionByDay(perSource.map { it.first }, perSource.map { it.second }, requiredFreshDay)
+        }
+    }
 
     /** Imported-only daily rows over the same active-and-canonical union, the twin of
      *  [computedDailyUnionFlow]. The Charge baselines (#2525) read the two buckets apart, because their rule
@@ -2811,6 +2844,24 @@ class WhoopRepository(
                 byDay[d.day] = if (held == null) d else coalesceDay(held, d)
             }
             return byDay.values.toList()
+        }
+
+        internal fun chargeUnionByDay(
+            lists: List<List<DailyMetric>>, proofs: List<Map<String, ChargeHrvProof>?>, requiredFreshDay: String?,
+        ): List<DailyMetric> {
+            val firstHrv = LinkedHashMap<String, Pair<Double, Double?>>()
+            for ((index, rows) in lists.withIndex()) for (row in rows) {
+                val value = row.avgHrv ?: continue
+                val proof = proofs[index]?.get(row.day)
+                val marker = if (proof != null && proof.value == value) proof.freshScoringValid else Double.NaN
+                firstHrv.putIfAbsent(row.day, value to marker)
+            }
+            return unionByDay(lists).map { row ->
+                val witness = firstHrv[row.day]
+                row.copy(avgHrv = com.noop.analytics.ChargeBaselines.ownHrvValue(
+                    witness?.first, witness?.second, row.day == requiredFreshDay,
+                ))
+            }
         }
 
         /**

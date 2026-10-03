@@ -23,6 +23,18 @@ import Foundation
 // Byte-identical twin of the Kotlin `ChargeBaselines`.
 public enum ChargeBaselines {
 
+    /// A computed Charge input keeps its own source's freshness marker. Unknown historical inputs
+    /// remain compatible except on the WHOOP 5 measurement-boundary day. Kotlin twin: `ownHrvValue`.
+    public static func ownHrvValue(_ value: Double?, freshScoringValid: Double?,
+                                   requireFresh: Bool = false) -> Double? {
+        guard let value, value.isFinite, value >= Baselines.hrvCfg.minVal,
+              value <= Baselines.hrvCfg.maxVal else { return nil }
+        if let marker = freshScoringValid {
+            return marker.isFinite && marker == 1 ? value : nil
+        }
+        return requireFresh ? nil : value
+    }
+
     /// Calendar days of nightly history a Charge baseline reads, counted back from the anchor day and
     /// including it. Deliberately the default scan window (`analyzeRecent(maxDays: 21)`), so the own nights
     /// a baseline reads are the ones the pass has just scored, and nothing changes for a wearer with no

@@ -434,6 +434,9 @@ data class MetricSeriesRow(
     val value: Double,
 )
 
+/** Joined Charge witness: the marker and HRV value are read from the same database snapshot. */
+data class ChargeHrvProof(val day: String, val value: Double, val freshScoringValid: Double?)
+
 /**
  * Provenance for one NOOP-computed score. [sourceId] normally records the provider actually used, while
  * `vo2max_est` records its estimator id. Separate from `dayOwnership`, which controls input resolution.

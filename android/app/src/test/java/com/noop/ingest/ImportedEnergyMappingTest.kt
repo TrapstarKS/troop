@@ -17,6 +17,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
 import java.lang.reflect.Proxy
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], manifest = Config.NONE)
@@ -39,9 +41,13 @@ class ImportedEnergyMappingTest {
 
     @Test fun wearableImportsKnownTotalAndActiveAsDistinctQuantities() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val file = File(context.cacheDir, "oura-energy.json")
+        val file = File(context.cacheDir, "oura-energy.zip")
         try {
-            file.writeText("""{"daily_activity":[{"day":"2026-06-01","active_calories":520,"total_calories":2450},{"day":"2026-06-02","active_calories":312}]}""")
+            ZipOutputStream(file.outputStream()).use { zip ->
+                zip.putNextEntry(ZipEntry("oura-energy.json"))
+                zip.write("""{"daily_activity":[{"day":"2026-06-01","active_calories":520,"total_calories":2450},{"day":"2026-06-02","active_calories":312}]}""".toByteArray())
+                zip.closeEntry()
+            }
             val writes = Writes()
             val summary = WearableExportImporter.importExport(context, Uri.fromFile(file), writes.repo)
             assertTrue(summary.message, writes.days.isNotEmpty())

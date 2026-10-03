@@ -2468,6 +2468,7 @@
     <string name="ground_truth_export">Экспортировать сессию</string>
     <string name="ground_truth_exporting">Формирование экспорта…</string>
     <string name="ground_truth_export_failed">Не удалось экспортировать сессию: %1$s</string>
+    <string name="debug_export_failed">Не удалось экспортировать файл: %1$s</string>
     <string name="ground_truth_sessions">Записанные сессии</string>
     <string name="ground_truth_no_sessions">Сессии ещё не записаны.</string>
     <string name="ground_truth_comment">Комментарий к сессии</string>

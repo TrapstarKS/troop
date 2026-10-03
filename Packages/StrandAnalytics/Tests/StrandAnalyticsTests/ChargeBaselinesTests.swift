@@ -9,6 +9,40 @@ import WhoopStore
 /// been worn. Byte-identical twin: Kotlin `ChargeBaselinesTest` (same cases, same oracle literal).
 final class ChargeBaselinesTests: XCTestCase {
 
+    func testOwnHrvFreshnessMatchesStandaloneSwiftOracle() {
+        let values: [Double?] = [nil, Baselines.hrvCfg.minVal - 1, Baselines.hrvCfg.minVal, 44,
+            Baselines.hrvCfg.maxVal, Baselines.hrvCfg.maxVal + 1, .nan, .infinity]
+        let markers: [Double?] = [nil, 0, 1, 0.49, 0.5, 2, -1, .nan, .infinity, -.infinity]
+        var lines: [String] = []
+        for (index, value) in values.enumerated() {
+            for strict in [false, true] {
+                let bits = markers.map { marker -> String in
+                    ChargeBaselines.ownHrvValue(value, freshScoringValid: marker, requireFresh: strict)
+                        .map { String(format: "%016llx", $0.bitPattern) } ?? "-"
+                }.joined(separator: ",")
+                lines.append("v=\(index) fresh=\(strict ? 1 : 0) \(bits)")
+            }
+        }
+        XCTAssertEqual(lines.joined(separator: "\n"), """
+        v=0 fresh=0 -,-,-,-,-,-,-,-,-,-
+        v=0 fresh=1 -,-,-,-,-,-,-,-,-,-
+        v=1 fresh=0 -,-,-,-,-,-,-,-,-,-
+        v=1 fresh=1 -,-,-,-,-,-,-,-,-,-
+        v=2 fresh=0 4014000000000000,-,4014000000000000,-,-,-,-,-,-,-
+        v=2 fresh=1 -,-,4014000000000000,-,-,-,-,-,-,-
+        v=3 fresh=0 4046000000000000,-,4046000000000000,-,-,-,-,-,-,-
+        v=3 fresh=1 -,-,4046000000000000,-,-,-,-,-,-,-
+        v=4 fresh=0 406f400000000000,-,406f400000000000,-,-,-,-,-,-,-
+        v=4 fresh=1 -,-,406f400000000000,-,-,-,-,-,-,-
+        v=5 fresh=0 -,-,-,-,-,-,-,-,-,-
+        v=5 fresh=1 -,-,-,-,-,-,-,-,-,-
+        v=6 fresh=0 -,-,-,-,-,-,-,-,-,-
+        v=6 fresh=1 -,-,-,-,-,-,-,-,-,-
+        v=7 fresh=0 -,-,-,-,-,-,-,-,-,-
+        v=7 fresh=1 -,-,-,-,-,-,-,-,-,-
+        """)
+    }
+
     private let hrvCfg = Baselines.hrvCfg
     private let rhrCfg = Baselines.restingHRCfg
 

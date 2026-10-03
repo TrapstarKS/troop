@@ -2662,6 +2662,7 @@
     <string name="ground_truth_export">Export session</string>
     <string name="ground_truth_exporting">Building export…</string>
     <string name="ground_truth_export_failed">Couldn’t export session: %1$s</string>
+    <string name="debug_export_failed">Couldn’t export file: %1$s</string>
     <string name="ground_truth_sessions">Recorded sessions</string>
     <string name="ground_truth_no_sessions">No sessions recorded yet.</string>
     <string name="ground_truth_comment">Session comment</string>

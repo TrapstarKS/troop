@@ -2627,6 +2627,7 @@
     <string name="ground_truth_export">Exportar sesión</string>
     <string name="ground_truth_exporting">Creando exportación…</string>
     <string name="ground_truth_export_failed">No se pudo exportar la sesión: %1$s</string>
+    <string name="debug_export_failed">No se pudo exportar el archivo: %1$s</string>
     <string name="ground_truth_sessions">Sesiones grabadas</string>
     <string name="ground_truth_no_sessions">Aún no hay sesiones grabadas.</string>
     <string name="ground_truth_comment">Comentario de la sesión</string>

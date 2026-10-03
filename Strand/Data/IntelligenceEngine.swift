@@ -926,8 +926,9 @@ final class IntelligenceEngine: ObservableObject {
             .sorted { $0.day < $1.day }
         let registry = DeviceRegistryStore(dbQueue: store.registryWriter)
         let regActiveId = (try? registry.activeDeviceId()) ?? deviceId
-        let hrvEpoch = await repo.effectiveHrvEpoch(store: store, activeOwner: regActiveId,
-            importedAlias: deviceId, manualEpoch: Baselines.hrvBaselineEpoch(), offsetSec: tzOffset)
+        let regimeEpoch = await repo.effectiveHrvEpoch(store: store, activeOwner: regActiveId,
+            importedAlias: deviceId, manualEpoch: 0, offsetSec: tzOffset)
+        let hrvEpoch = max(Baselines.hrvBaselineEpoch(), regimeEpoch)
         // HRV baseline honours the manual "Recalibrate baseline" epoch (noop.hrvBaselineEpoch); the
         // resting-HR baseline honours the Charge-wide sibling (noop.recoveryBaselineEpoch). Pass the
         // per-value "yyyy-MM-dd" day keys (parallel to the values) so foldHistory can drop every night
@@ -935,7 +936,9 @@ final class IntelligenceEngine: ObservableObject {
         let chargeAnchorDay = AnalyticsEngine.dayString(now, offsetSec: tzOffset)
         let chargeFromDay = Baselines.cutoffKey(todayKey: chargeAnchorDay, carryDays: ChargeBaselines.windowDays - 1)
         let baselineImported = await repo.unionDailyMetrics(store: store, from: chargeFromDay, to: chargeAnchorDay)
-        let baselineOwn = await repo.unionComputedDailyMetrics(store: store, from: chargeFromDay, to: chargeAnchorDay)
+        let baselineOwn = await repo.unionChargeComputedDailyMetrics(store: store, from: chargeFromDay,
+            to: chargeAnchorDay, requiredFreshDay: regimeEpoch > 0
+                ? AnalyticsEngine.dayString(Int(regimeEpoch), offsetSec: 0) : nil)
         let initial = ChargeBaselines.resolve(imported: baselineImported, own: baselineOwn,
             anchorDay: chargeAnchorDay, hrvEpoch: hrvEpoch, recoveryEpoch: Baselines.recoveryBaselineEpoch())
         let baselines1 = AnalyticsEngine.ProfileBaselines(hrv: initial.hrv, restingHR: initial.restingHR)
@@ -1947,8 +1950,9 @@ final class IntelligenceEngine: ObservableObject {
             let res = scan.result
             readOwnerByDay[res.daily.day] = (scan.readOwner, scan.hrRows)
             resolvedScoreOwnerByDay[res.daily.day] = scan.readOwner
-            nightlyHrvByDay[res.daily.day] = res.daily.avgHrv
-            hrvFreshScoringValidByDay[res.daily.day] = HealthSignalReliability.hrv(res.daily.avgHrv, computed: false) != nil
+            let freshHrv = ChargeBaselines.ownHrvValue(res.daily.avgHrv, freshScoringValid: 1)
+            nightlyHrvByDay[res.daily.day] = freshHrv
+            hrvFreshScoringValidByDay[res.daily.day] = freshHrv != nil
             respFreshScoringValidByDay[res.daily.day] = HealthSignalReliability.respiration(res.daily.respRateBpm, computed: false) != nil
             nightlyRhrByDay[res.daily.day] = res.daily.restingHr.map(Double.init)
             nightlyRespByDay[res.daily.day] = res.daily.respRateBpm
@@ -3592,8 +3596,8 @@ final class IntelligenceEngine: ObservableObject {
 // is most easily dropped at (they respell every field by name), so StrandTests asserts them directly
 // rather than through a copy that could drift. Nothing outside this module can see them either way.
 extension DailyMetric {
-    /// Rebuild with the exact legacy R-R-derived snapshot while keeping every other freshly-scored cell.
-    func with(avgHrv hrv: Double, recovery r: Double?, respRateBpm resp: Double?,
+    /// Rebuild the R-R-derived input or retained snapshot while keeping every unrelated cell.
+    func with(avgHrv hrv: Double?, recovery r: Double?, respRateBpm resp: Double?,
               avgSdnn sdnn: Double?) -> DailyMetric {
         DailyMetric(day: day, totalSleepMin: totalSleepMin, efficiency: efficiency, deepMin: deepMin,
                     remMin: remMin, lightMin: lightMin, disturbances: disturbances, restingHr: restingHr,

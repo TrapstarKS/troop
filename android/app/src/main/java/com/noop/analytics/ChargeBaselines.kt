@@ -27,6 +27,14 @@ import com.noop.data.DailyMetric
  */
 object ChargeBaselines {
 
+    /** A stored own HRV contributes only when its own source's fresh-scoring witness permits it. */
+    fun ownHrvValue(value: Double?, freshScoringValid: Double?, requireFresh: Boolean = false): Double? {
+        val cfg = Baselines.hrvCfg
+        if (value == null || !value.isFinite() || value < cfg.minVal || value > cfg.maxVal) return null
+        if (freshScoringValid == null) return if (requireFresh) null else value
+        return if (freshScoringValid.isFinite() && freshScoringValid == 1.0) value else null
+    }
+
     /**
      * Calendar days of nightly history a Charge baseline reads, counted back from the anchor day and
      * including it. Deliberately the default scan window (`analyzeRecent(maxDays = 21)`), so the own nights a

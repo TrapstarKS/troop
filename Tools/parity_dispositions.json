@@ -477,6 +477,68 @@
       "identity_sha256": "f2fcc9a538bee8eaef0fa7a5ada1eb2eb27a1d63ddcd443355b4086ca78cbc0c",
       "platform": "kotlin",
       "rationale": "Room MIGRATION_41_42 implements Migration.migrate; GRDB registers v48-daily-active-energy as an inline closure. Shared schema_oracle.json and actual migration/roundtrip tests pin the same appended nullable REAL column, with no historical backfill. Refs ryanbr/noop#2608."
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-constant",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::CHARGE_HRV_PROOF_SQL",
+      "identity_sha256": "e710b2372116c8eaa52b909276282a1cc937849425860464fe341d0b8a0cb9f5",
+      "platform": "kotlin",
+      "rationale": "Room requires a compile-time SQL constant for its suspend and Flow queries; GRDB embeds the identical source/day/key join in WhoopStore.chargeHrvProof in Packages/WhoopStore/Sources/WhoopStore/MetricSeriesStore.swift. Both execute actual SQLite fixtures. Refs ryanbr/noop#2126 and ryanbr/noop#2525."
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/IntelligenceEngine.kt::analyzeRecentOnCpu/25#1",
+      "identity_sha256": "6a7ddffde66788da6fc985b2079487d74b9055d002a7a1970f870ec8c02468f9",
+      "platform": "kotlin",
+      "rationale": "Swift IntelligenceEngine.analyzeRecent performs the same Charge freshness and civil-boundary fold in the excluded app layer. The added parameter carries the regime day separately from manual epochs; pure eligibility is guarded by a 160-vector Swift oracle and repository/engine regressions. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/IntelligenceEngine.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::chargeHrvProofFlow/3#1",
+      "identity_sha256": "62bf65234c70d0794a34b01215fa9f4a0e11a7908c2e9695ac663d039be817f1",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.refresh reads WhoopStore.chargeHrvProof through unionChargeComputedDailyMetrics and publishes the same joined proof via ObservableObject; Room uses a Flow query to observe both tables. The suspend SQL twin is paired in WhoopStore, and reactive updates have regression coverage. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::chargeComputedDailyUnion/4#1",
+      "identity_sha256": "9bb52628c063016d768dbbe158d4652f0535e25ca668bf63a57084a33b03e75b",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.unionChargeComputedDailyMetrics performs the same source-owned HRV proof check before active/canonical coalescing in the excluded app layer. Actual SQLite and cross-source collision regressions accompany the pure eligibility oracle. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::chargeComputedDailyUnionFlow/4#1",
+      "identity_sha256": "c37d04ef5cd48a9dc45c242eeebfe289ee8142c83dbde6c4b5dc9d76f753c432",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.refresh publishes unionChargeComputedDailyMetrics through ObservableObject in the excluded app layer; Android combines the same per-source raw rows and joined proofs through Flow. Marker-only and regime-only updates have reactive regressions. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::chargeUnionByDay/3#1",
+      "identity_sha256": "5e0e024acaceafcd387ddcde137f13c5607501ca090ab3166c68185726380983",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.unionChargeComputedDailyMetrics contains the same first-raw-source proof selection and post-coalescing HRV filter in the excluded app layer. This Kotlin extraction serves suspend/Flow readers and regression fixtures; it does not waive numeric parity. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/IntelligenceEngine.kt::foldChargeBaselines/15#1",
+      "identity_sha256": "cbff12f500de7ca8b983c00dfbd9dcf21f4fb571602ce656a9a2d07fb268ed3f",
+      "platform": "kotlin",
+      "rationale": "Swift IntelligenceEngine.analyzeRecent retains the same Charge history selection and folding block inline in the excluded app layer. Kotlin moves that block verbatim into a private helper to preserve the existing JaCoCo method-size ratchet; no formula, inputs, configuration, trace order or persistence changes. Pure Charge/Baselines twins remain oracle-guarded. Refs ryanbr/noop#1524 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/IntelligenceEngine.swift"
     }
   ]
 }

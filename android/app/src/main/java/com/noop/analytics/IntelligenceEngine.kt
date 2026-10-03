@@ -535,12 +535,14 @@ object IntelligenceEngine {
             // its JaCoCo bytecode budget, and both the initial and heal pass must fold the same era.
             val offsetSec = java.util.TimeZone.getDefault().getOffset(nowSeconds * 1_000L) / 1_000L
             val owner = ownerSource?.activeWriteId() ?: importedDeviceId
-            val hrvEpoch = repo.effectiveHrvEpoch(owner, importedDeviceId, baselineEpoch, offsetSec)
+            val regimeEpoch = repo.effectiveHrvEpoch(owner, importedDeviceId, 0.0, offsetSec)
+            val hrvEpoch = maxOf(baselineEpoch, regimeEpoch)
+            val requiredFreshDay = if (regimeEpoch > 0.0) AnalyticsEngine.dayString(regimeEpoch.toLong(), 0L) else null
             val (out, healed) = analyzeRecentOnCpu(repo, profile, maxDays, importedDeviceId, maxHROverride,
                 nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, hrvEpoch,
                 recoveryEpoch, diag, useExperimentalSleepV2, useMotionAwareWake, sleepTraceSink, recoveryTraceSink,
                 stepsTraceSink, universalSink, workoutsTraceSink, hrvTraceSink, deepHrvWindow,
-                spo2CandidateDisplay, effortMethod, dayCycleMode)
+                spo2CandidateDisplay, effortMethod, dayCycleMode, requiredFreshDay)
             val result = if (healed == 0) out
             // #899 heal re-pass: the pass above deleted overlapping duplicate sleep sessions AFTER its days
             // were scored, and the read-side dedup those days consumed had no bank-recency witness (the fresh
@@ -551,7 +553,7 @@ object IntelligenceEngine {
                 nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, hrvEpoch,
                 recoveryEpoch, diag, useExperimentalSleepV2, useMotionAwareWake, sleepTraceSink, recoveryTraceSink,
                 stepsTraceSink, universalSink, workoutsTraceSink, hrvTraceSink, deepHrvWindow,
-                spo2CandidateDisplay, effortMethod, dayCycleMode).first
+                spo2CandidateDisplay, effortMethod, dayCycleMode, requiredFreshDay).first
             // Write the pruned cache back, after the heal re-pass so the payload reflects whichever pass ran
             // last, and only when it moved. `serialize` renders sorted, so a pass that reused every day
             // produces the string already stored and skips the write entirely.
@@ -677,6 +679,7 @@ object IntelligenceEngine {
         // #1545: the Effort TRIMP recipe, threaded from the public wrapper.
         effortMethod: StrainScorer.Method = StrainScorer.Method.EDWARDS,
         dayCycleMode: DayCycleMode = DayCycleMode.SLEEP_ONSET,
+        requiredFreshDay: String? = null,
         // #899 heal re-pass: the second component of the return is how many overlapping duplicate sleep
         // sessions the heal below deleted this pass. The public wrapper re-runs ONCE when it is non-zero
         // so the affected days re-score against the cleaned store.
@@ -746,7 +749,7 @@ object IntelligenceEngine {
         val chargeFromDay = Baselines.cutoffKey(chargeAnchorDay, ChargeBaselines.windowDays - 1)
         val chargeOwner = ownerSource?.activeWriteId() ?: importedDeviceId
         val baselineImported = repo.importedDailyUnion(chargeOwner, chargeFromDay, chargeAnchorDay)
-        val baselineOwn = repo.computedDailyUnion(chargeOwner, chargeFromDay, chargeAnchorDay)
+        val baselineOwn = repo.chargeComputedDailyUnion(chargeOwner, chargeFromDay, chargeAnchorDay, requiredFreshDay)
         val initial = ChargeBaselines.resolve(baselineImported, baselineOwn, chargeAnchorDay,
             baselineEpoch, recoveryEpoch)
         val baselines1 = ProfileBaselines(hrv = initial.hrv, restingHR = initial.restingHR)
@@ -998,8 +1001,9 @@ object IntelligenceEngine {
                     // matching the loop's own guard).
                     if (universalSink != null) readOwnerByDay[day] = OwnerRead(cached.owner, cached.hrRows)
                     cached.hrvOverCount?.let { hrvOverCountByDay[day] = it }
-                    nightlyHrvByDay[day] = cached.res.daily.avgHrv
-                    hrvFreshScoringValidByDay[day] = HealthSignalReliability.hrv(cached.res.daily.avgHrv, computed = false) != null
+                    val freshHrv = ChargeBaselines.ownHrvValue(cached.res.daily.avgHrv, 1.0)
+                    nightlyHrvByDay[day] = freshHrv
+                    hrvFreshScoringValidByDay[day] = freshHrv != null
                     respFreshScoringValidByDay[day] = HealthSignalReliability.respiration(cached.res.daily.respRateBpm, computed = false) != null
                     nightlyRhrByDay[day] = cached.res.daily.restingHr?.toDouble()
                     nightlySkinByDay[day] = cached.res.nightlySkinTempC
@@ -1421,8 +1425,9 @@ object IntelligenceEngine {
             // Harvest the baseline-independent nightly aggregates (a day with no detected
             // sleep yields null → recorded as a missing night, i.e. skip-and-hold). The raw
             // streams (hr/rr/...) go out of scope here and are freed before the next night.
-            nightlyHrvByDay[day] = res.daily.avgHrv
-            hrvFreshScoringValidByDay[day] = HealthSignalReliability.hrv(res.daily.avgHrv, computed = false) != null
+            val freshHrv = ChargeBaselines.ownHrvValue(res.daily.avgHrv, 1.0)
+            nightlyHrvByDay[day] = freshHrv
+            hrvFreshScoringValidByDay[day] = freshHrv != null
             respFreshScoringValidByDay[day] = HealthSignalReliability.respiration(res.daily.respRateBpm, computed = false) != null
             nightlyRhrByDay[day] = res.daily.restingHr?.toDouble()
             nightlySkinByDay[day] = res.nightlySkinTempC
@@ -1552,71 +1557,10 @@ object IntelligenceEngine {
             nowLocalMidnight - (maxDays - 1) * SECONDS_PER_DAY, tzOffsetSeconds,
         )
         val newestDay = AnalyticsEngine.dayString(nowLocalMidnight, tzOffsetSeconds)
-        val importedNights = { value: (DailyMetric) -> Double? -> baselineImported.map { it.day to value(it) } }
-        val ownNights = { byDay: Map<String, Double?> -> byDay.entries.map { it.key to it.value } }
-
-        // Which SOURCE measured each night's respiration — the input `Baselines.deviceEraEpoch` (#459)
-        // needs for the resp fold below. `resolvedScoreOwnerByDay` (THIS PASS's freshly resolved per-day
-        // owner, before any re-homing) is the only per-night source this pass knows, and it covers every own
-        // night the window holds. The imported rows in `hist` are stored under `importedDeviceId` and are
-        // tagged with it, which buckets to WHOOP; the days this engine scores are written under `computedId`,
-        // never into `hist`. Mirrors Swift.
-        val respSourceByDay = HashMap<String, String>()
-        for ((day, owner) in resolvedScoreOwnerByDay) respSourceByDay[day] = owner
-        val respCandidateDays = (baselineImported.map { it.day }.toSet() + nightlyRespByDay.keys).sorted()
-        // Resp baseline: WITHIN one brand it pooled imported (cloud) values with on-device RSA estimates;
-        // since #2525 the two meet only while the import seeds. ACROSS brands it is not acceptable: a WHOOP
-        // export reports its own measured rate (~16.1 on this history) while an Oura ring reports the rate
-        // its firmware measured (~14.6), so pooling them turns a strap SWITCH into a ~3 sigma illness-ward
-        // step against a ~0.52 bpm spread — a device artifact scored as physiology, the same failure #459
-        // named for HRV. `deviceEraEpoch` returns 0.0 for a single-brand history (every WHOOP-origin id —
-        // import, strap, the computed sibling, the Apple/HC riders — buckets to one brand), so a WHOOP-only
-        // user is unaffected; `max` with the manual Recalibrate epoch keeps whichever cut is LATER, since
-        // both mean "ignore nights before this".
-        val respEraEpoch = Baselines.deviceEraEpoch(
-            respCandidateDays.map { it to (respSourceByDay[it] ?: importedDeviceId) },
-        )
-        val respEpoch = maxOf(recoveryEpoch, respEraEpoch)
-        // HRV honours noop.hrvBaselineEpoch; rhr/resp/skin honour noop.recoveryBaselineEpoch, so the manual
-        // Recalibrate restarts the whole Charge build-up together. A 0.0 epoch drops nothing.
-        val hrvHistory = ChargeBaselines.history(
-            importedNights { it.avgHrv }, ownNights(nightlyHrvByDay), newestDay, hrvCfg, baselineEpoch,
-        )
-        val rhrHistory = ChargeBaselines.history(
-            importedNights { it.restingHr?.toDouble() }, ownNights(nightlyRhrByDay), newestDay, rhrCfg, recoveryEpoch,
-        )
-        val respHistory = ChargeBaselines.history(
-            importedNights { it.respRateBpm }, ownNights(nightlyRespByDay), newestDay, respCfg, respEpoch,
-        )
-        // Absolute on-device temperatures keep their own sensor baseline; vendor values are not pooled.
-        val skinHistory = ChargeBaselines.history(
-            emptyList(), ownNights(nightlySkinByDay), newestDay, skinCfg, recoveryEpoch,
-        )
-        // #2525: one Recovery test-mode line naming what each of the four baselines was folded from (own
-        // nights, or own nights still seeded by the import), read off the same histories the folds consume.
-        recoveryTraceSink?.invoke(
-            ChargeBaselines.logLine(newestDay, hrvHistory, rhrHistory, respHistory, skinHistory),
-        )
-        // #1614: the per-night HRV fold, traced (see [emitHrvFoldTrace] for scope and why it is a call
-        // rather than an inline lambda). Sits immediately above the fold it describes, and takes the SAME
-        // baselineEpoch, so the trace can only ever describe the fold the scorer actually performed.
-        emitHrvFoldTrace(recoveryTraceSink, hrvHistory.values, hrvHistory.dayKeys, hrvCfg, baselineEpoch)
-        val hrvBase2 = Baselines.foldHistory(hrvHistory.values, hrvHistory.dayKeys, hrvCfg, baselineEpoch)
-        val rhrBase2 = Baselines.foldHistory(rhrHistory.values, rhrHistory.dayKeys, rhrCfg, recoveryEpoch)
-        // Gated on `usable` because RecoveryScorer includes the resp term whenever a baseline object is
-        // present , a CALIBRATING (<4-night) baseline would let one noisy night move recovery (mirrors the
-        // skin-temp use-site gate).
-        val respBase2 = Baselines
-            .foldHistory(respHistory.values, respHistory.dayKeys, respCfg, respEpoch)
-            .takeIf { it.usable }
-        // Gated on `usable` for consistency with the resp baseline above AND the Swift reference
-        // (`skinFold.usable ? skinFold : nil`) , the use-site re-checks `usable` too, so this is
-        // belt-and-suspenders, but it keeps the platforms byte-aligned.
-        val skinBase2 = Baselines
-            .foldHistory(skinHistory.values, skinHistory.dayKeys, skinCfg, recoveryEpoch)
-            .takeIf { it.usable }
-        val baselines2 = ProfileBaselines(
-            hrv = hrvBase2, restingHR = rhrBase2, resp = respBase2, skinTemp = skinBase2,
+        val baselines2 = foldChargeBaselines(
+            baselineImported, nightlyHrvByDay, nightlyRhrByDay, nightlyRespByDay, nightlySkinByDay,
+            resolvedScoreOwnerByDay, importedDeviceId, newestDay, hrvCfg, rhrCfg, respCfg, skinCfg,
+            baselineEpoch, recoveryEpoch, recoveryTraceSink,
         )
 
         // Real (non-detected) workouts in the scored window, used to de-duplicate detected bouts so a
@@ -2125,6 +2069,91 @@ object IntelligenceEngine {
             measuredResting, effortMethod)
 
         return out to healDropped.size
+    }
+
+    private fun foldChargeBaselines(
+        baselineImported: List<DailyMetric>,
+        nightlyHrvByDay: Map<String, Double?>,
+        nightlyRhrByDay: Map<String, Double?>,
+        nightlyRespByDay: Map<String, Double?>,
+        nightlySkinByDay: Map<String, Double?>,
+        resolvedScoreOwnerByDay: Map<String, String>,
+        importedDeviceId: String,
+        newestDay: String,
+        hrvCfg: MetricCfg,
+        rhrCfg: MetricCfg,
+        respCfg: MetricCfg,
+        skinCfg: MetricCfg,
+        baselineEpoch: Double,
+        recoveryEpoch: Double,
+        recoveryTraceSink: ((String) -> Unit)?,
+    ): ProfileBaselines {
+        val importedNights = { value: (DailyMetric) -> Double? -> baselineImported.map { it.day to value(it) } }
+        val ownNights = { byDay: Map<String, Double?> -> byDay.entries.map { it.key to it.value } }
+
+        // Which SOURCE measured each night's respiration — the input `Baselines.deviceEraEpoch` (#459)
+        // needs for the resp fold below. `resolvedScoreOwnerByDay` (THIS PASS's freshly resolved per-day
+        // owner, before any re-homing) is the only per-night source this pass knows, and it covers every own
+        // night the window holds. The imported rows in `hist` are stored under `importedDeviceId` and are
+        // tagged with it, which buckets to WHOOP; the days this engine scores are written under `computedId`,
+        // never into `hist`. Mirrors Swift.
+        val respSourceByDay = HashMap<String, String>()
+        for ((day, owner) in resolvedScoreOwnerByDay) respSourceByDay[day] = owner
+        val respCandidateDays = (baselineImported.map { it.day }.toSet() + nightlyRespByDay.keys).sorted()
+        // Resp baseline: WITHIN one brand it pooled imported (cloud) values with on-device RSA estimates;
+        // since #2525 the two meet only while the import seeds. ACROSS brands it is not acceptable: a WHOOP
+        // export reports its own measured rate (~16.1 on this history) while an Oura ring reports the rate
+        // its firmware measured (~14.6), so pooling them turns a strap SWITCH into a ~3 sigma illness-ward
+        // step against a ~0.52 bpm spread — a device artifact scored as physiology, the same failure #459
+        // named for HRV. `deviceEraEpoch` returns 0.0 for a single-brand history (every WHOOP-origin id —
+        // import, strap, the computed sibling, the Apple/HC riders — buckets to one brand), so a WHOOP-only
+        // user is unaffected; `max` with the manual Recalibrate epoch keeps whichever cut is LATER, since
+        // both mean "ignore nights before this".
+        val respEraEpoch = Baselines.deviceEraEpoch(
+            respCandidateDays.map { it to (respSourceByDay[it] ?: importedDeviceId) },
+        )
+        val respEpoch = maxOf(recoveryEpoch, respEraEpoch)
+        // HRV honours noop.hrvBaselineEpoch; rhr/resp/skin honour noop.recoveryBaselineEpoch, so the manual
+        // Recalibrate restarts the whole Charge build-up together. A 0.0 epoch drops nothing.
+        val hrvHistory = ChargeBaselines.history(
+            importedNights { it.avgHrv }, ownNights(nightlyHrvByDay), newestDay, hrvCfg, baselineEpoch,
+        )
+        val rhrHistory = ChargeBaselines.history(
+            importedNights { it.restingHr?.toDouble() }, ownNights(nightlyRhrByDay), newestDay, rhrCfg, recoveryEpoch,
+        )
+        val respHistory = ChargeBaselines.history(
+            importedNights { it.respRateBpm }, ownNights(nightlyRespByDay), newestDay, respCfg, respEpoch,
+        )
+        // Absolute on-device temperatures keep their own sensor baseline; vendor values are not pooled.
+        val skinHistory = ChargeBaselines.history(
+            emptyList(), ownNights(nightlySkinByDay), newestDay, skinCfg, recoveryEpoch,
+        )
+        // #2525: one Recovery test-mode line naming what each of the four baselines was folded from (own
+        // nights, or own nights still seeded by the import), read off the same histories the folds consume.
+        recoveryTraceSink?.invoke(
+            ChargeBaselines.logLine(newestDay, hrvHistory, rhrHistory, respHistory, skinHistory),
+        )
+        // #1614: the per-night HRV fold, traced (see [emitHrvFoldTrace] for scope and why it is a call
+        // rather than an inline lambda). Sits immediately above the fold it describes, and takes the SAME
+        // baselineEpoch, so the trace can only ever describe the fold the scorer actually performed.
+        emitHrvFoldTrace(recoveryTraceSink, hrvHistory.values, hrvHistory.dayKeys, hrvCfg, baselineEpoch)
+        val hrvBase2 = Baselines.foldHistory(hrvHistory.values, hrvHistory.dayKeys, hrvCfg, baselineEpoch)
+        val rhrBase2 = Baselines.foldHistory(rhrHistory.values, rhrHistory.dayKeys, rhrCfg, recoveryEpoch)
+        // Gated on `usable` because RecoveryScorer includes the resp term whenever a baseline object is
+        // present , a CALIBRATING (<4-night) baseline would let one noisy night move recovery (mirrors the
+        // skin-temp use-site gate).
+        val respBase2 = Baselines
+            .foldHistory(respHistory.values, respHistory.dayKeys, respCfg, respEpoch)
+            .takeIf { it.usable }
+        // Gated on `usable` for consistency with the resp baseline above AND the Swift reference
+        // (`skinFold.usable ? skinFold : nil`) , the use-site re-checks `usable` too, so this is
+        // belt-and-suspenders, but it keeps the platforms byte-aligned.
+        val skinBase2 = Baselines
+            .foldHistory(skinHistory.values, skinHistory.dayKeys, skinCfg, recoveryEpoch)
+            .takeIf { it.usable }
+        return ProfileBaselines(
+            hrv = hrvBase2, restingHR = rhrBase2, resp = respBase2, skinTemp = skinBase2,
+        )
     }
 
     private suspend fun persistFitnessVitalityAndSteps(
