@@ -66,8 +66,9 @@ class RawCaptureExportContractTest {
     // without the other orphans every exported ZIP silently.
     @Test fun exportArchiveIsDeletedFromThePathTheExportWroteIt() {
         val collector = source("GroundTruthCollector.kt")
-        assertTrue(collector.contains("val outDir = File(context.cacheDir, \"logs\").apply { mkdirs() }"))
-        assertTrue(collector.contains("val zip = File(outDir, \"noop-5mg-raw-\$id.zip\")"))
+        assertTrue(collector.contains("val zip = File(context.cacheDir, \"logs/noop-5mg-raw-\$id.zip\")"))
+        assertTrue(collector.contains("return writePreparation(zip) { out ->"))
+        assertTrue(collector.contains("zip.parentFile?.mkdirs()"))
         assertTrue(collector.contains(
             "val payloadFiles = listOf(File(context.cacheDir, \"logs/noop-5mg-raw-\$sessionId.zip\"))"))
         assertTrue(collector.contains(
