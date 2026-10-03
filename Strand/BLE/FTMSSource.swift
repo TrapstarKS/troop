@@ -89,19 +89,26 @@ public final class FTMSSource: NSObject, ObservableObject {
     public init(live: LiveState,
                 log: @escaping (String) -> Void = { _ in },
                 onBattery: @escaping (Int) -> Void = { _ in },
-                feedsLive: Bool = true) {
+                feedsLive: Bool = true,
+                allowsLiveTransports: Bool? = nil,
+                centralFactory: ((CBCentralManagerDelegate) -> CBCentralManager?)? = nil) {
         self.live = live
         self.log = log
         self.onBattery = onBattery
         self.feedsLive = feedsLive
         super.init()
-        self.central = CBCentralManager(delegate: self, queue: nil)
+        central = LiveTransportPolicy.makeTransport(
+            allowed: allowsLiveTransports ?? LiveTransportPolicy.enabled) {
+            if let centralFactory { return centralFactory(self) }
+            return CBCentralManager(delegate: self, queue: nil)
+        }
     }
 
     // MARK: - Scanning
 
     /// Begin scanning for FTMS machines advertising the 0x1826 service.
     public func scan() {
+        guard central != nil else { return }
         discovered.removeAll()
         seenPeripherals.removeAll()
         scanning = true
@@ -117,13 +124,14 @@ public final class FTMSSource: NSObject, ObservableObject {
     /// Stop an in-progress scan.
     public func stopScan() {
         scanning = false
-        if central.state == .poweredOn { central.stopScan() }
+        if central?.state == .poweredOn { central?.stopScan() }
     }
 
     // MARK: - Connecting
 
     /// Connect to the chosen machine and start streaming its machine data.
     public func connect(_ id: UUID) {
+        guard central != nil else { return }
         stopScan()
         // Before the radio is up a retrieve answers nothing even for a machine this device has been bonded
         // to for weeks, and the branch below would read that as "never seen" and arm a scan (#2433).
@@ -153,7 +161,7 @@ public final class FTMSSource: NSObject, ObservableObject {
         stopScan()
         pendingConnectID = nil
         if let p = peripheral {
-            central.cancelPeripheralConnection(p)
+            central?.cancelPeripheralConnection(p)
         }
         peripheral = nil
         loggedFirstReading = false

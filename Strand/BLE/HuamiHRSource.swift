@@ -93,7 +93,9 @@ public final class HuamiHRSource: NSObject, ObservableObject {
                 persist: @escaping (Streams) -> Void = { _ in },
                 log: @escaping (String) -> Void = { _ in },
                 onBattery: @escaping (Int) -> Void = { _ in },
-                feedsLive: Bool = true) {
+                feedsLive: Bool = true,
+                allowsLiveTransports: Bool? = nil,
+                centralFactory: ((CBCentralManagerDelegate) -> CBCentralManager?)? = nil) {
         self.live = live
         self.deviceId = deviceId
         self.persist = persist
@@ -101,7 +103,11 @@ public final class HuamiHRSource: NSObject, ObservableObject {
         self.onBattery = onBattery
         self.feedsLive = feedsLive
         super.init()
-        self.central = CBCentralManager(delegate: self, queue: nil)
+        central = LiveTransportPolicy.makeTransport(
+            allowed: allowsLiveTransports ?? LiveTransportPolicy.enabled) {
+            if let centralFactory { return centralFactory(self) }
+            return CBCentralManager(delegate: self, queue: nil)
+        }
     }
 
     // MARK: - Scanning
@@ -110,6 +116,7 @@ public final class HuamiHRSource: NSObject, ObservableObject {
     /// 0x180D, some the Huami 0xFEE0, some neither in the advert), so we scan broadly and keep only the
     /// ones whose advertised name `ExperimentalBrand` recognises as Amazfit/Zepp/Mi Band.
     public func scan() {
+        guard central != nil else { return }
         discovered.removeAll()
         seenPeripherals.removeAll()
         scanning = true
@@ -125,12 +132,13 @@ public final class HuamiHRSource: NSObject, ObservableObject {
 
     public func stopScan() {
         scanning = false
-        if central.state == .poweredOn { central.stopScan() }
+        if central?.state == .poweredOn { central?.stopScan() }
     }
 
     // MARK: - Connecting
 
     public func connect(_ id: UUID) {
+        guard central != nil else { return }
         stopScan()
         needsPairing = nil
         // Before the radio is up a retrieve answers nothing even for a device this device has been bonded
@@ -159,7 +167,7 @@ public final class HuamiHRSource: NSObject, ObservableObject {
     public func stop() {
         stopScan()
         pendingConnectID = nil
-        if let p = peripheral { central.cancelPeripheralConnection(p) }
+        if let p = peripheral { central?.cancelPeripheralConnection(p) }
         peripheral = nil
         loggedFirstHR = false
         enabledAnyHR = false
