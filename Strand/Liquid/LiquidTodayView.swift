@@ -401,15 +401,6 @@ struct LiquidTodayView: View {
         .liquidMediumHaptic(trigger: pullHaptic)
         // hydrationSeq joins the id so logging a drink re-reads the card immediately, the same trigger set
         // classic TodayView's reloadHydration() uses.
-        .onChangeCompat(of: selectedDayOffset) { _ in
-            liveEffortRequest = UUID()
-            cachedDisplayDay = nil
-            cachedChargeDisplay = .noData
-            cachedRecoveryDayKey = nil
-            liveTodayStrain = nil
-            restScore = nil
-            workouts = []
-        }
         .task(id: "\(repo.refreshSeq)-\(selectedDayOffset)-\(repo.hydrationSeq)-\(hydrationEnabled)-\(dayCycleModeRaw)") {
             DashboardCardPrefs.migrateLegacyStepsAverage()
             await load()
@@ -1591,6 +1582,14 @@ struct LiquidTodayView: View {
     private func load() async {
         let effortRequest = UUID()
         liveEffortRequest = effortRequest
+        // Reset in the same task that owns the request token. A separate day-change callback can
+        // run after this task starts and invalidate the new load, leaving the selected day empty.
+        cachedDisplayDay = nil
+        cachedChargeDisplay = .noData
+        cachedRecoveryDayKey = nil
+        liveTodayStrain = nil
+        restScore = nil
+        workouts = []
         let loadDayKey = selectedDayKey
         let loadDeviceId = repo.deviceId
         let loadLogicalDay = selectedLogicalDay
