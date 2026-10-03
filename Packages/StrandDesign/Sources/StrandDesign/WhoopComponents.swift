@@ -93,7 +93,7 @@ public struct ScoreDial: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel ?? "\(label), \(value)\(unit)")
+        .accessibilityLabel(Text(verbatim: accessibilityLabel ?? [label, value + unit].joined(separator: ", ")))
     }
 }
 
@@ -339,7 +339,8 @@ public struct TopChrome: View {
             Button(action: onStrap) {
                 HStack(spacing: NoopMetrics.space1) {
                     if let batteryPercent {
-                        Text("\(min(max(batteryPercent, 0), 100))%")
+                        Text(Double(min(max(batteryPercent, 0), 100)) / 100,
+                             format: .percent.precision(.fractionLength(0)))
                             .font(StrandFont.captionNumber)
                     }
                     Image(systemName: isConnected ? "sensor.tag.radiowaves.forward" : "sensor.tag.radiowaves.forward.fill")
