@@ -251,8 +251,7 @@ internal val drawerGroups: List<DrawerGroup> = listOf(
         Destination.Insights, Destination.Trends, Destination.WeeklyPlan, Destination.Explore, Destination.Compare,
     ), defaultExpanded = true),
     DrawerGroup("Body", R.string.more_group_body, listOf(
-        Destination.Sleep, Destination.RecoveryDetail, Destination.StrainDetail,
-        Destination.Live, Destination.Workouts, Destination.Healthspan, Destination.VitalSigns,
+        Destination.Sleep, Destination.Live, Destination.Workouts, Destination.VitalSigns,
         Destination.LabBook, Destination.Stress, Destination.Breathe, Destination.Intervals,
         Destination.Rhythm,
     ), defaultExpanded = true),
