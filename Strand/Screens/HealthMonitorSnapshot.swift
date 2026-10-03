@@ -20,7 +20,7 @@ enum HealthMonitorSnapshot {
     static let keys = ["hrv", "rhr", "resp", "spo2", "skin"]
 
     static func dayKey(days: [DailyMetric], now: Date) -> String {
-        let logical = Repository.logicalDayKey(now)
+        let logical = BodyVitalSigns.logicalDayKey(now)
         return Repository.resolveToday(days: days, logicalKey: logical, localKey: Repository.localDayKey(now))?.day ?? logical
     }
 
