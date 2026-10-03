@@ -732,10 +732,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         localNotificationDispatcher.weeklyPlanProvider = provider
     }
 
-    private suspend fun refreshLocalNotifications(days: List<DailyMetric> = recentDays.value) {
-        val now = java.time.Instant.now()
-        val zone = java.time.ZoneId.systemDefault()
-        val localNow = now.atZone(zone)
+    private suspend fun refreshLocalNotifications(
+        days: List<DailyMetric> = recentDays.value,
+        localNow: java.time.ZonedDateTime = java.time.ZonedDateTime.now(),
+    ) {
+        val now = localNow.toInstant()
+        val zone = localNow.zone
         val row = resolveTodayRow(days, logicalDay(localNow).toString(), localNow.toLocalDate().toString())
         _today.value = row
         val snapshot = row?.let {
@@ -1077,7 +1079,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // So: if the local calendar day differs from the logical day AND a row for the local day
                 // has a banked night (totalSleepMin != null), prefer it; otherwise fall back to the
                 // logical-day row, preserving the #144 anti-blank guard (no night yet ⇒ keep yesterday's).
-                refreshLocalNotifications(days)
+                val localNow = java.time.ZonedDateTime.now()
+                val logicalKey = logicalDay(localNow).toString()
+                val localKey = localNow.toLocalDate().toString()
+                refreshLocalNotifications(days, localNow)
                 _healthAlert.value =
                     (if (_illnessWatchEnabled.value && _today.value != null &&
                         days.lastOrNull()?.day == _today.value?.day

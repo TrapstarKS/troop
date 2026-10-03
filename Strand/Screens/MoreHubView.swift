@@ -102,7 +102,7 @@ struct MoreHubView: View {
                                 today: Repository.localDayKey(Date())).current
     }
 
-    private func group<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
+    private func group<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: @escaping () -> Content) -> some View {
         VStack(alignment: .leading, spacing: NoopMetrics.space3) {
             SectionHeader(title)
             NoopCard { VStack(spacing: NoopMetrics.space3) { content() } }

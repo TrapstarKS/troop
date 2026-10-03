@@ -1212,11 +1212,9 @@ struct SettingsView: View {
                 }
                 #if os(iOS)
                 rowDivider
-                // #1841: the same preference Android drives its own bar with, by name and meaning. Here
-                // the SYSTEM owns the behaviour — iOS 26 minimises the tab bar to a pill on scroll rather
-                // than sliding it away — so this asks for the platform's reading of the intent rather
-                // than reproducing ours. Below iOS 26 the modifier is inert and the row simply does
-                // nothing, which is why it is not offered there.
+                // #1841: shared with Android by name and meaning. The custom tab capsule consumes
+                // the shell's vertical-scroll callbacks to hide and restore its chrome on iOS 26.
+                // The preference remains inactive on earlier iOS versions.
                 if #available(iOS 26.0, *) {
                     FormRow(label: "Hide bar when scrolling") {
                         Toggle("", isOn: $bottomBarAutoHide)

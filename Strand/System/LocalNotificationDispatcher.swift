@@ -23,6 +23,15 @@ protocol WeeklyPlanNotificationProviding {
 }
 
 enum LocalNotificationPreferences {
+    static func isAuthorized(_ status: UNAuthorizationStatus) -> Bool {
+        if status == .authorized || status == .provisional { return true }
+        #if os(iOS)
+        return status == .ephemeral
+        #else
+        return false
+        #endif
+    }
+
     static func isQuiet(now: Date = Date(), defaults: UserDefaults = .standard) -> Bool {
         let parts = Calendar.current.dateComponents([.hour, .minute], from: now)
         return LocalNotificationPolicy.isQuiet(
@@ -86,7 +95,9 @@ final class LocalNotificationDispatcher {
                 self.hadConnection = false
             }
         }.store(in: &observers)
-        model.registry.$activeDeviceId.dropFirst().sink { [weak self] _ in
+        model.$deviceRegistry.map { registry -> AnyPublisher<String, Never> in
+            registry?.$activeDeviceId.eraseToAnyPublisher() ?? Just("my-whoop").eraseToAnyPublisher()
+        }.switchToLatest().removeDuplicates().dropFirst().sink { [weak self] _ in
             self?.offWristAt = nil
             self?.disconnectedAt = nil
             self?.hadConnection = false
@@ -102,7 +113,7 @@ final class LocalNotificationDispatcher {
         guard let model else { return }
         let now = now ?? clock()
         let settings = await UNUserNotificationCenter.current().notificationSettings()
-        let authorized = [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus)
+        let authorized = LocalNotificationPreferences.isAuthorized(settings.authorizationStatus)
         guard authorized, !LocalNotificationPreferences.isQuiet(now: now, defaults: defaults) else { return }
         let nowSec = Int(now.timeIntervalSince1970)
         let today = Repository.localDayKey(now)
@@ -170,7 +181,9 @@ final class LocalNotificationDispatcher {
                            title: String(localized: "Your recorded streak"), body: summary)
             }
         }
-        if let workout = model.repo.workouts.max(by: { $0.startTs < $1.startTs }), workout.endTs <= nowSec {
+        if defaults.bool(forKey: LocalNotificationFamily.workoutReady.enabledKey),
+           let workout = await model.repo.workoutRows(days: 1).max(by: { $0.startTs < $1.startTs }),
+           workout.endTs <= nowSec {
             await post(.workoutReady, event: String(workout.startTs), occurrence: workout.endTs, now: nowSec,
                        title: String(localized: "Workout ready"),
                        body: String(localized: "Your recorded activity is available in Workouts after the data refresh."))

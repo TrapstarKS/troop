@@ -313,7 +313,7 @@ enum BatteryNotifier {
         // Authorization is requested once via requestAuthorization() when alerts are enabled; here
         // we only check status (no second system prompt).
         center.getNotificationSettings { settings in
-            guard [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus),
+            guard LocalNotificationPreferences.isAuthorized(settings.authorizationStatus),
                   !LocalNotificationPreferences.isQuiet(),
                   deliveryGate.isCurrent(identifier, token: token) else {
                 finish(false)

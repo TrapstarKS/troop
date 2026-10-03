@@ -133,14 +133,16 @@ struct LocalNotificationsView: View {
     }
 
     private var permissionLabel: String {
+        if LocalNotificationPreferences.isAuthorized(authorization) {
+            return String(localized: "System notifications allowed")
+        }
         switch authorization {
-        case .authorized, .provisional, .ephemeral: return String(localized: "System notifications allowed")
         case .denied: return String(localized: "System notifications blocked")
         default: return String(localized: "Notification permission has not been requested")
         }
     }
 
-    private func section<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: @escaping () -> Content) -> some View {
         VStack(alignment: .leading, spacing: NoopMetrics.space3) {
             SectionHeader(title)
             NoopCard { VStack(alignment: .leading, spacing: NoopMetrics.space4) { content() }.font(StrandFont.body) }
@@ -170,7 +172,7 @@ struct LocalNotificationsView: View {
             _ = try? await center.requestAuthorization(options: [.alert, .sound])
         }
         authorization = await center.notificationSettings().authorizationStatus
-        return [.authorized, .provisional, .ephemeral].contains(authorization)
+        return LocalNotificationPreferences.isAuthorized(authorization)
     }
 
     private func openSystemSettings() {
@@ -219,15 +221,14 @@ private struct LocalFamilyToggle: View {
                     _ = try? await center.requestAuthorization(options: [.alert, .sound])
                 }
                 let status = await center.notificationSettings().authorizationStatus
-                enabled = [.authorized, .provisional, .ephemeral].contains(status)
-                denied = !enabled
-                if enabled {
-                    if family == .workoutReady,
-                       let newest = model.repo.workouts.max(by: { $0.startTs < $1.startTs }) {
-                        UserDefaults.standard.set("workoutReady:\(newest.startTs)", forKey: family.lastEventKey)
-                    }
-                    await model.localNotifications?.evaluate()
+                let allowed = LocalNotificationPreferences.isAuthorized(status)
+                if allowed, family == .workoutReady,
+                   let newest = await model.repo.workoutRows(days: 1).max(by: { $0.startTs < $1.startTs }) {
+                    UserDefaults.standard.set("workoutReady:\(newest.startTs)", forKey: family.lastEventKey)
                 }
+                enabled = allowed
+                denied = !allowed
+                if allowed { await model.localNotifications?.evaluate() }
             }
         }))
     }
