@@ -31,7 +31,7 @@
     <string name="health_monitor_spo2_missing">Kalibrierter Blutsauerstoff benötigt importierte Daten. Optische Rohwerte sind kein Sauerstoff-Prozentwert.</string>
     <string name="health_monitor_temp_missing">Keine Hauttemperatur für diesen Tag. Nächtliches Tragen oder Import nötig.</string>
     <string name="health_monitor_live_hr">Live-Herzfrequenz</string>
-    <string name="health_monitor_last_live">Zuletzt empfangen</string>
+    <string name="health_monitor_last_live">Aktuelle Herzfrequenz</string>
     <string name="health_monitor_live_passive">Getrennt von Nachtwerten. Hier werden empfangene Werte gezeigt; Live-HR starten für Streaming. Ein Zeitstempel ist hier nicht verfügbar.</string>
     <string name="health_monitor_disconnected">Gerät getrennt. Nach dem Verbinden Live-HR öffnen.</string>
     <string name="health_monitor_wellness_note">Lokale Wellness-Beobachtungen, keine Diagnose. Diese Bereiche und Schätzungen sind keine medizinischen Messungen.</string>

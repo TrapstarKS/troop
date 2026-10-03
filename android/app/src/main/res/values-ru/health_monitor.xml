@@ -17,7 +17,7 @@
     <string name="health_monitor_far_outside_range">Значительно вне личного диапазона</string>
     <string name="health_monitor_hrv">ВСР</string>
     <string name="health_monitor_hrv_missing">За этот день нет проверенных данных ВСР. Ночные данные могут быть неполными.</string>
-    <string name="health_monitor_last_live">Последнее полученное значение</string>
+    <string name="health_monitor_last_live">Текущая частота сердечных сокращений</string>
     <string name="health_monitor_live_hr">Пульс в реальном времени</string>
     <string name="health_monitor_live_passive">Отдельно от ночных показателей. Здесь показаны полученные значения; откройте пульс в реальном времени, чтобы запустить поток. Время измерения здесь недоступно.</string>
     <string name="health_monitor_multi_signal_alert">Обнаружены изменения нескольких ночных показателей</string>

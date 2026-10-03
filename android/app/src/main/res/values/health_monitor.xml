@@ -31,7 +31,7 @@
     <string name="health_monitor_spo2_missing">Calibrated blood oxygen requires imported data. Raw optical values are not a blood-oxygen percentage.</string>
     <string name="health_monitor_temp_missing">No skin-temperature reading for this day. Overnight wear or an import is needed.</string>
     <string name="health_monitor_live_hr">Live heart rate</string>
-    <string name="health_monitor_last_live">Latest received</string>
+    <string name="health_monitor_last_live">Current heart rate</string>
     <string name="health_monitor_live_passive">Separate from overnight metrics. This view shows received readings; open Live HR to start streaming. A reading timestamp is not available here.</string>
     <string name="health_monitor_disconnected">Device disconnected. Open Live HR after reconnecting.</string>
     <string name="health_monitor_wellness_note">Local wellness observations, not a diagnosis. These ranges and estimates are not medical measurements.</string>

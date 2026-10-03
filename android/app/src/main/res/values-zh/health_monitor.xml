@@ -17,7 +17,7 @@
     <string name="health_monitor_far_outside_range">明显超出个人范围</string>
     <string name="health_monitor_hrv">心率变异性</string>
     <string name="health_monitor_hrv_missing">当天没有经过验证的心率变异性数据，夜间覆盖可能不完整。</string>
-    <string name="health_monitor_last_live">最近收到的读数</string>
+    <string name="health_monitor_last_live">当前心率</string>
     <string name="health_monitor_live_hr">实时心率</string>
     <string name="health_monitor_live_passive">独立于夜间指标。此视图显示已收到的读数；打开实时心率以开始传输。此处不提供读数时间。</string>
     <string name="health_monitor_multi_signal_alert">检测到多项夜间变化</string>

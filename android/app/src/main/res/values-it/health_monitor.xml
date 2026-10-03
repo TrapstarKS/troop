@@ -17,7 +17,7 @@
     <string name="health_monitor_far_outside_range">Molto fuori dall’intervallo personale</string>
     <string name="health_monitor_hrv">VFC</string>
     <string name="health_monitor_hrv_missing">Nessuna VFC verificata per questo giorno. La copertura notturna potrebbe essere incompleta.</string>
-    <string name="health_monitor_last_live">Ultimo valore ricevuto</string>
+    <string name="health_monitor_last_live">Frequenza cardiaca attuale</string>
     <string name="health_monitor_live_hr">Frequenza cardiaca in tempo reale</string>
     <string name="health_monitor_live_passive">Separata dalle misure notturne. Questa vista mostra le letture ricevute; apri la FC in tempo reale per avviare il flusso. Qui non è disponibile l’ora della lettura.</string>
     <string name="health_monitor_multi_signal_alert">Rilevati più cambiamenti notturni</string>

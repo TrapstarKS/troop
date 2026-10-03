@@ -17,7 +17,7 @@
     <string name="health_monitor_far_outside_range">Znacznie poza osobistym zakresem</string>
     <string name="health_monitor_hrv">HRV</string>
     <string name="health_monitor_hrv_missing">Brak zweryfikowanego HRV dla tego dnia. Dane nocne mogą być niepełne.</string>
-    <string name="health_monitor_last_live">Ostatnio odebrane</string>
+    <string name="health_monitor_last_live">Aktualne tętno</string>
     <string name="health_monitor_live_hr">Tętno na żywo</string>
     <string name="health_monitor_live_passive">Odrębne od wskaźników nocnych. Ten widok pokazuje odebrane odczyty; otwórz tętno na żywo, aby rozpocząć transmisję. Czas odczytu nie jest tu dostępny.</string>
     <string name="health_monitor_multi_signal_alert">Wykryto kilka zmian nocnych</string>

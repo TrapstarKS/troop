@@ -65,7 +65,7 @@ struct HealthMonitorView: View {
                         }
                     }
                 }
-                HeartRateSection()
+                HealthMonitorLiveHeartRate()
                 NoopCard {
                     VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
                         Text("Health Report").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
@@ -116,6 +116,37 @@ struct HealthMonitorView: View {
             return
         }
         FileExport.exportFile(at: url, suggestedName: name)
+    }
+}
+
+private struct HealthMonitorLiveHeartRate: View {
+    @EnvironmentObject private var live: LiveState
+    @EnvironmentObject private var model: AppModel
+
+    private var heartRate: Int? {
+        guard live.connected else { return nil }
+        let value = model.bpm.flatMap { $0 > 0 ? $0 : nil }
+            ?? live.heartRate.flatMap { $0 > 0 ? $0 : nil }
+            ?? live.rr.last.flatMap { $0 > 0 ? Int((60_000.0 / Double($0)).rounded()) : nil }
+        return value.flatMap { (30...220).contains($0) ? $0 : nil }
+    }
+
+    var body: some View {
+        let value = heartRate
+        NavigationLink { LiveView() } label: {
+            NoopCard {
+                VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
+                    Text("Heart Rate").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+                    ContributorRow(label: String(localized: "Current heart rate"),
+                                   value: value.map(String.init) ?? "—", unit: value == nil ? "" : "bpm",
+                                   systemImage: "heart.fill")
+                    Text(live.connected
+                         ? String(localized: "Separate from overnight metrics. This view shows received readings; open Live HR to start streaming. A reading timestamp is not available here.")
+                         : String(localized: "Device disconnected. Open Live HR after reconnecting."))
+                        .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
+                }
+            }
+        }.buttonStyle(.plain)
     }
 }
 

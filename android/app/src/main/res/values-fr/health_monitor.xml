@@ -31,7 +31,7 @@
     <string name="health_monitor_spo2_missing">L’oxygène calibré nécessite des données importées. Les valeurs optiques brutes ne sont pas un pourcentage d’oxygène.</string>
     <string name="health_monitor_temp_missing">Aucune température cutanée pour ce jour. Un port nocturne ou un import est nécessaire.</string>
     <string name="health_monitor_live_hr">Fréquence cardiaque en direct</string>
-    <string name="health_monitor_last_live">Dernière valeur reçue</string>
+    <string name="health_monitor_last_live">Fréquence cardiaque actuelle</string>
     <string name="health_monitor_live_passive">Distincte des mesures nocturnes. Cette vue affiche les valeurs reçues ; ouvrez la FC en direct pour lancer le flux. L’heure de la mesure n’est pas disponible ici.</string>
     <string name="health_monitor_disconnected">Appareil déconnecté. Ouvrez la FC en direct après reconnexion.</string>
     <string name="health_monitor_wellness_note">Observations locales de bien-être, pas un diagnostic. Ces plages et estimations ne sont pas des mesures médicales.</string>
