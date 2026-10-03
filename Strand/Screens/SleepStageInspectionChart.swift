@@ -44,7 +44,7 @@ struct SleepStageInspectionChart: View {
                                 lane.addLine(to: CGPoint(x: size.width, y: y))
                                 context.stroke(lane, with: .color(StrandPalette.hairline))
                             }
-                            for interval in intervals {
+                            for (position, interval) in intervals.enumerated() {
                                 guard let index = stages.firstIndex(of: interval.stage) else { continue }
                                 let left = CGFloat(max(0, min(interval.start, span)) / span) * size.width
                                 let right = CGFloat(max(0, min(interval.end, span)) / span) * size.width
@@ -53,6 +53,15 @@ struct SleepStageInspectionChart: View {
                                                   width: max(0, right - left), height: NoopMetrics.hypnogramBandMinThickness)
                                 let opacity = highlightedStage == nil || highlightedStage == interval.stage ? 1.0 : 0.2
                                 context.fill(Path(rect), with: .color(StrandPalette.sleepStageColor(interval.stage).opacity(opacity)))
+                                if position > 0 {
+                                    let previous = intervals[position - 1]
+                                    if previous.end == interval.start, let previousIndex = stages.firstIndex(of: previous.stage) {
+                                        var transition = Path()
+                                        transition.move(to: CGPoint(x: left, y: laneHeight * (CGFloat(previousIndex) + 0.5)))
+                                        transition.addLine(to: CGPoint(x: left, y: y))
+                                        context.stroke(transition, with: .color(StrandPalette.sleepStageColor(interval.stage).opacity(opacity)))
+                                    }
+                                }
                             }
                             if let selection {
                                 let x = CGFloat(selection.seconds / span) * size.width
