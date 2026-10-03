@@ -81,4 +81,65 @@ final class BLEStartupGateTests: XCTestCase {
         await startup.value
         XCTAssertEqual(actions, 0)
     }
+    @MainActor
+    func testRestoredConnectAndDiscoveryAreEachClaimedOnce() {
+        let gate = BLEStartupGate()
+        let token = gate.beginRestoration(identifier: "strap-a")
+        XCTAssertTrue(gate.claimRestoration(.connect, token: token))
+        XCTAssertFalse(gate.claimRestoration(.connect, token: token))
+        XCTAssertTrue(gate.claimRestoration(.discover, token: token))
+        XCTAssertFalse(gate.claimRestoration(.discover, token: token))
+    }
+
+    @MainActor
+    func testSupersededRestorationCannotClaimAnActionEvenForTheSameUUID() {
+        let gate = BLEStartupGate()
+        let old = gate.beginRestoration(identifier: "strap-a")
+        let replacement = gate.beginRestoration(identifier: "strap-a")
+        XCTAssertFalse(gate.claimRestoration(.connect, token: old))
+        XCTAssertFalse(gate.claimRestoration(.discover, token: old))
+        XCTAssertTrue(gate.claimRestoration(.discover, token: replacement))
+        let other = gate.beginRestoration(identifier: "strap-b")
+        XCTAssertFalse(gate.claimRestoration(.discover, token: replacement))
+        XCTAssertTrue(gate.claimRestoration(.discover, token: other))
+    }
+
+    @MainActor
+    func testFailedPreparationDoesNotReleaseRestorationButKnownDenialCan() async {
+        let gate = BLEStartupGate()
+        var releases = 0
+        var actions = 0
+        await gate.resume(prepare: { false }, isAllowed: { false },
+                          onDenied: { releases += 1 }) { actions += 1 }
+        XCTAssertEqual(releases, 0)
+        XCTAssertEqual(actions, 0)
+        await gate.resume(prepare: { true }, isAllowed: { false },
+                          onDenied: { releases += 1 }) { actions += 1 }
+        XCTAssertEqual(releases, 1)
+        XCTAssertEqual(actions, 0)
+    }
+
+    @MainActor
+    func testChangedRestorationWhilePreparingCannotDiscoverTheOldPeripheral() async {
+        let gate = BLEStartupGate()
+        var releaseStore: CheckedContinuation<Void, Never>?
+        let old = gate.beginRestoration(identifier: "strap-a")
+        var current = old
+        var discoveries = 0
+        let pending = Task { @MainActor in
+            await gate.resume(prepare: {
+                await withCheckedContinuation { releaseStore = $0 }
+                return true
+            }, isAllowed: { old == current }) {
+                if gate.claimRestoration(.discover, token: old) { discoveries += 1 }
+            }
+        }
+        while releaseStore == nil { await Task.yield() }
+        current = gate.beginRestoration(identifier: "strap-b")
+        releaseStore?.resume()
+        await pending.value
+        XCTAssertEqual(discoveries, 0)
+        XCTAssertTrue(gate.claimRestoration(.discover, token: current))
+    }
+
 }
