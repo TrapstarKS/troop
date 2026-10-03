@@ -620,6 +620,24 @@
       "platform": "kotlin",
       "rationale": "Swift HealthspanView consumes the bounded dated/source-resolved history from app-layer Repository.refresh inline. This Android Room Flow facade uses the incumbent source and edited-sleep merge over explicit dates and preserves the dashboard cap. It is an app-layer read role, not a new stored calculation; this disposition alone makes no byte-parity claim. The full read-spine suite, historical source/range test and paired eligibility oracle verify the consumers.",
       "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::healthspanChangesFlow/1#1",
+      "identity_sha256": "616ffff9e86dc8946ba7c138d95ab3850d1c461d0c129f1b1015f70003b5f850",
+      "platform": "kotlin",
+      "rationale": "The Room observed-entity invalidation provides the existing Swift app-layer Repository.refreshSeq publication role. Android observes committed tables through Room Flow; Swift refresh publishes through ObservableObject outside the ledger inventory. No physiological formula, stored revision, schema or exported value is introduced. Emitting-repository tests cover same-count replacement/removal, loaded-empty state and cancelled source reads. This disposition records only the platform observation boundary; existing paired analytics oracles remain required.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::healthspanChangesFlow/0#1",
+      "identity_sha256": "9f02a9bb7d757a8ab4ac41069bc9d2fc19ae627f27105ae2343a9b47847cdb04",
+      "platform": "kotlin",
+      "rationale": "The repository committed-data event facade provides the existing Swift app-layer Repository.refreshSeq publication role. Android observes committed tables through Room Flow; Swift refresh publishes through ObservableObject outside the ledger inventory. No physiological formula, stored revision, schema or exported value is introduced. Emitting-repository tests cover same-count replacement/removal, loaded-empty state and cancelled source reads. This disposition records only the platform observation boundary; existing paired analytics oracles remain required.",
+      "twin_path": "Strand/Data/Repository.swift"
     }
   ]
 }

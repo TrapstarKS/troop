@@ -72,14 +72,15 @@ import kotlinx.coroutines.delay
 @Composable
 fun HealthspanScreen(vm: AppViewModel, onCoach: (() -> Unit)? = null) {
     var selectedPillar by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
-    val days = healthspanDays(vm)
+    val datedRows = healthspanDays(vm)
+    val days = datedRows.rows
     val bodyAge = healthspanSeries(vm, "body_age")
-    var referenceIso by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
-    val referenceDay = LocalDate.parse(referenceIso)
-    val today = LocalDate.now()
+    var referenceIso by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val referenceDay = datedRows.reference(referenceIso)
+    val today = datedRows.today
     val earliestDay = today.minusDays(HealthspanHistory.oldestReferenceOffset(days.mapNotNull { runCatching { ChronoUnit.DAYS.between(LocalDate.parse(it.day), today).toInt() }.getOrNull() }).toLong())
-    LaunchedEffect(earliestDay, days.isNotEmpty()) {
-        if (days.isNotEmpty()) referenceIso = maxOf(referenceDay, earliestDay).toString()
+    LaunchedEffect(earliestDay, datedRows.loaded, referenceIso) {
+        if (datedRows.loaded && days.isNotEmpty() && referenceDay < earliestDay) referenceIso = earliestDay.toString()
     }
     val profile = ProfileStore.from(LocalContext.current.applicationContext)
     val dateOfBirth = Instant.ofEpochMilli(profile.dateOfBirthMillis).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -108,7 +109,7 @@ fun HealthspanScreen(vm: AppViewModel, onCoach: (() -> Unit)? = null) {
 
     LazyScreenScaffold(title = stringResource(R.string.healthspan_title), subtitle = stringResource(R.string.healthspan_subtitle)) {
         item {
-            HealthDateNavigation(referenceDay, 7, true, earliestDay) { referenceIso = it.toString() }
+            HealthDateNavigation(referenceDay, 7, true, earliestDay, today) { referenceIso = it.takeUnless { it == today }?.toString() }
         }
         item {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
@@ -143,9 +144,10 @@ fun HealthspanScreen(vm: AppViewModel, onCoach: (() -> Unit)? = null) {
 
 @Composable
 fun HealthspanPreviewCard(vm: AppViewModel, onClick: () -> Unit) {
-    val days = healthspanDays(vm)
+    val datedRows = healthspanDays(vm)
+    val days = datedRows.rows
     val bodyAge = healthspanSeries(vm, "body_age")
-    val referenceDay = LocalDate.now()
+    val referenceDay = datedRows.today
     val age = ProfileStore.from(LocalContext.current.applicationContext).age.toDouble()
     val samples = remember(bodyAge, referenceDay) {
         bodyAge.mapNotNull { row ->
@@ -164,20 +166,21 @@ fun HealthspanPreviewCard(vm: AppViewModel, onClick: () -> Unit) {
 
 @Composable
 fun HealthSupportingMetricCards(vm: AppViewModel) {
-    val days = healthspanDays(vm)
+    val datedRows = healthspanDays(vm)
+    val days = datedRows.rows
     val computedVo2 = healthspanSeries(vm, "vo2max_est")
     val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val strapId = selectedStrap ?: vm.activeStrapId
     val lifecycleOwner = LocalLifecycleOwner.current
-    val reference = LocalDate.now()
+    val reference = datedRows.today
     val vo2 = computedVo2.lastOrNull { it.day in reference.minusDays(179).toString()..reference.toString() && it.value.isFinite() && it.value > 0 }
     var importedVo2 by remember(strapId) { mutableStateOf<Pair<String, Double>?>(null) }
     var steps by remember(strapId) { mutableStateOf<HealthspanPresentation.StepSample?>(null) }
-    LaunchedEffect(vm, strapId, days, vo2, lifecycleOwner) {
+    LaunchedEffect(vm, strapId, days, vo2, reference, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
                 try {
-                    val through = LocalDate.now()
+                    val through = reference
                     withContext(Dispatchers.Default) {
                         val imported = if (vo2 == null) vm.repo.resolvedSeries("vo2max", "apple-health", through.minusDays(179).toString(),
                             through.toString(), strapDeviceId = strapId).points.lastOrNull { it.value.isFinite() && it.value > 0 } else null
@@ -346,9 +349,8 @@ private fun HealthspanPace(pace: Double?) {
 }
 
 @Composable
-internal fun HealthDateNavigation(day: LocalDate, stepDays: Long = 1, weekly: Boolean = false, earliestDay: LocalDate = LocalDate.now().minusDays(3999), onSelect: (LocalDate) -> Unit) {
+internal fun HealthDateNavigation(day: LocalDate, stepDays: Long = 1, weekly: Boolean = false, earliestDay: LocalDate = LocalDate.now().minusDays(3999), today: LocalDate = LocalDate.now(), onSelect: (LocalDate) -> Unit) {
     val context = LocalContext.current
-    val today = LocalDate.now()
     val label = if (weekly) stringResource(R.string.healthspan_week_range, healthDateLabel(day.minusDays(6)), healthDateLabel(day))
         else healthDateLabel(day)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -359,7 +361,7 @@ internal fun HealthDateNavigation(day: LocalDate, stepDays: Long = 1, weekly: Bo
             modifier = Modifier.weight(1f).clickable(onClickLabel = stringResource(R.string.healthspan_pick_date)) {
                 DatePickerDialog(context, { _, year, month, date -> onSelect(LocalDate.of(year, month + 1, date)) },
                     day.year, day.monthValue - 1, day.dayOfMonth).apply {
-                    datePicker.maxDate = System.currentTimeMillis()
+                    datePicker.maxDate = today.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
                     datePicker.minDate = earliestDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 }.show()
             }.padding(vertical = Metrics.space12))
@@ -371,13 +373,15 @@ internal fun HealthDateNavigation(day: LocalDate, stepDays: Long = 1, weekly: Bo
 }
 
 @Composable
-private fun healthspanDays(vm: AppViewModel): List<DailyMetric> {
+private fun healthspanDays(vm: AppViewModel): HealthspanDatedRows {
     val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val strapId = selectedStrap ?: vm.activeStrapId
     return key(vm, strapId) {
         val days by remember(vm, strapId) {
-            vm.repo.daysMergedRangeFlow(strapId, LocalDate.now().minusDays(3999).toString(), LocalDate.now().toString())
-        }.collectAsStateWithLifecycle(initialValue = emptyList())
+            healthspanDatedRows(healthspanCivilDays(vm.repo.healthspanChangesFlow())) { from, to ->
+                vm.repo.daysMergedRangeFlow(strapId, from, to)
+            }
+        }.collectAsStateWithLifecycle(initialValue = HealthspanDatedRows(LocalDate.now(), emptyList(), false))
         days
     }
 }

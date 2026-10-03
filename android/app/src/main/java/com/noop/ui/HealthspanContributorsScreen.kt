@@ -25,6 +25,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.noop.R
 import com.noop.analytics.HealthspanHistory
 import com.noop.analytics.HealthspanPresentation
@@ -99,16 +102,22 @@ private fun HealthspanContributorDetail(vm: AppViewModel, driver: HealthspanDriv
     val profile = ProfileStore.from(context.applicationContext)
     val unitSystem = UnitPrefs.system(context)
     fun formattedValue(value: Double): String = if (driver == HealthspanDriver.leanMass) UnitFormatter.massFromKilograms(value, unitSystem) else healthspanNumber(value) + " " + driver.unit
-    var samples by remember(vm, strapId, reference, driver) { mutableStateOf(emptyList<HealthspanHistory.Sample>()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val hrMax = profile.hrMax.toDouble()
+    val sex = profile.sex
+    val method = NoopPrefs.effortMethod(context)
+    var read by remember(vm, strapId, reference, driver) { mutableStateOf(HealthspanContributorRead()) }
+    val samples = read.samples.orEmpty()
     var windowDays by rememberSaveable(driver, reference) { mutableStateOf(180) }
     var selectedOffset by remember(samples, windowDays) { mutableStateOf<Int?>(null) }
-    LaunchedEffect(vm, strapId, reference, driver) {
-        try {
-            samples = withContext(Dispatchers.Default) {
-                healthspanContributorSamples(vm.repo, strapId, reference, profile.hrMax.toDouble(), profile.sex, NoopPrefs.effortMethod(context))[driver].orEmpty()
-            }
-        } catch (cancelled: CancellationException) { throw cancelled }
-        catch (_: Exception) { samples = emptyList() }
+    LaunchedEffect(vm, strapId, reference, driver, lifecycleOwner, hrMax, sex, method) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            healthspanContributorReads(vm.repo.healthspanChangesFlow(), { vm.activeStrapId == strapId }) {
+                withContext(Dispatchers.Default) {
+                    healthspanContributorSamples(vm.repo, strapId, reference, hrMax, sex, method)[driver].orEmpty()
+                }
+            }.collect { read = it }
+        }
     }
     val comparison = HealthspanHistory.comparison(samples, driver.weekly)
     val points = HealthspanHistory.points(samples, windowDays)
@@ -133,7 +142,9 @@ private fun HealthspanContributorDetail(vm: AppViewModel, driver: HealthspanDriv
         item {
             NoopCard {
                 Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
-                    if (points.isEmpty()) Text(stringResource(R.string.healthspan_contributor_empty), style = NoopType.body, color = Palette.textSecondary)
+                    if (read.samples == null) Text(stringResource(R.string.l10n_health_screen_loading_33ce4174), style = NoopType.body, color = Palette.textSecondary)
+                    else if (read.failed) Text(stringResource(R.string.healthspan_no_value), style = NoopType.body, color = Palette.textSecondary)
+                    else if (points.isEmpty()) Text(stringResource(R.string.healthspan_contributor_empty), style = NoopType.body, color = Palette.textSecondary)
                     else {
                         fun select(x: Float, width: Float) { selectedOffset = ((1 - (x / width).coerceIn(0f, 1f)) * (windowDays - 1)).roundToInt() }
                         Canvas(Modifier.fillMaxWidth().height(Metrics.compactChartHeight)

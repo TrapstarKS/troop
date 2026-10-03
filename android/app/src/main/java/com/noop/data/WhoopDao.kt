@@ -4,6 +4,8 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
+import androidx.sqlite.db.SupportSQLiteQuery
 import androidx.room.Transaction
 import androidx.room.Update
 import androidx.room.Upsert
@@ -954,6 +956,11 @@ interface WhoopDao : DeviceRegistryDao {
             "ORDER BY day ASC"
     )
     fun dailyMetricsRangeFlow(deviceId: String, from: String, to: String): Flow<List<DailyMetric>>
+
+    // Platform observation seam; Swift's app-layer counterpart is Repository.refreshSeq.
+    @RawQuery(observedEntities = [DailyMetric::class, MetricSeriesRow::class, WorkoutRow::class,
+        DismissedWorkout::class, SleepSession::class, DismissedSleep::class, AppleDaily::class, HrSample::class])
+    fun healthspanChangesFlow(query: SupportSQLiteQuery): Flow<Int>
 
     @Query(CHARGE_HRV_PROOF_SQL)
     suspend fun chargeHrvProof(deviceId: String, from: String, to: String): List<ChargeHrvProof>

@@ -2,6 +2,7 @@ package com.noop.data
 
 import android.content.Context
 import androidx.room.withTransaction
+import androidx.sqlite.db.SimpleSQLiteQuery
 import com.noop.protocol.DroppedRtcEvent
 import com.noop.protocol.RrSourceChannel
 import kotlinx.coroutines.flow.Flow
@@ -869,6 +870,10 @@ class WhoopRepository(
         return if (flows.size == 1) flows[0]
         else combine(flows) { rows -> mergeComputedSeriesUnion(rows.toList()) }
     }
+
+    // Every committed invalidation is an event, including same-count replacement/removal.
+    // Swift's excluded app-layer role is Repository.refreshSeq; no revision is stored or exported.
+    fun healthspanChangesFlow(): Flow<Unit> = dao.healthspanChangesFlow(SimpleSQLiteQuery("SELECT 1")).map { Unit }
 
     suspend fun scoreInputSource(deviceId: String, day: String, key: String): String? =
         dao.scoreInputSource(deviceId, day, key)
