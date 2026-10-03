@@ -2959,4 +2959,11 @@
     <string name="plan_journal_instructions">Regista os hábitos de ontem e da noite passada.</string>
     <string name="plan_journal_ahead">Regista os hábitos para a entrada de amanhã.</string>
     <string name="plan_journal_edit_hint">Escolhe as perguntas que queres acompanhar.</string>
+
+    <string name="whoop_nav_home">Início</string>
+    <string name="whoop_nav_plan">Plano</string>
+    <string name="whoop_nav_healthspan">Longevidade</string>
+    <string name="whoop_nav_weekly_plan">Plano semanal</string>
+    <string name="whoop_plan_local_title">O planeamento semanal ainda não está disponível</string>
+    <string name="whoop_plan_local_detail">O diário e as tendências continuam disponíveis para rever os seus hábitos e progresso locais.</string>
 </resources>

@@ -2996,4 +2996,11 @@
     <string name="plan_journal_instructions">Record habits from yesterday and last night.</string>
     <string name="plan_journal_ahead">Record habits for tomorrow’s entry.</string>
     <string name="plan_journal_edit_hint">Choose the questions you want to track.</string>
+
+    <string name="whoop_nav_home">Home</string>
+    <string name="whoop_nav_plan">Plan</string>
+    <string name="whoop_nav_healthspan">Healthspan</string>
+    <string name="whoop_nav_weekly_plan">Weekly Plan</string>
+    <string name="whoop_plan_local_title">Weekly planning is not available yet</string>
+    <string name="whoop_plan_local_detail">Journal and Trends remain available to review your local habits and progress.</string>
 </resources>

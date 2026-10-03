@@ -15,8 +15,9 @@ import StrandDesign
 /// stored key, and the prompts are static copy. The first network call still happens where it always
 /// did — inside `AICoachEngine.send`, after an explicit user action.
 struct CoachLauncherSheet: View {
+    let onCoachRequested: () -> Void
+
     @EnvironmentObject var coach: AICoachEngine
-    @EnvironmentObject var router: NavRouter
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft = ""
@@ -108,8 +109,8 @@ struct CoachLauncherSheet: View {
             .foregroundStyle(StrandPalette.textTertiary)
 
         Button {
+            onCoachRequested()
             dismiss()
-            router.openCoach()
         } label: {
             Text("Connect a provider")
                 .font(StrandFont.caption)
@@ -140,7 +141,7 @@ struct CoachLauncherSheet: View {
     private func hand(off prompt: String) {
         coach.pendingPrompt = prompt
         draft = ""
+        onCoachRequested()
         dismiss()
-        router.openCoach()
     }
 }

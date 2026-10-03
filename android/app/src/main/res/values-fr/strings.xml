@@ -2966,4 +2966,11 @@
     <string name="plan_journal_instructions">Notez vos habitudes d’hier et de la nuit dernière.</string>
     <string name="plan_journal_ahead">Notez vos habitudes pour l’entrée de demain.</string>
     <string name="plan_journal_edit_hint">Choisissez les questions que vous souhaitez suivre.</string>
+
+    <string name="whoop_nav_home">Accueil</string>
+    <string name="whoop_nav_plan">Plan</string>
+    <string name="whoop_nav_healthspan">Longévité</string>
+    <string name="whoop_nav_weekly_plan">Plan hebdomadaire</string>
+    <string name="whoop_plan_local_title">La planification hebdomadaire est encore indisponible</string>
+    <string name="whoop_plan_local_detail">Le journal et les tendances restent disponibles pour consulter vos habitudes et vos progrès locaux.</string>
 </resources>

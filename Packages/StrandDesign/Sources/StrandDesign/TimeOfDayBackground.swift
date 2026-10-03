@@ -71,18 +71,13 @@ public struct TimeOfDayBackground: View {
         GeometryReader { geo in
             let size = geo.size
             ZStack {
-                // 1) The canvas — always the WHOOP dark base (a hair deeper at night).
-                base
-
-                // 2) The per-part wash (gradients + sun/moon/stars). Static; cheap.
-                AtmosphereWash(dayPart: dayPart, isLight: colorScheme == .light)
-
-                // 3) Slow-drifting soft shapes (clouds for day/dusk, orbs for night/dawn).
-                //    A single animation tick drives a horizontal loop; Reduce Motion pins it.
-                FloatingLayer(dayPart: dayPart,
-                              isLight: colorScheme == .light,
-                              size: size,
-                              drift: drift)
+                if colorScheme == .dark {
+                    LinearGradient(gradient: StrandPalette.canvasGradient, startPoint: .top, endPoint: .bottom)
+                } else {
+                    base
+                    AtmosphereWash(dayPart: dayPart, isLight: true)
+                    FloatingLayer(dayPart: dayPart, isLight: true, size: size, drift: drift)
+                }
             }
             .frame(width: size.width, height: size.height)
         }
