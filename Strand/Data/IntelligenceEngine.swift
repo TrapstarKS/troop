@@ -926,8 +926,9 @@ final class IntelligenceEngine: ObservableObject {
             .sorted { $0.day < $1.day }
         let registry = DeviceRegistryStore(dbQueue: store.registryWriter)
         let regActiveId = (try? registry.activeDeviceId()) ?? deviceId
-        let hrvEpoch = await repo.effectiveHrvEpoch(store: store, activeOwner: regActiveId,
-            importedAlias: deviceId, manualEpoch: Baselines.hrvBaselineEpoch(), offsetSec: tzOffset)
+        let regimeEpoch = await repo.effectiveHrvEpoch(store: store, activeOwner: regActiveId,
+            importedAlias: deviceId, manualEpoch: 0, offsetSec: tzOffset)
+        let hrvEpoch = max(Baselines.hrvBaselineEpoch(), regimeEpoch)
         // HRV baseline honours the manual "Recalibrate baseline" epoch (noop.hrvBaselineEpoch); the
         // resting-HR baseline honours the Charge-wide sibling (noop.recoveryBaselineEpoch). Pass the
         // per-value "yyyy-MM-dd" day keys (parallel to the values) so foldHistory can drop every night
@@ -935,7 +936,9 @@ final class IntelligenceEngine: ObservableObject {
         let chargeAnchorDay = AnalyticsEngine.dayString(now, offsetSec: tzOffset)
         let chargeFromDay = Baselines.cutoffKey(todayKey: chargeAnchorDay, carryDays: ChargeBaselines.windowDays - 1)
         let baselineImported = await repo.unionDailyMetrics(store: store, from: chargeFromDay, to: chargeAnchorDay)
-        let baselineOwn = await repo.unionComputedDailyMetrics(store: store, from: chargeFromDay, to: chargeAnchorDay)
+        let baselineOwn = await repo.unionChargeComputedDailyMetrics(store: store, from: chargeFromDay,
+            to: chargeAnchorDay, requiredFreshDay: regimeEpoch > 0
+                ? AnalyticsEngine.dayString(Int(regimeEpoch), offsetSec: 0) : nil)
         let initial = ChargeBaselines.resolve(imported: baselineImported, own: baselineOwn,
             anchorDay: chargeAnchorDay, hrvEpoch: hrvEpoch, recoveryEpoch: Baselines.recoveryBaselineEpoch())
         let baselines1 = AnalyticsEngine.ProfileBaselines(hrv: initial.hrv, restingHR: initial.restingHR)
@@ -1933,6 +1936,7 @@ final class IntelligenceEngine: ObservableObject {
         // #1118: per-day HRV over-count flag, carried from pass 1 for metricSeries persistence. nil (absent)
         // for a night with no in-sleep R-R; otherwise true/false, so a re-score always overwrites the row.
         var hrvOverCountByDay: [String: Bool] = [:]
+        var hrvFreshScoringValidByDay: [String: Bool] = [:]
         // #1169: primary-session mean RHR shadow metric per day, carried from pass 1 for metricSeries persistence.
         var primarySessionRHRByDay: [String: Double] = [:]
         // #1169: its coverage inputs (valid-sample count + primary-session duration), same lifetime as the mean.
@@ -1945,7 +1949,9 @@ final class IntelligenceEngine: ObservableObject {
             let res = scan.result
             readOwnerByDay[res.daily.day] = (scan.readOwner, scan.hrRows)
             resolvedScoreOwnerByDay[res.daily.day] = scan.readOwner
-            nightlyHrvByDay[res.daily.day] = res.daily.avgHrv
+            nightlyHrvByDay[res.daily.day] = ChargeBaselines.ownHrvValue(res.daily.avgHrv, freshScoringValid: 1)
+            hrvFreshScoringValidByDay[res.daily.day] = ChargeBaselines.ownHrvValue(
+                res.daily.avgHrv, freshScoringValid: 1) != nil
             nightlyRhrByDay[res.daily.day] = res.daily.restingHr.map(Double.init)
             nightlyRespByDay[res.daily.day] = res.daily.respRateBpm
             nightlySkinByDay[res.daily.day] = res.nightlySkinTempC
@@ -2347,6 +2353,9 @@ final class IntelligenceEngine: ObservableObject {
             // (not just absent) so a night that flips clean on re-score clears its prior flag.
             if let oc = hrvOverCountByDay[daily.day] {
                 restPoints.append(MetricPoint(day: daily.day, key: "hrv_rr_overcount", value: oc ? 1.0 : 0.0))
+            }
+            if let valid = hrvFreshScoringValidByDay[daily.day] {
+                restPoints.append(MetricPoint(day: daily.day, key: "hrv_fresh_scoring_valid", value: valid ? 1 : 0))
             }
             // #1169 shadow metric: the primary-session mean RHR, stored beside the shipped floor
             // (daily.restingHr) under the "-noop" computed ID. Instrumentation only — never shown, never
@@ -3581,8 +3590,8 @@ final class IntelligenceEngine: ObservableObject {
 // is most easily dropped at (they respell every field by name), so StrandTests asserts them directly
 // rather than through a copy that could drift. Nothing outside this module can see them either way.
 extension DailyMetric {
-    /// Rebuild with the exact legacy R-R-derived snapshot while keeping every other freshly-scored cell.
-    func with(avgHrv hrv: Double, recovery r: Double?, respRateBpm resp: Double?,
+    /// Rebuild the R-R-derived input or retained snapshot while keeping every unrelated cell.
+    func with(avgHrv hrv: Double?, recovery r: Double?, respRateBpm resp: Double?,
               avgSdnn sdnn: Double?) -> DailyMetric {
         DailyMetric(day: day, totalSleepMin: totalSleepMin, efficiency: efficiency, deepMin: deepMin,
                     remMin: remMin, lightMin: lightMin, disturbances: disturbances, restingHr: restingHr,

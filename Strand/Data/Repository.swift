@@ -499,6 +499,33 @@ final class Repository: ObservableObject {
         return byDay.values.sorted { $0.day < $1.day }
     }
 
+    /// Charge alone excludes display-only legacy HRV. The first raw non-nil source owns the marker,
+    /// so an invalid active reading cannot be refilled or validated by the canonical sibling.
+    /// Kotlin twin: `WhoopRepository.chargeComputedDailyUnion` and its reactive flow.
+    func unionChargeComputedDailyMetrics(store: WhoopStore, from: String, to: String,
+                                        requiredFreshDay: String? = nil) async -> [DailyMetric] {
+        var byDay: [String: DailyMetric] = [:]
+        var hrvByDay: [String: (value: Double, marker: Double?)] = [:]
+        for id in computedReadIds {
+            let inputs = try? await store.chargeHrvProof(deviceId: id, from: from, to: to)
+            let proofs = Dictionary((inputs ?? []).map { ($0.day, $0) },
+                uniquingKeysWith: { _, last in last })
+            for row in (try? await store.dailyMetrics(deviceId: id, from: from, to: to)) ?? [] {
+                if hrvByDay[row.day] == nil, let value = row.avgHrv {
+                    let proof = proofs[row.day]
+                    hrvByDay[row.day] = (value, proof?.value == value ? proof?.freshScoringValid : Double.nan)
+                }
+                byDay[row.day] = byDay[row.day].map { Self.coalesceDay($0, row) } ?? row
+            }
+        }
+        return byDay.values.sorted { $0.day < $1.day }.map { row in
+            guard let input = hrvByDay[row.day] else { return row }
+            return row.with(avgHrv: ChargeBaselines.ownHrvValue(input.value,
+                freshScoringValid: input.marker, requireFresh: row.day == requiredFreshDay),
+                recovery: row.recovery, respRateBpm: row.respRateBpm, avgSdnn: row.avgSdnn)
+        }
+    }
+
     /// Computed ("-noop") sleep sessions across every registered WHOOP source, keeping ALL sessions per day
     /// and collapsing near-identical nights recorded under different computed siblings.
     private func unionComputedSleepSessions(store: WhoopStore, from: Int, to: Int, limit: Int = 4000) async -> [CachedSleepSession] {
@@ -980,6 +1007,10 @@ final class Repository: ObservableObject {
         let chargeAnchorDay = AnalyticsEngine.dayString(nowTs, offsetSec: TimeZone.current.secondsFromGMT(for: now))
         let hrvEpoch = max(Baselines.hrvBaselineEpoch(), regimeEpoch)
         let recoveryEpoch = Baselines.recoveryBaselineEpoch()
+        let requiredFreshDay = regimeEpoch > 0 ? AnalyticsEngine.dayString(Int(regimeEpoch), offsetSec: 0) : nil
+        let chargeComputed = await unionChargeComputedDailyMetrics(store: store,
+            from: Baselines.cutoffKey(todayKey: chargeAnchorDay, carryDays: ChargeBaselines.windowDays - 1),
+            to: chargeAnchorDay, requiredFreshDay: requiredFreshDay)
 
         // Export-verbatim sleep figures (long-format metricSeries rows from WhoopImporter).
         // SleepView prefers these per day over its APPROXIMATE recomputations.
@@ -1010,7 +1041,7 @@ final class Repository: ObservableObject {
                 ),
                 // From the two buckets BEFORE `mergeDaily` blends them: the rule needs to know which nights
                 // are imported and which are the wearer's own.
-                chargeBaselines: ChargeBaselines.resolve(imported: imported, own: computed,
+                chargeBaselines: ChargeBaselines.resolve(imported: imported, own: chargeComputed,
                                                          anchorDay: chargeAnchorDay,
                                                          hrvEpoch: hrvEpoch, recoveryEpoch: recoveryEpoch),
                 sleeps: Self.mergeSleep(imported: impSleep, computed: compSleep),

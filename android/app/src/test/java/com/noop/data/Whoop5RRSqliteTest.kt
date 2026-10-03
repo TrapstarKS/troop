@@ -15,6 +15,16 @@ import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.ResultSet
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -32,6 +42,7 @@ class Whoop5RRSqliteTest {
     private val days = linkedMapOf<Pair<String, String>, DailyMetric>()
     private val provenance = linkedMapOf<Triple<String, String, String>, ScoreInputProvenanceRow>()
     private val gravity = mutableListOf<GravitySample>()
+    private val markerChanges = MutableStateFlow(0)
     private val id = "my-whoop"
 
     @Test fun midnightCycleKeepsCalendarMetricsAndDoesNotReadCycles() = runBlocking {
@@ -66,6 +77,9 @@ class Whoop5RRSqliteTest {
             "PRIMARY KEY(deviceId, ts, rrMs, seq))")
         sql(WhoopDatabase.RR_SOURCE_INDEX_SQL)
         sql("CREATE TABLE pairedDevice(id TEXT PRIMARY KEY, brand TEXT, model TEXT, status TEXT)")
+        sql("CREATE TABLE dailyMetric(deviceId TEXT NOT NULL, day TEXT NOT NULL, avgHrv REAL, PRIMARY KEY(deviceId, day))")
+        sql("CREATE TABLE metricSeries(deviceId TEXT NOT NULL, day TEXT NOT NULL, key TEXT NOT NULL, " +
+            "value REAL NOT NULL, PRIMARY KEY(deviceId, day, key))")
         sql("CREATE TABLE hrSample(deviceId TEXT, ts INTEGER, bpm INTEGER, PRIMARY KEY(deviceId, ts))")
         listOf("ppgHrSample", "respSample", "gravitySample", "sleepStateSample", "event",
             "spo2Sample", "skinTempSample", "stepSample").forEach {
@@ -100,6 +114,13 @@ class Whoop5RRSqliteTest {
                 "dailyMetricsRange" -> days.values.filter {
                     it.deviceId == args[0] && it.day >= args[1] as String && it.day <= args[2] as String
                 }
+                "dailyMetricsRangeFlow" -> flowOf(days.values.filter {
+                    it.deviceId == args[0] && it.day >= args[1] as String && it.day <= args[2] as String
+                })
+                "metricSeries" -> metricRows(args)
+                "metricSeriesFlow" -> markerChanges.map { metricRows(args) }
+                "chargeHrvProof" -> chargeProofRows(args)
+                "chargeHrvProofFlow" -> markerChanges.map { chargeProofRows(args) }
                 "upsertSleepSessions" -> {
                     (args[0] as List<*>).filterIsInstance<SleepSession>().forEach { sleeps[it.deviceId to it.startTs] = it }
                     Unit
@@ -120,13 +141,18 @@ class Whoop5RRSqliteTest {
                     days.keys.removeAll { it.first == deviceId && it.second in from..to }
                     provenance.keys.removeAll { it.first == deviceId && it.second in from..to && it.third != "vo2max_est" }
                     (args[3] as List<*>).filterIsInstance<DailyMetric>().forEach { days[it.deviceId to it.day] = it }
+                    writeMetricRows((args[4] as List<*>).filterIsInstance<MetricSeriesRow>())
                     (args[5] as List<*>).filterIsInstance<ScoreInputProvenanceRow>().forEach {
                         provenance[Triple(it.deviceId, it.day, it.key)] = it
                     }
                     Unit
                 }
                 "scoreInputSource" -> provenance[Triple(args[0] as String, args[1] as String, args[2] as String)]?.sourceId
-                "upsertMetricSeries", "upsertMetricSeriesWithProvenance", "deleteWorkoutsBySport" -> Unit
+                "upsertMetricSeries", "upsertMetricSeriesWithProvenance" -> {
+                    writeMetricRows((args[0] as List<*>).filterIsInstance<MetricSeriesRow>())
+                    Unit
+                }
+                "deleteWorkoutsBySport" -> Unit
                 "sessionSleepStateJson" -> null
                 "appleDaily", "workouts", "dismissedSleeps" -> emptyList<Any>()
                 "insertRr" -> (args[0] as List<*>).map { value ->
@@ -311,6 +337,7 @@ class Whoop5RRSqliteTest {
         assertTrue((noBeats.totalSleepMin ?: 0.0) > 0.0)
         assertNull(noBeats.avgHrv)
         assertNull(noBeats.recovery)
+        assertEquals(0.0, repo.metricSeries("$id-noop", "hrv_fresh_scoring_valid", noBeats.day, noBeats.day).single().value, 0.0)
         assertFalse("ordinary missing beats are not legacy units", showsLegacyGap(noBeats, owner))
 
         val computedId = "$id-noop"
@@ -332,7 +359,10 @@ class Whoop5RRSqliteTest {
             assertNotEquals("sleep must be freshly scored", legacySnapshot.totalSleepMin, legacy.totalSleepMin)
             assertNotEquals("only the R-R-derived snapshot is protected", legacySnapshot.restingHr, legacy.restingHr)
             assertEquals("legacy-owner", repo.scoreInputSource(computedId, legacy.day, "recovery"))
+            assertEquals(0.0, repo.metricSeries(computedId, "hrv_fresh_scoring_valid", legacy.day, legacy.day).single().value, 0.0)
+            assertNull(repo.chargeComputedDailyUnion(id, legacy.day, legacy.day).single().avgHrv)
             val stable = score()
+            assertEquals(0.0, repo.metricSeries(computedId, "hrv_fresh_scoring_valid", stable.day, stable.day).single().value, 0.0)
             assertEquals(legacySnapshot.avgHrv, stable.avgHrv)
             assertEquals(legacySnapshot.recovery, stable.recovery)
             assertEquals(legacySnapshot.respRateBpm, stable.respRateBpm)
@@ -382,7 +412,9 @@ class Whoop5RRSqliteTest {
                 repo.scoreInputSource(computedId, restored.day, "recovery"))
         }
         assertFalse(showsLegacyGap(restored, owner))
+        assertEquals(1.0, repo.metricSeries(computedId, "hrv_fresh_scoring_valid", restored.day, restored.day).single().value, 0.0)
         val idle = score()
+        assertEquals(1.0, repo.metricSeries(computedId, "hrv_fresh_scoring_valid", idle.day, idle.day).single().value, 0.0)
         assertEquals(restored.avgHrv, idle.avgHrv)
         assertEquals(restored.recovery, idle.recovery)
         assertFalse("a cache hit must not revive the explanation", showsLegacyGap(idle, owner))
@@ -434,7 +466,7 @@ class Whoop5RRSqliteTest {
             nowSeconds = now + if (quiet) 7_200L else 0L, preserveUnscoredHistory = preserve,
             recoveryTraceSink = { trace += it }, dayCycleMode = DayCycleMode.MIDNIGHT)
         val resolved = com.noop.analytics.ChargeBaselines.resolve(
-            repo.importedDailyUnion(id, "0000-01-01", anchor), repo.computedDailyUnion(id, "0000-01-01", anchor),
+            repo.importedDailyUnion(id, "0000-01-01", anchor), repo.chargeComputedDailyUnion(id, "0000-01-01", anchor),
             anchor, 0.0, 0.0)
         assertTrue(resolved.hrvHistory.ownValidNights >= 14)
         assertFalse(resolved.hrvHistory.seededByImport)
@@ -493,6 +525,196 @@ class Whoop5RRSqliteTest {
         registry("4.0", owner = "four")
         assertEquals(12_345.0, repo.effectiveHrvEpoch("four", id, 12_345.0, 0), 0.0)
     }
+
+    @Test fun chargeComputedAdapterHandlesEmptyHistoryAndPreservesDisplayCells() = runBlocking {
+        val day = "2026-09-04"
+        assertTrue(repo.chargeComputedDailyUnion(id, day, day).isEmpty())
+        assertTrue(repo.chargeComputedDailyUnionFlow(id, day, day).first().isEmpty())
+        val stored = DailyMetric("$id-noop", day, avgHrv = 77.0, restingHr = 55,
+            recovery = 0.42, respRateBpm = 15.0, avgSdnn = 44.0, steps = 42,
+            activeKcalEst = 1900.0, activeEnergyKcalEst = 400.0)
+        days[stored.deviceId to day] = stored
+        assertEquals(stored, repo.chargeComputedDailyUnion(id, day, day).single())
+        freshMarker(day, 0.0)
+        assertEquals(stored.copy(avgHrv = null), repo.chargeComputedDailyUnion(id, day, day).single())
+        assertEquals(stored, repo.computedDailyUnionFlow(id, day, day).first().single())
+        assertEquals(stored, days.getValue(stored.deviceId to day))
+        freshMarker(day, 1.0)
+        assertEquals(stored, repo.chargeComputedDailyUnion(id, day, day).single())
+    }
+
+    @Test fun chargeComputedAdapterKeepsTheFirstRawHrvSourcesMarker() = runBlocking {
+        val day = "2026-09-04"
+        val active = "new-five"
+        val held = DailyMetric("$active-noop", day, avgHrv = 77.0, restingHr = 55, steps = 42)
+        val filler = DailyMetric("$id-noop", day, avgHrv = 66.0, restingHr = 60, respRateBpm = 15.0)
+        days[held.deviceId to day] = held
+        days[filler.deviceId to day] = filler
+        freshMarker(day, 0.0, held.deviceId)
+        freshMarker(day, 1.0, filler.deviceId)
+        assertEquals(held.copy(respRateBpm = 15.0, avgHrv = null),
+            repo.chargeComputedDailyUnion(active, day, day).single())
+        freshMarker(day, 1.0, held.deviceId)
+        freshMarker(day, 0.0, filler.deviceId)
+        assertEquals(77.0, repo.chargeComputedDailyUnion(active, day, day).single().avgHrv!!, 0.0)
+        days[held.deviceId to day] = held.copy(avgHrv = null)
+        assertNull(repo.chargeComputedDailyUnion(active, day, day).single().avgHrv)
+        freshMarker(day, 1.0, filler.deviceId)
+        freshMarker(day, 0.0, held.deviceId)
+        assertEquals(held.copy(avgHrv = 66.0, respRateBpm = 15.0),
+            repo.chargeComputedDailyUnion(active, day, day).single())
+        days[held.deviceId to day] = held.copy(avgHrv = 4.0)
+        assertNull("an invalid first nonnull value cannot refill from the canonical source",
+            repo.chargeComputedDailyUnion(active, day, day).single().avgHrv)
+    }
+
+    @Test fun chargeBoundaryUsesTransportCivilDayAndDoesNotMakeManualDayStrict() = runBlocking {
+        registry("5.0", owner = "new-five")
+        activate("new-five")
+        val civil = java.time.LocalDate.parse("2026-09-04").toEpochDay() * 86_400L
+        insertRr(civil + 1800L, 5, device = "new-five")
+        val regime = repo.effectiveHrvEpoch("new-five", manualEpoch = 0.0, offsetSec = -3600)
+        val boundary = AnalyticsEngine.dayString(regime.toLong(), 0L)
+        assertEquals("2026-09-03", boundary)
+        val manual = civil.toDouble()
+        assertEquals(manual, repo.effectiveHrvEpoch("new-five", manualEpoch = manual, offsetSec = -3600), 0.0)
+        val later = "2026-09-04"
+        for (day in listOf("2026-09-02", boundary, later)) {
+            days["new-five-noop" to day] = DailyMetric("new-five-noop", day, avgHrv = 44.0)
+        }
+        val rows = repo.chargeComputedDailyUnion("new-five", "2026-09-02", later, boundary).associateBy { it.day }
+        assertEquals(44.0, rows.getValue("2026-09-02").avgHrv!!, 0.0)
+        assertNull(rows.getValue(boundary).avgHrv)
+        assertEquals("manual recalibration does not turn a later historical night into a fresh-only night",
+            44.0, rows.getValue(later).avgHrv!!, 0.0)
+        freshMarker(boundary, 1.0, "new-five-noop")
+        assertEquals(44.0, repo.chargeComputedDailyUnion("new-five", boundary, boundary, boundary).single().avgHrv!!, 0.0)
+    }
+
+    @Test fun chargeMarkerDoesNotChangeImportedOverlapOrItsColdStartSeed() = runBlocking {
+        val day = "2026-09-04"
+        val imported = DailyMetric(id, day, avgHrv = 55.0, recovery = 80.0)
+        days[id to day] = imported
+        days["$id-noop" to day] = DailyMetric("$id-noop", day, avgHrv = 77.0, restingHr = 60)
+        freshMarker(day, 0.0)
+        val own = repo.chargeComputedDailyUnion(id, day, day, day)
+        val rows = repo.importedDailyUnion(id, day, day)
+        assertEquals(listOf(imported), rows)
+        assertEquals(imported.avgHrv, repo.daysMerged(id).single().avgHrv)
+        val resolved = com.noop.analytics.ChargeBaselines.resolve(rows, own, day, 0.0, 0.0)
+        assertEquals(0, resolved.hrvHistory.ownValidNights)
+        assertEquals(1, resolved.hrvHistory.importedNights)
+        assertEquals(listOf(55.0), resolved.hrvHistory.values)
+    }
+
+    @Test fun chargeMetadataReadFailureFailsClosedWithoutBlankingOtherCells() = runBlocking {
+        val day = "2026-09-04"
+        val stored = DailyMetric("$id-noop", day, avgHrv = 77.0, restingHr = 55, recovery = 0.42)
+        days[stored.deviceId to day] = stored
+        sql("DROP TABLE metricSeries")
+        assertEquals(stored.copy(avgHrv = null), repo.chargeComputedDailyUnion(id, day, day).single())
+        assertEquals(stored.copy(avgHrv = null), repo.chargeComputedDailyUnionFlow(id, day, day).first().single())
+        assertEquals(stored, repo.computedDailyUnionFlow(id, day, day).first().single())
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun chargeReactiveAdapterTracksOwnMarkerAndRegimeOnlyChanges() = runBlocking {
+        val day = "2026-09-04"
+        days["$id-noop" to day] = DailyMetric("$id-noop", day, avgHrv = 44.0, restingHr = 55)
+        val required = MutableStateFlow<String?>(null)
+        val emitted = Channel<List<DailyMetric>>(Channel.UNLIMITED)
+        val collector = launch {
+            required.flatMapLatest { repo.chargeComputedDailyUnionFlow(id, day, day, it) }
+                .collect { emitted.send(it) }
+        }
+        try {
+            suspend fun next() = withTimeout(5_000) { emitted.receive().single() }
+            assertEquals(44.0, next().avgHrv!!, 0.0)
+            required.value = day
+            assertNull("a regime-only change reevaluates an unchanged row and marker table", next().avgHrv)
+            freshMarker(day, 1.0)
+            assertEquals(44.0, next().avgHrv!!, 0.0)
+            freshMarker(day, 0.0)
+            assertNull(next().avgHrv)
+            assertEquals(44.0, repo.computedDailyUnionFlow(id, day, day).first().single().avgHrv!!, 0.0)
+        } finally {
+            collector.cancelAndJoin()
+            emitted.close()
+        }
+    }
+
+    @Test fun chargeJoinedProofReadsOnlyTheOwnSourceDayAndFreshKey() = runBlocking {
+        val source = "$id-noop"
+        val first = "2026-09-04"
+        val second = "2026-09-05"
+        days[source to first] = DailyMetric(source, first, avgHrv = 44.0)
+        days[source to second] = DailyMetric(source, second, avgHrv = 55.0)
+        days[source to "2026-09-06"] = DailyMetric(source, "2026-09-06", restingHr = 60)
+        days["foreign-noop" to first] = DailyMetric("foreign-noop", first, avgHrv = 88.0)
+        repo.upsertMetricSeries(listOf(MetricSeriesRow(source, first, "unrelated", 1.0)))
+        freshMarker(first, 1.0, "foreign-noop")
+        freshMarker(second, 0.0)
+        assertEquals(listOf(ChargeHrvProof(first, 44.0, null), ChargeHrvProof(second, 55.0, 0.0)),
+            dao.chargeHrvProof(source, first, "2026-09-06"))
+        assertEquals(listOf(ChargeHrvProof(first, 88.0, 1.0)),
+            dao.chargeHrvProof("foreign-noop", first, first))
+        assertNull(repo.chargeComputedDailyUnion(id, first, first, first).single().avgHrv)
+        assertEquals(44.0, repo.chargeComputedDailyUnion(id, first, first).single().avgHrv!!, 0.0)
+    }
+
+    @Test fun chargeJoinedProofMustMatchTheWinningRawValue() = runBlocking {
+        val day = "2026-09-04"
+        val source = "$id-noop"
+        val old = DailyMetric(source, day, avgHrv = 44.0, restingHr = 55)
+        days[source to day] = old
+        freshMarker(day, 1.0)
+        val beforeRescore = dao.chargeHrvProof(source, day, day).associateBy { it.day }
+        assertEquals(ChargeHrvProof(day, 44.0, 1.0), beforeRescore.getValue(day))
+        val replaced = old.copy(avgHrv = 77.0)
+        days[source to day] = replaced
+        assertEquals(replaced.copy(avgHrv = null), WhoopRepository.chargeUnionByDay(
+            listOf(listOf(replaced)), listOf(beforeRescore), null).single())
+        assertEquals(replaced.copy(avgHrv = null), WhoopRepository.chargeUnionByDay(
+            listOf(listOf(replaced)), listOf(emptyMap()), null).single())
+        freshMarker(day, 0.0)
+        val afterRescore = dao.chargeHrvProof(source, day, day).associateBy { it.day }
+        assertEquals(ChargeHrvProof(day, 77.0, 0.0), afterRescore.getValue(day))
+        assertEquals(replaced.copy(avgHrv = null), WhoopRepository.chargeUnionByDay(
+            listOf(listOf(replaced)), listOf(afterRescore), null).single())
+        freshMarker(day, 1.0)
+        assertEquals(replaced, repo.chargeComputedDailyUnion(id, day, day).single())
+    }
+
+    private fun chargeProofRows(args: Array<out Any?>): List<ChargeHrvProof> {
+        // Daily models are the fixture's cache; mirror the queried cells into SQLite before its actual JOIN.
+        sql("DELETE FROM dailyMetric")
+        for (row in days.values) statement("INSERT INTO dailyMetric VALUES(:deviceId,:day,:hrv)",
+            mapOf("deviceId" to row.deviceId, "day" to row.day, "hrv" to row.avgHrv))
+            .use { it.executeUpdate() }
+        return query(CHARGE_HRV_PROOF_SQL, listOf("deviceId", "from", "to").zip(args.take(3)).toMap()) { row ->
+            val marker = row.getDouble("freshScoringValid").let { if (row.wasNull()) null else it }
+            ChargeHrvProof(row.getString("day"), row.getDouble("value"), marker)
+        }
+    }
+
+    private fun metricRows(args: Array<out Any?>): List<MetricSeriesRow> {
+        // Room's row mapping only; the production repository decides source and marker eligibility.
+        val querySql = "SELECT * FROM metricSeries WHERE deviceId = :deviceId AND key = :key " +
+            "AND day >= :from AND day <= :to ORDER BY day ASC"
+        return query(querySql, listOf("deviceId", "key", "from", "to").zip(args.take(4)).toMap()) {
+            MetricSeriesRow(it.getString("deviceId"), it.getString("day"), it.getString("key"), it.getDouble("value"))
+        }
+    }
+
+    private fun writeMetricRows(rows: List<MetricSeriesRow>) {
+        for (row in rows) statement("INSERT OR REPLACE INTO metricSeries VALUES(:deviceId,:day,:key,:value)",
+            mapOf("deviceId" to row.deviceId, "day" to row.day, "key" to row.key, "value" to row.value))
+            .use { it.executeUpdate() }
+        markerChanges.value++
+    }
+
+    private suspend fun freshMarker(day: String, value: Double, source: String = "$id-noop") =
+        repo.upsertMetricSeries(listOf(MetricSeriesRow(source, day, "hrv_fresh_scoring_valid", value)))
 
     private fun insertRr(ts: Long, channel: Int?, suspect: Int? = null, device: String = id) {
         statement(

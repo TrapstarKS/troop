@@ -535,12 +535,14 @@ object IntelligenceEngine {
             // its JaCoCo bytecode budget, and both the initial and heal pass must fold the same era.
             val offsetSec = java.util.TimeZone.getDefault().getOffset(nowSeconds * 1_000L) / 1_000L
             val owner = ownerSource?.activeWriteId() ?: importedDeviceId
-            val hrvEpoch = repo.effectiveHrvEpoch(owner, importedDeviceId, baselineEpoch, offsetSec)
+            val regimeEpoch = repo.effectiveHrvEpoch(owner, importedDeviceId, 0.0, offsetSec)
+            val hrvEpoch = maxOf(baselineEpoch, regimeEpoch)
+            val requiredFreshDay = if (regimeEpoch > 0.0) AnalyticsEngine.dayString(regimeEpoch.toLong(), 0L) else null
             val (out, healed) = analyzeRecentOnCpu(repo, profile, maxDays, importedDeviceId, maxHROverride,
                 nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, hrvEpoch,
                 recoveryEpoch, diag, useExperimentalSleepV2, useMotionAwareWake, sleepTraceSink, recoveryTraceSink,
                 stepsTraceSink, universalSink, workoutsTraceSink, hrvTraceSink, deepHrvWindow,
-                spo2CandidateDisplay, effortMethod, dayCycleMode)
+                spo2CandidateDisplay, effortMethod, dayCycleMode, requiredFreshDay)
             val result = if (healed == 0) out
             // #899 heal re-pass: the pass above deleted overlapping duplicate sleep sessions AFTER its days
             // were scored, and the read-side dedup those days consumed had no bank-recency witness (the fresh
@@ -551,7 +553,7 @@ object IntelligenceEngine {
                 nowSeconds, ownerSource, manualStepCoefficient, persistStepsCalibration, hrvEpoch,
                 recoveryEpoch, diag, useExperimentalSleepV2, useMotionAwareWake, sleepTraceSink, recoveryTraceSink,
                 stepsTraceSink, universalSink, workoutsTraceSink, hrvTraceSink, deepHrvWindow,
-                spo2CandidateDisplay, effortMethod, dayCycleMode).first
+                spo2CandidateDisplay, effortMethod, dayCycleMode, requiredFreshDay).first
             // Write the pruned cache back, after the heal re-pass so the payload reflects whichever pass ran
             // last, and only when it moved. `serialize` renders sorted, so a pass that reused every day
             // produces the string already stored and skips the write entirely.
@@ -677,6 +679,7 @@ object IntelligenceEngine {
         // #1545: the Effort TRIMP recipe, threaded from the public wrapper.
         effortMethod: StrainScorer.Method = StrainScorer.Method.EDWARDS,
         dayCycleMode: DayCycleMode = DayCycleMode.SLEEP_ONSET,
+        requiredFreshDay: String? = null,
         // #899 heal re-pass: the second component of the return is how many overlapping duplicate sleep
         // sessions the heal below deleted this pass. The public wrapper re-runs ONCE when it is non-zero
         // so the affected days re-score against the cleaned store.
@@ -746,7 +749,7 @@ object IntelligenceEngine {
         val chargeFromDay = Baselines.cutoffKey(chargeAnchorDay, ChargeBaselines.windowDays - 1)
         val chargeOwner = ownerSource?.activeWriteId() ?: importedDeviceId
         val baselineImported = repo.importedDailyUnion(chargeOwner, chargeFromDay, chargeAnchorDay)
-        val baselineOwn = repo.computedDailyUnion(chargeOwner, chargeFromDay, chargeAnchorDay)
+        val baselineOwn = repo.chargeComputedDailyUnion(chargeOwner, chargeFromDay, chargeAnchorDay, requiredFreshDay)
         val initial = ChargeBaselines.resolve(baselineImported, baselineOwn, chargeAnchorDay,
             baselineEpoch, recoveryEpoch)
         val baselines1 = ProfileBaselines(hrv = initial.hrv, restingHR = initial.restingHR)
@@ -996,7 +999,7 @@ object IntelligenceEngine {
                     // matching the loop's own guard).
                     if (universalSink != null) readOwnerByDay[day] = OwnerRead(cached.owner, cached.hrRows)
                     cached.hrvOverCount?.let { hrvOverCountByDay[day] = it }
-                    nightlyHrvByDay[day] = cached.res.daily.avgHrv
+                    nightlyHrvByDay[day] = ChargeBaselines.ownHrvValue(cached.res.daily.avgHrv, 1.0)
                     nightlyRhrByDay[day] = cached.res.daily.restingHr?.toDouble()
                     nightlySkinByDay[day] = cached.res.nightlySkinTempC
                     nightlyRespByDay[day] = cached.res.daily.respRateBpm
@@ -1417,7 +1420,7 @@ object IntelligenceEngine {
             // Harvest the baseline-independent nightly aggregates (a day with no detected
             // sleep yields null → recorded as a missing night, i.e. skip-and-hold). The raw
             // streams (hr/rr/...) go out of scope here and are freed before the next night.
-            nightlyHrvByDay[day] = res.daily.avgHrv
+            nightlyHrvByDay[day] = ChargeBaselines.ownHrvValue(res.daily.avgHrv, 1.0)
             nightlyRhrByDay[day] = res.daily.restingHr?.toDouble()
             nightlySkinByDay[day] = res.nightlySkinTempC
             nightlyRespByDay[day] = res.daily.respRateBpm
@@ -1708,6 +1711,9 @@ object IntelligenceEngine {
                 physiologicalSteps, computedId, restRows,
             )
             val daily = recomputeRecoveryDaily(editedDaily, res.nightlySkinTempC, baselines2)
+            // Capture the raw scored result before the persistence layer restores any legacy snapshot.
+            restRows.add(MetricSeriesRow(computedId, daily.day, "hrv_fresh_scoring_valid",
+                if (ChargeBaselines.ownHrvValue(res.daily.avgHrv, 1.0) != null) 1.0 else 0.0))
             val recovery = daily.recovery
             val skinTempDevC = daily.skinTempDevC
             // Charge term-breakdown trace (Test Centre Group G): only when the Recovery test mode is on

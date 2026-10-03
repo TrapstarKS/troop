@@ -16,6 +16,42 @@ import org.junit.Test
  */
 class ChargeBaselinesTest {
 
+    @Test fun ownHrvValueMatchesSwiftOracle() {
+        val values = listOf(null, hrvCfg.minVal - 1, hrvCfg.minVal, 44.0, hrvCfg.maxVal,
+            hrvCfg.maxVal + 1, Double.NaN, Double.POSITIVE_INFINITY)
+        val markers = listOf(null, 0.0, 1.0, 0.49, 0.5, 2.0, -1.0,
+            Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)
+        val actual = values.flatMapIndexed { index, value ->
+            listOf(false, true).map { fresh ->
+                "v=$index fresh=${if (fresh) 1 else 0} " + markers.joinToString(",") { marker ->
+                    ChargeBaselines.ownHrvValue(value, marker, fresh)?.let {
+                        java.lang.Long.toHexString(it.toRawBits()).padStart(16, '0')
+                    } ?: "-"
+                }
+            }
+        }.joinToString("\n")
+        // Actual standalone Swift -O stdout: Baselines.swift + ChargeBaselines.swift, 160 vectors.
+        val expected = """
+            v=0 fresh=0 -,-,-,-,-,-,-,-,-,-
+            v=0 fresh=1 -,-,-,-,-,-,-,-,-,-
+            v=1 fresh=0 -,-,-,-,-,-,-,-,-,-
+            v=1 fresh=1 -,-,-,-,-,-,-,-,-,-
+            v=2 fresh=0 4014000000000000,-,4014000000000000,-,-,-,-,-,-,-
+            v=2 fresh=1 -,-,4014000000000000,-,-,-,-,-,-,-
+            v=3 fresh=0 4046000000000000,-,4046000000000000,-,-,-,-,-,-,-
+            v=3 fresh=1 -,-,4046000000000000,-,-,-,-,-,-,-
+            v=4 fresh=0 406f400000000000,-,406f400000000000,-,-,-,-,-,-,-
+            v=4 fresh=1 -,-,406f400000000000,-,-,-,-,-,-,-
+            v=5 fresh=0 -,-,-,-,-,-,-,-,-,-
+            v=5 fresh=1 -,-,-,-,-,-,-,-,-,-
+            v=6 fresh=0 -,-,-,-,-,-,-,-,-,-
+            v=6 fresh=1 -,-,-,-,-,-,-,-,-,-
+            v=7 fresh=0 -,-,-,-,-,-,-,-,-,-
+            v=7 fresh=1 -,-,-,-,-,-,-,-,-,-
+        """.trimIndent()
+        assertEquals(expected, actual)
+    }
+
     private val hrvCfg = Baselines.hrvCfg
     private val rhrCfg = Baselines.restingHRCfg
 
