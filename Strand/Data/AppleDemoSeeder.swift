@@ -234,6 +234,7 @@ enum AppleDemoSeeder {
         NSLog("AppleDemoSeeder: seeded \(daily.count) days, \(workouts.count) workouts.")
     }
 
+    /// Kotlin twin: `DemoSeeder.seedHealthMonitor`.
     private static func seedHealthMonitor(into store: WhoopStore, days: [DailyMetric]) async throws {
         let points = days.flatMap { day in
             [MetricPoint(day: day.day, key: "hrv_fresh_scoring_valid", value: day.avgHrv?.isFinite == true ? 1 : 0),

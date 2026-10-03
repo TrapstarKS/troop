@@ -301,6 +301,7 @@ object DemoSeeder {
         if (journal.isNotEmpty()) repo.upsertJournal(journal)
     }
 
+    /** Swift twin: `AppleDemoSeeder.seedHealthMonitor`. */
     internal fun seedHealthMonitor(into: MutableList<MetricSeriesRow>, days: List<DailyMetric>) {
         for (day in days) {
             into.add(MetricSeriesRow(WHOOP_NOOP, day.day, "hrv_fresh_scoring_valid",
