@@ -1230,6 +1230,23 @@ fun TodayScreen(
     val homeWorkoutRows by viewModel.workouts.collectAsStateWithLifecycle()
     val publishedHomeStrap by viewModel.activeStrapIdFlow.collectAsStateWithLifecycle()
     val homeStrapId = effectiveActiveStrapId(publishedHomeStrap, viewModel.deviceId)
+    // Preserve the existing Test Centre battery analysis after replacing the old source-summary header.
+    LaunchedEffect(homeStrapId, activeIsWhoop, liveSnap.connected, liveSnap.batteryPct,
+        liveSnap.whoop5, liveSnap.charging) {
+        val testCentre = com.noop.testcentre.TestCentre.from(context)
+        if (!activeIsWhoop || !liveSnap.connected || liveSnap.charging == true ||
+            !testCentre.active(com.noop.testcentre.TestDomain.BATTERY)) return@LaunchedEffect
+        val now = System.currentTimeMillis() / 1000
+        val samples = viewModel.repo.batterySamples(homeStrapId, now - 14L * 86_400, now, limit = 2_000)
+            .mapNotNull { sample -> sample.soc?.let { sample.ts to it } }
+        val rated = if (liveSnap.whoop5) BatteryEstimator.ratedLifeHoursWhoop5 else BatteryEstimator.ratedLifeHoursWhoop4
+        val trace = withContext(Dispatchers.Default) { BatteryEstimator.estimateTrace(samples, rated).second }
+        ensureActive()
+        if (homeStrapId != viewModel.activeStrapId || !testCentre.active(com.noop.testcentre.TestDomain.BATTERY)) {
+            return@LaunchedEffect
+        }
+        for (line in trace) viewModel.ble.externalLog(line, com.noop.testcentre.TestDomain.BATTERY)
+    }
     LaunchedEffect(days, selectedDayKey, homeStrapId, homeWorkoutRows) {
         val effectDayKey = selectedDayKey
         val effectStrapId = homeStrapId
