@@ -228,6 +228,10 @@ internal enum class Destination(
     More("more", R.string.nav_more, Icons.Filled.Menu);
 
     companion object {
+        /** Details retain their caller's tab; only an exact root changes its selection. */
+        fun rootForRoute(route: String?): Destination? =
+            listOf(Today, Health, Plan, More).firstOrNull { it.route == route }
+
         /** Resolve the destination owning the current back-stack route (defaults to Today). */
         fun forRoute(route: String?): Destination =
             entries.firstOrNull {
@@ -534,12 +538,9 @@ fun AppRoot(
 
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val current = Destination.forRoute(currentRoute)
     var selectedTabRoute by rememberSaveable { mutableStateOf(Destination.Today.route) }
-    LaunchedEffect(current) {
-        if (current in listOf(Destination.Today, Destination.Health, Destination.Plan, Destination.More)) {
-            selectedTabRoute = current.route
-        }
+    LaunchedEffect(currentRoute) {
+        Destination.rootForRoute(currentRoute)?.let { selectedTabRoute = it.route }
     }
     val selectedTab = Destination.forRoute(selectedTabRoute)
     var showQuickActions by remember { mutableStateOf(false) }

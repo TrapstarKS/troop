@@ -1,10 +1,21 @@
 package com.noop.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WhoopRoutesTest {
+    @Test
+    fun `only exact roots change the selected shell tab`() {
+        listOf(Destination.Today, Destination.Health, Destination.Plan, Destination.More).forEach {
+            assertEquals(it, Destination.rootForRoute(it.route))
+        }
+        listOf(LOCAL_NOTICE_ROUTE, WhoopRoute.localBriefing, WhoopRoute.weeklyPlan,
+            Destination.Workouts.route, Destination.Settings.route, "settings/PROFILE", "unknown", null)
+            .forEach { assertNull(Destination.rootForRoute(it)) }
+    }
+
     @Test
     fun `every public detail hook resolves to a registered destination`() {
         val hooks = listOf(WhoopRoute.recoveryDetail, WhoopRoute.strainDetail, WhoopRoute.sleepDetail,
