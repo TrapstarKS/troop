@@ -215,6 +215,11 @@ struct WeeklyPlanView: View {
 
     private func refreshDay(_ day: String) {
         let next = WeeklyPlanDayAnchor(today: today, weekOffset: weekOffset).advanced(to: day)
+        if next.today != today {
+            loaded = false
+            saved = false
+            notice = nil
+        }
         weekOffset = next.weekOffset
         today = next.today
     }

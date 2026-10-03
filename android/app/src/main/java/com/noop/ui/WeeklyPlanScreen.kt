@@ -84,6 +84,11 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
     val lifecycleOwner = LocalLifecycleOwner.current
     fun refreshDay(day: String) {
         val next = WeeklyPlanDayAnchor(today, weekOffset).advanced(day)
+        if (next.today != today) {
+            loaded = false
+            saved = false
+            notice = null
+        }
         weekOffset = next.weekOffset
         today = next.today
     }
