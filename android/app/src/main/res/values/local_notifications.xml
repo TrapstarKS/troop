@@ -46,4 +46,5 @@
     <string name="local_review_plan_detail">Sleep need and debt are not included in this summary. Open Alarms to review your saved sleep plan.</string>
     <string name="local_notify_charging_attention">Charging needs attention</string>
     <string name="local_notify_charging_unavailable">Charging fault alerts are unavailable because the device data does not establish a charger fault.</string>
+    <string name="settings_all">All settings</string>
 </resources>

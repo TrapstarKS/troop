@@ -2,7 +2,7 @@
 
 More groups the local profile, device, app preferences, notifications, integrations, data tools and help. The feature index retains every previous mobile destination. Settings opens a task directory; All settings retains the complete form, including experiments and restore controls. Existing data-affecting explanations remain beside their switches. The provider settings have their own destination.
 
-All new briefing and notification copy is **newly authored**. It is a clean-room local summary, not WHOOP text or a reproduction of its proprietary coaching algorithm. No server, account, push service or telemetry is introduced. The Coach destination opens the existing configured provider conversation, or the offline briefing when no provider is configured. Opening either destination sends no request.
+All new briefing and notification copy is **newly authored**. It is a clean-room local summary, not WHOOP text or a reproduction of its proprietary coaching algorithm. No server, account, push service or telemetry is introduced. The Coach destination opens the existing BYOK provider conversation when a key is saved, or the offline briefing when no key is saved. Opening either destination sends no request.
 
 ## Delivery rules
 

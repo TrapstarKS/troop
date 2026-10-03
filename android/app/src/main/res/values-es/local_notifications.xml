@@ -46,4 +46,5 @@
     <string name="local_review_plan_detail">La necesidad y la deuda de sueño no están incluidas en este resumen. Abre Alarmas para revisar tu plan de sueño guardado.</string>
     <string name="local_notify_charging_attention">La carga necesita atención</string>
     <string name="local_notify_charging_unavailable">Las alertas de fallos de carga no están disponibles porque los datos del dispositivo no permiten determinar que exista un fallo del cargador.</string>
+    <string name="settings_all">Todos los ajustes</string>
 </resources>

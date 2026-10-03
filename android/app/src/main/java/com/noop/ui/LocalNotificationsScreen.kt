@@ -47,7 +47,6 @@ fun LocalNotificationsScreen(
     val illness by vm.illnessWatchEnabled.collectAsStateWithLifecycle()
     val battery by vm.batteryAlertsEnabled.collectAsStateWithLifecycle()
     val predictive by vm.predictiveBatteryAlertsEnabled.collectAsStateWithLifecycle()
-    val strapAlarm by vm.smartAlarmEnabled.collectAsStateWithLifecycle()
     val phoneAlarm by vm.phoneAlarmEnabled.collectAsStateWithLifecycle()
     val windDown by vm.windDownEnabled.collectAsStateWithLifecycle()
     fun change(block: () -> Unit) { block(); revision++ }
@@ -125,8 +124,7 @@ fun LocalNotificationsScreen(
             }
         }
         MoreHubSection(uiString(R.string.local_notify_sleep_group)) {
-            LocalNotificationToggle(uiString(R.string.l10n_smart_alarm_screen_strap_wake_alarm_1828fff3),
-                strapAlarm, enabled = false, onChange = {})
+            MoreHubRow(uiString(R.string.l10n_smart_alarm_screen_strap_wake_alarm_1828fff3), onClick = onOpenAlarms)
             LocalNotificationToggle(uiString(R.string.l10n_smart_alarm_screen_wake_alarm_37af3ecf), phoneAlarm) {
                 if (!vm.setPhoneAlarmEnabled(it)) onOpenAlarms()
             }

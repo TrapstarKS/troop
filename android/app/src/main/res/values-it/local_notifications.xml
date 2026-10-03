@@ -46,4 +46,5 @@
     <string name="local_review_plan_detail">Il fabbisogno e il debito di sonno non sono inclusi nel riepilogo. Apri Sveglie per consultare il piano del sonno salvato.</string>
     <string name="local_notify_charging_attention">La ricarica richiede attenzione</string>
     <string name="local_notify_charging_unavailable">Gli avvisi di guasti di ricarica non sono disponibili perché i dati del dispositivo non dimostrano un guasto del caricatore.</string>
+    <string name="settings_all">Tutte le impostazioni</string>
 </resources>

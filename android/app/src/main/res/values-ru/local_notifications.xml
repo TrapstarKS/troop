@@ -46,4 +46,5 @@
     <string name="local_review_plan_detail">Потребность во сне и дефицит сна не включены в эту сводку. Откройте Будильники для просмотра сохранённого плана сна.</string>
     <string name="local_notify_charging_attention">Зарядка требует внимания</string>
     <string name="local_notify_charging_unavailable">Уведомления о сбоях зарядки недоступны, поскольку данные устройства не подтверждают неисправность зарядного устройства.</string>
+    <string name="settings_all">Все настройки</string>
 </resources>

@@ -62,7 +62,7 @@ fun MoreHubScreen(
             MoreHubRow(uiString(R.string.nav_power_saving), Icons.Filled.Settings) { onNavigate("power_saving") }
         }
         MoreHubSection(uiString(R.string.more_app)) {
-            MoreHubRow(uiString(R.string.nav_settings), Icons.Filled.Settings) { onOpenSettings(SettingsCategory.APP) }
+            MoreHubRow(uiString(R.string.nav_settings), Icons.Filled.Settings) { onNavigate("settings") }
             MoreHubRow(uiString(R.string.settings_scores), Icons.Filled.Settings) { onOpenSettings(SettingsCategory.SCORES) }
             MoreHubRow(uiString(R.string.nav_automations), Icons.Filled.Settings) { onNavigate("automations") }
         }

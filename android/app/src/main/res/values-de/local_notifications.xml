@@ -46,4 +46,5 @@
     <string name="local_review_plan_detail">Schlafbedarf und Schlafdefizit sind in dieser Zusammenfassung nicht enthalten. Öffne Alarme für deinen gespeicherten Schlafplan.</string>
     <string name="local_notify_charging_attention">Aufladung erfordert Aufmerksamkeit</string>
     <string name="local_notify_charging_unavailable">Warnungen bei Ladefehlern sind nicht verfügbar, da die Gerätedaten keinen Fehler des Ladegeräts nachweisen.</string>
+    <string name="settings_all">Alle Einstellungen</string>
 </resources>

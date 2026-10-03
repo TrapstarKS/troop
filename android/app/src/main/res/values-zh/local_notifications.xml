@@ -46,4 +46,5 @@
     <string name="local_review_plan_detail">此摘要不包含睡眠需求和睡眠债。打开闹钟页面以查看已保存的睡眠计划。</string>
     <string name="local_notify_charging_attention">充电需要关注</string>
     <string name="local_notify_charging_unavailable">充电故障提醒不可用，因为设备数据无法确定充电器存在故障。</string>
+    <string name="settings_all">全部设置</string>
 </resources>

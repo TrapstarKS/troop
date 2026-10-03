@@ -5,7 +5,7 @@ import StrandAnalytics
 struct CoachDestinationView: View {
     @EnvironmentObject private var coach: AICoachEngine
     var body: some View {
-        if coach.isConfigured { CoachView() } else { LocalBriefingView() }
+        if coach.hasKey { CoachView() } else { LocalBriefingView() }
     }
 }
 

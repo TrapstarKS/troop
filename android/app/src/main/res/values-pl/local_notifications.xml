@@ -46,4 +46,5 @@
     <string name="local_review_plan_detail">Potrzeba i dług snu nie są uwzględnione w tym podsumowaniu. Otwórz Alarmy, aby przejrzeć zapisany plan snu.</string>
     <string name="local_notify_charging_attention">Ładowanie wymaga uwagi</string>
     <string name="local_notify_charging_unavailable">Alerty o błędach ładowania są niedostępne, ponieważ dane urządzenia nie potwierdzają usterki ładowarki.</string>
+    <string name="settings_all">Wszystkie ustawienia</string>
 </resources>

@@ -23,6 +23,19 @@ final class LocalNotificationPolicyTests: XCTestCase {
             eventKey: "night", lastEventKey: nil, occurrenceSec: 0, nowSec: 86_400))
     }
 
+    func testExpiredAndInvalidKeysStayUndeliverable() {
+        for key in [nil, ""] as [String?] {
+            XCTAssertFalse(LocalNotificationPolicy.shouldDeliver(enabled: true, authorized: true, quiet: false,
+                eventKey: key, lastEventKey: nil, occurrenceSec: 0, nowSec: 1100))
+        }
+        XCTAssertFalse(LocalNotificationPolicy.shouldDeliver(enabled: true, authorized: true, quiet: false,
+            eventKey: "night", lastEventKey: nil, occurrenceSec: 0, nowSec: 86_401))
+        XCTAssertFalse(LocalNotificationPolicy.shouldDeliver(enabled: true, authorized: true, quiet: false,
+            eventKey: "night", lastEventKey: nil, occurrenceSec: 0, nowSec: -1))
+        XCTAssertFalse(LocalNotificationPolicy.shouldDeliver(enabled: true, authorized: true, quiet: false,
+            eventKey: "night", lastEventKey: nil, occurrenceSec: 0, nowSec: 1, maxAgeSec: -1))
+    }
+
     func testQuietHoursWrapAndEqualTimes() {
         for minute in 0..<1440 {
             XCTAssertEqual(LocalNotificationPolicy.isQuiet(minute: minute, start: 1320, end: 420, enabled: true), minute >= 1320 || minute < 420)

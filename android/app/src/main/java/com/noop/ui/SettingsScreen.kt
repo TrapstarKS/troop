@@ -10,6 +10,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -530,14 +531,14 @@ class ProfileStore(private val prefs: SharedPreferences) {
 // MARK: - Screen
 
 enum class SettingsCategory(val titleRes: Int) {
-    ALL(R.string.more_all), PROFILE(R.string.more_profile), APP(R.string.more_app),
+    ALL(R.string.settings_all), PROFILE(R.string.more_profile), APP(R.string.more_app),
     DEVICE(R.string.nav_devices), SCORES(R.string.settings_scores), DATA(R.string.more_data), HELP(R.string.more_help),
 }
 
 @Composable
 fun SettingsScreen(
     vm: AppViewModel,
-    initialCategory: SettingsCategory = SettingsCategory.ALL,
+    initialCategory: SettingsCategory? = null,
     onOpenTestCentre: () -> Unit = {},
     onOpenBackupSync: () -> Unit = {},
     onOpenSelfHostedPush: () -> Unit = {},
@@ -546,6 +547,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var category by remember(initialCategory) { mutableStateOf(initialCategory) }
+    BackHandler(enabled = initialCategory == null && category != null) { category = null }
     val live by vm.live.collectAsStateWithLifecycle()
     // #2338: the read-only advertising-name probe result. Its own flow on the BLE client rather than a
     // LiveState field, matching the other opcode probes.
@@ -926,19 +928,19 @@ fun SettingsScreen(
     ScreenScaffold(
         title = uiString(R.string.l10n_settings_screen_settings_c7f73bb5),
         subtitle = "Your numbers, your strap, and how NOOP works. All on this phone.",
-        // LIQUID SKY BACKDROP (the pilot pattern — LiquidScreenSky.kt): the static time-of-day sky settles
-        // into the theme canvas behind the top of the list, exactly like the liquid Today. This is a long,
-        // scroll-heavy list with NO hero gauge, so the liquid finish here is just the sky + liquidPress on
-        // the tappable rows. Gated on the same day-cycle background pref Today reads, so turning that off
-        // returns Settings to the plain dark canvas too.
-        topBackground = screenBackdropSlot(showDayCycleBackground, skyBehindCards),
-        // Sky-behind-cards fills the viewport so the transparent cards reveal the sky the whole way
-        // down (Today / Trends / Sleep / metric-detail parity - same two prefs, same two behaviours).
-        fullBleedBackground = screenBackdropFullBleed(showDayCycleBackground, skyBehindCards),
     ) {
         // Read the revision counter so every profile write recomposes this subtree
         // (SharedPreferences is not observable; `mutate` bumps `rev` after each write).
         @Suppress("UNUSED_VARIABLE") val tick = rev
+
+        if (category == null) {
+            MoreHubSection(uiString(R.string.nav_settings)) {
+                (SettingsCategory.entries.filter { it != SettingsCategory.ALL } + SettingsCategory.ALL).forEach { option ->
+                    MoreHubRow(uiString(option.titleRes)) { category = option }
+                }
+            }
+            return@ScreenScaffold
+        }
 
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(Metrics.selectorSpacing)) {

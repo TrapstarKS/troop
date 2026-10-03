@@ -46,4 +46,5 @@
     <string name="local_review_plan_detail">Le besoin et la dette de sommeil ne sont pas inclus dans ce résumé. Ouvrez Alarmes pour consulter votre plan de sommeil enregistré.</string>
     <string name="local_notify_charging_attention">Recharge à vérifier</string>
     <string name="local_notify_charging_unavailable">Les alertes de défaut de charge sont indisponibles, car les données de l’appareil ne permettent pas d’établir un défaut du chargeur.</string>
+    <string name="settings_all">Tous les réglages</string>
 </resources>
