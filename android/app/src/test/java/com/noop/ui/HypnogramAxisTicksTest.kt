@@ -66,4 +66,29 @@ class HypnogramAxisTicksTest {
             .forEach { (_, label) -> assertTrue("interior '$label' should be 'h AM/PM'", label.matches(Regex("""\d{1,2} (AM|PM)"""))) }
         assertTrue("edge '${ticks.first().second}' should carry AM/PM", ticks.first().second.contains(Regex("AM|PM")))
     }
+
+    @Test fun measuredLabelWidthsKeepBothEdgesAndDropCollidingInteriorLabels() {
+        val fractions = listOf(0f, 0.30f, 0.55f, 0.805f, 1f)
+        val widths = listOf(180, 110, 110, 78, 124)
+        val narrow = hypnogramAxisLabelPositions(fractions, widths, 840, 24)
+        assertEquals(0 to 0, narrow.first())
+        assertEquals(716 to 0, narrow.last())
+        assertEquals(null, narrow[3])
+        var end = -24
+        narrow.forEachIndexed { index, position ->
+            position?.let { (x, row) ->
+                assertEquals(0, row)
+                assertTrue("label $index must have a measured gap", x >= end + 24)
+                assertTrue("label $index must fit the chart width", x + widths[index] <= 840)
+                end = x + widths[index]
+            }
+        }
+        val wide = hypnogramAxisLabelPositions(fractions, widths, 1440, 24)
+        assertTrue("the wider axis can retain the late hour mark", wide[3] != null)
+    }
+
+    @Test fun endpointsThatCannotFitOnOneRowKeepTheirExactLabelsOnSeparateRows() {
+        val positions = hypnogramAxisLabelPositions(listOf(0f, 0.5f, 1f), listOf(200, 80, 220), 300, 16)
+        assertEquals(listOf(0 to 0, null, 80 to 1), positions)
+    }
 }

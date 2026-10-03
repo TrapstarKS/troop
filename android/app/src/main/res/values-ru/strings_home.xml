@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_previous_day">Предыдущий день</string>
+    <string name="home_next_day">Следующий день</string>
+    <string name="home_profile">Открыть профиль</string>
+    <string name="home_device_connected">Устройство подключено</string>
+    <string name="home_device_disconnected">Устройство отключено</string>
+    <string name="home_sleep">Сон</string>
+    <string name="home_recovery">Восстановление</string>
+    <string name="home_strain">Нагрузка</string>
+    <string name="home_status_disconnected">Отключено</string>
+    <string name="home_status_scanning">Поиск устройства</string>
+    <string name="home_status_backfill">Синхронизация истории</string>
+    <string name="home_status_capture">Запись в реальном времени</string>
+    <string name="home_status_connected_no_data">Подключено · данных пока нет</string>
+    <string name="home_status_idle">Подключено · ожидание</string>
+    <string name="home_health_monitor">Монитор здоровья</string>
+    <string name="home_stress_monitor">Монитор стресса</string>
+    <string name="home_metrics_available">Доступные показатели</string>
+    <string name="home_stress_unavailable">Нет измерения за этот день</string>
+    <string name="home_stress_local">Локальная дневная оценка</string>
+    <string name="home_my_day">Мой день</string>
+    <string name="home_add_activity">Добавить активность</string>
+    <string name="home_sleep_duration">%1$dч %2$dмин</string>
+    <string name="home_no_sleep_yet">Сон пока не записан</string>
+    <string name="home_activity_time">%1$s – %2$s</string>
+    <string name="home_no_activities">За этот день активности не записаны</string>
+    <string name="home_my_plan">Мой план</string>
+    <string name="home_weekly_plan">План на неделю</string>
+    <string name="home_plan_summary">Просмотр локальных целей, привычек и прогресса.</string>
+    <string name="home_my_dashboard">Моя панель</string>
+    <string name="home_save">Сохранить</string>
+    <string name="home_sleep_pending_sync">Оценка сна ожидает синхронизации</string>
+    <string name="home_daily_guidance">Советы на день</string>
+    <string name="home_avatar" translatable="false">N</string>
+    <string name="home_no_value" translatable="false">—</string>
+    <string name="home_metrics_count" translatable="false">%1$d/5</string>
+    <string name="home_dial_label" translatable="false">%1$s ›</string>
+    <string name="home_status_capture_experimental">Запись в реальном времени · история экспериментальна</string>
+</resources>

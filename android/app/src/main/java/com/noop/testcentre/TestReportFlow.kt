@@ -5,6 +5,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import com.noop.ui.LogExport
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import java.io.File
 
 /**
  * Drives the in-app "Report" action on Android (spec section 5.2), twin of
@@ -57,21 +61,31 @@ object TestReportFlow {
     suspend fun run(context: Context, profile: TestDomain, title: String,
             version: String, platform: String, osVersion: String,
             gate: ReportReviewGate,
-            entries: List<Pair<String, ByteArray>>) {
-        runCatching {
-            if (!shouldProceed(gate)) return@runCatching
+            entries: List<Pair<String, ByteArray>>,
+            output: (suspend (List<Pair<String, ByteArray>>, String) -> File?)? = null,
+            saved: ((String) -> Unit)? = null,
+            copy: ((String) -> Unit)? = null) {
+        try {
+            if (!shouldProceed(gate)) return
             val name = Plan.bundleName(profile, platform, version)
-            LogExport.exportBundle(context, entries, name)              // existing ACTION_SEND chooser
-            Toast.makeText(context, Plan.attachToast(name), Toast.LENGTH_LONG).show()
+            val file = (if (output != null) output(entries, name) else LogExport.exportBundle(context, entries, name))
+                ?: return
+            currentCoroutineContext().ensureActive()
+            if (saved != null) saved(file.name) else
+                Toast.makeText(context, Plan.attachToast(file.name), Toast.LENGTH_LONG).show()
             if (Plan.offersCopyFallback(platform)) {
                 val report = entries.firstOrNull { it.first == "report.txt" }?.second
                 if (report != null) {
-                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("report.txt", String(report)))
+                    if (copy != null) copy(String(report)) else {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("report.txt", String(report)))
+                    }
                 }
             }
-        }.onFailure {
-            Toast.makeText(context, "Couldn't build the report: ${it.message}", Toast.LENGTH_LONG).show()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            Toast.makeText(context, "Couldn't build the report: ${error.message}", Toast.LENGTH_LONG).show()
         }
     }
 }

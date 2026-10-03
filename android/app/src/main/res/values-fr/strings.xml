@@ -1,6 +1,123 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
+    <string name="debug_export_failed">Impossible d’exporter le fichier : %1$s</string>
+    <string name="plan_factor_0">Alcool</string>
+    <string name="plan_factor_1">Caféine tardive</string>
+    <string name="plan_factor_2">Écran au lit</string>
+    <string name="plan_factor_3">Repas tardif</string>
+    <string name="plan_factor_4">Stress ressenti</string>
+    <string name="plan_factor_5">Sauna</string>
+    <string name="plan_factor_6">Lit partagé</string>
+    <string name="plan_factor_7">Malaise</string>
+    <string name="plan_factor_8">Magnésium</string>
+    <string name="plan_factor_9">Lecture avant le coucher</string>
+    <string name="plan_factor_10">Méditation</string>
+    <string name="plan_factor_11">Exercices respiratoires</string>
+    <string name="plan_factor_12">Temps en plein air</string>
+    <string name="plan_factor_13">Voyage</string>
+    <string name="plan_factor_14">Bruit dans la chambre</string>
+    <string name="plan_factor_15">Chambre chaude</string>
+    <string name="plan_factor_16">Chambre obscurcie</string>
+    <string name="plan_factor_17">Haute altitude</string>
+    <string name="plan_factor_18">Symptômes allergiques</string>
+    <string name="plan_factor_19">Médicament prescrit</string>
+    <string name="plan_factor_20">Vitamine D</string>
+    <string name="plan_factor_21">Quantité de caféine</string>
+    <string name="plan_factor_22">Eau consommée</string>
+    <string name="plan_factor_23">Durée de méditation</string>
+    <string name="plan_factor_24">Température de la chambre</string>
+    <string name="plan_factor_25">Durée de travail</string>
+    <string name="plan_unsaved">Non enregistré</string>
+    <string name="plan_not_started">Non commencé</string>
+    <string name="plan_saved">Enregistré</string>
+    <string name="plan_discard">Abandonner</string>
+    <string name="plan_saving">Enregistrement…</string>
+    <string name="plan_save_journal">Enregistrer le journal</string>
+    <string name="plan_save_failed">Le journal n’a pas pu être enregistré. Réessayez.</string>
+    <string name="plan_answered">%1$d sur %2$d réponses</string>
+    <string name="plan_cancel">Annuler</string>
+    <string name="plan_discard_prompt">Abandonner les modifications non enregistrées du journal ?</string>
+    <string name="plan_morning_journal">Le sommeil est prêt. Prenez un moment pour noter les habitudes d’hier.</string>
+    <string name="plan_journal_subtitle">Vos habitudes quotidiennes, enregistrées localement.</string>
+    <string name="plan_journal_date">Date du journal</string>
+    <string name="plan_trends_recovery">Récupération</string>
+    <string name="plan_trends_strain">Effort</string>
+    <string name="plan_trends_sleep_performance">Performance du sommeil</string>
+    <string name="plan_trends_metric">Mesure</string>
+    <string name="plan_trends_previous_period">Période précédente</string>
+    <string name="plan_trends_next_period">Période suivante</string>
+    <string name="plan_trends_monthly_performance">Performance mensuelle</string>
+    <string name="plan_trends_local_report">Rapport local</string>
+    <string name="plan_trends_recorded_days">%1$d sur %2$d jours enregistrés</string>
+    <string name="plan_trends_no_readings_month">Aucune mesure ce mois-ci</string>
+    <string name="plan_trends_report_note">Les moyennes utilisent uniquement les jours enregistrés. Les mesures manquantes restent indisponibles.</string>
+    <string name="weekly_plan_title">Plan hebdomadaire</string>
+    <string name="weekly_plan_subtitle">Choisissez des objectifs locaux pour la semaine.</string>
+    <string name="weekly_plan_overall">Progression globale</string>
+    <string name="weekly_plan_edit">Modifier les objectifs</string>
+    <string name="weekly_plan_sleep">Objectif de sommeil</string>
+    <string name="weekly_plan_strain">Objectif d’effort</string>
+    <string name="weekly_plan_journal">Habitude du journal</string>
+    <string name="weekly_plan_days_progress">%1$d sur %2$d jours</string>
+    <string name="weekly_plan_sleep_target">%1$d h %2$d min · %3$d jours</string>
+    <string name="weekly_plan_strain_target">Au moins %1$s %2$s · %3$d jours</string>
+    <string name="weekly_plan_missing">Aucune mesure cette semaine</string>
+    <string name="weekly_plan_waiting">La progression apparaît lorsque les données de sommeil, d’effort et du journal sélectionné sont disponibles.</string>
+    <string name="weekly_plan_logged">Toute entrée du journal enregistrée</string>
+    <string name="weekly_plan_saved">Objectifs enregistrés pour cette semaine</string>
+    <string name="weekly_plan_unsaved">Modifications non enregistrées</string>
+    <string name="weekly_plan_save">Enregistrer les objectifs</string>
+    <string name="weekly_plan_cancel">Annuler</string>
+    <string name="weekly_plan_sleep_minutes">Minutes de sommeil</string>
+    <string name="weekly_plan_sleep_days">Jours de sommeil</string>
+    <string name="weekly_plan_strain_minimum">Effort minimum</string>
+    <string name="weekly_plan_strain_days">Jours d’effort</string>
+    <string name="weekly_plan_journal_days">Jours de journal</string>
+    <string name="weekly_plan_behavior">Habitude suivie</string>
+    <string name="weekly_plan_yes">Oui</string>
+    <string name="weekly_plan_no">Non</string>
+    <string name="weekly_plan_check_in">Bilan du vendredi</string>
+    <string name="weekly_plan_check_in_body">Évaluez votre progression et ajustez le reste de la semaine.</string>
+    <string name="weekly_plan_recap">Récapitulatif du lundi</string>
+    <string name="weekly_plan_recap_body">Évaluez la semaine passée et choisissez ce que vous souhaitez conserver.</string>
+    <string name="weekly_plan_keep">Conserver les objectifs</string>
+    <string name="weekly_plan_dismiss">Terminé</string>
+    <string name="weekly_plan_local">Les objectifs et la progression restent sur cet appareil.</string>
+    <string name="weekly_plan_week_format">%1$s – %2$s</string>
+    <string name="weekly_plan_percent">%1$d%%</string>
+    <string name="weekly_plan_habit_target">%1$s · %2$s · %3$d jours</string>
+    <string name="plan_group_behaviour">Comportement</string>
+    <string name="plan_group_other">Autre</string>
+    <string name="plan_group_supplements">Compléments</string>
+    <string name="plan_group_nutrition">Nutrition</string>
+    <string name="plan_group_lifestyle">Mode de vie</string>
+    <string name="plan_group_environment">Environnement</string>
+    <string name="plan_association_note">Les jours enregistrés avec et sans cette habitude sont comparés ci-dessous. Une association ne démontre pas une cause.</string>
+    <string name="plan_comparison_window">Les comparaisons utilisent les 90 derniers jours et nécessitent au moins cinq réponses Oui et cinq Non. Les jours sans réponse sont exclus.</string>
+    <string name="weekly_plan_no_saved">Aucun plan enregistré pour cette semaine</string>
+    <string name="weekly_plan_habit_days">%1$s · %2$d jours</string>
+    <string name="weekly_plan_suggested">Objectifs suggérés</string>
+    <string name="weekly_plan_create">Créer un plan</string>
+    <string name="weekly_plan_suggestion_body">Les objectifs suggérés utilisent les données disponibles des 30 derniers jours. Enregistrez pour commencer.</string>
+    <string name="weekly_plan_presets_heading">Choisissez une routine de départ</string>
+    <string name="weekly_plan_rest_routine">Routine de repos</string>
+    <string name="weekly_plan_active_week">Semaine active</string>
+    <string name="weekly_plan_balanced_week">Semaine équilibrée</string>
+    <string name="weekly_plan_custom">Objectifs personnalisés</string>
+    <string name="plan_behavior_insights">Analyse des habitudes</string>
+    <string name="plan_recovery_trend">Tendance de récupération</string>
+    <string name="plan_recovery_full">Ouvre la mesure complète de récupération.</string>
+    <string name="plan_journal_instructions">Notez vos habitudes d’hier et de la nuit dernière.</string>
+    <string name="plan_journal_ahead">Notez vos habitudes pour l’entrée de demain.</string>
+    <string name="plan_journal_edit_hint">Choisissez les questions que vous souhaitez suivre.</string>
+    <string name="whoop_nav_home">Accueil</string>
+    <string name="whoop_nav_plan">Plan</string>
+    <string name="whoop_nav_healthspan">Longévité</string>
+    <string name="whoop_nav_weekly_plan">Plan hebdomadaire</string>
+    <string name="whoop_plan_local_title">La planification hebdomadaire est encore indisponible</string>
+    <string name="whoop_plan_local_detail">Le journal et les tendances restent disponibles pour consulter vos habitudes et vos progrès locaux.</string>
+    <string name="plan_numeric_invalid">Saisissez un nombre valide pour enregistrer.</string>
+    <string name="plan_behavior_comparison_summary">%1$s, %2$s, %3$s</string>
     <string name="sleep_status_calculating_title">Calcul du sommeil de la nuit dernière…</string>
     <string name="sleep_status_calculating_body">L’historique de votre bracelet est arrivé. NOOP détecte et analyse maintenant la nuit.</string>
     <string name="sleep_status_sync_failed_title">Le sommeil de la nuit dernière n’a pas été synchronisé</string>
@@ -9,8 +126,6 @@
     <string name="sleep_status_waiting_body">Connectez le bracelet et synchronisez son historique. NOOP calculera la nuit lorsque les données nocturnes arriveront.</string>
     <string name="sleep_status_not_detected_title">Le sommeil de la nuit dernière n’a pas été détecté</string>
     <string name="sleep_status_not_detected_body">La synchronisation est terminée, mais NOOP n’a pas pu identifier avec certitude une période de sommeil. Gardez le bracelet connecté et relancez la synchronisation ; la nuit plus ancienne ci-dessous reste votre dernier sommeil détecté.</string>
-
-    <!-- #453 generated Compose literal migration -->
     <string name="l10n_add_device_wizard_0123456789abcdef0123456789abcdef_b1775a78">0123456789abcdef0123456789abcdef</string>
     <string name="l10n_add_device_wizard_a_whoop_strap_bonds_to_a_d39bdf4a">Un bracelet WHOOP se lie à un seul appareil. Alors qu\'il est connecté à NOOP il ne va pas diffuser to the official WHOOP app, and the other way round. It\'s reversible: pair it in the other app whenever you want it back.</string>
     <string name="l10n_add_device_wizard_add_61cc55aa">Ajouter</string>
@@ -914,8 +1029,6 @@
     <string name="l10n_workouts_screen_total_workouts_7abd421f">Total des entraînements</string>
     <string name="l10n_workouts_screen_workout_actions_88be5c37">Actions d\'entraînement</string>
     <string name="l10n_workouts_screen_workouts_ccb58b22">Entraînements</string>
-
-    <!-- #453 generated Compose literal migration -->
     <string name="l10n_add_device_wizard_back_b52b36b7">Retour</string>
     <string name="l10n_add_device_wizard_cancel_77dfd213">Annuler</string>
     <string name="l10n_add_device_wizard_close_bbfa773e">Fermer</string>
@@ -1587,15 +1700,12 @@
     <string name="l10n_weekly_digest_card_sleep_steadiness_rest_varied_fmt1_sd_44997f21">Stabilité du sommeil : repos varié ±%1$s pts de nuit à nuit.</string>
     <string name="l10n_wheel_picker_accessibility_tap_to_choose_1314c4ed">%1$s. Appuyez sur pour choisir.</string>
     <string name="l10n_workouts_screen_minutes_total_100_roundtoint_5bb7c6d8">%1$s%%</string>
-    <!-- #453 manually migrated complex Kotlin templates. -->
     <string name="intervals_range_step">%1$s – %2$s%3$s · pas %4$d</string>
     <string name="live_workout_saved_summary">✓ %1$s enregistré · %2$s</string>
     <string name="skin_temp_reason_summary">%1$s : %2$s</string>
     <string name="stress_score_accessibility">Stress %1$s sur 3, %2$s</string>
     <string name="stress_peak_summary">pic %1$s · %2$s</string>
     <string name="today_load_ratio">charge %1$s</string>
-
-    <!-- #453 base-catalog locale completion -->
     <string name="app_name">NOOP</string>
     <string name="widget_description">Le repos, la charge et l\'effort d\'aujourd\'hui, avec la fréquence cardiaque et le bracelet en un coup d\'oeil.</string>
     <string name="widget_compact_name">Compact NOOP</string>
@@ -1762,7 +1872,6 @@
     <string name="power_saving_pct">%1$d%%</string>
     <string name="power_saving_hrv_pause">Capture de la VFC en pause</string>
     <string name="power_saving_hrv_pause_desc">Quand la batterie de votre bracelet est basse, arrêtez le flux de VFC en arrière-plan, ce qui sollicite le plus votre bracelet. Un écran Live affiche toujours la fréquence cardiaque, et il recommence automatiquement une fois le bracelet chargé.</string>
-    <!-- #453 data-driven metric labels that do not appear directly in Compose calls. -->
     <string name="timeline_metric_heart_rate">Fréquence cardiaque</string>
     <string name="timeline_metric_rmssd">rMSSD (5 min)</string>
     <string name="timeline_metric_spo2">SpO₂</string>
@@ -1841,16 +1950,10 @@
         <item quantity="one">Record : %1$d jour</item>
         <item quantity="other">Record : %1$d jours</item>
     </plurals>
-
-    <!-- Alertes de batterie escaladées (passage critique de charge + garde de nuit avant le coucher). -->
     <string name="battery_critical_title">Rechargez votre WHOOP maintenant</string>
     <string name="battery_critical_body">Il reste %1$d%%. Le bracelet cesse d\'enregistrer vers 10%% — il ne captera pas cette nuit sans recharge.</string>
     <string name="battery_bedtime_title">Ne tiendra pas la nuit</string>
     <string name="battery_bedtime_body">Il reste %1$s d\'enregistrement, mais cette nuit en demande environ %2$s. Rechargez avant de vous coucher.</string>
-
-    <!-- #867: the three older battery notifications, previously raw Kotlin literals in
-         BatteryAlertNotifier and therefore English in every locale. Wording and translations are the
-         Apple catalog's, moved across unchanged. -->
     <string name="battery_runtime_title">Batterie faible du bracelet</string>
     <string name="battery_runtime_body">Il reste %1$s sur votre WHOOP — rechargez-le ce soir.</string>
     <string name="battery_stale_title">WHOOP vu avec peu de batterie</string>
@@ -1859,12 +1962,6 @@
     <string name="battery_low_body">Rechargez votre WHOOP avant ce soir.</string>
     <string name="battery_full_title">Bracelet complètement chargé</string>
     <string name="battery_full_body">Votre WHOOP est à 100 %.</string>
-
-    <!-- Foreground-service notification (WhoopConnectionService). Always on screen while the strap is
-         connected, and hardcoded English until now: com/noop/ble is outside i18n_audit.py's scan roots,
-         and a NotificationCompat builder chain matches none of its Compose patterns, so the gate could
-         not see it. postNotification's dedupe key now includes the locale — without that, these would
-         keep the previous language until the connection or battery state happened to change. -->
     <string name="fgs_title_reconnecting">Reconnexion à votre WHOOP…</string>
     <string name="fgs_title_syncing">Synchronisation de l\'historique du bracelet…</string>
     <string name="fgs_title_connected">Connecté à votre WHOOP</string>
@@ -1875,9 +1972,6 @@
     <string name="fgs_action_disconnect">Déconnecter</string>
     <string name="fgs_channel_name">Connexion du bracelet</string>
     <string name="fgs_channel_desc">Affiché pendant que NOOP maintient votre WHOOP connecté en arrière-plan.</string>
-
-    <!-- The remaining notifier titles/bodies, surfaced by extending i18n_audit.py to the
-         notification builders. Same defect as the block above: user-visible, never localised. -->
     <string name="illness_alert_title">Alerte précoce : allez-y doucement</string>
     <string name="illness_alert_window">Nuits : %1$s, %2$s</string>
     <string name="inactivity_title">Rappel de mouvement</string>
@@ -1885,7 +1979,6 @@
     <string name="smart_alarm_body">Votre alarme intelligente vient de sonner.</string>
     <string name="battery_channel_name">Alertes de batterie</string>
     <string name="battery_channel_desc">Alertes lorsque la batterie du bracelet est faible ou complètement chargée.</string>
-    <!-- K5: scheduled Coach morning-brief notification. -->
     <string name="coach_brief_channel_name">Brief matinal du Coach</string>
     <string name="coach_brief_channel_desc">"Brief de coaching du jour, généré sur l'appareil à l'heure choisie."</string>
     <string name="coach_brief_title">Brief de coaching du jour</string>
@@ -1906,7 +1999,6 @@
     <string name="l10n_settings_screen_r22_accepted_all">✓ Le bracelet a accepté les %1$d indicateurs R22</string>
     <string name="l10n_settings_screen_r22_accepted_partial">Le bracelet a accepté %1$d/%2$d indicateurs R22…</string>
     <string name="l10n_app_changelog_water_and_caffeine_from_apple_health_5123b6b0">L\'eau et la caféine depuis Apple Santé, un score Effort plus précis et un correctif de la FC au repos Oura</string>
-    <!-- Textes de la configuration initiale. -->
     <string name="onboarding_cta_begin">Commencer</string>
     <string name="onboarding_cta_continue">Continuer</string>
     <string name="onboarding_cta_save_continue">Enregistrer et continuer</string>
@@ -2073,7 +2165,6 @@
     <string name="l10n_health_screen_fix_in_settings_d7472915">Corriger dans les réglages</string>
     <string name="l10n_app_changelog_personalized_heart_rate_zones_compare_and_8d89ee2a">Zones de fréquence cardiaque personnalisées, comparer et changer de sangle, et des lectures HRV, sommeil et Oura plus honnêtes</string>
     <string name="l10n_breathe_screen_elapsed_target_b1c2d3e4">%1$s / %2$s</string>
-    <!-- breath protocol catalog (generated) -->
     <string name="breath_presence_intro_title">Le Presence Process</string>
     <string name="breath_presence_intro_body">Respiration consciemment connectée (CCB) : inspirez et expirez en boucle continue sans rétention en haut ni en bas. Trouvez un rythme confortable — la connexion compte plus que l’intensité. La pratique typique est d’environ 15 minutes, deux fois par jour. Regular est le tempo de départ durable ; Mid un démarrage plus rapide pour les tours suivants ; Punching Through seulement pour pousser la somnolence ou le blocage (pas le défaut débutant).</string>
     <string name="breath_stage_belly_in">Ventre vers l’intérieur</string>
@@ -2183,9 +2274,7 @@
     <string name="breath_proto_presence_punching_edu">Punching Through (~1,9 s / 1,9 s) est pour la somnolence ou le blocage — pas le défaut débutant. Une fois « dedans », vous pouvez revenir à un souffle connecté plus lent et plus profond.</string>
     <string name="breath_proto_presence_punching_session_hint">Jusqu’à 15 minutes ; ralentissez si vous forcez.</string>
     <string name="breath_proto_presence_punching_caution">Non recommandé comme défaut débutant sauf si le but est de vaincre la somnolence.</string>
-    <!-- /breath protocol catalog -->
     <string name="l10n_breathe_screen_calm_me_a1b2c3d4">Calmez-moi</string>
-    <!-- Accueil/Aujourd’hui -->
     <string name="today_section_hero">Charge / Effort / Repos</string>
     <string name="today_section_live_session">Démarrer une séance</string>
     <string name="today_section_synthesis">Synthèse</string>
@@ -2731,8 +2820,6 @@
     <string name="l10n_settings_screen_bar_size_2304bfbb">Taille de la barre</string>
     <string name="l10n_settings_screen_bar_transparency_3f648fbb">Transparence de la barre</string>
     <string name="l10n_settings_screen_how_see_through_the_bar_is_ddb0c208">À quel point la barre est transparente. Le niveau le plus faible affiche encore son contour, elle reste donc toujours repérable.</string>
-
-    <!-- Coach screen -->
     <string name="coach_clear_conversation_confirm">Effacer la conversation ?</string>
     <string name="coach_clear_conversation_message">"Ceci efface la conversation enregistrée de cet appareil. L'historique du Coach est constitué de vos propres notes, pas d'un avis médical."</string>
     <string name="coach_clear_action">Effacer</string>
@@ -2836,7 +2923,7 @@
     <string name="l10n_settings_screen_bold_19e07430">Gras</string>
     <string name="l10n_settings_screen_softer_9edfeba1">Plus douce</string>
     <string name="oura_notify_mask_full_title">Masque de notification Oura ff (expérimental)</string>
-    <string name="oura_notify_mask_full_desc">Envoie le masque SetNotification de l’application officielle (1c 01 ff) au lieu du 3f de NOOP à la prochaine connexion. La bague regroupe ~10 paquets par notification pour l’application officielle et un seul pour NOOP (vidage 9× plus lent) ; c’est le premier commutateur candidat. Désactivé par défaut ; la connexion suivant la désactivation repasse en 3f. Surveillez « -> notify_all(ff) » dans le journal du bracelet et comparez la taille des notifications dans la capture brute.</string>
+    <string name="oura_notify_mask_full_desc">Envoie le masque SetNotification de l’application officielle (1c 01 ff) au lieu du 3f de NOOP à la prochaine connexion. La bague regroupe ~10 paquets par notification pour l’application officielle et un seul pour NOOP (vidage 9× plus lent) ; c’est le premier commutateur candidat. Désactivé par défaut ; la connexion suivant la désactivation repasse en 3f. Surveillez « -&gt; notify_all(ff) » dans le journal du bracelet et comparez la taille des notifications dans la capture brute.</string>
     <string name="data_sources_whoop_live_subtitle">S\'associe directement à votre bracelet par Bluetooth : pas d\'app WHOOP, pas de cloud. Le bracelet peut aussi annoncer sa fréquence cardiaque comme capteur Bluetooth standard.</string>
     <string name="data_sources_band_broadcast_description">Diffuse en Bluetooth la fréquence cardiaque en direct propre au bracelet pour Garmin, Zwift ou les équipements de sport.</string>
     <string name="whoop4_direct_broadcast_explainer">Votre WHOOP 4.0 peut diffuser directement la fréquence cardiaque. Ouvrez Sources de données et utilisez « Diffuser la fréquence cardiaque du bracelet » pour Zwift, Peloton, Garmin ou les équipements de sport. Vous pouvez aussi utiliser « Diffuser la FC depuis ce téléphone » si nécessaire.</string>
@@ -2855,10 +2942,4 @@
     <string name="raw_diag_ecg_probe_start">Démarrer la capture ECG</string>
     <string name="raw_diag_ecg_probe_stop">Arrêter la capture ECG</string>
     <string name="raw_diag_ecg_probe_running">Une capture est peut-être encore active sur ce bracelet. Le verdict est écrit dans le strap log.</string>
-    <string name="whoop_nav_home">Accueil</string>
-    <string name="whoop_nav_plan">Plan</string>
-    <string name="whoop_nav_healthspan">Longévité</string>
-    <string name="whoop_nav_weekly_plan">Plan hebdomadaire</string>
-    <string name="whoop_plan_local_title">La planification hebdomadaire est encore indisponible</string>
-    <string name="whoop_plan_local_detail">Le journal et les tendances restent disponibles pour consulter vos habitudes et vos progrès locaux.</string>
 </resources>

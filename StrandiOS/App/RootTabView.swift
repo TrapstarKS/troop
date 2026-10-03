@@ -31,6 +31,7 @@ struct RootTabView: View {
     /// when a hub row deep-links to it via NavRouter. nil = closed.
     @State private var routedPillar: NavRouter.Destination?
     @State private var pendingCoach = false
+    @State private var waitingForRouteDismissal = false
     @State private var pendingRoutedRequest: RoutedSheetRequest?
     // Keep the outgoing sheet occupied until SwiftUI finishes its dismissal animation.
     @State private var routedSheetActive = false
@@ -170,42 +171,8 @@ struct RootTabView: View {
         }
         // Honour a router request: Devices keeps its dedicated sheet; the v5 pillars route through the
         // shared pillar sheet. Cleared so the same tap can fire again later.
-        .onChange(of: router.requestedDestination) { _, dest in
-            switch dest {
-            case .devices:
-                showDevices = true
-                router.requestedDestination = nil
-            case .insightsHub, .labBook, .fusedRecord, .rhythm, .alarms:
-                routedPillar = dest
-                router.requestedDestination = nil
-            case .coach:
-                presentCoach()
-                router.requestedDestination = nil
-            case .trends:
-                selectedTab = 2
-                tabPaths[2] = NavigationPath()
-                tabPaths[2].append(MoreDestination.trends)
-                router.requestedDestination = nil
-            case .activeWorkout:
-                // The Today active-workout indicator opens Live through the quick-action Live sheet; once
-                // it's up, LiveView consumes the one-shot `presentActiveWorkout` flag and presents the
-                // in-exercise screen. Calm sheet easing, matching the other quick-action presents.
-                withAnimation(Self.sheetEase) { quickAction = .live }
-                router.requestedDestination = nil
-            case .liveSession:
-                // Live Sessions is presented from Today's own Start entry (a cover, not a routed sheet),
-                // so a deep-link lands on the Today tab where that entry lives.
-                withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24)) { selectedTab = 0 }
-                router.requestedDestination = nil
-            case .journal:
-                // The #627 Today journal widget opens the journal through the quick-action Journal sheet
-                // (InsightsView), matching the FAB's "Log journal" action. Calm sheet easing.
-                withAnimation(Self.sheetEase) { quickAction = .journal }
-                router.requestedDestination = nil
-            case nil:
-                break
-            }
-        }
+        .onChange(of: router.requestedDestination) { _, _ in consumeRouterRequest() }
+        .onChange(of: router.requestedLocalNotificationContext) { _, _ in consumeRouterRequest() }
         // A screen's top-bar "+" routes here: open the quick-action sheet, then clear the flag.
         .onChange(of: router.quickActionsRequested) { _, req in
             if req {
@@ -217,12 +184,14 @@ struct RootTabView: View {
         // through the change callback. Both route through the same screens as the centre FAB.
         .onAppear {
             presentPendingHomeScreenQuickActionIfPossible()
+            consumeRouterRequest()
         }
         .onChange(of: homeScreenQuickActions.pendingAction) { _, _ in
             presentPendingHomeScreenQuickActionIfPossible()
         }
         .onChange(of: homeScreenQuickActionsEnabled) { _, _ in
             presentPendingHomeScreenQuickActionIfPossible()
+            consumeRouterRequest()
         }
         // The running gym session, reachable from ANY tab. It sits above the tab bar rather than
         // inside the Lift Log screen, because a workout outlives whichever screen you wandered to —
@@ -257,8 +226,91 @@ struct RootTabView: View {
         // A session left running by a previous launch is back before this view exists
         // (`LiftSessionController.resumeSaved`, from `StrandiOSApp.init`), as the BAR — not as a sheet
         // thrown in the user's face; they open it when they want it.
+        .modifier(DebugExportReviewHost())
         .sheet(isPresented: $liftSession.isPresented, onDismiss: presentPendingCoach) {
             LiftSessionView { }
+        }
+    }
+
+    private func consumeRouterRequest() {
+        guard homeScreenQuickActionsEnabled, let dest = router.requestedDestination else { return }
+        if [.devices, .workouts, .weeklyPlan, .localBriefing].contains(dest) {
+            if dest == .devices && showDevices {
+                router.requestedDestination = nil
+                router.requestedLocalNotificationContext = nil
+                return
+            }
+            guard !waitingForRouteDismissal else { return }
+            if quickAction != nil || showDevices || liftSession.isPresented || routedSheetActive || routedPillar != nil {
+                waitingForRouteDismissal = true
+                pendingCoach = false
+                pendingRoutedRequest = nil
+                quickAction = nil
+                showDevices = false
+                liftSession.isPresented = false
+                routedPillar = nil
+                return
+            }
+        }
+        if let context = router.requestedLocalNotificationContext {
+            if dest == .devices {
+                showDevices = true
+            } else {
+                let tab = dest == .weeklyPlan ? 2 : 3
+                selectedTab = tab
+                tabPaths[tab] = NavigationPath()
+                tabPaths[tab].append(TabRoute.localNotice(LocalNotificationRoutePayload(context: context)))
+            }
+            router.requestedLocalNotificationContext = nil
+            router.requestedDestination = nil
+            return
+        }
+        switch dest {
+        case .devices:
+            showDevices = true
+            router.requestedDestination = nil
+        case .insightsHub, .labBook, .fusedRecord, .rhythm, .alarms:
+            routedPillar = dest
+            router.requestedDestination = nil
+        case .coach:
+            presentCoach()
+            router.requestedDestination = nil
+        case .trends:
+            selectedTab = 2
+            tabPaths[2] = NavigationPath()
+            tabPaths[2].append(MoreDestination.trends)
+            router.requestedDestination = nil
+        case .activeWorkout:
+            // The Today active-workout indicator opens Live through the quick-action Live sheet; once
+            // it's up, LiveView consumes the one-shot `presentActiveWorkout` flag and presents the
+            // in-exercise screen. Calm sheet easing, matching the other quick-action presents.
+            withAnimation(Self.sheetEase) { quickAction = .live }
+            router.requestedDestination = nil
+        case .liveSession:
+            // Live Sessions is presented from Today's own Start entry (a cover, not a routed sheet),
+            // so a deep-link lands on the Today tab where that entry lives.
+            withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24)) { selectedTab = 0 }
+            router.requestedDestination = nil
+        case .journal:
+            // The #627 Today journal widget opens the journal through the quick-action Journal sheet
+            // (InsightsView), matching the FAB's "Log journal" action. Calm sheet easing.
+            withAnimation(Self.sheetEase) { quickAction = .journal }
+            router.requestedDestination = nil
+        case .workouts:
+            selectedTab = 3
+            tabPaths[3] = NavigationPath()
+            tabPaths[3].append(TabRoute.workouts)
+            router.requestedDestination = nil
+        case .weeklyPlan:
+            selectedTab = 2
+            tabPaths[2] = NavigationPath()
+            tabPaths[2].append(TabRoute.weeklyPlan)
+            router.requestedDestination = nil
+        case .localBriefing:
+            selectedTab = 3
+            tabPaths[3] = NavigationPath()
+            tabPaths[3].append(TabRoute.localBriefing)
+            router.requestedDestination = nil
         }
     }
 
@@ -293,6 +345,11 @@ struct RootTabView: View {
     }
 
     private func presentPendingCoach() {
+        if waitingForRouteDismissal {
+            waitingForRouteDismissal = false
+            consumeRouterRequest()
+            return
+        }
         guard pendingCoach else { return }
         pendingCoach = false
         if coachEnabled { routedPillar = .coach }
@@ -300,6 +357,11 @@ struct RootTabView: View {
 
     private func presentPendingRoutedRequest() {
         routedSheetActive = false
+        if waitingForRouteDismissal {
+            waitingForRouteDismissal = false
+            consumeRouterRequest()
+            return
+        }
         guard let request = pendingRoutedRequest else { return }
         pendingRoutedRequest = nil
         switch request {
@@ -361,8 +423,11 @@ struct RootTabView: View {
                 // .journal opens through the quick-action Journal sheet (handled above); this keeps the
                 // switch exhaustive and falls back to the journal's Insights host if it ever reaches here.
                 case .journal: InsightsView()
-                case .coach: CoachView()
+                case .coach: CoachDestinationView()
                 case .alarms: SmartAlarmView()
+                case .workouts: WorkoutsView()
+                case .weeklyPlan: WeeklyPlanView()
+                case .localBriefing: LocalBriefingView()
                 }
             }
             // The Trends/Today fallbacks above emit TabRoute value pushes (#198), which need a
@@ -494,6 +559,7 @@ struct RootTabView: View {
                 VStack(spacing: 0) {
                     MoreRow("Journal", "square.and.pencil", .insights)
                     MoreRow("Weekly Plan", "calendar", .weeklyPlan)
+                    MoreRow("Sleep Planner", "alarm", .alarms)
                     MoreRow("What Moves You", "wand.and.sparkles", .insightsHub)
                     MoreRow("Trends", "chart.line.uptrend.xyaxis", .trends)
                     MoreRow("Intelligence", "brain.head.profile", .intelligence)
@@ -509,90 +575,8 @@ struct RootTabView: View {
     // ScreenScaffold for the title1 "More" + subtitle, a `SectionHeader` overline per group, and the group's
     // rows in a single grouped NoopCard with hairline dividers — the same row idiom Settings/Health use.
     private func moreTab(path: Binding<NavigationPath>, scrollSignal: Int) -> some View {
-        let onScroll = chromeScrollHandler(for: 3)
-        return NavigationStack(path: path) {
-            ScreenScaffold(title: "More", subtitle: "Everything else, one tap away",
-                           onRefresh: { await repo.refresh() },
-                           topBackground: liquidScaffoldSky()) {
-                moreSection("Insights") {
-                    MoreRow("What Moves You", "wand.and.sparkles", .insightsHub)
-                    MoreRow("Intelligence", "brain.head.profile", .intelligence)
-                    MoreRow("Insights", "lightbulb.fill", .insights)
-                    MoreRow("Explore", "square.grid.2x2.fill", .explore)
-                    MoreRow("Compare", "rectangle.split.2x1.fill", .compare)
-                }
-                moreSection("Body") {
-                    MoreRow("Live", "waveform.path.ecg", .live)
-                    MoreRow("Workouts", "figure.run", .workouts)
-                    MoreRow("Lift Log", "dumbbell.fill", .liftLog)
-                    MoreRow("Sleep", "bed.double", .sleep)
-                    MoreRow("Sleep Planner", "alarm", .sleepPlanner)
-                    MoreRow("Health", "heart.text.square.fill", .health)
-                    MoreRow("Health Monitor", "heart.text.square", .healthMonitor)
-                    MoreRow("Healthspan", "figure.walk", .healthspan)
-                    MoreRow("Lab Book", "books.vertical.fill", .labBook)
-                    MoreRow("Stress", "bolt.heart.fill", .stress)
-                    MoreRow("Breathe", "wind", .breathe)
-                    MoreRow("Intervals", "timer", .intervals)
-                    // Experimental beat-to-beat regularity visualization — self-gates on its own consent.
-                    MoreRow("Rhythm", "waveform.path", .rhythm)
-                }
-                moreSection("Data") {
-                    MoreRow("Your Data, Fused", "square.stack.3d.up.fill", .fusedRecord)
-                    MoreRow("Apple Health", "heart.fill", .appleHealth)
-                    MoreRow("Mi Band", "figure.walk.motion", .miBand)
-                    MoreRow("Data Sources", "externaldrive.fill", .dataSources)
-                    MoreRow("Backup & Sync", "externaldrive.fill.badge.icloud", .backupSync)
-                    // #155: HealthKit-free Apple Health path for sideloaded installs (Siri Shortcut
-                    // reads the opt-in Documents/noop_sync.txt drop file).
-                    MoreRow("Shortcuts Export", "square.and.arrow.up.fill", .shortcutsExport)
-                    // The plain 4.0 vs 5.0/MG capability grid — what NOOP reads live off each strap.
-                    MoreRow("NOOP Limitations", "list.bullet.rectangle", .noopLimitations)
-                }
-                moreSection("App") {
-                    MoreRow("Devices", "sensor.tag.radiowaves.forward", .devices)
-                    // #805/#811: the v7.3.1 #766 alarm consolidation moved Smart Alarm under a single
-                    // "Alarms" sidebar entry (RootView .smartAlarm) but the regression dropped the row
-                    // from the iPhone More list, leaving Alarms unreachable on iPhone. Restore it here
-                    // (route to SmartAlarmView, the cross-platform iOS/macOS surface).
-                    //
-                    // Notifications (RootView .notifications) is deliberately NOT added: that screen is
-                    // macOS-only (it picks which Mac apps tap your wrist via NSWorkspace, imports AppKit,
-                    // and project.yml excludes Screens/NotificationSettingsView.swift from the iOS target),
-                    // so it can't compile or apply on iPhone. iPhone's wrist-alert controls live on the
-                    // Automations screen instead. Its absence from the iPhone More list is correct.
-                    MoreRow("Alarms", "alarm.fill", .alarms)
-                    MoreRow("Automations", "wand.and.stars", .automations)
-                    // The Test Centre (the diagnostics + bug-report hub) gets a first-class home here, not
-                    // just buried in Settings, so the feedback loop is one tap from the More tab.
-                    MoreRow("Test Centre", "stethoscope", .testCentre)
-                    MoreRow("Siri & Shortcuts", "mic.fill", .siriShortcuts)
-                    // #477 lives here rather than inside Settings: the strap-battery levers are the
-                    // ones people reach for when a strap is running down, so they get their own row.
-                    MoreRow("Power saving", "battery.25", .powerSaving)
-                    MoreRow("Settings", "gearshape.fill", .settings)
-                }
-            }
-            // The rows push MoreDestination VALUES so a re-tap of the More tab can pop them off the
-            // bound path (#135/#198). Each destination keeps the per-screen wrapper the rows used to
-            // apply inline (surfaceBase background, inline title bar, hidden bar background):
-            // #1027 — a pushed sky-scaffold screen (Live, Workouts, Health, …) draws a full-bleed liquid
-            // sky; an opaque surfaceBase nav-bar band sat over it and clipped the top on scroll. A hidden
-            // bar background keeps the sky edge-to-edge. On the flat (no-sky) screens this is visually
-            // identical at rest — the destination's own surfaceBase background shows through the bar.
-            .tabChromeScrollObserver(onScroll)
-            .navigationDestination(for: MoreDestination.self) { route in
-                route.destination
-                    .tabChromeScrollObserver(onScroll)
-                    .background(StrandPalette.surfaceBase.ignoresSafeArea())
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbarBackground(.hidden, for: .navigationBar)
-            }
-            .tabRouteDestinations(onVerticalScroll: onScroll)
-        }
-        // Scroll the More index to the top on an at-root re-tap (#198 follow-up); read by its ScreenScaffold.
-        .environment(\.scrollToTopSignal, scrollSignal)
-        .tabItem { Label("More", systemImage: "ellipsis") }
+        tab(MoreHubView(onVerticalScroll: chromeScrollHandler(for: 3)), "More", "line.3.horizontal",
+            path: path, scrollSignal: scrollSignal, tabIndex: 3)
     }
 
     /// One titled, COLLAPSIBLE group in the More index (S2): the app's overline (UPPERCASE) becomes a
@@ -665,7 +649,7 @@ private enum MoreDestination: Hashable {
         switch self {
         case .insightsHub:     InsightsHubView()
         case .intelligence:    IntelligenceView()
-        case .coach:           CoachView()
+        case .coach:           CoachDestinationView()
         case .insights:        InsightsView()
         case .explore:         MetricExplorerView()
         case .compare:         CompareView()
@@ -674,7 +658,7 @@ private enum MoreDestination: Hashable {
         case .liftLog:         LiftLogView()
         case .health:          HealthView()
         case .labBook:         LabBookView()
-        case .stress:          StressView()
+        case .stress:          StressMonitorView()
         case .breathe:         BreathingView()
         case .intervals:       IntervalTimerView()
         case .rhythm:          RhythmHost()
@@ -693,11 +677,11 @@ private enum MoreDestination: Hashable {
         case .settings:        SettingsView()
         case .devices:         DevicesView()
         case .trends:          TrendsView()
-        case .weeklyPlan:      TabRoutePlaceholder(title: "Weekly Plan")
+        case .weeklyPlan:      WeeklyPlanView()
         case .sleep:           SleepView()
         case .sleepPlanner:    SmartAlarmView()
-        case .healthMonitor:   HealthView()
-        case .healthspan:      HealthView()
+        case .healthMonitor:   HealthMonitorView()
+        case .healthspan:      HealthspanView()
         }
     }
 }

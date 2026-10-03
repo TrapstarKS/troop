@@ -165,4 +165,16 @@ final class WhoopCsvExporterTests: XCTestCase {
         XCTAssertEqual(result.workouts.count, 0)
         XCTAssertEqual(result.journal.count, 0)
     }
+    func testSkinColumnExportsAbsoluteAndLeavesDeviationOnlyBlank() {
+        func row(_ day: String, deviation: Double?, celsius: Double?) -> DailyMetric {
+            DailyMetric(day: day, totalSleepMin: nil, efficiency: nil, deepMin: nil, remMin: nil,
+                        lightMin: nil, disturbances: nil, restingHr: nil, avgHrv: nil, recovery: nil,
+                        strain: nil, exerciseCount: nil, skinTempDevC: deviation, skinTempC: celsius)
+        }
+        let rows = [row("2026-06-01", deviation: 0.2, celsius: 33.4),
+                    row("2026-06-02", deviation: 0.2, celsius: nil),
+                    row("2026-06-03", deviation: 33.1, celsius: nil)]
+        let parsed = WhoopExportImporter().parseCycles(CSVTable(text: WhoopCsvExporter.cyclesCSV(days: rows, series: [:])))
+        XCTAssertEqual(parsed.map(\.skinTempCelsius), [33.4, nil, 33.1])
+    }
 }

@@ -17,6 +17,7 @@ public enum NoopMetrics {
     public static let tabHeight: CGFloat = 60
     public static let coachDiameter: CGFloat = 58
     public static let scoreDialDiameter: CGFloat = 260
+    public static let fullScoreDialWidthFraction: CGFloat = 0.662
     public static let compactScoreDialDiameter: CGFloat = 90
     public static let scoreDialStroke: CGFloat = 15
     public static let compactScoreDialStroke: CGFloat = 5

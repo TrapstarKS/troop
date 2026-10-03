@@ -611,7 +611,7 @@ See `Tools/linux-capture/README.md` for the capture/export side that produces th
   fewer than two intervals (matches the Swift `rr.count >= 2` guard).
 - **`Zones.zone(hr, hrMax)`** — the `pct = hr/hrMax` ladder (`≥0.9→5, ≥0.8→4, ≥0.7→3, ≥0.6→2,
   else 1`), with a fallback to zone 1 when `hrMax ≤ 0`. `Zones.hrMaxTanaka(age)` = `round(208 − 0.7·age)`.
-- **`IllnessWatch.evaluate(days)`** — compares the last ~2 days against a ~28-day baseline ending 3
+- **`IllnessWatch.evaluateWindow(days).alert`** — compares the last ~2 days against a ~28-day baseline ending 3
   days ago across resting HR, HRV, skin-temp deviation, and respiration; surfaces a banner when 2+
   anomalies fire. Requires ≥14 days of history. The Swift `behavior.illnessWatch` UI toggle is
   intentionally omitted from this pure function — the caller decides whether to run it.

@@ -5,9 +5,11 @@ import StrandAnalytics
 /// Surfaces the strap battery state as a user notification — a LOW warning when the cell falls to
 /// the threshold so the user can top up before tonight's sleep, and a CHARGED note when it reaches
 /// 100%. Mirrors `IllnessNotifier`: requestAuthorization() up front when the toggle is enabled,
-/// status-only check at fire time, and the persisted gate advances even when delivery is deferred.
+/// status-only check at fire time, and the persisted gate advances after an accepted post.
 /// On-device only; gated behind the user's "Battery alerts" setting (default ON) by the caller (#368).
 enum BatteryNotifier {
+    private static let deliveryGate = LocalNotificationDeliveryGate()
+
     private static let lowAlertedKey = "behavior.batteryLowAlerted"
     private static let fullAlertedKey = "behavior.batteryFullAlerted"
     private static let runtimeAlertedKey = "behavior.batteryRuntimeAlerted"
@@ -132,9 +134,8 @@ enum BatteryNotifier {
     }
 
     /// Run the policy against a fresh battery reading and post at most one notification per genuine
-    /// crossing. No-op when the setting is off. The persisted flags are written back ALWAYS (so the
-    /// gate advances even if the user declined notifications or delivery is deferred — mirroring how
-    /// `IllnessNotifier` marks the day up front).
+    /// crossing. Rearm clears persist immediately; firing flags advance only after an authorized post.
+    /// Quiet hours or denied permission leave a crossing eligible for the next observed reading.
     static func onBatteryUpdate(pct: Int, charging: Bool?, enabled: Bool) {
         guard enabled else { return }
         let d = UserDefaults.standard
@@ -143,19 +144,27 @@ enum BatteryNotifier {
             charging: charging,
             lowAlerted: d.bool(forKey: lowAlertedKey),
             fullAlerted: d.bool(forKey: fullAlertedKey))
-        // Advance the persisted gate up front so the once-per-crossing limit holds regardless of
-        // authorization or delivery — the in-app battery surfaces stay the live view either way.
-        d.set(result.newLowAlerted, forKey: lowAlertedKey)
-        d.set(result.newFullAlerted, forKey: fullAlertedKey)
+        if !result.fireLow {
+            if !result.newLowAlerted { deliveryGate.invalidate("battery-low") }
+            d.set(result.newLowAlerted, forKey: lowAlertedKey)
+        }
+        if !result.fireFull {
+            if !result.newFullAlerted { deliveryGate.invalidate("battery-full") }
+            d.set(result.newFullAlerted, forKey: fullAlertedKey)
+        }
         if result.fireLow {
             post(identifier: "battery-low",
                  title: String(localized: "Low battery"),
-                 body: String(localized: "Recharge your WHOOP before tonight."))
+                 body: String(localized: "Recharge your WHOOP before tonight.")) {
+                d.set(true, forKey: lowAlertedKey)
+            }
         }
         if result.fireFull {
             post(identifier: "battery-full",
                  title: String(localized: "Strap fully charged"),
-                 body: String(localized: "Your WHOOP is at 100%."))
+                 body: String(localized: "Your WHOOP is at 100%.")) {
+                d.set(true, forKey: fullAlertedKey)
+            }
         }
         // #514: the strap has dropped below 100% — pull the stale "fully charged" note (delivered
         // banner + any still-pending request) so it can't linger after the cell discharges.
@@ -170,19 +179,24 @@ enum BatteryNotifier {
     /// `BatteryEstimator.runtimeAlert` (fire ≤24 h, re-arm ≥36 h — see the policy for why a runtime
     /// threshold beats a fixed SoC one) and post at most one notification per discharge cycle. The
     /// 15% SoC alert stays as the safety net for straps with no usable estimate (`estimate == nil`
-    /// is a no-op here). Same gating discipline as #368: the persisted flag advances even when
-    /// delivery is deferred, and the whole thing no-ops when the "Battery alerts" setting is off.
+    /// is a no-op here). The flag advances after delivery, while rearm clears remain durable.
+    /// The whole thing no-ops when the "Battery alerts" setting is off.
     static func onRuntimeEstimate(remainingHours: Double?, charging: Bool?, enabled: Bool) {
         guard enabled, let remainingHours else { return }
         let d = UserDefaults.standard
         let result = BatteryEstimator.runtimeAlert(remainingHours: remainingHours,
                                                    charging: charging,
                                                    alerted: d.bool(forKey: runtimeAlertedKey))
-        d.set(result.newAlerted, forKey: runtimeAlertedKey)
+        if !result.fire {
+            if !result.newAlerted { deliveryGate.invalidate("battery-runtime") }
+            d.set(result.newAlerted, forKey: runtimeAlertedKey)
+        }
         if result.fire {
             post(identifier: "battery-runtime",
                  title: String(localized: "Strap battery low"),
-                 body: String(localized: "\(BatteryEstimator.label(hours: remainingHours)) left on your WHOOP — recharge tonight."))
+                 body: String(localized: "\(BatteryEstimator.label(hours: remainingHours)) left on your WHOOP — recharge tonight.")) {
+                d.set(true, forKey: runtimeAlertedKey)
+            }
         }
     }
 
@@ -195,7 +209,7 @@ enum BatteryNotifier {
     /// last ~3 h of the discharge, from 15% down to the ~10% cutoff, passed in total silence and cost
     /// a night of biometrics. This gate is independent of both: `criticalAlertedKey` is its own key, so
     /// a latched low/runtime alert cannot suppress it. Same discipline as #368 otherwise — self-gates
-    /// on the setting, advances the persisted flag even when delivery is deferred, once per cycle.
+    /// on the setting, advances the firing flag after delivery, once per cycle.
     /// Warn that a strap last seen LOW has not been heard from since (#2556). Twin of Kotlin
     /// `BatteryAlertNotifier.onStrapNotSeen`.
     ///
@@ -223,9 +237,9 @@ enum BatteryNotifier {
         post(identifier: "battery-stale",
              title: String(localized: "WHOOP last seen low"),
              body: String(localized: "\(lastSocPct)% when NOOP last heard from it, \(age) ago. Charge it before tonight."),
-             interruptionLevel: .timeSensitive)
-        // Persisted AFTER posting, keyed on the reading, so a failed post retries on the next wake.
-        d.set(lastTsSec, forKey: staleAlertedTsKey)
+             interruptionLevel: .timeSensitive) {
+            d.set(lastTsSec, forKey: staleAlertedTsKey)
+        }
     }
 
     static func onCriticalBattery(pct: Int, charging: Bool?, enabled: Bool) {
@@ -234,12 +248,17 @@ enum BatteryNotifier {
         let result = BatteryEstimator.criticalAlert(pct: pct,
                                                     charging: charging,
                                                     alerted: d.bool(forKey: criticalAlertedKey))
-        d.set(result.newAlerted, forKey: criticalAlertedKey)
+        if !result.fire {
+            if !result.newAlerted { deliveryGate.invalidate("battery-critical") }
+            d.set(result.newAlerted, forKey: criticalAlertedKey)
+        }
         if result.fire {
             post(identifier: "battery-critical",
                  title: String(localized: "Charge your WHOOP now"),
                  body: String(localized: "\(pct)% left. The strap stops recording near 10% — it won't capture tonight unless you charge it."),
-                 interruptionLevel: .timeSensitive)
+                 interruptionLevel: .timeSensitive) {
+                d.set(true, forKey: criticalAlertedKey)
+            }
         }
     }
 
@@ -265,32 +284,55 @@ enum BatteryNotifier {
                                                    usableRemainingHours: usableRemainingHours,
                                                    charging: charging,
                                                    alerted: d.bool(forKey: bedtimeAlertedKey))
-        d.set(result.newAlerted, forKey: bedtimeAlertedKey)
+        if !result.fire {
+            if !result.newAlerted { deliveryGate.invalidate("battery-bedtime") }
+            d.set(result.newAlerted, forKey: bedtimeAlertedKey)
+        }
         if result.fire, let runway = result.runway {
             post(identifier: "battery-bedtime",
                  title: String(localized: "Won't last the night"),
                  body: String(localized: "\(BatteryEstimator.label(hours: runway.usableHours)) of recording left, but tonight needs about \(BatteryEstimator.label(hours: runway.requiredHours)). Charge before bed."),
-                 interruptionLevel: .timeSensitive)
+                 interruptionLevel: .timeSensitive) {
+                d.set(true, forKey: bedtimeAlertedKey)
+            }
         }
     }
 
     private static func post(identifier: String, title: String, body: String,
-                             interruptionLevel: UNNotificationInterruptionLevel = .active) {
+                             interruptionLevel: UNNotificationInterruptionLevel = .active,
+                             onDelivered: @escaping () -> Void) {
+        guard !LocalNotificationPreferences.isQuiet() else { return }
+        guard let token = deliveryGate.begin(identifier) else { return }
         let center = UNUserNotificationCenter.current()
+        let finish: (Bool) -> Void = { accepted in
+            deliveryGate.finish(identifier, token: token, accepted: accepted, onAccepted: onDelivered) {
+                center.removeDeliveredNotifications(withIdentifiers: [identifier])
+                center.removePendingNotificationRequests(withIdentifiers: [identifier])
+            }
+        }
         // Authorization is requested once via requestAuthorization() when alerts are enabled; here
         // we only check status (no second system prompt).
         center.getNotificationSettings { settings in
-            guard settings.authorizationStatus == .authorized else { return }
+            guard LocalNotificationPreferences.isAuthorized(settings.authorizationStatus),
+                  !LocalNotificationPreferences.isQuiet(),
+                  deliveryGate.isCurrent(identifier, token: token) else {
+                finish(false)
+                return
+            }
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
             content.sound = .default
+            content.categoryIdentifier = "local-report"
+            content.userInfo = ["localNotificationRoute": "devices"]
             // The two escalation alerts ask for .timeSensitive so they can break through a sleep Focus —
             // the whole point is reaching the user in the hour before bed. Without the time-sensitive
             // entitlement the OS silently treats this as .active, so it is safe to request either way.
             content.interruptionLevel = interruptionLevel
             center.add(UNNotificationRequest(identifier: identifier,
-                                             content: content, trigger: nil))
+                                             content: content, trigger: nil)) { error in
+                finish(error == nil)
+            }
         }
     }
 }

@@ -104,6 +104,75 @@ class ChartXSpacingTest {
             assertEquals("point $i", i, nearest)
         }
     }
+
+    @Test
+    fun `fixed window retains empty edges and breaks across unmeasured days`() {
+        val ts = listOf(day("2026-09-03"), day("2026-09-05"), day("2026-09-06"))
+        val domain = day("2026-09-01")..day("2026-09-11")
+        val fractions = xFractions(3, ts, domain)
+        assertEquals(listOf(0.2f, 0.4f, 0.5f), fractions)
+        assertEquals(listOf(0..0, 1..2), lineChartSegmentRanges(3, hrGapSegmentIds(ts, 86_400L)))
+        fractions.forEachIndexed { index, fraction ->
+            assertEquals(index, nearestIndexForX(fractions, 1000f, fraction * 1000f))
+        }
+        assertEquals(0, nearestIndexForX(fractions, 1000f, 0f))
+        assertEquals(2, nearestIndexForX(fractions, 1000f, 1000f))
+    }
+
+    @Test
+    fun `one actual reading occupies its day without fabricated anchors`() {
+        val ts = listOf(day("2026-09-05"))
+        val domain = day("2026-09-01")..day("2026-09-11")
+        val points = pointsFor(listOf(73.5), 1000f, 100f, 6.5f, 6.5f, timestamps = ts, xDomain = domain)
+        assertEquals(1, points.size)
+        assertEquals(400f, points.single().x, 0.001f)
+        assertEquals(50f, points.single().y, 0.001f)
+        assertEquals(listOf(0f), xFractions(1, ts))
+        assertTrue(pointsFor(listOf(73.5), 1000f, 100f, 6.5f, 6.5f).isEmpty())
+        assertEquals(listOf(0.5f), xFractions(1, ts, ts.single()..ts.single()))
+        assertEquals(500f, pointsFor(listOf(73.5), 1000f, 100f, 6.5f, 6.5f,
+            timestamps = ts, xDomain = ts.single()..ts.single()).single().x, 0.001f)
+    }
+
+    @Test
+    fun `invalid fixed domains preserve observed timestamp spacing`() {
+        val ts = listOf(day("2026-09-03"), day("2026-09-05"), day("2026-09-06"))
+        val expected = xFractions(3, ts)
+        listOf(
+            day("2026-09-06")..day("2026-09-03"),
+            day("2026-09-04")..day("2026-09-08"),
+            day("2026-09-01")..day("2026-09-05"),
+            day("2026-09-03")..day("2026-09-03"),
+        ).forEach { assertEquals(expected, xFractions(3, ts, it)) }
+        assertEquals(listOf(0f, 0.5f, 1f), xFractions(3, null, ts.first()..ts.last()))
+        assertEquals(listOf(0f, 0.5f, 1f), xFractions(3, ts.reversed(), ts.first()..ts.last()))
+    }
+
+    @Test
+    fun `calendar bars share line centers and retain a one-day width`() {
+        val ts = listOf(day("2026-09-03"), day("2026-09-06"))
+        val domain = day("2026-09-01")..day("2026-09-11")
+        assertEquals(xFractions(2, ts, domain), barXFractions(2, ts, domain))
+        assertEquals(0.1f, barSlotFraction(2, ts, domain), 0.000001f)
+        assertEquals(0.1f, barSlotFraction(1, ts.take(1), domain), 0.000001f)
+        assertEquals(listOf(0.5f), barXFractions(1, ts.take(1), ts.first()..ts.first()))
+        assertEquals(1f, barSlotFraction(1, ts.take(1), ts.first()..ts.first()), 0f)
+        assertEquals(listOf(0.25f, 0.75f), barXFractions(2, null))
+        assertEquals(0.5f, barSlotFraction(2, null), 0f)
+        assertEquals(listOf(0.25f, 0.75f), barXFractions(2, ts.reversed(), domain))
+    }
+
+    @Test
+    fun `finite value filtering keeps timestamps aligned under a fixed window`() {
+        val values = listOf(52.0, Double.NaN, 68.0)
+        val ts = listOf(day("2026-09-03"), day("2026-09-04"), day("2026-09-06"))
+        val points = pointsFor(values, 1000f, 100f, 6.5f, 6.5f,
+            timestamps = ts, xDomain = day("2026-09-01")..day("2026-09-11"))
+        assertEquals(listOf(200f, 500f), points.map { it.x })
+        assertEquals(listOf(93.5f, 6.5f), points.map { it.y })
+        assertEquals(52.0, values.first(), 0.0)
+        assertEquals(68.0, values.last(), 0.0)
+    }
 }
 
 /**

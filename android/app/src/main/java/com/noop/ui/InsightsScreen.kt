@@ -6,6 +6,8 @@ import android.content.Context
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -28,10 +31,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,12 +46,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -72,8 +82,9 @@ import com.noop.analytics.EffectRanker
 //     logged "yes" vs the days it was logged "no" — a day it was not logged at all
 //     is in neither group) and compare a chosen outcome metric (Charge / HRV /
 //     Rest / RHR) between the two groups. Ranked by effect size (Cohen's d), with
-//     significant effects first. Each card carries a plain-English sentence, the
-//     with/without means, group counts, a significance pill, and the magnitude word.
+//     significant effects first. Compact summaries open the with/without means,
+//     group counts, the association note,
+//     significance, and the magnitude word.
 //     Tint is sign-aware: a behaviour that moves the outcome the "good" way (respecting
 //     higherIsBetter) reads positive/green, the "bad" way reads critical/red.
 //
@@ -94,7 +105,6 @@ import com.noop.analytics.EffectRanker
 /** One interrogable outcome metric: how to read it off a DailyMetric, its label,
  *  units, and whether higher is the "good" direction (drives sign-aware tint). */
 private enum class Outcome(
-    val label: String,
     val outcomeName: String,
     val higherIsBetter: Boolean,
     /** The Bevel colour world the outcome belongs to, drives the card wash so the
@@ -105,22 +115,32 @@ private enum class Outcome(
     val format: (Double) -> String,
 ) {
     Recovery(
-        label = uiString(R.string.l10n_insights_screen_charge_d4e1aee4), outcomeName = "Charge", higherIsBetter = true, domain = DomainTheme.Charge,
+        outcomeName = "Recovery", higherIsBetter = true, domain = DomainTheme.Charge,
         pick = { it.recovery }, format = { "${it.roundToInt()}%" },
     ),
     Hrv(
-        label = "HRV", outcomeName = "HRV", higherIsBetter = true, domain = DomainTheme.Rest,
+        outcomeName = "HRV", higherIsBetter = true, domain = DomainTheme.Rest,
         pick = { it.avgHrv }, format = { "${it.roundToInt()} ms" },
     ),
     Sleep(
-        label = uiString(R.string.l10n_insights_screen_rest_b79e5f48), outcomeName = "Rest", higherIsBetter = true, domain = DomainTheme.Rest,
-        pick = { it.efficiency }, format = { "${it.roundToInt()}%" },
+        outcomeName = "Sleep Performance", higherIsBetter = true, domain = DomainTheme.Rest,
+        pick = { null }, format = { "${it.roundToInt()}%" },
     ),
     Rhr(
-        label = uiString(R.string.l10n_insights_screen_rhr_04edf9b3), outcomeName = "Resting HR", higherIsBetter = false, domain = DomainTheme.Stress,
+        outcomeName = "Resting HR", higherIsBetter = false, domain = DomainTheme.Stress,
         pick = { it.restingHr?.toDouble() }, format = { "${it.roundToInt()} bpm" },
-    ),
+    );
+
+    val label: String
+        get() = when (this) {
+            Recovery -> uiString(R.string.plan_trends_recovery)
+            Hrv -> "HRV"
+            Sleep -> uiString(R.string.plan_trends_sleep_performance)
+            Rhr -> uiString(R.string.l10n_insights_screen_rhr_04edf9b3)
+        }
 }
+
+private data class EffectSelection(val effect: BehaviorEffect, val outcome: Outcome, val displayName: String)
 
 // MARK: - Computed shapes (plain data; behaviour effects come from the analytics package)
 
@@ -169,6 +189,22 @@ private data class InsightModel(
 @Composable
 fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     val days by vm.recentDays.collectAsStateWithLifecycle()
+    val registryActiveId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeStrapId = registryActiveId ?: vm.activeStrapId
+    var showingWeeklyPlan by remember { mutableStateOf(false) }
+    if (showingWeeklyPlan) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showingWeeklyPlan = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.fillMaxSize().background(Palette.surfaceBase)) {
+                androidx.compose.material3.TextButton(onClick = { showingWeeklyPlan = false }) {
+                    Text(uiString(R.string.weekly_plan_dismiss), style = NoopType.body, color = Palette.textPrimary)
+                }
+                WeeklyPlanScreen(vm)
+            }
+        }
+    }
 
     // Journal answers (all history): imported "my-whoop" rows UNIONED with native "noop-journal"
     // rows (native wins per (day, question)). Keyed on journalSeq so the logging card's saves and
@@ -180,8 +216,17 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     // Map<String, Double> outcome), so "caffeine mg" / "alcohol units" can rank as a numeric outcome.
     var numericJournalSeries by remember { mutableStateOf<Map<String, Map<String, Double>>>(emptyMap()) }
     var journalLoaded by remember { mutableStateOf(false) }
-    var journalSeq by remember { mutableStateOf(0) }
-    var dayOffset by remember { mutableStateOf(0L) }
+    val publishedStrapId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    var sleepPerformance by remember(publishedStrapId) { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    androidx.compose.runtime.LaunchedEffect(days, publishedStrapId, activeStrapId) {
+        val strapDeviceId = activeStrapId
+        val performance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", strapDeviceId = strapDeviceId)
+            .points.associate { it.day to it.value }
+        if (strapDeviceId == vm.activeStrapId) sleepPerformance = performance
+    }
+    val journalSeq by vm.repo.journalRevision.collectAsStateWithLifecycle()
+    var dayOffset by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0L) }
+    var journalDraftDirty by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     // #656: honour a day the Today journal widget deep-linked to (tapping a bar opens the journal at THAT
     // day). Consumed once on arrival, then cleared so it doesn't re-apply on the next recomposition.
     val pendingJournalDay by vm.pendingJournalDayOffset.collectAsStateWithLifecycle()
@@ -189,10 +234,10 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         pendingJournalDay?.let { dayOffset = it; vm.requestJournalDay(null) }
     }
     var importedQuestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var answersDayKey by remember { mutableStateOf("") }
     var dayAnswers by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     // #322: the selected day's native numeric values (question -> value), drives the numeric fields.
     var dayNumeric by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    var preFilledFromYesterday by remember { mutableStateOf(false) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     // #322: the v2 catalog (rename + numeric type + group + order), folding the legacy custom/hidden
@@ -206,21 +251,24 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     // previous day's answers pinned under "Today" instead of the new day starting blank. We re-stamp this on
     // every lifecycle RESUME, and fold it into the load effect's keys, so the moment the date rolls over the
     // journal reloads for the new day and prior answers move to their real date. iOS parity in InsightsView.
-    var currentDayKey by remember { mutableStateOf(LocalDate.now().toString()) }
+    var currentDayKey by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 val key = LocalDate.now().toString()
-                if (key != currentDayKey) currentDayKey = key
+                if (key != currentDayKey) {
+                    dayOffset = JournalCalendar.rolloverOffset(dayOffset, currentDayKey, key, journalDraftDirty)
+                    currentDayKey = key
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    androidx.compose.runtime.LaunchedEffect(journalSeq, dayOffset, currentDayKey) {
-        val imported = vm.repo.journal("my-whoop", "0000-01-01", "9999-12-31")
+    androidx.compose.runtime.LaunchedEffect(journalSeq, dayOffset, currentDayKey, activeStrapId) {
+        val imported = vm.repo.importedSourceIds(activeStrapId).flatMap { vm.repo.journal(it, "0000-01-01", "9999-12-31") }
         val native = vm.repo.journal(JOURNAL_DEVICE_ID, "0000-01-01", "9999-12-31")
         val entries = mergeJournalEntries(imported, native)
         val byBehaviour = mutableMapOf<String, MutableSet<String>>()
@@ -238,39 +286,19 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         controls = controlsByBehaviour.mapValues { it.value.toSet() }
         numericJournalSeries = numericByBehaviour.mapValues { it.value.toMap() }
         importedQuestions = imported.map { it.question }.distinct()
-        val key = journalDayKey(dayOffset)
+        val key = journalDayKey(dayOffset, LocalDate.parse(currentDayKey))
         var answers = native.filter { it.day == key }.associate { it.question to it.answeredYes }
         // #322: the selected day's numeric values (native-only; imported WHOOP rows carry none).
         dayNumeric = native.filter { it.day == key && it.numericValue != null }
             .associate { it.question to it.numericValue!! }
-        // Pre-fill from last night when opening today's journal with no entries yet, makes
-        // recurring patterns (e.g. no alcohol, read before bed) one tap to confirm instead of re-enter.
-        if (answers.isEmpty() && dayOffset == 0L) {
-            val yesterdayAnswers = native
-                .filter { it.day == journalDayKey(1L) }
-                .associate { it.question to it.answeredYes }
-            if (yesterdayAnswers.isNotEmpty()) {
-                // Upsert real rows for today so the effects engine counts the day as logged
-                // and onClear can delete the row it finds. Without this the chips looked
-                // pre-filled but no row existed, so "confirm" persisted nothing and
-                // "clear" tried to delete a phantom.
-                vm.repo.upsertJournal(yesterdayAnswers.map { (q, yes) ->
-                    JournalEntry(JOURNAL_DEVICE_ID, key, q, yes)
-                })
-                answers = yesterdayAnswers
-                preFilledFromYesterday = true
-            } else {
-                preFilledFromYesterday = false
-            }
-        } else {
-            preFilledFromYesterday = false
-        }
+        answersDayKey = key
         dayAnswers = answers
         journalLoaded = true
     }
 
     // Selected outcome metric for the behaviour-effects half.
     var outcome by remember { mutableStateOf(Outcome.Recovery) }
+    var selectedEffect by remember { mutableStateOf<EffectSelection?>(null) }
 
     // --- Personal-experiment state (LOCAL ONLY, SharedPreferences, parity with the
     //     Swift @AppStorage keys). `experimentSeq` bumps after a save so the snapshot
@@ -284,12 +312,12 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
 
     // Build outcome day-maps + ordered series off the cached daily metrics. Cheap and
     // recomputed only when `days` changes (not on every recomposition).
-    val model = remember(days, behaviours, controls, numericJournalSeries) {
-        buildModel(days, behaviours, controls, numericJournalSeries)
+    val model = remember(days, behaviours, controls, numericJournalSeries, sleepPerformance) {
+        buildModel(days, behaviours, controls, numericJournalSeries, sleepPerformance)
     }
 
     // Ranked behaviour effects for the current outcome (recomputed when outcome/data change).
-    val ranked = remember(model, outcome) { rankEffects(model, outcome) }
+    val ranked = remember(model, outcome, currentDayKey) { rankEffects(model, outcome, currentDayKey) }
     // Curated relationships (independent of the selected outcome).
     val relationships = remember(model) { computeRelationships(model) }
 
@@ -322,32 +350,15 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     val showDayCycleBackground = remember { NoopPrefs.showDayCycleBackground(skyCtx) }
     val skyBehindCards = remember { NoopPrefs.skyBehindCards(skyCtx) }
     LazyScreenScaffold(
-        title = uiString(R.string.l10n_insights_screen_insights_b4510362),
-        subtitle = "Interrogate what affects what.",
+        title = uiString(R.string.l10n_journal_log_journal_57d7f743),
+        subtitle = uiString(R.string.plan_journal_subtitle),
         topBackground = screenBackdropSlot(showDayCycleBackground, skyBehindCards),
         // Sky-behind-cards fills the viewport so the transparent cards reveal the sky the whole way
         // down (Today / Trends / Sleep / metric-detail parity - same two prefs, same two behaviours).
         fullBleedBackground = screenBackdropFullBleed(showDayCycleBackground, skyBehindCards),
     ) {
 
-        // --- "What moves you" deep-link into the v5 Insights Hub (ranked, lag-aware ranked-effect feed +
-        //     personal alcohol/caffeine dose-response). The honest in-Insights entry point; the hub is its
-        //     own destination too. Mirrors the Swift InsightsView.whatMovesYouLink. ---
-        item { WhatMovesYouLink(onOpen = onOpenInsightsHub) }
-
-        item { Spacer(Modifier.height(Metrics.sectionGap - 20.dp)) }
-
         // --- Native journal logging (always reachable, the account-free way in) ---
-        if (preFilledFromYesterday) {
-            item {
-            Text(
-                uiString(R.string.l10n_insights_screen_pre_filled_from_last_night_tap_ce81097c),
-                style = NoopType.footnote,
-                color = Palette.textTertiary,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            }
-        }
         item {
         // Persist a mutated catalog list and refresh state (the pure edit helpers never touch the
         // canonical key, so a rename/regroup/convert keeps history joined; #322).
@@ -356,47 +367,54 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
             catalogItems = next
         }
         JournalLogCard(
-            items = resolveJournalItems(importedQuestions, catalogItems, includeHidden = false),
+            items = resolveJournalItems(importedQuestions, catalogItems, includeHidden = true),
             answers = dayAnswers,
             numericAnswers = dayNumeric,
             dayOffset = dayOffset,
             onDayOffset = { dayOffset = it },
-            onAnswer = { q, yes ->
-                scope.launch {
-                    vm.repo.upsertJournal(
-                        listOf(JournalEntry(JOURNAL_DEVICE_ID, journalDayKey(dayOffset), q, yes)),
-                    )
-                    journalSeq++
-                }
-            },
-            onNumeric = { q, value ->
-                scope.launch {
-                    // A numeric log writes answeredYes=true AND the value (#322), so the effects engine
-                    // counts the day as logged and the with/without split is unchanged.
-                    vm.repo.upsertJournal(
-                        listOf(JournalEntry(JOURNAL_DEVICE_ID, journalDayKey(dayOffset), q,
-                            answeredYes = true, numericValue = value)),
-                    )
-                    journalSeq++
-                }
-            },
-            onClear = { q ->
-                scope.launch {
-                    vm.repo.deleteJournalEntry(JOURNAL_DEVICE_ID, journalDayKey(dayOffset), q)
-                    journalSeq++
-                }
-            },
             onAddCustom = { q, kind, group -> applyCatalog(addCustomJournalItem(catalogItems, q, kind, group)) },
             onRename = { q, name -> applyCatalog(renameJournalItem(catalogItems, q, name)) },
             onSetGroup = { q, group -> applyCatalog(setJournalItemGroup(catalogItems, q, group)) },
             onSetKind = { q, kind -> applyCatalog(setJournalItemKind(catalogItems, q, kind)) },
             onRemoveQuestion = { q -> applyCatalog(removeJournalItem(catalogItems, q)) },
             onRestoreQuestion = { q -> applyCatalog(restoreJournalItem(catalogItems, q)) },
+            answersDayKey = answersDayKey,
+            anchorDay = currentDayKey,
+            onDirtyChanged = { journalDraftDirty = it },
+            morningPrompt = days.any { it.day == currentDayKey && it.totalSleepMin != null },
+            onSave = { day, nextAnswers, nextNumeric, questions ->
+                try {
+                    for (question in questions - nextAnswers.keys) {
+                        vm.repo.deleteJournalEntry(JOURNAL_DEVICE_ID, day, question)
+                    }
+                    vm.repo.upsertJournal(nextAnswers.filterKeys { it in questions }.map { (question, yes) ->
+                        JournalEntry(JOURNAL_DEVICE_ID, day, question, yes, numericValue = nextNumeric[question])
+                    })
+                    vm.repo.noteJournalChanged()
+                    true
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    false
+                }
+            },
         )
         }
 
         item { Spacer(Modifier.height(Metrics.sectionGap - 20.dp)) }
 
+        // --- "What moves you" deep-link into the v5 Insights Hub (ranked, lag-aware ranked-effect feed +
+        //     personal alcohol/caffeine dose-response). The honest in-Insights entry point; the hub is its
+        //     own destination too. Mirrors the Swift InsightsView.whatMovesYouLink. ---
+        item { WhatMovesYouLink(onOpen = onOpenInsightsHub) }
+
+        item { Spacer(Modifier.height(Metrics.sectionGap - 20.dp)) }
+
+        item {
+            NoopCard(modifier = Modifier.clickable { showingWeeklyPlan = true }) {
+                Text(uiString(R.string.weekly_plan_title), style = NoopType.headline, color = Palette.textPrimary)
+            }
+        }
         // --- Mind: daily mood check-in + mood ↔ body correlations (Swift Mind-lane
         //     mirror; storage contract + footnote shared verbatim across platforms) ---
         item { MindSection(vm) }
@@ -419,9 +437,13 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
             // Hidden canonicals come from the v2 catalog now (#322), same triage-fix semantics.
             val hiddenQuestions = catalogItems.filter { it.hidden }.map { it.canonical }
             val candidates = experimentCandidates(behaviours, importedQuestions, hiddenQuestions, experimentBehaviour)
-            val expOutcome = Outcome.entries.firstOrNull { it.outcomeName == experimentOutcomeName } ?: Outcome.Recovery
-            val resolvedBehaviour = resolveExperimentBehaviour(candidates, experimentBehaviour)
-            val snapshot = remember(model, behaviours, experimentStartedDay, experimentOutcomeName, experimentDurationDays, experimentBaselineDays, experimentSeq) {
+            val expOutcome = when (experimentOutcomeName) {
+                "Charge" -> Outcome.Recovery
+                "Rest" -> Outcome.Sleep
+                else -> Outcome.entries.firstOrNull { it.outcomeName == experimentOutcomeName } ?: Outcome.Recovery
+            }
+            val resolvedBehaviour = resolveExperimentBehaviour(candidates, experimentBehaviour, experimentStartedDay)
+            val snapshot = remember(model, behaviours, resolvedBehaviour, experimentStartedDay, experimentOutcomeName, experimentDurationDays, experimentBaselineDays, experimentSeq) {
                 buildExperimentSnapshot(
                     model = model,
                     behaviours = behaviours,
@@ -437,6 +459,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
                 snapshot = snapshot,
                 candidates = candidates,
                 resolvedBehaviour = resolvedBehaviour,
+                catalogItems = catalogItems,
                 outcome = expOutcome,
                 length = ExperimentLength.fromDays(experimentDurationDays),
                 onBehaviour = {
@@ -474,7 +497,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
                             vm.repo.upsertJournal(
                                 listOf(JournalEntry(JOURNAL_DEVICE_ID, journalDayKey(0L), behaviour, answeredYes)),
                             )
-                            journalSeq++       // refresh behaviours map (logged-today, compliance)
+                            vm.repo.noteJournalChanged()
                             experimentSeq++    // refresh the snapshot
                         }
                     }
@@ -509,6 +532,8 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
                 outcome = outcome,
                 onOutcome = { outcome = it },
                 ranked = ranked,
+                catalogItems = catalogItems,
+                onSelected = { selectedEffect = it },
             )
         }
         }
@@ -522,6 +547,20 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
 
         // --- Metric relationships ---------------------------------------------
         item { RelationshipsSection(relationships) }
+    }
+    selectedEffect?.let { selection ->
+        AlertDialog(
+            onDismissRequest = { selectedEffect = null },
+            title = { Text(uiString(R.string.plan_behavior_insights), style = NoopType.title2) },
+            text = {
+                Column(Modifier.heightIn(max = Metrics.dialogScrollableMaxHeight).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Metrics.space16)) {
+                    Text(selection.outcome.label, style = NoopType.overline, color = Palette.textSecondary)
+                    EffectCard(selection.effect, selection.outcome, selection.displayName, compact = false)
+                }
+            },
+            confirmButton = { TextButton(onClick = { selectedEffect = null }) { Text(uiString(R.string.weekly_plan_dismiss)) } },
+        )
     }
 }
 
@@ -733,6 +772,8 @@ private fun BehaviourSection(
     outcome: Outcome,
     onOutcome: (Outcome) -> Unit,
     ranked: List<BehaviorEffect>,
+    catalogItems: List<JournalCatalogItem>,
+    onSelected: (EffectSelection) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
         Row(
@@ -741,7 +782,7 @@ private fun BehaviourSection(
         ) {
             Box(modifier = Modifier.weight(1f)) {
                 SectionHeader(
-                    "Behaviour Effects",
+                    uiString(R.string.plan_behavior_insights),
                     overline = "What moves your ${outcome.outcomeName.lowercase(Locale.US)}",
                 )
             }
@@ -753,6 +794,7 @@ private fun BehaviourSection(
             )
         }
 
+        Text(uiString(R.string.plan_comparison_window), style = NoopType.footnote, color = Palette.textSecondary)
         if (ranked.isEmpty()) {
             NoopCard {
                 Text(
@@ -764,15 +806,21 @@ private fun BehaviourSection(
         } else {
             // Fade + rise the ranked cards in sequence (mirrors iOS .staggeredAppear(index:)).
             ranked.forEachIndexed { i, e ->
-                Box(modifier = Modifier.staggeredAppear(i)) { EffectCard(e, outcome) }
+                val item = catalogItems.firstOrNull { normJournalKey(it.canonical) == normJournalKey(e.behavior) } ?: JournalCatalogItem(e.behavior)
+                val displayName = journalLocalizedLabel(item)
+                Box(modifier = Modifier.staggeredAppear(i)) {
+                    EffectCard(e, outcome, displayName, compact = true, onOpen = {
+                        onSelected(EffectSelection(e, outcome, displayName))
+                    })
+                }
             }
         }
     }
 }
 
-/** One behaviour-effect card: sentence + with/without StatTiles + significance pill. */
+/** Compact impact summary, or its captured comparison detail. */
 @Composable
-private fun EffectCard(e: BehaviorEffect, outcome: Outcome) {
+private fun EffectCard(e: BehaviorEffect, outcome: Outcome, displayName: String, compact: Boolean, onOpen: (() -> Unit)? = null) {
     // Sign-aware tint: did this behaviour move the outcome the GOOD way?
     val movedGood: Boolean? = when {
         e.delta == 0.0 -> null
@@ -783,17 +831,21 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome) {
         true -> StrandTone.Positive
         false -> if (e.significant) StrandTone.Critical else StrandTone.Warning
     }
-    val tintColor = tone.color
-    val arrow = if (e.delta > 0) "↑" else if (e.delta < 0) "↓" else "→"
-    val deltaText = "$arrow ${String.format(Locale.US, "%.1f", abs(e.delta))}"
-    val sentence = effectSentence(e, outcome)
+    val tintColor = when (movedGood) { true -> Palette.statusPositive; false -> Palette.statusWarning; null -> Palette.textSecondary }
+    val deltaText = e.pctChange?.let { "${if (it > 0) "+" else if (it < 0) "−" else ""}${abs(it).roundToInt()}%" } ?: outcome.format(e.delta)
+    val sentence = uiString(R.string.plan_association_note)
+    val summaryLabel = uiString(R.string.plan_behavior_comparison_summary, displayName, deltaText, outcome.label)
 
     // The card wash reads as the OUTCOME's colour world (so the whole Behaviour Effects
-    // section sits in one world), while the dot / StatTile accents stay sign-aware.
-    NoopCard(tint = outcome.domain.color) {
-        Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
+    // section sits in one world), while the summary / StatTile accents stay sign-aware.
+    val modifier = if (compact && onOpen != null) Modifier.clickable(
+        role = Role.Button, onClickLabel = uiString(R.string.l10n_skin_temp_cards_screen_view_detail_27af4b67), onClick = onOpen,
+    )
+        .semantics(mergeDescendants = true) { contentDescription = summaryLabel } else Modifier
+    NoopCard(modifier = modifier, tint = outcome.domain.color) {
+        Column(verticalArrangement = Arrangement.spacedBy(if (compact) Metrics.space8 else Metrics.space16)) {
 
-            // Header: behaviour name (tinted dot) + significance pill.
+            // Summary: wrapping behaviour name, change, and detail disclosure.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -801,71 +853,66 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome) {
                 Row(
                     modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Metrics.space8),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .drawBehind { drawCircle(tintColor) },
-                    )
                     Text(
-                        e.behavior,
-                        style = NoopType.headline,
+                        displayName.uppercase(),
+                        style = NoopType.overline,
                         color = Palette.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                StatePill(
-                    if (e.significant) "SIGNIFICANT" else "EXPLORATORY",
-                    tone = if (e.significant) StrandTone.Positive else StrandTone.Neutral,
-                    showsDot = false,
-                )
+                Text(deltaText, style = NoopType.bodyNumber, color = tintColor)
+                if (compact) {
+                    Spacer(Modifier.width(Metrics.space8))
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Palette.textSecondary, modifier = Modifier.size(Metrics.iconSmall))
+                }
             }
 
-            // Plain-English sentence.
-            Text(sentence, style = NoopType.body, color = Palette.textSecondary)
+            e.pctChange?.let { RBar(it / 50.0, tintColor, decorative = true, journalImpact = true) }
+            if (!compact) {
+                Text(sentence, style = NoopType.body, color = Palette.textSecondary)
 
-            // With / without means as uniform StatTiles.
-            Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
-                StatTile(
-                    modifier = Modifier.weight(1f),
-                    label = uiString(R.string.l10n_insights_screen_with_564f8c6e),
-                    value = outcome.format(e.meanWith),
-                    caption = "n = ${e.nWith}",
-                    accent = tintColor,
-                    delta = deltaText,
-                    deltaColor = tintColor,
-                )
-                StatTile(
-                    modifier = Modifier.weight(1f),
-                    label = uiString(R.string.l10n_insights_screen_without_cb735356),
-                    value = outcome.format(e.meanWithout),
-                    caption = "n = ${e.nWithout}",
-                    accent = Palette.textPrimary,
-                )
-            }
+                // With / without means as uniform StatTiles.
+                Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
+                    StatTile(
+                        modifier = Modifier.fillMaxWidth(),
+                        label = uiString(R.string.l10n_insights_screen_with_564f8c6e),
+                        value = outcome.format(e.meanWith),
+                        caption = "n = ${e.nWith}",
+                        accent = tintColor,
+                        delta = null,
+                        deltaColor = tintColor,
+                    )
+                    StatTile(
+                        modifier = Modifier.fillMaxWidth(),
+                        label = uiString(R.string.l10n_insights_screen_without_cb735356),
+                        value = outcome.format(e.meanWithout),
+                        caption = "n = ${e.nWithout}",
+                        accent = Palette.textPrimary,
+                    )
+                }
 
-            HorizontalDivider(color = Palette.hairline)
+                HorizontalDivider(color = Palette.hairline)
+                StatePill(if (e.significant) "p < 0.05" else "n.s.", tone = tone, showsDot = false)
 
-            // Effect-size footer: Cohen's d + magnitude word.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Overline("Effect size", modifier = Modifier.weight(1f))
-                Text(
-                    String.format(Locale.US, "d = %.2f", e.cohensD),
-                    style = NoopType.captionNumber,
-                    color = tintColor,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    effectMagnitudeWord(e.cohensD),
-                    style = NoopType.caption,
-                    color = Palette.textTertiary,
-                )
+                // Effect-size footer: Cohen's d + magnitude word.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Overline("Effect size", modifier = Modifier.weight(1f))
+                    Text(
+                        String.format(Locale.US, "d = %.2f", e.cohensD),
+                        style = NoopType.captionNumber,
+                        color = tintColor,
+                    )
+                    Spacer(Modifier.width(Metrics.space6))
+                    Text(
+                        effectMagnitudeWord(e.cohensD),
+                        style = NoopType.caption,
+                        color = Palette.textTertiary,
+                    )
+                }
             }
         }
     }
@@ -930,6 +977,7 @@ private fun ExperimentSection(
     snapshot: ExperimentSnapshot?,
     candidates: List<String>,
     resolvedBehaviour: String?,
+    catalogItems: List<JournalCatalogItem>,
     outcome: Outcome,
     length: ExperimentLength,
     onBehaviour: (String) -> Unit,
@@ -947,11 +995,12 @@ private fun ExperimentSection(
         )
         NoopCard {
             if (snapshot != null) {
-                ActiveExperimentCard(snapshot, onMark = onMark, onEnd = onEnd)
+                ActiveExperimentCard(snapshot, catalogItems, onMark = onMark, onEnd = onEnd)
             } else {
                 ExperimentSetupCard(
                     candidates = candidates,
                     resolvedBehaviour = resolvedBehaviour,
+                    catalogItems = catalogItems,
                     outcome = outcome,
                     length = length,
                     onBehaviour = onBehaviour,
@@ -968,6 +1017,7 @@ private fun ExperimentSection(
 private fun ExperimentSetupCard(
     candidates: List<String>,
     resolvedBehaviour: String?,
+    catalogItems: List<JournalCatalogItem>,
     outcome: Outcome,
     length: ExperimentLength,
     onBehaviour: (String) -> Unit,
@@ -1004,6 +1054,7 @@ private fun ExperimentSetupCard(
                 ExperimentBehaviourPicker(
                     candidates = candidates,
                     selection = resolvedBehaviour ?: candidates.first(),
+                    catalogItems = catalogItems,
                     onSelect = onBehaviour,
                 )
             }
@@ -1041,9 +1092,12 @@ private fun ExperimentSetupCard(
 @Composable
 private fun ActiveExperimentCard(
     snapshot: ExperimentSnapshot,
+    catalogItems: List<JournalCatalogItem>,
     onMark: (Boolean) -> Unit,
     onEnd: () -> Unit,
 ) {
+    val item = catalogItems.firstOrNull { normJournalKey(it.canonical) == normJournalKey(snapshot.behavior) }
+        ?: JournalCatalogItem(snapshot.behavior)
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1051,7 +1105,7 @@ private fun ActiveExperimentCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    snapshot.behavior,
+                    journalLocalizedLabel(item),
                     style = NoopType.headline,
                     color = Palette.textPrimary,
                     maxLines = 2,
@@ -1233,9 +1287,13 @@ private fun ExperimentMeasure(
 private fun ExperimentBehaviourPicker(
     candidates: List<String>,
     selection: String,
+    catalogItems: List<JournalCatalogItem>,
     onSelect: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val selectedItem = catalogItems.firstOrNull { normJournalKey(it.canonical) == normJournalKey(selection) }
+        ?: JournalCatalogItem(selection)
+    val selectedLabel = journalLocalizedLabel(selectedItem)
     // liquidPress on the tappable picker row (same interactionSource on the clickable + press; indication
     // nulled so only the liquid settle reads). Same expand-on-tap + same accessibility label.
     val interaction = remember { MutableInteractionSource() }
@@ -1249,11 +1307,11 @@ private fun ExperimentBehaviourPicker(
                 .clickable(interactionSource = interaction, indication = null) { expanded = true }
                 .liquidPress(interaction)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .semantics { contentDescription = uiString(R.string.l10n_insights_screen_experiment_behaviour_selection_bcb29b58, selection) },
+                .semantics { contentDescription = uiString(R.string.l10n_insights_screen_experiment_behaviour_selection_bcb29b58, selectedLabel) },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                selection,
+                selectedLabel,
                 style = NoopType.subhead,
                 color = Palette.textPrimary,
                 modifier = Modifier.weight(1f),
@@ -1264,8 +1322,10 @@ private fun ExperimentBehaviourPicker(
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             candidates.forEach { q ->
+                val item = catalogItems.firstOrNull { normJournalKey(it.canonical) == normJournalKey(q) }
+                    ?: JournalCatalogItem(q)
                 DropdownMenuItem(
-                    text = { Text(q, style = NoopType.subhead, color = Palette.textPrimary) },
+                    text = { Text(journalLocalizedLabel(item), style = NoopType.subhead, color = Palette.textPrimary) },
                     onClick = {
                         onSelect(q)
                         expanded = false
@@ -1305,9 +1365,12 @@ private fun experimentCandidates(
     return out
 }
 
-/** The saved behaviour if still eligible, else the first candidate (or null when empty). */
-private fun resolveExperimentBehaviour(candidates: List<String>, saved: String): String? {
-    val savedTrim = saved.trim()
+/** Active experiments keep their saved canonical identity; setup falls back to an eligible candidate. */
+internal fun resolveExperimentBehaviour(candidates: List<String>, saved: String, startedDay: String): String? {
+    val savedTrim = saved.trim {
+        (it.isWhitespace() && it !in '\u001C'..'\u001F') || it == '\u0085' || it == '\u200B'
+    }
+    if (startedDay.isNotEmpty()) return savedTrim.takeIf { it.isNotEmpty() }
     if (savedTrim.isNotEmpty() && candidates.contains(savedTrim)) return savedTrim
     return candidates.firstOrNull()
 }
@@ -1528,15 +1591,25 @@ private fun RelationshipRow(rel: Relationship) {
  * printed beside the title, so the bar is never an unexplained coloured shape on phone).
  */
 @Composable
-private fun RBar(r: Double, color: Color) {
+private fun RBar(r: Double, color: Color, decorative: Boolean = false, journalImpact: Boolean = false) {
     Box(
         modifier = Modifier
+            .then(if (decorative) Modifier.clearAndSetSemantics { } else Modifier)
             .fillMaxWidth()
-            .height(8.dp)
-            .clip(CircleShape)
+            .height(Metrics.space8)
+            .then(if (journalImpact) Modifier else Modifier.clip(CircleShape))
             .drawBehind {
                 val half = size.width / 2f
                 val mag = (abs(r).coerceAtMost(1.0)).toFloat() * half
+                if (journalImpact) {
+                    drawContext.canvas.save()
+                    drawContext.canvas.clipPath(Path().apply {
+                        addRoundRect(RoundRect(
+                            Rect(0f, 0f, size.width, size.height),
+                            CornerRadius(size.height / 2f, size.height / 2f),
+                        ))
+                    })
+                }
                 // Inset track.
                 drawLine(
                     color = Palette.surfaceInset,
@@ -1545,13 +1618,27 @@ private fun RBar(r: Double, color: Color) {
                     strokeWidth = size.height,
                     cap = StrokeCap.Round,
                 )
-                // Centre tick.
-                drawLine(
-                    color = Palette.hairlineStrong,
-                    start = Offset(half, 0f),
-                    end = Offset(half, size.height),
-                    strokeWidth = 1f,
-                )
+                if (journalImpact) {
+                    var x = -size.height
+                    val spacing = Metrics.space8.toPx()
+                    while (x <= size.width) {
+                        drawLine(
+                            color = Palette.hairlineStrong,
+                            start = Offset(x, size.height),
+                            end = Offset(x + size.height, 0f),
+                            strokeWidth = Metrics.space4.toPx() / 2f,
+                        )
+                        x += spacing
+                    }
+                } else {
+                    // Centre tick.
+                    drawLine(
+                        color = Palette.hairlineStrong,
+                        start = Offset(half, 0f),
+                        end = Offset(half, size.height),
+                        strokeWidth = 1f,
+                    )
+                }
                 // Value fill from centre outward.
                 if (mag > 0f) {
                     val start = if (r >= 0) Offset(half, size.height / 2f)
@@ -1566,6 +1653,12 @@ private fun RBar(r: Double, color: Color) {
                         cap = StrokeCap.Round,
                     )
                 }
+                if (journalImpact) {
+                    drawContext.canvas.restore()
+                    val origin = Offset(half, size.height / 2f)
+                    drawCircle(Palette.surfaceInset, radius = Metrics.space12.toPx() / 2f, center = origin)
+                    drawCircle(Palette.textPrimary, radius = Metrics.space4.toPx() / 2f, center = origin)
+                }
             },
     )
 }
@@ -1578,12 +1671,13 @@ private fun buildModel(
     behaviours: Map<String, Set<String>>,
     controls: Map<String, Set<String>>,
     numericJournalSeries: Map<String, Map<String, Double>> = emptyMap(),
+    sleepPerformance: Map<String, Double> = emptyMap(),
 ): InsightModel {
     val outcomeByDay = mutableMapOf<Outcome, Map<String, Double>>()
     val seriesByOutcome = mutableMapOf<Outcome, List<Pair<String, Double>>>()
     for (o in Outcome.entries) {
         // Oldest → newest; one value per day (DailyMetric PK is (deviceId, day)).
-        val series = days.mapNotNull { d -> o.pick(d)?.let { d.day to it } }
+        val series = if (o == Outcome.Sleep) sleepPerformance.toList().sortedBy { it.first } else days.mapNotNull { d -> o.pick(d)?.let { d.day to it } }
         seriesByOutcome[o] = series
         outcomeByDay[o] = series.toMap()
     }
@@ -1591,15 +1685,16 @@ private fun buildModel(
 }
 
 /** Rank behaviour effects for one outcome by |Cohen's d|, significant first. */
-private fun rankEffects(model: InsightModel, outcome: Outcome): List<BehaviorEffect> {
-    val outcomeDays = model.outcomeByDay[outcome] ?: emptyMap()
+private fun rankEffects(model: InsightModel, outcome: Outcome, today: String): List<BehaviorEffect> {
+    val firstDay = LocalDate.parse(today).minusDays(89).toString()
+    val outcomeDays = (model.outcomeByDay[outcome] ?: emptyMap()).filterKeys { it >= firstDay && it <= today }
     if (outcomeDays.isEmpty()) return emptyList()
     // Through the shared engine, not a local copy. This screen used to carry its own with/without split,
     // its own pooled-SD Cohen's d and a "crude significance" (|d| >= 0.5 with >= 3 a side) where iOS's
     // same screen ran a Welch p — so identical journals could flag different behaviours on the two
     // platforms. EffectRanker.rankNoLag is the byte-identical twin of Swift's BehaviorInsights.rank,
     // which is what iOS calls here.
-    return EffectRanker.rankNoLag(model.behaviours, model.controls, outcomeDays, outcome.outcomeName)
+    return EffectRanker.rankNoLag(model.behaviours, model.controls, outcomeDays, outcome.outcomeName).filter { it.nWith >= 5 && it.nWithout >= 5 }
 }
 
 /** The curated metric relationships, computed via Pearson r over aligned day pairs. */

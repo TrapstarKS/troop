@@ -52,6 +52,7 @@ enum HealthExportMerge {
             respRateBpm: imported.respRateBpm,
             steps: imported.steps,
             activeKcalEst: imported.activeKcalEst,
+            activeEnergyKcalEst: imported.activeEnergyKcalEst,
             spo2Red: imported.spo2Red,
             spo2Ir: imported.spo2Ir,
             avgSdnn: carried,

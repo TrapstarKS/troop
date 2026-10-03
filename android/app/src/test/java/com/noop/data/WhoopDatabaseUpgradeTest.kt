@@ -1,6 +1,7 @@
 package com.noop.data
 
 import androidx.room.Room
+import kotlinx.coroutines.runBlocking
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.platform.app.InstrumentationRegistry
@@ -60,7 +61,9 @@ class WhoopDatabaseUpgradeTest {
 
     @Test
     fun previousReleasedSchemaOpensThroughTheProductionMigrationChain() {
-        helper.createDatabase(databaseName, previousVersion).close()
+        helper.createDatabase(databaseName, previousVersion).apply {
+            execSQL("INSERT INTO dailyMetric (deviceId, day, activeKcalEst, recovery) VALUES ('my-whoop-noop', '2026-10-01', 2345, 72)")
+        }.close()
 
         val migrated = Room.databaseBuilder(
             instrumentation.targetContext,
@@ -73,6 +76,21 @@ class WhoopDatabaseUpgradeTest {
 
         try {
             val db = migrated.openHelper.writableDatabase
+            db.query("SELECT activeKcalEst, activeEnergyKcalEst, recovery FROM dailyMetric").use { row ->
+                check(row.moveToFirst())
+                assertEquals(2345.0, row.getDouble(0), 0.0)
+                check(row.isNull(1)) { "legacy total must not become active energy" }
+                assertEquals(72.0, row.getDouble(2), 0.0)
+            }
+            runBlocking {
+                val dao = migrated.whoopDao()
+                val original = dao.dailyMetricsRange("my-whoop-noop", "2026-10-01", "2026-10-01").single()
+                dao.upsertDailyMetrics(listOf(original.copy(activeEnergyKcalEst = 456.0)))
+                val updated = dao.dailyMetricsRange("my-whoop-noop", "2026-10-01", "2026-10-01").single()
+                assertEquals(456.0, updated.activeEnergyKcalEst!!, 0.0)
+                assertEquals(2345.0, updated.activeKcalEst!!, 0.0)
+                assertEquals(72.0, updated.recovery!!, 0.0)
+            }
             val cursor = db.query("PRAGMA user_version")
             cursor.use {
                 check(it.moveToFirst()) { "PRAGMA user_version returned no row" }

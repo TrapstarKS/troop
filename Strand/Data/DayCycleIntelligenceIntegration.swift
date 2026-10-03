@@ -21,6 +21,7 @@ import WhoopStore
         let stepsByWakeDay: [String: Int]
         let strainByWakeDay: [String: Double]
         let caloriesByWakeDay: [String: Double]
+        var activeCaloriesByWakeDay: [String: Double] = [:]
         let workoutCountByWakeDay: [String: Int]
         let onsetByWakeDay: [String: Int]
         let firstWakeDay: String?
@@ -38,7 +39,7 @@ import WhoopStore
     }
     /// A cycle's Effort and calories, with the key of the inputs they were computed from.
     fileprivate struct CachedLoad {
-        let key: String; let strain: Double?; let calories: Double?
+        let key: String; let strain: Double?; let calories: Double?; let activeCalories: Double?
     }
     final class Cache {
         fileprivate var cycles: [String: CachedCycle] = [:]
@@ -131,8 +132,10 @@ import WhoopStore
             }
             let classified = PhysiologicalSteps.classifyForCycle(
                 blocks, offsetSec: offsetSec, habitualMidsleepSec: habitualMidsleepSec)
-            guard let winner = classified.filter({ $0.kind == .mainSleep })
-                .min(by: { $0.effectiveOnset < $1.effectiveOnset }), winner.effectiveOnset <= now else { continue }
+            guard let onset = PhysiologicalSteps.mainSleepOnset(
+                blocks, offsetSec: offsetSec, habitualMidsleepSec: habitualMidsleepSec),
+                let winner = classified.first(where: { $0.kind == .mainSleep && $0.effectiveOnset == onset }),
+                onset <= now else { continue }
             boundaries.append(.init(sleepId: winner.id, onset: winner.effectiveOnset))
             wakeDayById[winner.id] = night.daily.day; ownerById[winner.id] = night.owner
         }
@@ -187,6 +190,7 @@ import WhoopStore
         })
         var steps: [String: Int] = [:], onsets: [String: Int] = [:]
         var strains: [String: Double] = [:], calories: [String: Double] = [:]
+        var activeCalories: [String: Double] = [:]
         var workoutCounts: [String: Int] = [:]
         windowLoop: for window in windows {
             guard let day = wakeDayById[window.sleepId], let fallback = ownerById[window.sleepId] else { continue }
@@ -228,16 +232,18 @@ import WhoopStore
                     }
                 }
                 let cycleHR = hrByTimestamp.values.sorted { $0.ts < $1.ts }
+                let energy = cycleHR.isEmpty ? nil : Calories.estimateDayEnergy(
+                    cycleHR, profile: profile, hrmax: effectiveMaxHR, restingHR: restingHR)
                 load = CachedLoad(
                     key: loadKey,
                     strain: StrainScorer.strain(cycleHR, maxHR: effectiveMaxHR, restingHR: restingHR,
                                                 method: effortMethod, sex: profile.sex),
-                    calories: cycleHR.isEmpty ? nil : Calories.estimateDayCalories(
-                        cycleHR, profile: profile, hrmax: effectiveMaxHR, restingHR: restingHR))
+                    calories: energy?.totalKcal, activeCalories: energy?.activeKcal)
                 cache.loads[window.sleepId] = load
             }
             if let strain = load.strain { strains[day] = strain }
             if let kcal = load.calories { calories[day] = kcal }
+            if let kcal = load.activeCalories { activeCalories[day] = kcal }
             let persistedWorkoutKeys = workouts
                 .filter { $0.startTs >= window.onset && $0.startTs < window.endExclusive }
                 .map { "\($0.startTs):\($0.endTs)" }
@@ -338,6 +344,7 @@ import WhoopStore
         let recoveredMarkers = recovered.map { SourcedMarker(deviceId: computedId($0.owner),
             point: MetricPoint(day: $0.wakeDay, key: onsetKey, value: Double($0.boundary.onset))) }
         return Result(stepsByWakeDay: steps, strainByWakeDay: strains, caloriesByWakeDay: calories,
+            activeCaloriesByWakeDay: activeCalories,
             workoutCountByWakeDay: workoutCounts, onsetByWakeDay: onsets,
             firstWakeDay: wakeDayById.values.min(), markerUpdate: .replace(
                 points: recoveredMarkers,
@@ -349,13 +356,14 @@ import WhoopStore
         let steps = established ? result.stepsByWakeDay[daily.day] : daily.steps
         let strain = established ? result.strainByWakeDay[daily.day] : daily.strain
         let calories = established ? result.caloriesByWakeDay[daily.day] : daily.activeKcalEst
+        let activeCalories = established ? result.activeCaloriesByWakeDay[daily.day] : daily.activeEnergyKcalEst
         let workouts = established ? result.workoutCountByWakeDay[daily.day] : daily.exerciseCount
         return DailyMetric(day: daily.day, totalSleepMin: daily.totalSleepMin, efficiency: daily.efficiency,
             deepMin: daily.deepMin, remMin: daily.remMin, lightMin: daily.lightMin,
             disturbances: daily.disturbances, restingHr: daily.restingHr, avgHrv: daily.avgHrv,
             recovery: daily.recovery, strain: strain, exerciseCount: workouts,
             spo2Pct: daily.spo2Pct, skinTempDevC: daily.skinTempDevC, respRateBpm: daily.respRateBpm,
-            steps: steps, activeKcalEst: calories, spo2Red: daily.spo2Red,
+            steps: steps, activeKcalEst: calories, activeEnergyKcalEst: activeCalories, spo2Red: daily.spo2Red,
             spo2Ir: daily.spo2Ir, avgSdnn: daily.avgSdnn,
             skinTempC: daily.skinTempC, sleepHrOnly: daily.sleepHrOnly)
     }
