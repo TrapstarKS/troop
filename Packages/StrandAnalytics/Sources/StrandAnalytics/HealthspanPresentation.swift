@@ -1,11 +1,23 @@
 import Foundation
 
-/// A presentation of existing Body Age history, never a clinical biological-age model.
+/// Existing Body Age and step observations, never a clinical biological-age model.
 public enum HealthspanPresentation {
     public struct AgeSample: Equatable, Sendable {
         public let daysAgo: Int
         public let age: Double
         public init(daysAgo: Int, age: Double) { self.daysAgo = daysAgo; self.age = age }
+    }
+
+    public struct StepSample: Equatable, Sendable {
+        public let day: String
+        public let count: Double
+        public let source: String
+
+        public init(day: String, count: Double, source: String) {
+            self.day = day
+            self.count = count
+            self.source = source
+        }
     }
 
     public struct Snapshot: Equatable, Sendable {
@@ -53,5 +65,23 @@ public enum HealthspanPresentation {
             minutes[zone] += hour.minutes
         }
         return minutes
+    }
+
+    /// Uses inclusive canonical ISO day keys and caller-resolved measured WHOOP samples.
+    /// Measured rows, including zero, win per day; imported maxima retain the first tied row.
+    /// Kotlin twin: `HealthspanPresentation.latestSteps`.
+    public static func latestSteps(measured: [StepSample], imported: [StepSample],
+                                   fromDay: String, throughDay: String) -> StepSample? {
+        // Kotlin twin: HealthspanPresentation.valid
+        func valid(_ sample: StepSample) -> Bool {
+            sample.count.isFinite && sample.count >= 0 && sample.day >= fromDay && sample.day <= throughDay
+        }
+        var byDay: [String: StepSample] = [:]
+        for sample in imported where valid(sample) {
+            if sample.count > (byDay[sample.day]?.count ?? -1) { byDay[sample.day] = sample }
+        }
+        // Reverse traversal preserves the first valid measured row for each day.
+        for sample in measured.reversed() where valid(sample) { byDay[sample.day] = sample }
+        return byDay.keys.max().flatMap { byDay[$0] }
     }
 }
