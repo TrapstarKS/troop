@@ -1668,40 +1668,11 @@ object IntelligenceEngine {
             if (recoveryTraceSink != null) {
                 for (line in recoveryTraceLines(daily, baselines2)) recoveryTraceSink(line)
             }
-            RestScorer.restFromDaily(daily)?.let { rest ->
-                restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "sleep_performance", value = rest))
-            }
-            // #103: persist the SpO₂ candidate @82 nightly mean to metricSeries as "spo2_candidate" so the
-            // Blood Oxygen tile can surface it as a "strap estimate (unverified)" fallback when the toggle
-            // is ON. Written under the "-noop" computed device ID, never to `spo2Pct`.
-            spo2CandidateByDay[daily.day]?.let { cand ->
-                restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "spo2_candidate", value = cand.toDouble()))
-            }
-            // #1118: persist the HRV over-count flag (1/0) so the HRV card can mark an over-counted 4.0
-            // night's reading "unverified" until the two-channel de-dup lands. 0 written on a clean night
-            // (not just absent) so a night that flips clean on re-score clears its prior flag.
-            hrvOverCountByDay[daily.day]?.let { oc ->
-                restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "hrv_rr_overcount", value = if (oc) 1.0 else 0.0))
-            }
-            // Capture the fresh scan before legacy score preservation can restore an older HRV value.
-            hrvFreshScoringValidByDay[daily.day]?.let { valid ->
-                restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "hrv_fresh_scoring_valid", value = if (valid) 1.0 else 0.0))
-            }
-            respFreshScoringValidByDay[daily.day]?.let { valid ->
-                restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "resp_fresh_scoring_valid", value = if (valid) 1.0 else 0.0))
-            }
-            // #1169 shadow metric: the primary-session mean RHR, stored beside the shipped floor
-            // (daily.restingHr) under the "-noop" computed ID. Instrumentation only — never shown, never
-            // scored — for later mean-vs-floor evaluation from exports.
-            primarySessionRHRByDay[daily.day]?.let { v ->
-                restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "rhr_primary_session", value = v))
-            }
-            // #1169: its coverage inputs beside the mean — valid-sample count + primary-session duration (s)
-            // — so a thin-coverage night can be down-weighted in the later holdout. Raw inputs, not a fraction.
-            primarySessionRHRCoverageByDay[daily.day]?.let { cov ->
-                restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "rhr_primary_session_valid_samples", value = cov.validSamples.toDouble()))
-                restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "rhr_primary_session_duration_s", value = cov.durationSec))
-            }
+            appendNightMetricRows(
+                daily, computedId, restRows, spo2CandidateByDay, hrvOverCountByDay,
+                hrvFreshScoringValidByDay, respFreshScoringValidByDay,
+                primarySessionRHRByDay, primarySessionRHRCoverageByDay,
+            )
 
             out.add(
                 Computed(
@@ -2025,6 +1996,53 @@ object IntelligenceEngine {
             measuredResting, effortMethod)
 
         return out to healDropped.size
+    }
+
+    private fun appendNightMetricRows(
+        daily: DailyMetric,
+        computedId: String,
+        restRows: MutableList<MetricSeriesRow>,
+        spo2CandidateByDay: Map<String, Int>,
+        hrvOverCountByDay: Map<String, Boolean>,
+        hrvFreshScoringValidByDay: Map<String, Boolean>,
+        respFreshScoringValidByDay: Map<String, Boolean>,
+        primarySessionRHRByDay: Map<String, Double>,
+        primarySessionRHRCoverageByDay: Map<String, PrimarySessionRestingHR.Coverage>,
+    ) {
+        RestScorer.restFromDaily(daily)?.let { rest ->
+            restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "sleep_performance", value = rest))
+        }
+        // #103: persist the SpO₂ candidate @82 nightly mean to metricSeries as "spo2_candidate" so the
+        // Blood Oxygen tile can surface it as a "strap estimate (unverified)" fallback when the toggle
+        // is ON. Written under the "-noop" computed device ID, never to `spo2Pct`.
+        spo2CandidateByDay[daily.day]?.let { cand ->
+            restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "spo2_candidate", value = cand.toDouble()))
+        }
+        // #1118: persist the HRV over-count flag (1/0) so the HRV card can mark an over-counted 4.0
+        // night's reading "unverified" until the two-channel de-dup lands. 0 written on a clean night
+        // (not just absent) so a night that flips clean on re-score clears its prior flag.
+        hrvOverCountByDay[daily.day]?.let { oc ->
+            restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "hrv_rr_overcount", value = if (oc) 1.0 else 0.0))
+        }
+        // Capture the fresh scan before legacy score preservation can restore an older HRV value.
+        hrvFreshScoringValidByDay[daily.day]?.let { valid ->
+            restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "hrv_fresh_scoring_valid", value = if (valid) 1.0 else 0.0))
+        }
+        respFreshScoringValidByDay[daily.day]?.let { valid ->
+            restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "resp_fresh_scoring_valid", value = if (valid) 1.0 else 0.0))
+        }
+        // #1169 shadow metric: the primary-session mean RHR, stored beside the shipped floor
+        // (daily.restingHr) under the "-noop" computed ID. Instrumentation only — never shown, never
+        // scored — for later mean-vs-floor evaluation from exports.
+        primarySessionRHRByDay[daily.day]?.let { v ->
+            restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "rhr_primary_session", value = v))
+        }
+        // #1169: its coverage inputs beside the mean — valid-sample count + primary-session duration (s)
+        // — so a thin-coverage night can be down-weighted in the later holdout. Raw inputs, not a fraction.
+        primarySessionRHRCoverageByDay[daily.day]?.let { cov ->
+            restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "rhr_primary_session_valid_samples", value = cov.validSamples.toDouble()))
+            restRows.add(MetricSeriesRow(deviceId = computedId, day = daily.day, key = "rhr_primary_session_duration_s", value = cov.durationSec))
+        }
     }
 
     private suspend fun foldImportedDailyMetrics(
