@@ -1474,10 +1474,10 @@ public final class BLEManager: NSObject, ObservableObject {
             // connect gate. Automatic startup awaits this seed before connecting or discovering services,
             // even when `SourceCoordinator` has not wired up yet (#2604).
             let activeRow = (try? registry.all())?.first(where: { $0.id == activeId })
-            if let activeRow, !SourceIdentity.isWhoop(activeRow) {
+            if !BLEStartupGate.allowsWhoopBLE(for: activeRow) {
                 setWhoopIsActiveDevice(false)
-                log("Active device \(activeId) is not a WHOOP — leaving sample attribution on \(deviceId) (#1881)")
-            } else {
+                log("Active device \(activeId) replaces WHOOP BLE — leaving sample attribution on \(deviceId) (#1881)")
+            } else if activeRow.map(SourceIdentity.isWhoop) ?? true {
                 self.deviceId = activeId
             }
         }
@@ -2145,7 +2145,7 @@ public final class BLEManager: NSObject, ObservableObject {
         // Only on the blocked path, so the common case still costs nothing.
         if let registry = registryStore, let activeId = try? registry.activeDeviceId() {
             let row = (try? registry.all())?.first(where: { $0.id == activeId })
-            if row.map(SourceIdentity.isWhoop) ?? true {
+            if BLEStartupGate.allowsWhoopBLE(for: row) {
                 setWhoopIsActiveDevice(true)
                 return true
             }
