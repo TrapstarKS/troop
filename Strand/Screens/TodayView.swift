@@ -1614,6 +1614,7 @@ struct TodayView: View {
 
     private var homeDashboard: some View {
         HomeDashboardContent(dayKey: selectedDayKey, dayOffset: selectedDayOffset,
+            windowDayKey: Repository.localDayKey(selectedLogicalDay),
             day: displayDay, sleepScore: restScore,
             recovery: displayDay?.recovery ?? lastScoredCharge?.value,
             recoveryDayKey: chargeBreakdownRow?.day ?? selectedDayKey,
@@ -1630,7 +1631,7 @@ struct TodayView: View {
                             NavigationLink(value: TabRoute.recoveryDetailForDay(dayKey: chargeBreakdownRow?.day ?? selectedDayKey)) { keyMetricTile(metric) }
                             .buttonStyle(.plain)
                         } else if metric == .effort {
-                            NavigationLink(value: TabRoute.strainDetailForDay(dayKey: selectedDayKey, effortOverride: effortStrain(displayDay).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil })) { keyMetricTile(metric) }
+                            NavigationLink(value: TabRoute.strainDetailForDay(dayKey: selectedDayKey, effortOverride: effortStrain(displayDay).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }, windowDayKey: Repository.localDayKey(selectedLogicalDay))) { keyMetricTile(metric) }
                             .buttonStyle(.plain)
                         } else {
                             NavigationLink(value: HomeMetricRoute.route(metric)) { keyMetricTile(metric) }

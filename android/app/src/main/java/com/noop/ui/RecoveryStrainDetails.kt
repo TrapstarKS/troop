@@ -154,6 +154,7 @@ fun StrainDetailScreen(
     vm: AppViewModel,
     dayKey: String? = null,
     effortOverride: Double? = null,
+    windowDayKey: String? = null,
     onBack: () -> Unit,
 ) {
     val today by vm.today.collectAsStateWithLifecycle()
@@ -174,30 +175,38 @@ fun StrainDetailScreen(
     val context = LocalContext.current
     val profile = remember(context) { ProfileStore.from(context) }
     val mode = NoopPrefs.dayCycleMode(context)
-    var hr by remember(selectedKey, activeId, mode) { mutableStateOf<List<HrBucket>>(emptyList()) }
-    var zones by remember(selectedKey, activeId, mode) { mutableStateOf<List<Double>?>(null) }
-    var belowZone1 by remember(selectedKey, activeId, mode) { mutableStateOf<Double?>(null) }
-    var window by remember(selectedKey, activeId, mode) { mutableStateOf<LongRange?>(null) }
+    var hr by remember(selectedKey, windowDayKey, activeId, mode) { mutableStateOf<List<HrBucket>>(emptyList()) }
+    var zones by remember(selectedKey, windowDayKey, activeId, mode) { mutableStateOf<List<Double>?>(null) }
+    var belowZone1 by remember(selectedKey, windowDayKey, activeId, mode) { mutableStateOf<Double?>(null) }
+    var window by remember(selectedKey, windowDayKey, activeId, mode) { mutableStateOf<LongRange?>(null) }
     var activity by remember { mutableStateOf<WorkoutRow?>(null) }
     var workoutsLoaded by remember(activeId) { mutableStateOf(false) }
     LaunchedEffect(activeId) {
         vm.loadWorkouts().join()
         workoutsLoaded = true
     }
-    LaunchedEffect(selectedKey, days, activeId, mode, live.lastSyncAt, live.syncChunksThisSession) {
-        val date = detailDate(selectedKey)
+    LaunchedEffect(selectedKey, windowDayKey, days, activeId, mode, live.lastSyncAt, live.syncChunksThisSession) {
         val zone = ZoneId.systemDefault()
         val now = System.currentTimeMillis() / 1000
+        val currentLogicalDay = logicalDay(java.time.Instant.ofEpochSecond(now).atZone(zone))
+        val anchor = windowDayKey?.let(::detailDate) ?: if (dayKey == null) currentLogicalDay else detailDate(selectedKey)
+        val nextMarkerKey = detailDate(selectedKey).plusDays(1).toString()
         val markers = if (mode == DayCycleMode.SLEEP_ONSET) runCatching {
             vm.repo.metricSeriesComputedUnion(activeId, DayCycleIntelligenceIntegration.ONSET_KEY,
-                selectedKey, date.plusDays(1).toString())
+                selectedKey, nextMarkerKey)
         }.getOrDefault(emptyList()) else emptyList()
-        val start = markers.firstOrNull { it.day == selectedKey }?.value?.toLong() ?: date.atStartOfDay(zone).toEpochSecond()
-        val calendarEnd = date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1
-        val end = minOf(now, markers.firstOrNull { it.day == date.plusDays(1).toString() }?.value?.toLong()?.minus(1) ?: calendarEnd)
-        window = start..end
-        hr = runCatching { vm.repo.hrBucketsUnion(activeId, start, end, 300) }.getOrDefault(emptyList())
-        val samples = runCatching { vm.repo.hrSamplesUnion(activeId, start, end, limit = 200_000) }.getOrDefault(emptyList())
+        val resolvedWindow = RecoveryStrainDetailLogic.strainWindow(
+            anchor.atStartOfDay(zone).toEpochSecond(), anchor.plusDays(1).atStartOfDay(zone).toEpochSecond(),
+            anchor == currentLogicalDay, mode == DayCycleMode.SLEEP_ONSET,
+            RecoveryStrainDetailLogic.timestampSeconds(markers.firstOrNull { it.day == selectedKey }?.value),
+            RecoveryStrainDetailLogic.timestampSeconds(markers.firstOrNull { it.day == nextMarkerKey }?.value), now)
+        window = resolvedWindow
+        hr = if (resolvedWindow == null) emptyList() else runCatching {
+            vm.repo.hrBucketsUnion(activeId, resolvedWindow.first, resolvedWindow.last, 300)
+        }.getOrDefault(emptyList())
+        val samples = if (resolvedWindow == null) emptyList() else runCatching {
+            vm.repo.hrSamplesUnion(activeId, resolvedWindow.first, resolvedWindow.last, limit = 200_000)
+        }.getOrDefault(emptyList())
         val split = samples.takeIf { it.isNotEmpty() }?.let { HrZones.timeInZone(it, profile.hrZoneSet) }
         zones = split?.seconds?.map { it / 60 }
         belowZone1 = split?.belowZone1?.div(60)
@@ -214,7 +223,8 @@ fun StrainDetailScreen(
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
                 ScoreDial(uiString(R.string.d2b_strain), strainDisplay ?: uiString(R.string.home_no_value), progress = strain?.div(21)?.toFloat(),
-                    color = Palette.strainPrimary, targetRange = band?.let { it.low / 21f..it.high / 21f })
+                    color = Palette.strainPrimary, target = band?.let { it.low / 21f },
+                    targetRange = band?.let { it.low / 21f..it.high / 21f })
                 StatusPill(uiString(when (target) {
                     RecoveryStrainDetailLogic.TargetStatus.Unavailable -> if (band == null) R.string.d2b_target_unavailable else R.string.d2b_strain_unavailable
                     RecoveryStrainDetailLogic.TargetStatus.Under -> R.string.d2b_target_under
@@ -273,11 +283,12 @@ fun ActivityDetailScreen(vm: AppViewModel, row: WorkoutRow, onBack: () -> Unit) 
     val effort = current.strain?.takeIf { it.isFinite() && it in 0.0..100.0 }
     LaunchedEffect(current, activeId) {
         hr = vm.workoutHrBuckets(current.startTs, current.endTs, current.source, current.deviceId, activeId)
-        val imported = parseZonePercents(current.zonesJSON)
-        val minutes = (current.durationS ?: (current.endTs - current.startTs).toDouble()) / 60
-        importedZones = imported != null && minutes > 0
-        zones = if (importedZones) imported?.map { it * minutes / 100 }
-            else vm.workoutZoneMinutes(current.startTs, current.endTs, current.source, current.deviceId, activeId)
+        val duration = current.durationS ?: (current.endTs - current.startTs).toDouble()
+        val imported = RecoveryStrainDetailLogic.zoneDistribution(parseZonePercents(current.zonesJSON), duration)
+        val distribution = imported ?: RecoveryStrainDetailLogic.zoneDistribution(null, duration,
+            vm.workoutZoneMinutes(current.startTs, current.endTs, current.source, current.deviceId, activeId))
+        zones = distribution?.minutes
+        importedZones = distribution?.imported ?: false
     }
     BackHandler(onBack = onBack)
     LazyScreenScaffold(title = null, topPadding = Metrics.space8) {

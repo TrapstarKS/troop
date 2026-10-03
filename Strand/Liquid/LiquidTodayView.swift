@@ -1439,7 +1439,7 @@ struct LiquidTodayView: View {
                 NavigationLink(value: TabRoute.recoveryDetailForDay(dayKey: cachedRecoveryDayKey ?? selectedDayKey)) { tile }
                 .buttonStyle(.plain)
             } else if key == HeroRingMetric.effort {
-                NavigationLink(value: TabRoute.strainDetailForDay(dayKey: selectedDayKey, effortOverride: effortStrain(displayDay).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil })) { tile }
+                NavigationLink(value: TabRoute.strainDetailForDay(dayKey: selectedDayKey, effortOverride: effortStrain(displayDay).flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil }, windowDayKey: Repository.localDayKey(selectedLogicalDay))) { tile }
                 .buttonStyle(.plain)
             } else if key == HeroRingMetric.rest {
                 NavigationLink(value: TabRoute.sleepDetail) { tile }.buttonStyle(.plain)
@@ -1549,6 +1549,7 @@ struct LiquidTodayView: View {
 
     private var homeDashboard: some View {
         HomeDashboardContent(dayKey: selectedDayKey, dayOffset: selectedDayOffset,
+            windowDayKey: Repository.localDayKey(selectedLogicalDay),
             day: displayDay, sleepScore: restScore, recovery: cachedChargeDisplay.pct,
             recoveryDayKey: cachedRecoveryDayKey ?? selectedDayKey,
             recoveryCaption: chargeCarryCaption, strain: effortStrain(displayDay),

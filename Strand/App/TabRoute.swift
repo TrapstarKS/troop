@@ -39,7 +39,7 @@ enum TabRoute: Hashable {
     case recoveryDetail
     case strainDetail
     case recoveryDetailForDay(dayKey: String?)
-    case strainDetailForDay(dayKey: String?, effortOverride: Double?)
+    case strainDetailForDay(dayKey: String?, effortOverride: Double?, windowDayKey: String? = nil)
     case sleepDetailForDay(dayKey: String?)
     case localBriefing
     case sleepDetail
@@ -89,7 +89,7 @@ extension View {
                 case .recoveryDetail: RecoveryDetailView()
                 case .strainDetail: StrainDetailView()
                 case .recoveryDetailForDay(let dayKey): RecoveryDetailView(dayKey: dayKey)
-                case .strainDetailForDay(let dayKey, let effortOverride): StrainDetailView(dayKey: dayKey, effortOverride: effortOverride)
+                case .strainDetailForDay(let dayKey, let effortOverride, let windowDayKey): StrainDetailView(dayKey: dayKey, effortOverride: effortOverride, windowDayKey: windowDayKey)
                 case .sleepDetailForDay(let dayKey): SleepView(initialDayKey: dayKey)
                 case .localBriefing: LocalBriefingView()
                 case .sleepDetail: SleepView()

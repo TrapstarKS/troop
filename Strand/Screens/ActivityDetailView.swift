@@ -120,14 +120,14 @@ struct ActivityDetailView: View {
         let selected = row
         let deviceId = repo.deviceId
         let buckets = await repo.workoutHrBuckets(from: selected.startTs, to: selected.endTs, source: selected.source)
-        var zones: [Double]? = nil
-        let percents = WorkoutZones.percents(selected.zonesJSON)
-        if let percents {
-            let duration = selected.durationS ?? Double(selected.endTs - selected.startTs)
-            if duration > 0 { zones = percents.map { duration / 60 * $0 / 100 } }
-        }
-        if zones == nil {
-            zones = await repo.workoutZoneMinutes(from: selected.startTs, to: selected.endTs, zoneSet: profile.hrZoneSet, source: selected.source)
+        let duration = selected.durationS ?? Double(selected.endTs - selected.startTs)
+        var distribution = RecoveryStrainDetailLogic.zoneDistribution(
+            importedPercentages: WorkoutZones.percents(selected.zonesJSON), durationSeconds: duration)
+        if distribution == nil {
+            let recorded = await repo.workoutZoneMinutes(from: selected.startTs, to: selected.endTs,
+                                                       zoneSet: profile.hrZoneSet, source: selected.source)
+            distribution = RecoveryStrainDetailLogic.zoneDistribution(
+                importedPercentages: nil, durationSeconds: duration, recordedMinutes: recorded)
         }
         guard row.startTs == selected.startTs, row.endTs == selected.endTs, row.source == selected.source,
               repo.deviceId == deviceId, !Task.isCancelled else { return }
@@ -136,8 +136,8 @@ struct ActivityDetailView: View {
         points = buckets.enumerated().map { index, bucket in
             TrendPoint(date: Date(timeIntervalSince1970: Double(bucket.ts)), value: bucket.bpm, segment: segmentIds[index])
         }
-        minutes = zones
-        importedZones = percents != nil
+        minutes = distribution?.minutes
+        importedZones = distribution?.imported ?? false
         loaded = true
     }
 
