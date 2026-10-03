@@ -26,7 +26,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # canonical GitHub mirror coordinates (override via env if ever needed)
-GH_REPO="${GH_REPO:-ryanbr/noop}"
+GH_REPO="${GH_REPO:-TrapstarKS/troop}"
 
 VER="${1:?usage: release.sh <version> <asset...> [-- notes]}"; shift
 TAG="v$VER"
@@ -54,24 +54,14 @@ if [[ ! "$NOTES" =~ $NOTES_HANDLE_RE ]]; then
   echo "        re-run release.sh with -- \"<notes>\" to refresh them; publishing is idempotent"
 fi
 
-# ── iOS asset: ONE canonical name ────────────────────────────────────────────
-# The iOS .ipa ships under a SINGLE name: NOOP-v<V>-ios.ipa, which every doc
-# (README, docs/IOS.md, the wiki) and the AltStore source point at. We used to
-# upload BOTH NOOP-v<V>.ipa and a -ios alias for backward-compat with a v5.2.5
-# cached-source 404, but that transition is long done, and two byte-identical iOS
-# files only confused users about which to install. So: rename any plain
-# NOOP-v*.ipa to its -ios name and ship exactly one iOS file.
+# Normalize legacy local IPA names to the fork workflow's canonical filename.
 NEW_ASSETS=()
 for f in ${ASSETS[@]+"${ASSETS[@]}"}; do
   case "$f" in
-    *NOOP-v*.ipa)
-      if [ -f "$f" ] && [ "${f%-ios.ipa}" = "$f" ]; then   # a plain .ipa -> ship ONLY as -ios
-        ios_f="${f%.ipa}-ios.ipa"
-        cp -f "$f" "$ios_f" 2>/dev/null && NEW_ASSETS+=("$ios_f") \
-          && echo "  iOS asset: $(basename "$ios_f")"
-      else
-        NEW_ASSETS+=("$f")
-      fi ;;
+    *.ipa)
+      ios_f="$(dirname "$f")/NOOP-ios-unsigned-v${VER}.ipa"
+      if [ "$f" != "$ios_f" ]; then cp "$f" "$ios_f"; fi
+      NEW_ASSETS+=("$ios_f") ;;
     *) NEW_ASSETS+=("$f") ;;
   esac
 done
@@ -178,13 +168,15 @@ if [ "$GH_OK" = 1 ]; then
   IPA_ASSET=""; ZIP_ASSET=""
   for f in ${ASSETS[@]+"${ASSETS[@]}"}; do
     case "$f" in
-      *NOOP-v*-ios.ipa|*NOOP-v*.ipa) [ -z "$IPA_ASSET" ] && [ -f "$f" ] && IPA_ASSET="$f" ;;
+      *NOOP-ios-unsigned-v*.ipa|*NOOP-v*-ios.ipa|*NOOP-v*.ipa) [ -z "$IPA_ASSET" ] && [ -f "$f" ] && IPA_ASSET="$f" ;;
       *NOOP-v*-macos.zip|*NOOP-v*macos*.zip) [ -f "$f" ] && ZIP_ASSET="$f" ;;
     esac
   done
   if [ -n "$IPA_ASSET" ] && [ -x "$HERE/update-altstore-source.sh" ]; then
     echo "→ refreshing AltStore source for $VER"
-    "$HERE/update-altstore-source.sh" "$VER" "$IPA_ASSET" \
+    "$HERE/update-altstore-source.sh" --repo "$GH_REPO" --source "$HERE/../altstore-source.json" \
+      --asset-url "https://github.com/${GH_REPO}/releases/download/v${VER}/$(basename "$IPA_ASSET")" \
+      --version "$VER" --ipa "$IPA_ASSET" \
       || echo "  ⚠ AltStore source update failed — run Tools/update-altstore-source.sh by hand" >&2
     echo "  ↳ remember to commit + push altstore-source.json"
   fi
