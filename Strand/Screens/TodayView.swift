@@ -1042,7 +1042,7 @@ struct TodayView: View {
             // gate folded the whole history while the Charge engine folded from the epoch, so the pill could
             // read solid off nights the ring is no longer using.
             let hrvBase = repo.chargeBaselines?.hrv
-                ?? Baselines.foldHistory([], cfg: Baselines.hrvCfg, baselineEpoch: repo.effectiveHrvBaselineEpoch)
+                ?? Baselines.foldHistory([], dayKeys: [], cfg: Baselines.hrvCfg, baselineEpoch: repo.effectiveHrvBaselineEpoch)
             conf = ScoreConfidence.charge(recovery: displayDay?.recovery, hrvBaseline: hrvBase)
         case "sleep_performance":
             // A watch night with a Rest score reads as built; without one it's still calibrating.
