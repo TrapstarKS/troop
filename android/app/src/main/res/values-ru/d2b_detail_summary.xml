@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="d2b_zone_group_low">Время в зонах 1–3</string>
+    <string name="d2b_zone_group_high">Время в зонах 4–5</string>
+    <string name="d2b_strength_duration">Длительность силовой тренировки</string>
+</resources>

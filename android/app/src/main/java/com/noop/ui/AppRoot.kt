@@ -938,11 +938,14 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         if (key == UpdateStore.WHATS_NEW_DEEP_LINK) {
                             showWhatsNewFromInbox = true
                         } else {
-                            val route = when (key) {
-                                "trends" -> Destination.Trends.route
-                                else -> null
+                            if (key == "trends") {
+                                selectedTabRoute = Destination.Plan.route
+                                nav.navigate(Destination.Plan.route) {
+                                    popUpTo(nav.graph.startDestinationId)
+                                    launchSingleTop = true
+                                }
+                                nav.navigate(Destination.Trends.route) { launchSingleTop = true }
                             }
-                            if (route != null && route != currentRoute) nav.navigateTopLevel(route)
                         }
                     },
                     onRestore = { cardId ->
@@ -979,7 +982,9 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
             current = selectedTab,
             onTabSelected = { dest ->
                 if (dest != Destination.Coach) selectedTabRoute = dest.route
-                if (dest.route != currentRoute) {
+                if (dest != Destination.Coach && nav.popBackStack(dest.route, false)) {
+                    // Reselect returns to the owning tab root.
+                } else if (dest.route != currentRoute) {
                     if (dest == Destination.Coach) nav.navigate(dest.route)
                     else nav.navigateTopLevel(dest.route)
                 }

@@ -1460,11 +1460,7 @@ private fun SessionRow(
 @Composable
 internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetails: Boolean = false, onDismiss: () -> Unit) {
     if (!expandedDetails) {
-        ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = Palette.surfaceBase,
-        ) {
+        DetailFullScreenDialog(onDismiss = onDismiss) {
             ActivityDetailScreen(vm, row, onBack = onDismiss)
         }
         return

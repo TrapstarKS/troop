@@ -10,6 +10,20 @@ enum RecoveryStrainDetailLogic {
         let imported: Bool
     }
 
+    static func comparisonValue(_ value: Double?, decimals: Int) -> Double? {
+        guard let value, value.isFinite, (0...1).contains(decimals) else { return nil }
+        let factor = decimals == 0 ? 1.0 : 10.0
+        let scaled = value * factor
+        let rounded = scaled.isFinite ? scaled.rounded() / factor : value
+        return rounded == 0 ? 0 : rounded
+    }
+
+    static func comparisonDelta(current: Double?, mean: Double?, decimals: Int) -> Double? {
+        guard let current = comparisonValue(current, decimals: decimals),
+              let mean = comparisonValue(mean, decimals: decimals) else { return nil }
+        return comparisonValue(current - mean, decimals: decimals)
+    }
+
     static func zoneDistribution(importedPercentages: [Double]?, durationSeconds: Double,
                                  recordedMinutes: [Double]? = nil) -> ZoneDistribution? {
         if let importedPercentages, durationSeconds.isFinite, durationSeconds > 0 {

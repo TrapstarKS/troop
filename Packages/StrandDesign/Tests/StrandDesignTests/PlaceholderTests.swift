@@ -34,6 +34,23 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertEqual(StrandPalette.recoveryBandColor(67), StrandPalette.recoveryHigh)
     }
 
+    func testRecoveryPreferencesAndUnavailableScores() {
+        let previousStyle = StrandPalette.chartStyle
+        defer { StrandPalette.chartStyle = previousStyle }
+        for style in [ChartStyle.classic, .titanium] {
+            StrandPalette.chartStyle = style
+            for score in [-10.0, 0, 33.99, 34, 66.99, 67, 100, 110] {
+                let expected = style == .classic
+                    ? StrandPalette.sample(stops: StrandPalette.recoveryStops, at: score / 100)
+                    : StrandPalette.recoveryBandColor(score)
+                XCTAssertEqual(StrandPalette.recoveryColor(score), expected)
+            }
+            for score in [Double.nan, .infinity, -.infinity] {
+                XCTAssertEqual(StrandPalette.recoveryColor(score), StrandPalette.textTertiary)
+            }
+        }
+    }
+
     func testRecoveryColorEndpoints() {
         // Score 0 should equal the indigo start; 100 the mint end.
         let low = StrandPalette.recoveryColor(0).rgbaComponents

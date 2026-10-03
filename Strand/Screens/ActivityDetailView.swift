@@ -5,6 +5,7 @@ import WhoopStore
 
 struct ActivityDetailView: View {
     @EnvironmentObject private var repo: Repository
+    @State private var viewportWidth: CGFloat? = nil
     @Environment(\.dismiss) private var dismiss
     @StateObject private var profile = ProfileStore()
     @State private var row: WorkoutRow
@@ -49,7 +50,7 @@ struct ActivityDetailView: View {
                     .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
             }.frame(maxWidth: .infinity)
             ScoreDial(label: String(localized: "Activity strain"), value: strain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—",
-                      progress: strain.map { UnitFormatter.effortValue($0, scale: .whoop) / 21 }, color: StrandPalette.strainPrimary)
+                      progress: strain.map { UnitFormatter.effortValue($0, scale: .whoop) / 21 }, color: StrandPalette.strainPrimary, viewportWidth: viewportWidth)
                 .frame(maxWidth: .infinity)
             NoopCard {
                 VStack(spacing: NoopMetrics.space4) {
@@ -84,6 +85,10 @@ struct ActivityDetailView: View {
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
             }.buttonStyle(.plain)
         }
+        .background(GeometryReader { geometry in
+            Color.clear.onAppear { viewportWidth = geometry.size.width }
+                .onChange(of: geometry.size.width) { viewportWidth = $0 }
+        })
         .navigationTitle(WorkoutSource.displaySport(row.sport))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

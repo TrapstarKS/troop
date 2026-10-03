@@ -6,7 +6,11 @@ Recovery uses the requested resolved day. A Home read carried from a previous ni
 
 Recovery's whole-percent display truncates toward zero through one shared presentation helper. The scorer stores a continuous value; rounding 66.75 to 67 would otherwise show a high-band number with a moderate-band color. Truncation keeps the displayed number in the raw score's 0–33, 34–66 or 67–100 band. Stored scores, chart heights, comparisons and classifications retain their original precision. Home should use the same helper.
 
+Contributor panels use compact icon rows, separators and a shared comparison legend. The secondary number is the preceding 30-day mean; accessibility also names the mean and signed change. Comparisons quantize the reading and mean at the displayed precision before computing change. Equal displayed readings produce unsigned zero and a neutral indicator. The paired standalone Swift oracle includes values on either side of half ties, nonfinite values and overflow cases.
+
 Strain uses the existing `UnitFormatter` display conversion: stored Effort × 21/100. This reversible change of units leaves stored values, imports and analytics untouched; decimal formatting only rounds the visible number. The score is from NOOP's local model and does not claim the official proprietary model. The suggested range reuses the existing recovery-dependent Coupled view bands. A missing recovery leaves the range unavailable. Both endpoints are included in the within-range state.
+
+The Strain summary groups recorded time in Zones 1–3 and 4–5, preserves a stored Steps value when present, and leaves strength duration unavailable. It does not infer muscular work from heart rate or workout names. The summary and guidance precede activities, the day HR trace and complete zone bars. The guidance action opens the existing local scoring guide. Full detail dials use the design owner's responsive viewport API; compact Home dials retain their own size.
 
 Day HR, zones and activity membership use Home's configured calendar or sleep-onset day window. Whole-day zone reads keep the 200,000-row limit used by day scoring instead of the shorter workout default. Chart lines break across absent buckets. Activity ownership follows the start timestamp in the same half-open cycle interval used by the daily workout count.
 
@@ -19,6 +23,8 @@ Imported zone percentages require a positive finite activity duration. Otherwise
 The expanded activity drill-down omits its former Effort summary. Activity's shared score dial is the single score readout in this flow, so opening further details cannot switch that score to a different preferred axis or legacy gauge.
 
 Android detail reads collect the registry's active strap and reset the day/HR read state when it changes. Workout curves, zones and HR recovery accept that snapshot instead of the startup-only device ID; workout-list loads discard results after a source switch. Swift's repository already updates its read device ID from the registry.
+
+Android's primary Recovery, Strain and Activity dialogs draw the shared canvas gradient through the system bars and inset their scrollable content by the safe drawing area. Home content is not used as a navigation-bar backdrop. The expanded legacy activity details remain reachable through their existing sheet.
 
 `WorkoutRow.energyKcal` does not persist an active/total discriminator. Its display is therefore “Recorded energy”, with an explicit explanation. No resting energy is added and no stored row is reinterpreted.
 

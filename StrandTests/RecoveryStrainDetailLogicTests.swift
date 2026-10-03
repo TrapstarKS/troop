@@ -41,6 +41,30 @@ final class RecoveryStrainDetailLogicTests: XCTestCase {
         XCTAssertEqual(lines.joined(separator: "\n"), expected)
     }
 
+    func testStandaloneSwiftOraclePinsDisplayedComparisonPrecisionAndSignedZero() {
+        var lines: [String] = []
+        let values: [Double?] = [nil,.nan,.infinity,-.infinity,-0.0,0,0.01,-0.01,0.05,-0.05,0.15,-0.15,0.5,-0.5,Double(0.5).nextDown,Double(0.5).nextUp,Double(-0.5).nextDown,Double(-0.5).nextUp,56.49,56.5,1e300,Double.greatestFiniteMagnitude]
+        for decimals in [-1,0,1,2] {
+         lines.append(values.map { RecoveryStrainDetailLogic.comparisonValue($0,decimals:decimals).map { String($0.bitPattern) } ?? "unavailable" }.joined(separator:","))
+        }
+        let pairs: [(Double?,Double?,Int)] = [(56,55.999,0),(56,56.01,0),(56,55.5,0),(56.49,55.5,0),(56.5,55.5,0),(14.6,14.61,1),(14.6,14.65,1),(77.1,80.4,1),(nil,56,0),(56,nil,0),(.nan,56,0),(56,.infinity,0),(-1e308,1e308,1)]
+        lines.append(pairs.map { RecoveryStrainDetailLogic.comparisonDelta(current:$0.0,mean:$0.1,decimals:$0.2).map { String($0.bitPattern) } ?? "unavailable" }.joined(separator:","))
+        let expected = """
+        unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable
+        unavailable,unavailable,unavailable,unavailable,0,0,0,0,0,0,0,0,4607182418800017408,13830554455654793216,0,4607182418800017408,13830554455654793216,0,4633078116657397760,4633218854145753088,9094988921128908188,9218868437227405311
+        unavailable,unavailable,unavailable,unavailable,0,0,0,0,4591870180066957722,13815242216921733530,4596373779694328218,13819745816549104026,4602678819172646912,13826050856027422720,4602678819172646912,4602678819172646912,13826050856027422720,13826050856027422720,4633148485401575424,4633148485401575424,9094988921128908188,9218868437227405311
+        unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable
+        0,0,0,0,4607182418800017408,0,13815242216921733530,13837985395039954534,unavailable,unavailable,unavailable,unavailable,unavailable
+        """
+        XCTAssertEqual(lines.joined(separator: "\n"), expected)
+    }
+
+    func testEqualDisplayedReadingsHaveUnsignedZeroChangeAtTheirOwnPrecision() {
+        XCTAssertEqual(RecoveryStrainDetailLogic.comparisonDelta(current: 56, mean: 55.999, decimals: 0)?.bitPattern, 0)
+        XCTAssertEqual(RecoveryStrainDetailLogic.comparisonDelta(current: 56, mean: 56.01, decimals: 0)?.bitPattern, 0)
+        XCTAssertEqual(RecoveryStrainDetailLogic.comparisonDelta(current: 14.6, mean: 14.61, decimals: 1)?.bitPattern, 0)
+    }
+
     func testStrainWindowIncludesPostMidnightCurrentDataAndAfterMidnightOnsets() {
         XCTAssertEqual(RecoveryStrainDetailLogic.strainWindow(calendarStart: 0, nextCalendarStart: 86_400,
             isCurrentDay: true, sleepOnsetMode: false, onset: nil, nextOnset: nil, now: 97_200), 0...97_200)
