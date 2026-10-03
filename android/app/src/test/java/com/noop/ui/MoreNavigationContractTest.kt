@@ -48,7 +48,11 @@ class MoreNavigationContractTest {
         )
         assertTrue(
             "Bottom-tab selections must retain top-level state save/restore",
-            source.contains("if (dest.route != currentRoute) nav.navigateTopLevel(dest.route)"),
+            source.contains("if (dest.route != currentRoute) { if (dest == Destination.Coach) nav.navigate(dest.route) else nav.navigateTopLevel(dest.route) }"),
+        )
+        assertTrue(
+            "The Coach orb must preserve the selected primary tab",
+            source.contains("if (dest != Destination.Coach) selectedTabRoute = dest.route"),
         )
     }
 }

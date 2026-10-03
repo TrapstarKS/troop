@@ -2824,4 +2824,10 @@
     <string name="raw_diag_ecg_probe_start">Avvia acquisizione ECG</string>
     <string name="raw_diag_ecg_probe_stop">Interrompi acquisizione ECG</string>
     <string name="raw_diag_ecg_probe_running">Una acquisizione potrebbe essere ancora attiva su questo strap. Il verdetto va nello strap log.</string>
+    <string name="whoop_nav_home">Home</string>
+    <string name="whoop_nav_plan">Piano</string>
+    <string name="whoop_nav_healthspan">Longevità</string>
+    <string name="whoop_nav_weekly_plan">Piano settimanale</string>
+    <string name="whoop_plan_local_title">La pianificazione settimanale non è ancora disponibile</string>
+    <string name="whoop_plan_local_detail">Diario e tendenze restano disponibili per esaminare abitudini e progressi locali.</string>
 </resources>
