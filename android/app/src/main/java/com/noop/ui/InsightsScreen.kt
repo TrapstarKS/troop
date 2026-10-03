@@ -170,6 +170,8 @@ private data class InsightModel(
 @Composable
 fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     val days by vm.recentDays.collectAsStateWithLifecycle()
+    val registryActiveId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeStrapId = registryActiveId ?: vm.activeStrapId
     var showingWeeklyPlan by remember { mutableStateOf(false) }
     if (showingWeeklyPlan) {
         androidx.compose.ui.window.Dialog(
@@ -196,12 +198,13 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     var numericJournalSeries by remember { mutableStateOf<Map<String, Map<String, Double>>>(emptyMap()) }
     var journalLoaded by remember { mutableStateOf(false) }
     var sleepPerformance by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    androidx.compose.runtime.LaunchedEffect(days, vm.activeStrapId) {
-        sleepPerformance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", vm.activeStrapId)
+    androidx.compose.runtime.LaunchedEffect(days, activeStrapId) {
+        sleepPerformance = vm.repo.resolvedSeries("sleep_performance", "my-whoop", "0001-01-01", "9999-12-31", activeStrapId)
             .points.associate { it.day to it.value }
     }
     val journalSeq by vm.repo.journalRevision.collectAsStateWithLifecycle()
-    var dayOffset by remember { mutableStateOf(0L) }
+    var dayOffset by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0L) }
+    var journalDraftDirty by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     // #656: honour a day the Today journal widget deep-linked to (tapping a bar opens the journal at THAT
     // day). Consumed once on arrival, then cleared so it doesn't re-apply on the next recomposition.
     val pendingJournalDay by vm.pendingJournalDayOffset.collectAsStateWithLifecycle()
@@ -226,14 +229,14 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
     // previous day's answers pinned under "Today" instead of the new day starting blank. We re-stamp this on
     // every lifecycle RESUME, and fold it into the load effect's keys, so the moment the date rolls over the
     // journal reloads for the new day and prior answers move to their real date. iOS parity in InsightsView.
-    var currentDayKey by remember { mutableStateOf(LocalDate.now().toString()) }
+    var currentDayKey by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 val key = LocalDate.now().toString()
                 if (key != currentDayKey) {
-                    if (dayOffset != 0L) dayOffset += ChronoUnit.DAYS.between(LocalDate.parse(currentDayKey), LocalDate.parse(key))
+                    dayOffset = JournalCalendar.rolloverOffset(dayOffset, currentDayKey, key, journalDraftDirty)
                     currentDayKey = key
                 }
             }
@@ -242,8 +245,8 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    androidx.compose.runtime.LaunchedEffect(journalSeq, dayOffset, currentDayKey) {
-        val imported = vm.repo.journal("my-whoop", "0000-01-01", "9999-12-31")
+    androidx.compose.runtime.LaunchedEffect(journalSeq, dayOffset, currentDayKey, activeStrapId) {
+        val imported = vm.repo.importedSourceIds(activeStrapId).flatMap { vm.repo.journal(it, "0000-01-01", "9999-12-31") }
         val native = vm.repo.journal(JOURNAL_DEVICE_ID, "0000-01-01", "9999-12-31")
         val entries = mergeJournalEntries(imported, native)
         val byBehaviour = mutableMapOf<String, MutableSet<String>>()
@@ -332,18 +335,6 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         fullBleedBackground = screenBackdropFullBleed(showDayCycleBackground, skyBehindCards),
     ) {
 
-        // --- "What moves you" deep-link into the v5 Insights Hub (ranked, lag-aware ranked-effect feed +
-        //     personal alcohol/caffeine dose-response). The honest in-Insights entry point; the hub is its
-        //     own destination too. Mirrors the Swift InsightsView.whatMovesYouLink. ---
-        item { WhatMovesYouLink(onOpen = onOpenInsightsHub) }
-
-        item { Spacer(Modifier.height(Metrics.sectionGap - 20.dp)) }
-
-        item {
-            NoopCard(modifier = Modifier.clickable { showingWeeklyPlan = true }) {
-                Text(uiString(R.string.weekly_plan_title), style = NoopType.headline, color = Palette.textPrimary)
-            }
-        }
         // --- Native journal logging (always reachable, the account-free way in) ---
         item {
         // Persist a mutated catalog list and refresh state (the pure edit helpers never touch the
@@ -366,6 +357,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
             onRestoreQuestion = { q -> applyCatalog(restoreJournalItem(catalogItems, q)) },
             answersDayKey = answersDayKey,
             anchorDay = currentDayKey,
+            onDirtyChanged = { journalDraftDirty = it },
             morningPrompt = days.any { it.day == currentDayKey && it.totalSleepMin != null },
             onSave = { day, nextAnswers, nextNumeric, questions ->
                 try {
@@ -388,6 +380,18 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
 
         item { Spacer(Modifier.height(Metrics.sectionGap - 20.dp)) }
 
+        // --- "What moves you" deep-link into the v5 Insights Hub (ranked, lag-aware ranked-effect feed +
+        //     personal alcohol/caffeine dose-response). The honest in-Insights entry point; the hub is its
+        //     own destination too. Mirrors the Swift InsightsView.whatMovesYouLink. ---
+        item { WhatMovesYouLink(onOpen = onOpenInsightsHub) }
+
+        item { Spacer(Modifier.height(Metrics.sectionGap - 20.dp)) }
+
+        item {
+            NoopCard(modifier = Modifier.clickable { showingWeeklyPlan = true }) {
+                Text(uiString(R.string.weekly_plan_title), style = NoopType.headline, color = Palette.textPrimary)
+            }
+        }
         // --- Mind: daily mood check-in + mood ↔ body correlations (Swift Mind-lane
         //     mirror; storage contract + footnote shared verbatim across platforms) ---
         item { MindSection(vm) }

@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -193,18 +194,25 @@ fun JournalLogCard(
     onRestoreQuestion: (String) -> Unit = {},
     answersDayKey: String,
     anchorDay: String,
+    onDirtyChanged: (Boolean) -> Unit,
     morningPrompt: Boolean = false,
     onSave: suspend (String, Map<String, Boolean>, Map<String, Double>, Set<String>) -> Boolean,
 ) {
-    var baselineAnswers by rememberSaveable(dayOffset, anchorDay) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
-    var baselineNumeric by rememberSaveable(dayOffset, anchorDay) { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    var draftAnswers by rememberSaveable(dayOffset, anchorDay) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
-    var draftNumeric by rememberSaveable(dayOffset, anchorDay) { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    val selectedDay = journalDayKey(dayOffset, LocalDate.parse(anchorDay))
+    var baselineAnswers by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var baselineNumeric by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var draftAnswers by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var draftNumeric by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var saving by remember { mutableStateOf(false) }
     var saveFailed by remember { mutableStateOf(false) }
     var pendingOffset by remember { mutableStateOf<Long?>(null) }
     val dirty = draftAnswers != baselineAnswers || draftNumeric != baselineNumeric
-    val answersReady = answersDayKey == journalDayKey(dayOffset, LocalDate.parse(anchorDay))
+    val answersReady = answersDayKey == selectedDay
+    LaunchedEffect(dirty) { onDirtyChanged(dirty) }
+    val liveAnchorDay by rememberUpdatedState(anchorDay)
+    val liveDayOffset by rememberUpdatedState(dayOffset)
+    val liveDirty by rememberUpdatedState(dirty)
+    val liveSaving by rememberUpdatedState(saving)
     LaunchedEffect(dayOffset, answersDayKey, answers, numericAnswers) {
         if (answersDayKey == journalDayKey(dayOffset, LocalDate.parse(anchorDay)) && !dirty) {
             baselineAnswers = answers; baselineNumeric = numericAnswers
@@ -214,8 +222,8 @@ fun JournalLogCard(
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     fun selectDay(offset: Long) {
-        if (saving || !answersReady || offset == dayOffset) return
-        if (dirty) pendingOffset = offset else onDayOffset(offset)
+        if (liveSaving || offset == liveDayOffset) return
+        if (liveDirty) pendingOffset = offset else onDayOffset(offset)
     }
     var editing by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<JournalCatalogItem?>(null) }
@@ -247,7 +255,7 @@ fun JournalLogCard(
                     style = NoopType.body, color = Palette.textPrimary,
                     modifier = Modifier.weight(1f).clickable(enabled = !saving && answersReady) {
                         DatePickerDialog(context, { _, year, month, day ->
-                            selectDay(ChronoUnit.DAYS.between(LocalDate.of(year, month + 1, day), LocalDate.parse(anchorDay)))
+                            selectDay(ChronoUnit.DAYS.between(LocalDate.of(year, month + 1, day), LocalDate.parse(liveAnchorDay)))
                         }, selected.year, selected.monthValue - 1, selected.dayOfMonth).apply {
                             datePicker.maxDate = java.time.ZonedDateTime.now().plusDays(1).toInstant().toEpochMilli()
                         }.show()

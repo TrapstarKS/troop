@@ -54,6 +54,8 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
     val context = LocalContext.current
     val preferences = remember(context) { WeeklyPlanPreferences(context) }
     val reactiveDays by vm.recentDays.collectAsStateWithLifecycle()
+    val registryActiveId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val activeStrapId = registryActiveId ?: vm.activeStrapId
     val journalSeq by vm.repo.journalRevision.collectAsStateWithLifecycle()
     val effortScale = UnitPrefs.effortScale(context)
     var today by remember { mutableStateOf(LocalDate.now().toString()) }
@@ -84,9 +86,9 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
     LaunchedEffect(Unit) {
         if (BuildConfig.ENABLE_DEMO) seedWeeklyPlanDemo(context, today)
     }
-    LaunchedEffect(reactiveDays, journalSeq, today, vm.activeStrapId, selectedWeek) {
-        days = vm.repo.daysMerged(vm.activeStrapId).map { WeeklyPlanDay(it.day, it.totalSleepMin, it.strain) }
-        val imported = vm.repo.importedSourceIds(vm.activeStrapId).flatMap { vm.repo.journal(it, "0001-01-01", today) }
+    LaunchedEffect(reactiveDays, journalSeq, today, activeStrapId, selectedWeek) {
+        days = vm.repo.daysMerged(activeStrapId).map { WeeklyPlanDay(it.day, it.totalSleepMin, it.strain) }
+        val imported = vm.repo.importedSourceIds(activeStrapId).flatMap { vm.repo.journal(it, "0001-01-01", today) }
         val native = vm.repo.journal(JOURNAL_DEVICE_ID, "0001-01-01", today)
         journal = mergeJournalEntries(imported, native).map { WeeklyPlanJournalDay(it.day, it.question, it.answeredYes) }
         val suggested = WeeklyPlanEngine.suggestedGoals(days, today)

@@ -29,17 +29,19 @@ struct JournalLogCard: View {
     @Binding var dayOffset: Int            // -1 = tomorrow, 0 = today, 1 = yesterday
     let anchorDay: String
     let answersDayKey: String
+    let onDirtyChanged: (Bool) -> Void
     let onChanged: () -> Void              // parent re-runs load() after a write
 
     init(importedQuestions: [String], answers: [String: Bool],
          numericAnswers: [String: Double] = [:], dayOffset: Binding<Int>, answersDayKey: String, anchorDay: String,
-         onChanged: @escaping () -> Void) {
+         onDirtyChanged: @escaping (Bool) -> Void, onChanged: @escaping () -> Void) {
         self.importedQuestions = importedQuestions
         self.answers = answers
         self.numericAnswers = numericAnswers
         self._dayOffset = dayOffset
         self.anchorDay = anchorDay
         self.answersDayKey = answersDayKey
+        self.onDirtyChanged = onDirtyChanged
         self.onChanged = onChanged
     }
 
@@ -194,7 +196,11 @@ struct JournalLogCard: View {
             }
         }
         .disabled(saving || answersDayKey != dayKey)
-        .onAppear { if answersDayKey == dayKey && !dirty { resetDraft() } }
+        .onAppear {
+            if answersDayKey == dayKey && !dirty { resetDraft() }
+            onDirtyChanged(dirty)
+        }
+        .onChangeCompat(of: dirty) { onDirtyChanged($0) }
         .onChangeCompat(of: answers) { _ in if answersDayKey == dayKey && !dirty { resetDraft() } }
         .onChangeCompat(of: numericAnswers) { _ in if answersDayKey == dayKey && !dirty { resetDraft() } }
         .onChangeCompat(of: answersDayKey) { _ in if answersDayKey == dayKey && !dirty { resetDraft() } }
