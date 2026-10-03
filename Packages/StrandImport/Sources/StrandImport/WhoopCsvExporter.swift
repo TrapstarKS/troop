@@ -271,6 +271,7 @@ public enum WhoopCsvExporter {
     }
 
     /// The WHOOP column carries an absolute. A true deviation cannot be exported as a temperature.
+    /// Kotlin twin: `WhoopCsvExporter.exportedSkinTempCelsius`.
     static func exportedSkinTempCelsius(_ daily: DailyMetric) -> Double? {
         daily.skinTempC ?? daily.skinTempDevC.flatMap { $0 >= 20 ? $0 : nil }
     }
