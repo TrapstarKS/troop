@@ -242,17 +242,18 @@ struct RootTabView: View {
         // A session left running by a previous launch is back before this view exists
         // (`LiftSessionController.resumeSaved`, from `StrandiOSApp.init`), as the BAR — not as a sheet
         // thrown in the user's face; they open it when they want it.
-        .sheet(isPresented: $liftSession.isPresented) {
+        .sheet(isPresented: $liftSession.isPresented, onDismiss: presentPendingCoach) {
             LiftSessionView { }
         }
     }
 
     private func presentCoach() {
         guard coachEnabled else { return }
-        if quickAction != nil || showDevices {
+        if quickAction != nil || showDevices || liftSession.isPresented {
             pendingCoach = true
             quickAction = nil
             showDevices = false
+            liftSession.isPresented = false
         } else {
             routedPillar = .coach
         }
@@ -346,7 +347,8 @@ struct RootTabView: View {
                 // re-presents cleanly (avoids dismiss/re-present races). Calm easing on re-present.
                 quickAction = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    guard quickAction == nil, !pendingCoach, routedPillar == nil, !showDevices else { return }
+                    guard quickAction == nil, !pendingCoach, routedPillar == nil,
+                          !showDevices, !liftSession.isPresented else { return }
                     withAnimation(Self.sheetEase) { quickAction = picked }
                 }
             }
