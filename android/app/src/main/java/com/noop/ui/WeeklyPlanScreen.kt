@@ -35,6 +35,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.noop.BuildConfig
 import com.noop.R
 import com.noop.data.WeeklyPlanCalendar
@@ -53,6 +54,8 @@ import java.time.LocalDate
 import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 fun WeeklyPlanScreen(vm: AppViewModel) {
@@ -79,16 +82,29 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
     var notice by remember { mutableStateOf<WeeklyPlanNotice?>(null) }
     var catalogItems by remember { mutableStateOf(loadJournalCatalogItems(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    fun refreshDay(day: String) {
+        val next = WeeklyPlanDayAnchor(today, weekOffset).advanced(day)
+        weekOffset = next.weekOffset
+        today = next.today
+    }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                today = LocalDate.now().toString()
+                refreshDay(LocalDate.now().toString())
                 resumeRevision += 1
                 catalogItems = loadJournalCatalogItems(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                refreshDay(LocalDate.now().toString())
+                delay(60_000L)
+            }
+        }
     }
     val currentWeek = WeeklyPlanCalendar.weekStart(today) ?: today
     val selectedWeek = WeeklyPlanCalendar.adding(weekOffset * 7, currentWeek) ?: currentWeek

@@ -773,23 +773,18 @@ private fun BehaviourSection(
     onSelected: (EffectSelection) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
-        Row(
+        SectionHeader(
+            uiString(R.string.plan_behavior_insights),
+            overline = "What moves your ${outcome.outcomeName.lowercase(Locale.US)}",
+        )
+        SegmentedPillControl(
+            items = Outcome.entries.toList(),
+            selection = outcome,
+            label = { it.label },
+            onSelect = onOutcome,
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = Modifier.weight(1f)) {
-                SectionHeader(
-                    uiString(R.string.plan_behavior_insights),
-                    overline = "What moves your ${outcome.outcomeName.lowercase(Locale.US)}",
-                )
-            }
-            SegmentedPillControl(
-                items = Outcome.entries.toList(),
-                selection = outcome,
-                label = { it.label },
-                onSelect = onOutcome,
-            )
-        }
+            adaptsToAvailableWidth = true,
+        )
 
         Text(uiString(R.string.plan_comparison_window), style = NoopType.footnote, color = Palette.textSecondary)
         if (ranked.isEmpty()) {
@@ -1061,6 +1056,8 @@ private fun ExperimentSetupCard(
                     selection = outcome,
                     label = { it.label },
                     onSelect = onOutcome,
+                    modifier = Modifier.fillMaxWidth(),
+                    adaptsToAvailableWidth = true,
                 )
             }
             ExperimentField("Window") {

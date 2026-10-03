@@ -25,6 +25,7 @@ struct WeeklyPlanView: View {
     @State private var notice: WeeklyPlanNotice?
 
     private let preferences = WeeklyPlanPreferences()
+    private let dayTicker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     private var effortScale: EffortScale { UnitPrefs.resolveEffortScale(effortScaleRaw) }
     private var currentWeek: String { WeeklyPlanCalendar.weekStart(today) ?? today }
     private var selectedWeek: String { WeeklyPlanCalendar.adding(days: weekOffset * 7, to: currentWeek) ?? currentWeek }
@@ -88,7 +89,10 @@ struct WeeklyPlanView: View {
         }
         .task(id: "\(repo.refreshSeq):\(repo.journalSeq):\(repo.loaded):\(today):\(weekOffset):\(resumeRevision)") { await load() }
         .onChange(of: scenePhase) { phase in
-            if phase == .active { today = Repository.localDayKey(Date()); resumeRevision += 1 }
+            if phase == .active { refreshDay(Repository.localDayKey(Date())); resumeRevision += 1 }
+        }
+        .onReceive(dayTicker) { now in
+            if scenePhase == .active { refreshDay(Repository.localDayKey(now)) }
         }
         .sheet(item: $editorSession) { session in
             WeeklyPlanEditor(session: session, items: items, effortScale: effortScale,
@@ -207,6 +211,12 @@ struct WeeklyPlanView: View {
         goals = preferences.goals(weekStart: selectedWeek, suggested: suggested)
         notice = preferences.eligibleNotice(today: today, eligibility: eligibility)
         loaded = true
+    }
+
+    private func refreshDay(_ day: String) {
+        let next = WeeklyPlanDayAnchor(today: today, weekOffset: weekOffset).advanced(to: day)
+        weekOffset = next.weekOffset
+        today = next.today
     }
 
     private func openEditor() {
