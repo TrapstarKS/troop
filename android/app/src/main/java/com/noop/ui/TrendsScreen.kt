@@ -44,7 +44,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -282,7 +281,10 @@ private fun resolveSelectedMetric(
     val points = days.filter { window.contains(it.day) }.mapNotNull { day ->
         value(day)?.takeIf { it.isFinite() }?.let { day.day to it }
     }
-    return ResolvedMetric(points.map { it.second }, points.map { it.first })
+    return ResolvedMetric(
+        points.map { it.second }, points.map { it.first },
+        LocalDate.parse(window.start).toEpochDay() * 86_400L..LocalDate.parse(window.end).toEpochDay() * 86_400L,
+    )
 }
 
 private fun trendsWindowLabel(window: TrendsWindow): String {
@@ -505,6 +507,7 @@ private enum class TrendsRange(val days: Int?, val label: String, val longName: 
 private data class ResolvedMetric(
     val values: List<Double>,
     val dates: List<String>,
+    val xDomain: LongRange? = null,
 )
 
 /**
@@ -585,6 +588,7 @@ private fun ChartCard(
     // hero's `valueRange: 0...106` padded ceiling, so the peak + now-cap halo clear the top
     // gridline. 0 keeps the curve filling the full height (the small multiples). (#458/parity)
     chartHeadroom: Float = 0f,
+    xDomain: LongRange? = null,
 ) {
     val body: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
@@ -605,7 +609,7 @@ private fun ChartCard(
             // Chart (fixed height) or sparse placeholder. The chart is flanked by a max/avg/min
             // Y-axis column on the left and a first/mid/last date X-axis row underneath, so the
             // line reads against real numbers and dates instead of a bare unlabelled curve.
-            if (values.size >= 2) {
+            if (values.isNotEmpty()) {
                 ChartWithAxes(
                     values = values,
                     dates = dates,
@@ -613,6 +617,7 @@ private fun ChartCard(
                     tipColor = tipColor,
                     formatY = formatY,
                     headroom = chartHeadroom,
+                    xDomain = xDomain,
                 )
             } else {
                 SparsePlaceholder()
@@ -659,7 +664,7 @@ private fun ChangeChip(change: Double?, higherIsBetter: Boolean?, fmt: (Double) 
 }
 
 /**
- * A [LineChart] with a max/avg/min Y-axis label column and a first/mid/last date X-axis row.
+ * A [LineChart] with a max/avg/min Y-axis label column and calendar date X-axis row.
  * Shared by the hero + small-multiple trend cards so every chart gets the same axis treatment.
  * Date strings (ISO yyyy-MM-dd) are reformatted to "d MMM"; an unparseable string falls back to
  * its raw value so a non-ISO key never blanks a label.
@@ -673,10 +678,16 @@ private fun ChartWithAxes(
     tipColor: Color = color,
     // See ChartCard.chartHeadroom , fraction of the plot left empty above the peak.
     headroom: Float = 0f,
+    xDomain: LongRange? = null,
 ) {
     val maxV = values.max()
     val avgV = values.average()
     val minV = values.min()
+    // UTC civil-day keys preserve calendar spacing across DST and the phone's time zone.
+    val timestamps = remember(dates) {
+        runCatching { dates.map { LocalDate.parse(it).toEpochDay() * 86_400L } }.getOrNull()
+    }
+    val calendarDomain = xDomain ?: timestamps?.singleOrNull()?.let { it..it }
     // Trend chart style (line vs bar). Read here at the single chart choke point (every trend card routes
     // through ChartWithAxes); SharedPreferences isn't reactive, but returning from Settings recomposes the
     // Trends screen, which re-reads it — the same read-on-recompose the Effort scale toggle relies on.
@@ -712,14 +723,15 @@ private fun ChartWithAxes(
                 Box(modifier = Modifier.fillMaxWidth().height(plotHeight)) {
                     if (chartStyle == TrendChartStyle.BAR) {
                         // Bar mode: value-ramp bars from the baseline. No GlowEndCap (the "now" halo is a
-                        // line idiom). selectionEnabled is OFF so BarChart mean-bins a dense window (the
-                        // multi-year "ALL" span) down to the pixel width — a clean silhouette instead of a
-                        // 1000-bar sub-pixel smear. The max/avg/min axis column + footer carry the numbers.
+                        // line idiom). Timestamp bars retain every measured day; index-bin averaging
+                        // would erase missing dates. The max/avg/min axis column + footer carry numbers.
                         BarChart(
                             values = values,
                             modifier = Modifier.fillMaxSize(),
                             color = color,
                             selectionEnabled = false,
+                            timestamps = timestamps,
+                            xDomain = calendarDomain,
                         )
                     } else {
                         LineChart(
@@ -732,12 +744,16 @@ private fun ChartWithAxes(
                             // so a tapped Effort day can't print the stored 0-100 value beside a 0-21 axis.
                             formatValue = formatY,
                             selectionLabels = dates.map(::prettyAxisDate),
+                            timestamps = timestamps,
+                            segmentIds = timestamps?.let { hrGapSegmentIds(it, 86_400L) },
+                            xDomain = calendarDomain,
+                            showsPoints = true,
                         )
-                        GlowEndCap(values = values, tipColor = tipColor)
+                        GlowEndCap(values = values, tipColor = tipColor, timestamps = timestamps, xDomain = calendarDomain)
                     }
                 }
             }
-            val axisLabels = trendAxisLabels(dates)
+            val axisLabels = trendAxisLabels(dates, calendarDomain)
             if (axisLabels.isNotEmpty()) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     axisLabels.forEach { label ->
@@ -765,18 +781,36 @@ internal enum class TrendAxisAnchor { START, CENTER, END }
 
 internal data class TrendAxisLabel(val day: String, val anchor: TrendAxisAnchor)
 
-/** Selects date labels and pins them to the corresponding start, middle, and end of the plot. */
-internal fun trendAxisLabels(dates: List<String>): List<TrendAxisLabel> = when {
-    dates.size < 2 -> emptyList()
-    dates.size == 2 -> listOf(
-        TrendAxisLabel(dates.first(), TrendAxisAnchor.START),
-        TrendAxisLabel(dates.last(), TrendAxisAnchor.END),
-    )
-    else -> listOf(
-        TrendAxisLabel(dates.first(), TrendAxisAnchor.START),
-        TrendAxisLabel(dates[dates.lastIndex / 2], TrendAxisAnchor.CENTER),
-        TrendAxisLabel(dates.last(), TrendAxisAnchor.END),
-    )
+/** Calendar labels represent the plot's true start, midpoint, and end, including unmeasured dates. */
+internal fun trendAxisLabels(dates: List<String>, xDomain: LongRange? = null): List<TrendAxisLabel> {
+    val timestamps = runCatching { dates.map { LocalDate.parse(it).toEpochDay() * 86_400L } }.getOrNull()
+    val domain = timestampXDomain(dates.size, timestamps, xDomain)
+    if (domain != null) {
+        fun dateAt(epoch: Long) = LocalDate.ofEpochDay(Math.floorDiv(epoch, 86_400L)).toString()
+        if (domain.first == domain.last) return listOf(TrendAxisLabel(dateAt(domain.first), TrendAxisAnchor.CENTER))
+        val endpoints = listOf(
+            TrendAxisLabel(dateAt(domain.first), TrendAxisAnchor.START),
+            TrendAxisLabel(dateAt(domain.last), TrendAxisAnchor.END),
+        )
+        if (domain.last - domain.first <= 86_400L) return endpoints
+        return listOf(
+            endpoints.first(),
+            TrendAxisLabel(dateAt(domain.first + (domain.last - domain.first) / 2), TrendAxisAnchor.CENTER),
+            endpoints.last(),
+        )
+    }
+    return when {
+        dates.size < 2 -> emptyList()
+        dates.size == 2 -> listOf(
+            TrendAxisLabel(dates.first(), TrendAxisAnchor.START),
+            TrendAxisLabel(dates.last(), TrendAxisAnchor.END),
+        )
+        else -> listOf(
+            TrendAxisLabel(dates.first(), TrendAxisAnchor.START),
+            TrendAxisLabel(dates[dates.lastIndex / 2], TrendAxisAnchor.CENTER),
+            TrendAxisLabel(dates.last(), TrendAxisAnchor.END),
+        )
+    }
 }
 
 /** ISO "yyyy-MM-dd" → "d MMM"; falls back to the raw string (or "" when null) if it doesn't parse. */
@@ -855,6 +889,7 @@ private fun MetricTrendCard(
         tipColor = tipColor,
         values = resolved.values,
         dates = resolved.dates,
+        xDomain = resolved.xDomain,
         formatY = fmt,
         change = periodChange(resolved.values),
         higherIsBetter = higherIsBetter,
@@ -952,25 +987,17 @@ private fun RecoveryHistoryCard(days: List<DailyMetric>, range: TrendsRange) {
 /**
  * A glowing dot pinned to a LineChart's latest sample , the Bevel "now" end-cap (a soft halo + bright
  * core + white centre), matching Today's OverviewHRChart. Drawn as a sibling overlay so the shared
- * LineChart stays untouched; it reproduces that chart's point geometry exactly (strokePx 2.5, top/
- * bottom pad strokePx+4, finite-value min/max) so the cap sits on the curve's final point.
+ * LineChart stays shared; it uses that chart's point geometry and timestamp domain so the cap sits
+ * on the final real reading even when the selected window continues after it.
  */
 @Composable
-private fun GlowEndCap(values: List<Double>, tipColor: Color) {
-    val clean = remember(values) { values.filter { it.isFinite() } }
-    if (clean.size < 2) return
+private fun GlowEndCap(values: List<Double>, tipColor: Color, timestamps: List<Long>?, xDomain: LongRange?) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val strokePx = 2.5f
         val topPad = strokePx + 4f
         val bottomPad = strokePx + 4f
-        val minV = clean.min()
-        val maxV = clean.max()
-        val span = (maxV - minV).takeIf { it > 0.0 } ?: 1.0
-        val usableH = (size.height - topPad - bottomPad).coerceAtLeast(1f)
-        val x = size.width  // the latest point sits at the right edge
-        val norm = ((clean.last() - minV) / span).toFloat().coerceIn(0f, 1f)
-        val y = topPad + (1f - norm) * usableH
-        val center = Offset(x, y)
+        val center = pointsFor(values, size.width, size.height, topPad, bottomPad,
+            timestamps = timestamps, xDomain = xDomain).lastOrNull() ?: return@Canvas
         drawCircle(color = tipColor.copy(alpha = 0.30f), radius = 9f, center = center)
         drawCircle(color = tipColor.copy(alpha = 0.65f), radius = 5.5f, center = center)
         drawCircle(color = Palette.tipCore, radius = 2.4f, center = center)

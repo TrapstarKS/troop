@@ -169,11 +169,10 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
             NoopCard {
                 Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
                     Text(stringResource(if (preferences.hasPlan(selectedWeek)) R.string.weekly_plan_overall else R.string.weekly_plan_suggested), style = NoopType.overline, color = Palette.textSecondary)
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
                         Text(if (preferences.hasPlan(selectedWeek)) snapshot.overallPercent?.let { stringResource(R.string.weekly_plan_percent, it) } ?: "—" else "—",
-                            style = NoopType.display(), color = Palette.textPrimary)
-                        Spacer(Modifier.weight(1f))
-                        if (weekOffset == 0) NoopButton(stringResource(if (preferences.hasPlan(selectedWeek)) R.string.weekly_plan_edit else R.string.weekly_plan_create), kind = NoopButtonKind.Secondary, onClick = { openEditor() })
+                            style = NoopType.display(), color = Palette.textPrimary, maxLines = 1)
+                        if (weekOffset == 0) NoopButton(stringResource(if (preferences.hasPlan(selectedWeek)) R.string.weekly_plan_edit else R.string.weekly_plan_create), kind = NoopButtonKind.Secondary, fullWidth = true, onClick = { openEditor() })
                     }
                     if (preferences.hasPlan(selectedWeek)) {
                         snapshot.overallPercent?.let { WeeklyPlanBar(it, Palette.accent) }

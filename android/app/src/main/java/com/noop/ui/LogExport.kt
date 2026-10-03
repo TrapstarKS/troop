@@ -6,7 +6,12 @@ import android.os.Build
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.noop.BuildConfig
+import com.noop.R
 import com.noop.ble.PuffinExperiment
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -83,25 +88,91 @@ object LogExport {
      * multi-MB bundle doesn't stall the caller's dispatcher; only the chooser intent fires back on
      * whatever dispatcher the caller resumed on (Main, for every UI call site today).
      */
-    suspend fun exportBundle(context: Context, entries: List<Pair<String, ByteArray>>, suggestedName: String): File? =
-        runCatching {
+    suspend fun exportBundle(
+        context: Context,
+        entries: List<Pair<String, ByteArray>>,
+        suggestedName: String,
+        write: (suspend (File, ByteArray) -> Unit)? = null,
+        share: ((File) -> Unit)? = null,
+        failed: ((Throwable) -> Unit)? = null,
+    ): File? = exportPreparedFile(context, suggestedName, "application/zip", "Share report bundle",
+        bytes = { zipEntries(entries) }, write = write, share = share, failed = failed)
+
+    internal suspend fun exportReviewedText(
+        context: Context,
+        bytes: ByteArray,
+        suggestedName: String,
+        write: (suspend (File, ByteArray) -> Unit)? = null,
+        share: ((File) -> Unit)? = null,
+        failed: ((Throwable) -> Unit)? = null,
+    ): File? = exportPreparedFile(context, suggestedName, "text/plain", "Share log",
+        bytes = { bytes }, write = write, share = share, failed = failed)
+
+    private suspend fun exportPreparedFile(
+        context: Context,
+        suggestedName: String,
+        contentType: String,
+        chooserTitle: String,
+        bytes: () -> ByteArray?,
+        write: (suspend (File, ByteArray) -> Unit)?,
+        share: ((File) -> Unit)?,
+        failed: ((Throwable) -> Unit)?,
+    ): File? {
+        var staged: File? = null
+        try {
+            currentCoroutineContext().ensureActive()
             val file = withContext(Dispatchers.IO) {
-                zipEntries(entries)?.let { bytes ->
-                    val dir = File(context.cacheDir, "logs").apply { mkdirs() }
-                    File(dir, suggestedName).also { it.writeBytes(bytes) }
+                bytes()?.let { data ->
+                    uniqueFile(context, suggestedName, "share").also { out ->
+                        staged = out
+                        if (write != null) write(out, data) else out.writeBytes(data)
+                    }
                 }
             } ?: return null
-            val send = Intent(Intent.ACTION_SEND).apply {
-                type = "application/zip"
-                putExtra(Intent.EXTRA_STREAM, fileUri(context, file))
-                putExtra(Intent.EXTRA_SUBJECT, suggestedName)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            currentCoroutineContext().ensureActive()
+            if (share != null) share(file) else {
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = contentType
+                    putExtra(Intent.EXTRA_STREAM, fileUri(context, file))
+                    putExtra(Intent.EXTRA_SUBJECT, suggestedName)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(send, chooserTitle))
             }
-            context.startActivity(Intent.createChooser(send, "Share report bundle"))
-            file
-        }.onFailure {
-            Toast.makeText(context, "Couldn't export the bundle: ${it.message}", Toast.LENGTH_LONG).show()
-        }.getOrNull()
+            // ACTION_SEND has no consumer-completion receipt. Retain its unique cache artifact for reads.
+            return file
+        } catch (cancelled: CancellationException) {
+            discardBundle(staged)
+            throw cancelled
+        } catch (error: Throwable) {
+            discardBundle(staged)
+            if (failed != null) failed(error) else
+                Toast.makeText(context, context.getString(R.string.debug_export_failed, error.message.orEmpty()), Toast.LENGTH_LONG).show()
+            return null
+        }
+    }
+
+    private suspend fun discardBundle(file: File?) {
+        if (file != null) withContext(Dispatchers.IO + NonCancellable) {
+            file.delete()
+            file.parentFile?.delete()
+        }
+    }
+
+    private fun uniqueFile(context: Context, name: String, kind: String): File =
+        File(File(exportDir(context), "$kind-${java.util.UUID.randomUUID()}").apply { mkdirs() }, name)
+
+    private fun writePreparationFile(context: Context, name: String, write: (File) -> Unit): File {
+        val file = uniqueFile(context, name, "prepare")
+        try {
+            write(file)
+            return file
+        } catch (error: Throwable) {
+            file.delete()
+            file.parentFile?.delete()
+            throw error
+        }
+    }
 
     /**
      * Mirror the latest strap-log tail into the durable [StrapLogBuffer] (#510). Called from the same UI
@@ -148,23 +219,19 @@ object LogExport {
                 appendLine("─".repeat(40))
             }
             val text = body.ifBlank { "(rolling strap-log buffer is empty; connect to your strap so lines accrue)" }
-            val logFile = File(dir, strapLogFilename(nowMs))
-            logFile.writeText(header + "\n" + text)
-            out.add(logFile)
-
-            // The raw 5/MG capture (JSONL of every backfilled frame) copied alongside as a matching `.bin`
-            // so the scheduled drop is a self-contained pair, mirroring the interactive shareRawAndLog. Only
-            // present when a 5/MG owner has the opt-in capture on and a history sync has run.
+            val entries = arrayListOf("report.txt" to (header + "\n" + text).toByteArray())
             val main = File(context.filesDir, com.noop.ble.WhoopBleClient.WHOOP5_CAPTURE_FILE)
             val prev = File(context.filesDir, "${com.noop.ble.WhoopBleClient.WHOOP5_CAPTURE_FILE}.1")
-            // Same rule as the interactive share: content, not existence. An empty capture file would
-            // otherwise put a zero-byte `.bin` into every scheduled drop, forever.
             if (captureHasFrames(main.length(), prev.length())) {
-                val rawFile = File(dir, rawCaptureFilename(nowMs))
-                rawFile.outputStream().bufferedWriter().use { w ->
-                    for (f in listOf(prev, main)) if (f.exists()) f.bufferedReader().use { r -> r.copyTo(w) }
+                val raw = java.io.ByteArrayOutputStream().use { bytes ->
+                    for (file in listOf(prev, main)) if (file.exists()) file.inputStream().use { it.copyTo(bytes) }
+                    bytes.toByteArray()
                 }
-                out.add(rawFile)
+                entries.add("raw-capture.jsonl" to raw)
+            }
+            for ((name, bytes) in DebugExportReview.prepare(entries)) {
+                val filename = if (name == "raw-capture.jsonl") rawCaptureFilename(nowMs) else strapLogFilename(nowMs)
+                out.add(File(dir, filename).apply { writeBytes(bytes) })
             }
 
             // Retention (#642): scheduled exports accumulate silently with no UI in the loop (unlike an
@@ -245,7 +312,8 @@ object LogExport {
      * Build the shareable strap-log file (header + body + last crash) under cache/logs and return it,
      * so both the single-share and the "raw + log" matched-pair export write the SAME content.
      */
-    private suspend fun writeStrapLogFile(context: Context, logText: String): File {
+    internal suspend fun writeStrapLogFile(context: Context, logText: String,
+        name: String = "noop-strap-log-${timestamp()}.txt"): File {
         // Mirror every interactively-shared tail into the durable rolling buffer (#510) so the scheduled
         // background export has a current source even when the live BLE client is gone.
         mirrorToRollingBuffer(logText)
@@ -268,10 +336,7 @@ object LogExport {
         // tab (#224/#267) arrives with its real stack trace instead of being unreachable.
         val crashText = crashSection(com.noop.CrashCapture.lastCrash(context))
 
-        val dir = File(context.cacheDir, "logs").apply { mkdirs() }
-        val file = File(dir, "noop-strap-log-${timestamp()}.txt")
-        file.writeText(header + "\n" + body + crashText)
-        return file
+        return writePreparationFile(context, name) { it.writeText(header + "\n" + body + crashText) }
     }
 
     /**
@@ -279,7 +344,7 @@ object LogExport {
      * cache/logs and return it, or null if no capture has been recorded yet. Shared by the single
      * share and the "raw + log" matched-pair export so both emit the SAME content.
      */
-    private fun writeCaptureFile(context: Context): File? {
+    internal fun writeCaptureFile(context: Context, name: String = "noop-raw-capture-${timestamp()}.jsonl"): File? {
         val main = File(context.filesDir, com.noop.ble.WhoopBleClient.WHOOP5_CAPTURE_FILE)
         val prev = File(context.filesDir, "${com.noop.ble.WhoopBleClient.WHOOP5_CAPTURE_FILE}.1")
         // An EMPTY capture is no capture. This used to gate on the files EXISTING, and existence is not
@@ -297,14 +362,13 @@ object LogExport {
             appendLine("# App: ${BuildConfig.VERSION_NAME} (${BuildConfig.TIER}) · Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine("# NOTE: contains raw biometric frames (heart rate, R-R, skin temp, motion) and the strap's console text. Share only if you're comfortable with that.")
         }
-        val dir = File(context.cacheDir, "logs").apply { mkdirs() }
-        val out = File(dir, "noop-raw-capture-${timestamp()}.jsonl")
-        out.outputStream().bufferedWriter().use { w ->
-            w.write(header)
-            // Oldest first: previous generation (if rotated), then the live file.
-            for (f in listOf(prev, main)) if (f.exists()) f.bufferedReader().use { r -> r.copyTo(w) }
+        return writePreparationFile(context, name) { out ->
+            out.outputStream().bufferedWriter().use { w ->
+                w.write(header)
+                // Oldest first: previous generation (if rotated), then the live file.
+                for (f in listOf(prev, main)) if (f.exists()) f.bufferedReader().use { r -> r.copyTo(w) }
+            }
         }
-        return out
     }
 
     /**
@@ -312,32 +376,58 @@ object LogExport {
      * Test Centre toggle writes. Concatenates the rolled generation + the live file (oldest first) into one
      * shareable `.txt`. Lines are ALREADY PII-scrubbed by `WhoopBleClient.log()`, so no extra redaction here.
      */
-    suspend fun shareCaptureLog(context: Context) {
-        runCatching {
-            val out = withContext(Dispatchers.IO) { writeCaptureLogFile(context) }
-            if (out == null) {
-                Toast.makeText(
-                    context,
-                    "No detailed capture yet — turn on \"Detailed capture to file\" in Test Centre first.",
-                    Toast.LENGTH_LONG,
-                ).show()
-                return
+    internal suspend fun reviewDebugFiles(
+        context: Context,
+        files: List<Pair<String, File>>,
+        suggestedName: String,
+        bundle: Boolean = false,
+        ticket: Long? = null,
+        read: (suspend () -> List<Pair<String, ByteArray>>)? = null,
+        ownedPreparations: List<File> = emptyList(),
+    ) {
+        try {
+            val preparation = ticket ?: DebugExportReview.shared.beginPreparation()
+            val entries = if (read != null) read() else withContext(Dispatchers.IO) {
+                files.map { (name, file) -> name to file.readBytes() }
             }
-            val send = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, fileUri(context, out))
-                putExtra(Intent.EXTRA_SUBJECT, "NOOP detailed capture log")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            DebugExportReview.shared.stage(entries, ticket = preparation) { prepared ->
+                if (bundle) {
+                    exportBundle(context, prepared, suggestedName)
+                } else {
+                    exportReviewedText(context, prepared.single().second, suggestedName)
+                }
             }
-            context.startActivity(Intent.createChooser(send, "Share captured log"))
-        }.onFailure {
-            Toast.makeText(context, "Couldn't share the capture: ${it.message}", Toast.LENGTH_LONG).show()
+        } finally {
+            for (file in ownedPreparations) discardBundle(file)
         }
+    }
+
+    suspend fun shareCaptureLog(context: Context) {
+        val ticket = DebugExportReview.shared.beginPreparation()
+        var prepared: File? = null
+        try {
+            runCatching {
+                val out = withContext(Dispatchers.IO) { writeCaptureLogFile(context).also { prepared = it } }
+                if (out == null) {
+                    Toast.makeText(
+                        context,
+                        "No detailed capture yet — turn on \"Detailed capture to file\" in Test Centre first.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return
+                }
+                reviewDebugFiles(context, listOf("report.txt" to out), out.name, ticket = ticket,
+                    ownedPreparations = listOf(out))
+            }.onFailure {
+                if (it is CancellationException) throw it
+                Toast.makeText(context, "Couldn't share the capture: ${it.message}", Toast.LENGTH_LONG).show()
+            }
+        } finally { discardBundle(prepared) }
     }
 
     /** Concatenate the rolling capture file's rolled + live generations (oldest first) into a shareable
      *  copy under cache/logs. Null when nothing has been captured yet. */
-    private fun writeCaptureLogFile(context: Context): File? {
+    internal fun writeCaptureLogFile(context: Context, name: String = "noop-capture-${timestamp()}.txt"): File? {
         val main = File(context.filesDir, com.noop.ble.WhoopBleClient.CAPTURE_LOG_FILE)
         val prev = File(context.filesDir, "${com.noop.ble.WhoopBleClient.CAPTURE_LOG_FILE}.1")
         // Content, not existence — the same flaw the raw capture had. This writer opens on demand too,
@@ -347,33 +437,32 @@ object LogExport {
             appendLine("# NOOP detailed capture — rolling strap log (PII-scrubbed at source)")
             appendLine("# App: ${BuildConfig.VERSION_NAME} (${BuildConfig.TIER}) · Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
         }
-        val dir = File(context.cacheDir, "logs").apply { mkdirs() }
-        val out = File(dir, "noop-capture-${timestamp()}.txt")
-        out.outputStream().bufferedWriter().use { w ->
-            w.write(header)
-            for (f in listOf(prev, main)) if (f.exists()) f.bufferedReader().use { r -> r.copyTo(w) }
+        return writePreparationFile(context, name) { out ->
+            out.outputStream().bufferedWriter().use { w ->
+                w.write(header)
+                for (f in listOf(prev, main)) if (f.exists()) f.bufferedReader().use { r -> r.copyTo(w) }
+            }
         }
-        return out
     }
 
     private fun fileUri(context: Context, file: File) =
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
 
     suspend fun shareStrapLog(context: Context, logText: String) {
-        runCatching {
-            // writeStrapLogFile does blocking file IO (#646/#651) — keep it off whatever dispatcher the
-            // caller is on (Main, for every UI call site today).
-            val file = withContext(Dispatchers.IO) { writeStrapLogFile(context, logText) }
-            val send = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, fileUri(context, file))
-                putExtra(Intent.EXTRA_SUBJECT, "NOOP strap log")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val ticket = DebugExportReview.shared.beginPreparation()
+        var prepared: File? = null
+        try {
+            runCatching {
+                // writeStrapLogFile does blocking file IO (#646/#651) — keep it off whatever dispatcher the
+                // caller is on (Main, for every UI call site today).
+                val file = withContext(Dispatchers.IO) { writeStrapLogFile(context, logText).also { prepared = it } }
+                reviewDebugFiles(context, listOf("report.txt" to file), file.name, ticket = ticket,
+                    ownedPreparations = listOf(file))
+            }.onFailure {
+                if (it is CancellationException) throw it
+                Toast.makeText(context, "Couldn't share the log: ${it.message}", Toast.LENGTH_LONG).show()
             }
-            context.startActivity(Intent.createChooser(send, "Share strap log"))
-        }.onFailure {
-            Toast.makeText(context, "Couldn't share the log: ${it.message}", Toast.LENGTH_LONG).show()
-        }
+        } finally { discardBundle(prepared) }
     }
 
     /**
@@ -472,24 +561,24 @@ object LogExport {
      * biometric frames and the strap's own console text.
      */
     suspend fun shareWhoop5Capture(context: Context, whoop5Connected: Boolean, encryptedBond: Boolean) {
-        runCatching {
-            // writeCaptureFile does blocking file IO (#646/#651) — keep it off whatever dispatcher the
-            // caller is on (Main, for every UI call site today).
-            val out = withContext(Dispatchers.IO) { writeCaptureFile(context) }
-            if (out == null) {
-                Toast.makeText(context, noCaptureMsg(context, whoop5Connected, encryptedBond, sharingLog = false), Toast.LENGTH_LONG).show()
-                return
+        val ticket = DebugExportReview.shared.beginPreparation()
+        var prepared: File? = null
+        try {
+            runCatching {
+                // writeCaptureFile does blocking file IO (#646/#651) — keep it off whatever dispatcher the
+                // caller is on (Main, for every UI call site today).
+                val out = withContext(Dispatchers.IO) { writeCaptureFile(context).also { prepared = it } }
+                if (out == null) {
+                    Toast.makeText(context, noCaptureMsg(context, whoop5Connected, encryptedBond, sharingLog = false), Toast.LENGTH_LONG).show()
+                    return
+                }
+                reviewDebugFiles(context, listOf("raw-capture.jsonl" to out), out.name, ticket = ticket,
+                    ownedPreparations = listOf(out))
+            }.onFailure {
+                if (it is CancellationException) throw it
+                Toast.makeText(context, "Couldn't share the capture: ${it.message}", Toast.LENGTH_LONG).show()
             }
-            val send = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, fileUri(context, out))
-                putExtra(Intent.EXTRA_SUBJECT, "NOOP 5/MG protocol capture")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(send, "Share 5/MG capture"))
-        }.onFailure {
-            Toast.makeText(context, "Couldn't share the capture: ${it.message}", Toast.LENGTH_LONG).show()
-        }
+        } finally { discardBundle(prepared) }
     }
 
     /**
@@ -505,21 +594,26 @@ object LogExport {
      * [exportBundle] call (which does its own IO hop for the zip) run back on the caller's dispatcher.
      */
     suspend fun shareRawAndLog(context: Context, logText: String, whoop5Connected: Boolean, encryptedBond: Boolean) {
-        runCatching {
-            val (entries, hasCapture) = withContext(Dispatchers.IO) {
-                val logFile = writeStrapLogFile(context, logText)
-                val capture = writeCaptureFile(context)
-                val entries = arrayListOf("report.txt" to logFile.readBytes())
-                if (capture != null) entries.add(0, "raw-capture.jsonl" to capture.readBytes())
-                entries to (capture != null)
+        val ticket = DebugExportReview.shared.beginPreparation()
+        val preparations = arrayListOf<File>()
+        try {
+            runCatching {
+                val (files, hasCapture) = withContext(Dispatchers.IO) {
+                    val logFile = writeStrapLogFile(context, logText).also { preparations.add(it) }
+                    val capture = writeCaptureFile(context).also { if (it != null) preparations.add(it) }
+                    val files = arrayListOf("report.txt" to logFile)
+                    if (capture != null) files.add(0, "raw-capture.jsonl" to capture)
+                    files to (capture != null)
+                }
+                if (!hasCapture) {
+                    Toast.makeText(context, noCaptureMsg(context, whoop5Connected, encryptedBond, sharingLog = true), Toast.LENGTH_LONG).show()
+                }
+                reviewDebugFiles(context, files, "noop-export-${timestamp()}.zip", bundle = true, ticket = ticket,
+                    ownedPreparations = preparations)
+            }.onFailure {
+                if (it is CancellationException) throw it
+                Toast.makeText(context, "Couldn't export the pair: ${it.message}", Toast.LENGTH_LONG).show()
             }
-            if (!hasCapture) {
-                Toast.makeText(context, noCaptureMsg(context, whoop5Connected, encryptedBond, sharingLog = true), Toast.LENGTH_LONG).show()
-            }
-            val name = "noop-export-${timestamp()}.zip"
-            exportBundle(context, entries, name)
-        }.onFailure {
-            Toast.makeText(context, "Couldn't export the pair: ${it.message}", Toast.LENGTH_LONG).show()
-        }
+        } finally { for (file in preparations) discardBundle(file) }
     }
 }

@@ -27,4 +27,6 @@
     <string name="whoop_sleep_raw_stages">Unverarbeitete Schlafphasen des Geräts</string>
     <string name="whoop_sleep_estimated_stages">Geschätzte Schlafphasen auf dem Gerät</string>
     <string name="whoop_sleep_requested_missing">Keine Schlafdaten für diesen Tag.</string>
+    <string name="whoop_sleep_recorded_subtitle">%1$s aufgezeichnet · %2$s Effizienz</string>
+    <string name="whoop_sleep_in_bed_duration">%1$s im Bett</string>
 </resources>

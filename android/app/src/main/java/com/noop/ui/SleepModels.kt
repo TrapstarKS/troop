@@ -11,7 +11,7 @@ internal data class Stages(
     val deep: Double,
     val rem: Double,
 ) {
-    /** Total time in bed (includes awake). */
+    /** Total recorded or estimated stage minutes (includes awake). */
     val total: Double get() = awake + light + deep + rem
 
     /** Asleep time = total minus awake. */

@@ -1,6 +1,8 @@
 package com.noop.ui
 
 import android.content.Context
+import com.noop.notif.LocalNotificationContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -136,6 +138,8 @@ object WhoopRoute {
     const val stressMonitor = "stress"
     const val weeklyPlan = "weekly_plan"
     const val journal = "insights"
+    const val localBriefing = "local_briefing"
+    const val localNotifications = "local_notifications"
 }
 
 /** A single drawer destination: stable route, display title (localized via [titleRes]), sidebar icon. */
@@ -175,6 +179,8 @@ internal enum class Destination(
     // it is deliberately absent from every [DrawerGroup]: the drawer groups mirror the iOS More list
     // one-for-one, and the iOS twin hangs off Coach in the same way.
     CoachSettings("coach_settings", R.string.coach_settings, Icons.Filled.Tune),
+    LocalBriefing(WhoopRoute.localBriefing, R.string.local_outlook, Icons.Filled.AutoAwesome),
+    LocalNotifications(WhoopRoute.localNotifications, R.string.nav_notifications, Icons.Filled.Notifications),
     InsightsHub("insights_hub", R.string.nav_insights_hub, Icons.Filled.Insights),
     Insights("insights", R.string.nav_insights, Icons.Filled.Insights),
     Explore("explore", R.string.nav_explore, Icons.Filled.Explore),
@@ -222,6 +228,10 @@ internal enum class Destination(
     More("more", R.string.nav_more, Icons.Filled.Menu);
 
     companion object {
+        /** Details retain their caller's tab; only an exact root changes its selection. */
+        fun rootForRoute(route: String?): Destination? =
+            listOf(Today, Health, Plan, More).firstOrNull { it.route == route }
+
         /** Resolve the destination owning the current back-stack route (defaults to Today). */
         fun forRoute(route: String?): Destination =
             entries.firstOrNull {
@@ -253,7 +263,7 @@ internal val drawerGroups: List<DrawerGroup> = listOf(
     ), defaultExpanded = true),
     DrawerGroup("Body", R.string.more_group_body, listOf(
         Destination.Sleep, Destination.Live, Destination.Workouts, Destination.VitalSigns,
-        Destination.LabBook, Destination.Stress, Destination.Breathe, Destination.Intervals,
+        Destination.LabBook, Destination.Healthspan, Destination.Stress, Destination.Breathe, Destination.Intervals,
         Destination.Rhythm,
     ), defaultExpanded = true),
     DrawerGroup("Data", R.string.more_group_data, listOf(
@@ -516,23 +526,52 @@ object BottomBarStyleStore {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppRoot(viewModel: AppViewModel = viewModel()) {
+fun AppRoot(
+    viewModel: AppViewModel = viewModel(),
+    localNotificationRoute: String? = null,
+    onLocalNotificationRouteConsumed: (String) -> Unit = {},
+    notificationContext: LocalNotificationContext? = null,
+    onNotificationContextConsumed: (LocalNotificationContext) -> Unit = {},
+) {
     val nav = rememberNavController()
+    val coachOwner = requireNotNull(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current)
 
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val current = Destination.forRoute(currentRoute)
     var selectedTabRoute by rememberSaveable { mutableStateOf(Destination.Today.route) }
-    LaunchedEffect(current) {
-        if (current in listOf(Destination.Today, Destination.Health, Destination.Plan, Destination.More)) {
-            selectedTabRoute = current.route
-        }
+    LaunchedEffect(currentRoute) {
+        Destination.rootForRoute(currentRoute)?.let { selectedTabRoute = it.route }
     }
     val selectedTab = Destination.forRoute(selectedTabRoute)
     var showQuickActions by remember { mutableStateOf(false) }
     // The Updates inbox sheet (opened by the Today header bell). The store is a process singleton so
     // the Today cards and the import path post to the same inbox this sheet renders.
     val context = androidx.compose.ui.platform.LocalContext.current
+    val openCoach = {
+        val route = coachDestination(com.noop.ai.AiKeyStore.hasKey(context))
+        if (route != currentRoute) nav.navigate(route) { launchSingleTop = true }
+    }
+    LaunchedEffect(localNotificationRoute) {
+        localNotificationRoute?.let { route ->
+            localNotificationDestination(route, com.noop.ai.AiKeyStore.hasKey(context))?.let { target ->
+                selectedTabRoute = target.root
+                nav.navigateShellDetail(target)
+            }
+            onLocalNotificationRouteConsumed(route)
+        }
+    }
+    LaunchedEffect(notificationContext) {
+        notificationContext?.let { notice ->
+            datedNotificationDestination(notice.route)?.let { target ->
+                selectedTabRoute = target.root
+                nav.navigateShellDetail(target)
+                if (target.detail == LOCAL_NOTICE_ROUTE) {
+                    nav.currentBackStackEntry?.savedStateHandle?.set("localNotificationContext", HashMap(notice.wireFields))
+                }
+                onNotificationContextConsumed(notice)
+            }
+        }
+    }
     val updateStore = remember { UpdateStore.from(context) }
     var showUpdatesInbox by remember { mutableStateOf(false) }
     // #984: the changelog sheet a What's New inbox row opens. Held here (not inside the inbox) so it
@@ -599,8 +638,8 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         onTabSelected = { dest ->
                             if (dest != Destination.Coach) selectedTabRoute = dest.route
                             if (dest.route != currentRoute) {
-                                if (dest == Destination.Coach) nav.navigate(dest.route)
-                                else nav.navigateTopLevel(dest.route)
+                                if (dest == Destination.Coach) openCoach()
+                                else if (!nav.popBackStack(dest.route, false)) nav.navigateTopLevel(dest.route)
                             }
                         },
                     )
@@ -654,7 +693,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         onOpenUpdates = { showUpdatesInbox = true },
                         // The leading profile avatar opens Settings (where the photo is set/changed),
                         // mirroring iOS's avatar-leading Today header. The drawer hamburger is unchanged.
-                        onOpenSettings = { nav.navigateTopLevel(Destination.Settings.route) },
+                        onOpenSettings = { nav.navigate("settings/${SettingsCategory.PROFILE.name}") },
                         // The opt-in Hydration card (only shown when Hydration tracking is on) pushes its
                         // detail. A normal push so the back-stack returns to Today.
                         onOpenHydration = { nav.navigate(Destination.Hydration.route) },
@@ -673,7 +712,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         onOpenCoupled = { nav.navigate(Destination.CoupledView.route) },
                         // #1862: the Coach launcher hands off here. Without this the sheet's buttons
                         // would fall back to the parameter's no-op default and silently do nothing.
-                        onOpenCoach = { nav.navigateTopLevel(Destination.Coach.route) },
+                        onOpenCoach = { openCoach() },
                         // The "workout in progress" indicator: raise the one-shot the Live screen consumes to
                         // re-open the in-exercise overlay, then route to Live. One tap from Today (iOS parity).
                         onOpenActiveWorkout = {
@@ -696,12 +735,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.StrainDetail.route) {
                     StrainDetailScreen(vm = viewModel, onBack = { nav.popBackStack() })
                 }
-                composable(Destination.Healthspan.route) {
-                    HealthScreen(vm = viewModel, onVitalClick = { nav.navigate("vital_detail/$it") },
-                        onOpenLabBook = { nav.navigate(Destination.LabBook.route) },
-                        onOpenFusedRecord = { nav.navigate(Destination.FusedRecord.route) },
-                        onOpenSettings = { nav.navigate(Destination.Settings.route) })
-                }
+                composable(Destination.Healthspan.route) { HealthspanScreen(viewModel, onCoach = { nav.navigate(Destination.Coach.route) }) }
                 composable(Destination.Live.route) {
                     LiveScreen(
                         viewModel = viewModel,
@@ -726,20 +760,12 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.Breathe.route) { BreatheScreen(viewModel) }
                 composable(Destination.Coach.route) {
                     // A normal push, so Back returns to the conversation (#2243).
-                    CoachScreen(onOpenSettings = { nav.navigate(Destination.CoachSettings.route) })
+                    CoachScreen(vm = viewModel(viewModelStoreOwner = coachOwner),
+                        onOpenSettings = { nav.navigate(Destination.CoachSettings.route) })
                 }
                 composable(Destination.CoachSettings.route) {
-                    // The SAME CoachViewModel the conversation is using, not a fresh one.
-                    // `viewModel()` resolves against LocalViewModelStoreOwner, which under
-                    // Navigation Compose is the NavBackStackEntry, so the default would hand this
-                    // destination its own instance. CoachViewModel keeps consent in memory
-                    // (`_consent`, seeded once at construction) and `send` passes that value to
-                    // `chatStream`, so a revoke made against a second instance would persist to
-                    // storage and still leave the conversation sending on the old one until its
-                    // entry was destroyed. Coach is always below this on the back stack: this
-                    // destination is reachable only from the strip on that screen.
-                    val coachEntry = remember(it) { nav.getBackStackEntry(Destination.Coach.route) }
-                    CoachSettingsScreen(vm = viewModel(coachEntry))
+                    // Settings and restored conversations observe the same consent and configuration.
+                    CoachSettingsScreen(vm = viewModel(viewModelStoreOwner = coachOwner))
                 }
                 composable(Destination.Explore.route) { TrendsExploreScreen(viewModel) }
                 composable(Destination.Automations.route) { AutomationsScreen(viewModel) }
@@ -749,9 +775,9 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
 
                 // Existing local feature destinations.
                 composable(Destination.Stress.route) {
-                    StressScreen(
+                    StressMonitorScreen(
                         vm = viewModel,
-                        onBreathe = { nav.navigateTopLevel(Destination.Breathe.route) },
+                        onBreathe = { nav.navigate(Destination.Breathe.route) },
                     )
                 }
                 composable(Destination.Trends.route) { TrendsScreen(viewModel) }
@@ -760,6 +786,9 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.Health.route) {
                     HealthScreen(
                         vm = viewModel,
+                        onOpenHealthMonitor = { nav.navigate(WhoopRoute.healthMonitor) },
+                        onOpenHealthspan = { nav.navigate(WhoopRoute.healthspan) },
+                        onOpenStress = { nav.navigate(WhoopRoute.stressMonitor) },
                         onVitalClick = { nav.navigate("vital_detail/$it") },
                         onOpenLabBook = { nav.navigateTopLevel(Destination.LabBook.route) },
                         onOpenFusedRecord = { nav.navigateTopLevel(Destination.FusedRecord.route) },
@@ -768,9 +797,10 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 }
                 composable(Destination.Hydration.route) { HydrationScreen(viewModel) }
                 composable(Destination.VitalSigns.route) {
-                    VitalSignsScreen(
+                    HealthMonitorScreen(
                         vm = viewModel,
                         onVitalClick = { nav.navigate("vital_detail/$it") },
+                        onOpenLiveHr = { nav.navigate(Destination.Live.route) },
                     )
                 }
                 composable(Destination.VitalSignsDetail.route) { backStackEntry ->
@@ -798,14 +828,39 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.BackupSync.route) { BackupSyncScreen() }
                 composable(Destination.Notifications.route) { NotificationsSettingsScreen(viewModel) }
                 composable(Destination.PowerSaving.route) { PowerSavingScreen(viewModel) }
-                composable(Destination.Settings.route) {
-                    SettingsScreen(
-                        viewModel,
-                        onOpenTestCentre = { nav.navigate(Destination.TestCentre.route) },
-                        onOpenBackupSync = { nav.navigate(Destination.BackupSync.route) },
-                        onOpenSelfHostedPush = { nav.navigate(Destination.SelfHostedPush.route) },
-                        onOpenStepsCalibration = { nav.navigate(Destination.StepsCalibration.route) },
-                    )
+                composable(Destination.Settings.route) { ShellSettings(viewModel, nav) }
+                composable("settings/{category}") { entry ->
+                    ShellSettings(viewModel, nav,
+                        SettingsCategory.entries.find { it.name == entry.arguments?.getString("category") })
+                }
+                composable(Destination.LocalNotifications.route) {
+                    LocalNotificationsScreen(viewModel,
+                        onOpenWristAlerts = { nav.navigate(Destination.Notifications.route) },
+                        onOpenAutomations = { nav.navigate(Destination.Automations.route) },
+                        onOpenAlarms = { nav.navigate(WhoopRoute.sleepPlanner) },
+                        onOpenCoachSettings = { nav.navigate(Destination.CoachSettings.route) })
+                }
+                composable(LOCAL_NOTICE_ROUTE) { entry ->
+                    val fields by entry.savedStateHandle
+                        .getStateFlow<HashMap<String, String>?>("localNotificationContext", null)
+                        .collectAsStateWithLifecycle()
+                    val notice = remember(fields) { fields?.let { LocalNotificationContext.fromWireFields(it) } }
+                    notice?.let {
+                        if (it.route == "local_briefing") {
+                            LocalBriefingScreen(viewModel,
+                                onOpenCoach = { nav.navigate(Destination.Coach.route) },
+                                onOpenCoachSettings = { nav.navigate(Destination.CoachSettings.route) },
+                                onOpenAlarms = { nav.navigate(WhoopRoute.sleepPlanner) }, notificationContext = it)
+                        } else {
+                            LocalRecordedNoticeScreen(it)
+                        }
+                    }
+                }
+                composable(Destination.LocalBriefing.route) {
+                    LocalBriefingScreen(viewModel,
+                        onOpenCoach = { nav.navigate(Destination.Coach.route) },
+                        onOpenCoachSettings = { nav.navigate(Destination.CoachSettings.route) },
+                        onOpenAlarms = { nav.navigate(WhoopRoute.sleepPlanner) })
                 }
                 composable(Destination.StepsCalibration.route) {
                     val profile = remember(context) { ProfileStore.from(context) }
@@ -831,7 +886,8 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 // full grouped destination list (was a pull-up sheet). A row pushes its destination so
                 // Android Back returns to More instead of skipping straight to Today.
                 composable(Destination.More.route) {
-                    MoreScreen(onNavigate = { nav.navigate(it) })
+                    MoreHubScreen(viewModel, onNavigate = { nav.navigate(it) },
+                        onOpenSettings = { nav.navigate("settings/${it.name}") })
                 }
             }
         }
@@ -931,11 +987,10 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         if (key == UpdateStore.WHATS_NEW_DEEP_LINK) {
                             showWhatsNewFromInbox = true
                         } else {
-                            val route = when (key) {
-                                "trends" -> Destination.Trends.route
-                                else -> null
+                            updatesDestination(key)?.let { target ->
+                                selectedTabRoute = target.root
+                                nav.navigateShellDetail(target)
                             }
-                            if (route != null && route != currentRoute) nav.navigateTopLevel(route)
                         }
                     },
                     onRestore = { cardId ->
@@ -973,8 +1028,8 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
             onTabSelected = { dest ->
                 if (dest != Destination.Coach) selectedTabRoute = dest.route
                 if (dest.route != currentRoute) {
-                    if (dest == Destination.Coach) nav.navigate(dest.route)
-                    else nav.navigateTopLevel(dest.route)
+                    if (dest == Destination.Coach) openCoach()
+                    else if (!nav.popBackStack(dest.route, false)) nav.navigateTopLevel(dest.route)
                 }
             },
             modifier = Modifier
@@ -1245,6 +1300,25 @@ internal fun BrandMark(size: Dp = 22.dp) {
         // Solid WHITE "on-device core" dot at the centre (green ring + white core — iOS parity, no gold).
         drawCircle(color = Color.White, radius = stroke * 0.62f, center = center)
     }
+}
+
+@Composable
+private fun ShellSettings(vm: AppViewModel, nav: NavHostController, category: SettingsCategory? = null) {
+    SettingsScreen(vm,
+        initialCategory = category,
+        onOpenTestCentre = { nav.navigate(Destination.TestCentre.route) },
+        onOpenBackupSync = { nav.navigate(Destination.BackupSync.route) },
+        onOpenSelfHostedPush = { nav.navigate(Destination.SelfHostedPush.route) },
+        onOpenStepsCalibration = { nav.navigate(Destination.StepsCalibration.route) })
+}
+
+/** Install the owning tab before pushing an external destination; reselect can then pop to that root. */
+private fun NavHostController.navigateShellDetail(target: ShellDetailDestination) {
+    navigate(target.root) {
+        popUpTo(graph.findStartDestination().id)
+        launchSingleTop = true
+    }
+    navigate(target.detail) { launchSingleTop = true }
 }
 
 /** Navigate to a top-level destination with single-top + state save/restore. */

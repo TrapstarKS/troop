@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import StrandAnalytics
 
 // MARK: - Target-strain notification (#593)
 //
@@ -59,6 +60,7 @@ enum StrainTargetNotifier {
     /// once they're re-enabled while the same day still shows the reached target (Android twin behaviour).
     static func onDayUpdate(day: String, dayStrain21: Double?, target21: Int?, enabled: Bool) {
         let d = UserDefaults.standard
+        guard !LocalNotificationPreferences.isQuiet() else { return }
         guard StrainTargetPolicy.shouldNotify(enabled: enabled,
                                               dayStrain: dayStrain21,
                                               target: target21.map(Double.init),
@@ -75,8 +77,14 @@ enum StrainTargetNotifier {
             content.title = copy.title
             content.body = copy.body
             content.sound = .default
-            center.add(UNNotificationRequest(identifier: "strain-target", content: content, trigger: nil))
-            UserDefaults.standard.set(day, forKey: lastDayKey)
+            content.categoryIdentifier = "local-report"
+            content.userInfo = LocalNotificationContext(route: "local_briefing", eventID: "strainTarget:\(day)",
+                family: "strainTarget", day: day, message: copy.body,
+                report: LocalRecordedReport(day: day, recovery: nil, sleepMinutes: nil,
+                    strainTenths: dayStrain21.map { Int(($0 * 10).rounded()) }, streak: 0)).wireFields
+            center.add(UNNotificationRequest(identifier: "strain-target:\(day)", content: content, trigger: nil)) { error in
+                if error == nil { UserDefaults.standard.set(day, forKey: lastDayKey) }
+            }
         }
     }
 }

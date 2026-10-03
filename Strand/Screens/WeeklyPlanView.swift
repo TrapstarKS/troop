@@ -1,6 +1,13 @@
 import SwiftUI
 import StrandDesign
 
+private struct WeeklyPlanEditorSession: Identifiable {
+    let id = UUID()
+    let weekStart: String
+    let initialGoals: WeeklyPlanGoals
+    let hadPlan: Bool
+}
+
 struct WeeklyPlanView: View {
     @EnvironmentObject private var repo: Repository
     @Environment(\.scenePhase) private var scenePhase
@@ -9,11 +16,8 @@ struct WeeklyPlanView: View {
     @State private var today = Repository.localDayKey(Date())
     @State private var weekOffset = 0
     @State private var goals = WeeklyPlanGoals()
-    @State private var draft = WeeklyPlanGoals()
-    @State private var editingWeek = ""
-    @State private var editingBaseline = WeeklyPlanGoals()
+    @State private var editorSession: WeeklyPlanEditorSession?
     @State private var journal: [WeeklyPlanJournalDay] = []
-    @State private var editing = false
     @State private var loaded = false
     @State private var saved = false
     @State private var notice: WeeklyPlanNotice?
@@ -40,12 +44,12 @@ struct WeeklyPlanView: View {
                 NoopCard {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                         Text(preferences.hasPlan(weekStart: selectedWeek) ? String(localized: "Overall progress") : String(localized: "Suggested goals")).strandOverline()
-                        HStack(alignment: .firstTextBaseline, spacing: NoopMetrics.space2) {
+                        VStack(alignment: .leading, spacing: NoopMetrics.space2) {
                             Text(preferences.hasPlan(weekStart: selectedWeek) ? (snapshot.overallPercent.map { "\($0)%" } ?? "—") : "—")
                                 .font(StrandFont.display()).foregroundStyle(StrandPalette.textPrimary)
-                            Spacer()
+                                .lineLimit(1).minimumScaleFactor(0.5)
                             if weekOffset == 0 {
-                                NoopButton(preferences.hasPlan(weekStart: selectedWeek) ? "Edit goals" : "Create plan", systemImage: "pencil", kind: .secondary) { openEditor() }
+                                NoopButton(preferences.hasPlan(weekStart: selectedWeek) ? "Edit goals" : "Create plan", systemImage: "pencil", kind: .secondary, fullWidth: true) { openEditor() }
                             }
                         }
                         if preferences.hasPlan(weekStart: selectedWeek) {
@@ -79,7 +83,12 @@ struct WeeklyPlanView: View {
         .onChange(of: scenePhase) { phase in
             if phase == .active { today = Repository.localDayKey(Date()) }
         }
-        .sheet(isPresented: $editing) { editor }
+        .sheet(item: $editorSession) { session in
+            WeeklyPlanEditor(session: session, items: items, effortScale: effortScale,
+                             journalLabel: journalLabel,
+                             onSave: { saveEditor($0, weekStart: $1) },
+                             onCancel: { editorSession = nil })
+        }
     }
 
     private var weekNavigation: some View {
@@ -150,13 +159,85 @@ struct WeeklyPlanView: View {
         }
     }
 
-    private var editor: some View {
+    private func load() async {
+        guard repo.loaded else { return }
+        let entries = await repo.journalEntries()
+        journal = entries.map { WeeklyPlanJournalDay(day: $0.day, question: $0.question, answeredYes: $0.answeredYes) }
+        let suggested = WeeklyPlanEngine.suggestedGoals(days: days, today: today)
+        goals = preferences.goals(weekStart: selectedWeek, suggested: suggested)
+        notice = preferences.notice(today: today)
+        loaded = true
+    }
+
+    private func openEditor() {
+        let week = selectedWeek
+        editorSession = WeeklyPlanEditorSession(weekStart: week, initialGoals: goals,
+                                               hadPlan: preferences.hasPlan(weekStart: week))
+    }
+    private func saveEditor(_ nextGoals: WeeklyPlanGoals, weekStart: String) {
+        goals = nextGoals
+        preferences.save(goals, weekStart: weekStart)
+        if weekStart == currentWeek, let notice { dismiss(notice) }
+        if let target = WeeklyPlanCalendar.date(weekStart), let anchor = WeeklyPlanCalendar.date(currentWeek) {
+            weekOffset = Int(target.timeIntervalSince(anchor) / 604_800)
+        }
+        saved = true
+        editorSession = nil
+    }
+    private func moveWeek(by offset: Int) {
+        weekOffset += offset
+        goals = preferences.goals(weekStart: selectedWeek, suggested: WeeklyPlanEngine.suggestedGoals(days: days, today: today))
+        saved = false
+    }
+    private func dismiss(_ value: WeeklyPlanNotice) { preferences.dismiss(value); notice = nil }
+    private func sleepTarget(_ value: WeeklyPlanGoals) -> String {
+        String(localized: "\(value.sleepMinutes / 60) h \(value.sleepMinutes % 60) min · \(value.sleepDays) days")
+    }
+    private func strainTarget(_ value: WeeklyPlanGoals) -> String {
+        String(localized: "At least \(UnitFormatter.effortDisplay(Double(value.strainMinimum), scale: effortScale)) /\(UnitFormatter.effortScaleMax(effortScale)) · \(value.strainDays) days")
+    }
+    private func journalTarget(_ value: WeeklyPlanGoals) -> String {
+        guard !value.journalQuestion.isEmpty else {
+            return String(localized: "Any saved journal entry · \(value.journalDays) days")
+        }
+        let label = journalLabel(value.journalQuestion)
+        let answer = value.journalAnswer == "yes" ? String(localized: "Yes") : String(localized: "No")
+        return String(localized: "\(label) · \(answer) · \(value.journalDays) days")
+    }
+
+    private func journalLabel(_ question: String) -> String {
+        catalog.item(for: question)?.localizedDisplay ?? JournalFactor.find(question)?.label ?? question
+    }
+}
+
+private struct WeeklyPlanEditor: View {
+    let session: WeeklyPlanEditorSession
+    let items: [JournalCatalogItem]
+    let effortScale: EffortScale
+    let journalLabel: (String) -> String
+    let onSave: (WeeklyPlanGoals, String) -> Void
+    let onCancel: () -> Void
+    @State private var draft: WeeklyPlanGoals
+
+    init(session: WeeklyPlanEditorSession, items: [JournalCatalogItem], effortScale: EffortScale,
+         journalLabel: @escaping (String) -> String,
+         onSave: @escaping (WeeklyPlanGoals, String) -> Void, onCancel: @escaping () -> Void) {
+        self.session = session
+        self.items = items
+        self.effortScale = effortScale
+        self.journalLabel = journalLabel
+        self.onSave = onSave
+        self.onCancel = onCancel
+        _draft = State(initialValue: session.initialGoals)
+    }
+
+    var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
-                    Text("\(editingWeek) – \(WeeklyPlanCalendar.adding(days: 6, to: editingWeek) ?? editingWeek)")
+                    Text("\(session.weekStart) – \(WeeklyPlanCalendar.adding(days: 6, to: session.weekStart) ?? session.weekStart)")
                         .font(StrandFont.captionNumber).foregroundStyle(StrandPalette.textPrimary)
-                    Text(preferences.hasPlan(weekStart: editingWeek) && draft.normalized == editingBaseline ? String(localized: "Goals saved for this week") : String(localized: "Unsaved changes"))
+                    Text(session.hadPlan && draft.normalized == session.initialGoals ? String(localized: "Goals saved for this week") : String(localized: "Unsaved changes"))
                         .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                     NoopCard {
                         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
@@ -203,67 +284,19 @@ struct WeeklyPlanView: View {
                         }.font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
                     }
                     NoopButton("Save goals", kind: .primary, fullWidth: true) {
-                        goals = draft.normalized
-                        preferences.save(goals, weekStart: editingWeek)
-                        if editingWeek == currentWeek, let notice { dismiss(notice) }
-                        if let target = WeeklyPlanCalendar.date(editingWeek), let anchor = WeeklyPlanCalendar.date(currentWeek) {
-                            weekOffset = Int(target.timeIntervalSince(anchor) / 604_800)
-                        }
-                        saved = true
-                        editing = false
+                        onSave(draft.normalized, session.weekStart)
                     }
                 }.padding(NoopMetrics.screenPadding)
             }
             .background(StrandPalette.surfaceBase)
             .navigationTitle("Edit goals")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { editing = false } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { onCancel() } } }
         }
         #if os(macOS)
         .frame(minWidth: NoopMetrics.editorSheetMinWidth, minHeight: NoopMetrics.editorSheetMinHeight)
         #else
         .noopSheetPresentation(largeFirst: true)
         #endif
-    }
-
-    private func load() async {
-        guard repo.loaded else { return }
-        let entries = await repo.journalEntries()
-        journal = entries.map { WeeklyPlanJournalDay(day: $0.day, question: $0.question, answeredYes: $0.answeredYes) }
-        let suggested = WeeklyPlanEngine.suggestedGoals(days: days, today: today)
-        goals = preferences.goals(weekStart: selectedWeek, suggested: suggested)
-        notice = preferences.notice(today: today)
-        loaded = true
-    }
-
-    private func openEditor() {
-        editingWeek = selectedWeek
-        editingBaseline = goals
-        draft = goals
-        editing = true
-    }
-    private func moveWeek(by offset: Int) {
-        weekOffset += offset
-        goals = preferences.goals(weekStart: selectedWeek, suggested: WeeklyPlanEngine.suggestedGoals(days: days, today: today))
-        saved = false
-    }
-    private func dismiss(_ value: WeeklyPlanNotice) { preferences.dismiss(value); notice = nil }
-    private func sleepTarget(_ value: WeeklyPlanGoals) -> String {
-        String(localized: "\(value.sleepMinutes / 60) h \(value.sleepMinutes % 60) min · \(value.sleepDays) days")
-    }
-    private func strainTarget(_ value: WeeklyPlanGoals) -> String {
-        String(localized: "At least \(UnitFormatter.effortDisplay(Double(value.strainMinimum), scale: effortScale)) /\(UnitFormatter.effortScaleMax(effortScale)) · \(value.strainDays) days")
-    }
-    private func journalTarget(_ value: WeeklyPlanGoals) -> String {
-        guard !value.journalQuestion.isEmpty else {
-            return String(localized: "Any saved journal entry · \(value.journalDays) days")
-        }
-        let label = journalLabel(value.journalQuestion)
-        let answer = value.journalAnswer == "yes" ? String(localized: "Yes") : String(localized: "No")
-        return String(localized: "\(label) · \(answer) · \(value.journalDays) days")
-    }
-
-    private func journalLabel(_ question: String) -> String {
-        catalog.item(for: question)?.localizedDisplay ?? JournalFactor.find(question)?.label ?? question
     }
 
     private func presetLabel(_ preset: WeeklyPlanPreset) -> String {

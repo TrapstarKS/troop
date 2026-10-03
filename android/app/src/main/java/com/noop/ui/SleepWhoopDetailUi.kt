@@ -65,12 +65,13 @@ internal fun Metric?.selectedValue(): Double? =
 internal fun SleepPerformanceSummary(
     score: Double?,
     efficiencyPct: Double?,
+    sufficiencyPct: Double?,
     detail: SleepModel?,
     source: String,
     importedScore: Boolean,
     onMetricClick: (String) -> Unit,
 ) {
-    val sufficiency = detail?.hoursVsNeeded.selectedValue()
+    val sufficiency = sufficiencyPct
     val consistency = detail?.consistency.selectedValue()
     val efficiency = efficiencyPct
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space16)) {
@@ -178,23 +179,4 @@ internal fun SleepSupportingMetrics(
         Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
             MetricCard(label = stringResource(R.string.whoop_sleep_restorative),
                 value = stages?.let { durationText(it.deep + it.rem) } ?: "—",
-                detail = detail?.restorative.selectedValue()?.let {
-                    uiString(R.string.l10n_sleep_screen_percent_2281d326, it.roundToInt())
-                },
-                color = Palette.sleepREM, modifier = Modifier.weight(1f).clickable { onMetricClick("restorative") })
-            MetricCard(label = stringResource(R.string.l10n_trends_explore_screen_sleep_efficiency_b4b5c293),
-                value = efficiencyPct?.roundToInt()?.toString() ?: "—",
-                unit = if (efficiencyPct != null) "%" else "",
-                color = Palette.sleepPrimary, modifier = Modifier.weight(1f).clickable { onMetricClick("efficiency") })
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
-            MetricCard(label = stringResource(R.string.l10n_health_screen_respiratory_rate_3fbb532f),
-                value = detail?.respiratory.selectedValue()?.let { String.format(Locale.getDefault(), "%.1f", it) } ?: "—",
-                unit = if (detail?.respiratory.selectedValue() != null) stringResource(R.string.whoop_sleep_breaths_minute) else "",
-                modifier = Modifier.weight(1f).clickable { onMetricClick("respiratory") })
-            MetricCard(label = stringResource(R.string.l10n_sleep_screen_sleep_debt_3aec7d9c),
-                value = detail?.sleepDebt.selectedValue()?.let(::durationText) ?: "—",
-                color = Palette.sleepPrimary, modifier = Modifier.weight(1f).clickable { onMetricClick("sleep_debt") })
-        }
-    }
-}
+                detail = stages?.takeIf { it.asleep > 0.0 }?.let { (it.deep + it.rem) / it.asleep * 100.0 }?.let {

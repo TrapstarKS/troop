@@ -293,6 +293,272 @@
       "rationale": "Formats the reading's day for the Settings caption of the Health Connect weight sync. Apple platforms have no Health Connect, so the opt-in 'Use weight from Health Connect' profile sync exists only on Android and there is no Swift counterpart to pair with, now or later."
     },
     {
+      "type": "platform_specific",
+      "kind": "add-unpaired-constant",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::HRV_PROVENANCE_SQL",
+      "identity_sha256": "7f3b9a6f88266fdfbee06ca796dbe1d2434bd729a401502746f0be53aa83687c",
+      "platform": "kotlin",
+      "rationale": "Room @Query requires a compile-time SQL string. The shared joined-read behavior is explicitly paired with WhoopStore.hrvProvenance in Packages/WhoopStore/Sources/WhoopStore/MetricSeriesStore.swift; GRDB builds its device placeholders inside that function. Paired storage tests cover identical source ownership and committed read snapshots."
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-file",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/IllnessHistory.kt",
+      "identity_sha256": "3f0eb20b4bffd1c29b9721006e120eba6d8db792f8da095d1c634684af933e02",
+      "platform": "kotlin",
+      "rationale": "Swift assembles the same source-bound HRV and respiratory evidence in the excluded Repository.signalReliabilityByDay and applies it in AppModel.evaluateIllness. Android keeps its Room Flow loading, source-switch invalidation and filtered-day snapshot together in this app-data file; this records the app-layer role rather than a physiological formula claim.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/IllnessHistory.kt::flow/3#1",
+      "identity_sha256": "b63e6a80aff2d220da99139a88f0e284e986f511fad928110fae8fe18b4ae69f",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.signalReliabilityByDay reads the same source IDs and joined provenance window in the excluded app layer. Kotlin wraps that read in a Room Flow and combines it with the captured day window; this is an app-loader role twin, not a signature or physiological formula claim.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/IllnessHistory.kt::isCurrent/2#1",
+      "identity_sha256": "196146e5db259127c4990b106e1aec4257644737196171a06f2279c5cd4a3455",
+      "platform": "kotlin",
+      "rationale": "Swift AppModel.evaluateIllness and applyIllnessSignal compare captured source IDs, day rows and evaluation generation before applying async results. Kotlin puts the day/source comparison on its snapshot; the equivalent guard remains inline in the excluded Swift app layer.",
+      "twin_path": "Strand/App/AppModel.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/IllnessHistory.kt::observe/2#1",
+      "identity_sha256": "8d6d715719e3265e4e9a8b670e3c6b06a7556e4d23a36ddb0600f80c42738cfd",
+      "platform": "kotlin",
+      "rationale": "Swift AppModel reevaluates on completed scans and rejects stale, cancelled or switched-source tasks before publishing. Kotlin uses flatMapLatest with nullable loading emissions to invalidate its Room snapshot; this records equivalent app-layer invalidation ownership without claiming the coroutine and Task APIs are identical.",
+      "twin_path": "Strand/App/AppModel.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/IllnessHistory.kt::records/1#1",
+      "identity_sha256": "f175a7ef607a6f548c2117a982b819e66aac6d72f027ca10deeadc3de8e00c29",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.signalReliabilityByDay groups joined rows by day and physical source before applying HealthSignalReliability and choosing firstRecord. Kotlin extracts that grouping into a local helper inside its snapshot projection; the real Swift assembly lives in the excluded app layer.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/IllnessHistory.kt::resolve/5#1",
+      "identity_sha256": "a59b7bc7bcc7665e2cc1dab0ae399feb02bf9c4ec6f216b490af97e93552845f",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.signalReliabilityByDay produces owner-bound records and AppModel.evaluateIllness filters actual HRV and respiratory readings with Record.matches before scoring. Kotlin returns both evidence maps and filtered daily rows from one projection; this is the same app-layer assembly role, not an alert-model equivalence claim.",
+      "twin_path": "Strand/App/AppModel.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::hrvProvenanceFlow/3#1",
+      "identity_sha256": "62fbe219a237033523c6d6f37673f3bc2c8565f9287917566f051205bc26345a",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.signalReliabilityByDay passes its imported and computed read IDs to the paired WhoopStore joined provenance read in the excluded app layer. Kotlin exposes the same source-window read as a Room Flow; only this repository adapter has an app-layer role disposition, while the underlying query remains explicitly paired.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/Analytics.kt::evaluateWindow/3#1",
+      "identity_sha256": "9b7f6fe9a8d2d3f881e747d271f269dbbb7f8f20f9243b1f042c24817bdde154",
+      "platform": "kotlin",
+      "rationale": "Swift AppModel.applyIllnessSignal evaluates trusted current signals and supplies notification validity from the excluded app layer. Android exposes its evaluation as a value. The pre-existing Swift z-score/confounder model and Android local fixed thresholds remain different; this records the evaluator role and does not assert physiological byte parity.",
+      "twin_path": "Strand/App/AppModel.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/Analytics.kt::signal/4#1",
+      "identity_sha256": "07009e90301512e47f395f3e98a5501c5cdede6d5e2ba40eec59dd0d82eb4f39",
+      "platform": "kotlin",
+      "rationale": "Swift AppModel.applyIllnessSignal has an inline signal helper that folds calendar history with metric-specific epochs and rejects untrusted current readings. Kotlin extracts the same trusted-signal assembly role inside its existing fixed-threshold evaluator. The physiological threshold divergence is preserved and this disposition does not claim identical alert formulas.",
+      "twin_path": "Strand/App/AppModel.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/Analytics.kt::values/2#1",
+      "identity_sha256": "08ac746fecd50b6ea5ae1d504f6aaec98ee41ecc6a301526ab7ca97d408bcaaf",
+      "platform": "kotlin",
+      "rationale": "Swift AppModel.applyIllnessSignal has an inline eligible selector that rejects nonfinite and out-of-config readings before baseline folding. Kotlin returns that selector from a local helper. The corresponding validation assembly is in the excluded Swift app layer; this records that role without pairing incompatible closure signatures.",
+      "twin_path": "Strand/App/AppModel.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-constant",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/ingest/WhoopCsvImporter.kt::importerVersion",
+      "identity_sha256": "e7b871f983fd868ec5ec2694994760eca3c84f4ce5524b93ad8f66b9e3064ddb",
+      "platform": "kotlin",
+      "rationale": "The actual shared constant is WhoopImporter.importerVersion in Strand/Data/WhoopImporter.swift. It has the same value and import-repair role, but Swift app-target constants are outside the ledger constant inventory. The shared import mapping and repair functions carry explicit twin references; this disposition only records the excluded constant location. Refs ryanbr/noop#2285.",
+      "twin_path": "Strand/Data/WhoopImporter.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-constant",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/ingest/WhoopCsvImporter.kt::skinTempRepairFlagKey",
+      "identity_sha256": "b050a42b6ab4e34234708aceb457deca97e8914f5526e9919bd656b481787a30",
+      "platform": "kotlin",
+      "rationale": "The actual shared constant is WhoopImporter.skinTempRepairFlagKey in Strand/Data/WhoopImporter.swift. It has the same value and import-repair role, but Swift app-target constants are outside the ledger constant inventory. The shared import mapping and repair functions carry explicit twin references; this disposition only records the excluded constant location. Refs ryanbr/noop#2285.",
+      "twin_path": "Strand/Data/WhoopImporter.swift"
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-function",
+      "identity": "swift\u0000Packages/StrandImport/Sources/StrandImport/HealthWriteback.swift::authorizationTypeSignature/2#1",
+      "identity_sha256": "6e0b0937dcf71cc73b720cd0ea36b2fdd076dcc02feeed6ddb87c0e8ecfb3b2d",
+      "platform": "swift",
+      "rationale": "Used only by the Apple HealthKitBridge authorization cache to fingerprint HealthKit read and share type identifiers separately when requested permissions change. Android uses the Health Connect permission API and has no HealthKit request-type cache to fingerprint; this helper does not transform health measurements or stored cross-platform data. Refs ryanbr/noop#2644 and ryanbr/noop#2514."
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::importedDailyUnion/3#1",
+      "identity_sha256": "87eb8b4a1f861f1bcf8f7a112890edba54e9e6362fd3bc8a52dd30935846d08c",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.unionDailyMetrics performs the same active/canonical imported bucket read in the excluded app layer. Stored-row Charge histories have actual engine/SQLite regression twins. Refs ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::importedDailyUnionFlow/3#1",
+      "identity_sha256": "a1b8ac6c0842e6925e91e66bfb292e599945dff1dcb8e5eb3080e17951c16e21",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.refresh publishes the same imported bucket through ObservableObject rather than Flow, in the excluded app layer. Refs ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::effectiveHrvEpoch/4#1",
+      "identity_sha256": "b222c28c9cad61cbfefec8380ffddff5e7749848da80f0d3bdf594396b786355",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.effectiveHrvEpoch performs the same active/canonical scorable-RR lookup in the excluded app layer. The pure Baselines twin is oracle-guarded and repository lookups have actual SQLite twins. Refs ryanbr/noop#2126.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/ingest/WhoopCsvImporter.kt::withSkinTempDeviations/2#1",
+      "identity_sha256": "8431f85376351488f3136fc0536cee7e9151c53961bc0e0166c3916c2082d464",
+      "platform": "kotlin",
+      "rationale": "Swift WhoopImporter.withSkinTempDeviations performs the same preceding-absolute-night fold in the excluded app layer, with actual rounding oracle and import regressions. Refs ryanbr/noop#2285.",
+      "twin_path": "Strand/Data/WhoopImporter.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/ingest/WhoopCsvImporter.kt::skinTempRepair/3#1",
+      "identity_sha256": "b5ca7277c7f07a07fc69683213779a7549b69a522f65c79141f3f8a434b4b97e",
+      "platform": "kotlin",
+      "rationale": "Swift WhoopImporter.skinTempRepair uses the same canonical series origin proof in the excluded app layer; false-origin/idempotency regressions guard both. Refs ryanbr/noop#2285.",
+      "twin_path": "Strand/Data/WhoopImporter.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/ingest/WhoopCsvImporter.kt::repairAbsoluteSkinTempIfNeeded/4#1",
+      "identity_sha256": "479a15d4f55eb6de209bcaec93dd2cb09abfb67b81c6e810782647b92a416351",
+      "platform": "kotlin",
+      "rationale": "Swift WhoopImporter.repairAbsoluteSkinTempIfNeeded performs the same successful-write-only repair flag logic in the excluded app layer; defaults and injected Android preferences have distinct dependencies. Refs ryanbr/noop#2285.",
+      "twin_path": "Strand/Data/WhoopImporter.swift"
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDatabase.kt::migrate/1#40",
+      "identity_sha256": "f2fcc9a538bee8eaef0fa7a5ada1eb2eb27a1d63ddcd443355b4086ca78cbc0c",
+      "platform": "kotlin",
+      "rationale": "Room MIGRATION_41_42 implements Migration.migrate; GRDB registers v48-daily-active-energy as an inline closure. Shared schema_oracle.json and actual migration/roundtrip tests pin the same appended nullable REAL column, with no historical backfill. Refs ryanbr/noop#2608."
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-constant",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::CHARGE_HRV_PROOF_SQL",
+      "identity_sha256": "e710b2372116c8eaa52b909276282a1cc937849425860464fe341d0b8a0cb9f5",
+      "platform": "kotlin",
+      "rationale": "Room requires a compile-time SQL constant for its suspend and Flow queries; GRDB embeds the identical source/day/key join in WhoopStore.chargeHrvProof in Packages/WhoopStore/Sources/WhoopStore/MetricSeriesStore.swift. Both execute actual SQLite fixtures. Refs ryanbr/noop#2126 and ryanbr/noop#2525."
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/IntelligenceEngine.kt::analyzeRecentOnCpu/25#1",
+      "identity_sha256": "6a7ddffde66788da6fc985b2079487d74b9055d002a7a1970f870ec8c02468f9",
+      "platform": "kotlin",
+      "rationale": "Swift IntelligenceEngine.analyzeRecent performs the same Charge freshness and civil-boundary fold in the excluded app layer. The added parameter carries the regime day separately from manual epochs; pure eligibility is guarded by a 160-vector Swift oracle and repository/engine regressions. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/IntelligenceEngine.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::chargeHrvProofFlow/3#1",
+      "identity_sha256": "62bf65234c70d0794a34b01215fa9f4a0e11a7908c2e9695ac663d039be817f1",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.refresh reads WhoopStore.chargeHrvProof through unionChargeComputedDailyMetrics and publishes the same joined proof via ObservableObject; Room uses a Flow query to observe both tables. The suspend SQL twin is paired in WhoopStore, and reactive updates have regression coverage. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::chargeComputedDailyUnion/4#1",
+      "identity_sha256": "9bb52628c063016d768dbbe158d4652f0535e25ca668bf63a57084a33b03e75b",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.unionChargeComputedDailyMetrics performs the same source-owned HRV proof check before active/canonical coalescing in the excluded app layer. Actual SQLite and cross-source collision regressions accompany the pure eligibility oracle. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::chargeComputedDailyUnionFlow/4#1",
+      "identity_sha256": "c37d04ef5cd48a9dc45c242eeebfe289ee8142c83dbde6c4b5dc9d76f753c432",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.refresh publishes unionChargeComputedDailyMetrics through ObservableObject in the excluded app layer; Android combines the same per-source raw rows and joined proofs through Flow. Marker-only and regime-only updates have reactive regressions. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::chargeUnionByDay/3#1",
+      "identity_sha256": "5e0e024acaceafcd387ddcde137f13c5607501ca090ab3166c68185726380983",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.unionChargeComputedDailyMetrics contains the same first-raw-source proof selection and post-coalescing HRV filter in the excluded app layer. This Kotlin extraction serves suspend/Flow readers and regression fixtures; it does not waive numeric parity. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/IntelligenceEngine.kt::foldChargeBaselines/15#1",
+      "identity_sha256": "cbff12f500de7ca8b983c00dfbd9dcf21f4fb571602ce656a9a2d07fb268ed3f",
+      "platform": "kotlin",
+      "rationale": "Swift IntelligenceEngine.analyzeRecent retains the same Charge history selection and folding block inline in the excluded app layer. Kotlin moves that block verbatim into a private helper to preserve the existing JaCoCo method-size ratchet; no formula, inputs, configuration, trace order or persistence changes. Pure Charge/Baselines twins remain oracle-guarded. Refs ryanbr/noop#1524 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/IntelligenceEngine.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/IntelligenceEngine.kt::foldImportedDailyMetrics/9#1",
+      "identity_sha256": "3f224ec731976e48342f742a7b606ab568c867519b1d4a81f659bbbe49bb2863",
+      "platform": "kotlin",
+      "rationale": "Swift IntelligenceEngine.analyzeRecent retains the same imported-only daily fold inline in the excluded app layer. Kotlin extracts the unchanged block into a private suspend helper to preserve the existing JaCoCo method-size limit. Read order, imported recovery precedence, raw freshness replacement, source ownership, list append order and persistence are unchanged. Pure scoring and provenance twins remain oracle-guarded. Refs ryanbr/noop#1524 and ryanbr/noop#823 and ryanbr/noop#2525.",
+      "twin_path": "Strand/Data/IntelligenceEngine.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/analytics/IntelligenceEngine.kt::appendNightMetricRows/9#1",
+      "identity_sha256": "2b96a1ffe91806fca16c85f31b6ecc7f478a2732fb8ebe601d1d21395ee58b32",
+      "platform": "kotlin",
+      "rationale": "Swift IntelligenceEngine.analyzeRecent retains the same per-night metric sidecar append block inline in the excluded app layer. Kotlin moves that block into a private non-suspending helper to preserve the existing JaCoCo method-size limit. Null handling, numeric conversions, marker values, row append order and placement before computed-window persistence are unchanged. Pure scoring and provenance twins remain oracle-guarded. Refs ryanbr/noop#1524 and ryanbr/noop#1118 and ryanbr/noop#1169.",
+      "twin_path": "Strand/Data/IntelligenceEngine.swift"
+    },
+    {
       "type": "out_of_scope_twin",
       "kind": "add-unpaired-function",
       "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WeeklyPlan.kt::calendar/0#1",

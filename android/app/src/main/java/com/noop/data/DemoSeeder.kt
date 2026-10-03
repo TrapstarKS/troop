@@ -27,6 +27,18 @@ import kotlin.random.Random
  */
 object DemoSeeder {
 
+    fun seedSleepPlannerPreferences(context: android.content.Context) {
+        val prefs = com.noop.ui.NoopPrefs.of(context)
+        if (prefs.contains("sleepPlanner.goalPercent")) return
+        com.noop.alarm.SleepPlannerStore.from(context).write(com.noop.alarm.SleepPlannerSettings(
+            goalPercent = 100,
+            goals = mapOf(6 to 85, 7 to 70),
+            baseNeedMinutes = 480,
+            debtMinutes = 75,
+            historyNights = 14,
+        ))
+    }
+
     private const val WHOOP = "my-whoop"
     private const val APPLE = "apple-health"
     // The NOOP-COMPUTED strap source ("<strap>-noop") the IntelligenceEngine persists its derived weekly
@@ -45,12 +57,15 @@ object DemoSeeder {
         "Running", "Cycling", "Strength", "HIIT", "Swimming", "Yoga", "Walking", "Rowing"
     )
 
-    /** Seed only if the demo (and the user) has no daily history yet. Safe to call on every launch.
-     * Swift twin: `AppleDemoSeeder.seedIfRequested`. */
+    /** Seed daily history only when empty, then add independent demo fixtures once. */
     suspend fun seedIfEmpty(repo: WhoopRepository, context: android.content.Context? = null) {
-        if (repo.days(WHOOP).isNotEmpty()) return
-        seed(repo)
-        context?.let { seedWeeklyPlanDemo(it, LocalDate.now().toString()) }
+        val seededNow = repo.days(WHOOP).isEmpty()
+        val pristineBeforeBaseSeed = seededNow && HealthspanStressDemoSeed.hasEmptyStreams(repo)
+        if (seededNow) {
+            seed(repo)
+            context?.let { seedWeeklyPlanDemo(it, LocalDate.now().toString()) }
+        }
+        HealthspanStressDemoSeed.seedIfDemo(repo, seededNow, pristineBeforeBaseSeed)
     }
 
     /**
@@ -292,6 +307,8 @@ object DemoSeeder {
             }
         }
 
+        seedHealthMonitor(series, daily)
+
         repo.upsertDailyMetrics(daily)
         sleepDetailExamples(sleeps, zone)
         repo.upsertSleepSessions(sleeps)
@@ -317,6 +334,17 @@ object DemoSeeder {
         repo.upsertJournal(rows)
     }
 
+    /** Swift twin: `AppleDemoSeeder.seedHealthMonitor`. */
+    internal fun seedHealthMonitor(into: MutableList<MetricSeriesRow>, days: List<DailyMetric>) {
+        for (day in days) {
+            into.add(MetricSeriesRow(WHOOP_NOOP, day.day, "hrv_fresh_scoring_valid",
+                if (day.avgHrv?.isFinite() == true) 1.0 else 0.0))
+            into.add(MetricSeriesRow(WHOOP_NOOP, day.day, "resp_fresh_scoring_valid",
+                if (day.respRateBpm?.isFinite() == true) 1.0 else 0.0))
+            into.add(MetricSeriesRow(WHOOP_NOOP, day.day, "hrv_rr_overcount", 0.0))
+        }
+    }
+
     // MARK: - helpers
 
     /** Synthetic sleep-detail fixtures; no random samples or real strap data are consumed. */
@@ -338,11 +366,11 @@ object DemoSeeder {
         segment("wake", awakeSec)
         val index = sleeps.indexOf(latest)
         sleeps[index] = latest.copy(stagesJSON = timeline.toString())
-        val napStart = LocalDate.now().atTime(14, 15).atZone(zone).toEpochSecond()
+        val napStart = LocalDate.now().minusDays(1).atTime(14, 15).atZone(zone).toEpochSecond()
         val napTimeline = JSONArray().put(JSONObject().put("start", napStart).put("end", napStart + 30 * 60)
             .put("stage", "light"))
         sleeps.add(SleepSession(deviceId = WHOOP, startTs = napStart, endTs = napStart + 30 * 60,
-            efficiency = 1.0, stagesJSON = napTimeline.toString(), userEdited = true))
+            efficiency = 100.0, stagesJSON = napTimeline.toString(), userEdited = true))
     }
 
     /** Box–Muller normal sample. */

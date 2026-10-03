@@ -27,4 +27,6 @@
     <string name="whoop_sleep_raw_stages">Необработанные фазы с устройства</string>
     <string name="whoop_sleep_estimated_stages">Фазы, оценённые на устройстве</string>
     <string name="whoop_sleep_requested_missing">Нет данных сна за этот день.</string>
+    <string name="whoop_sleep_recorded_subtitle">Записано %1$s · эффективность %2$s</string>
+    <string name="whoop_sleep_in_bed_duration">%1$s в постели</string>
 </resources>

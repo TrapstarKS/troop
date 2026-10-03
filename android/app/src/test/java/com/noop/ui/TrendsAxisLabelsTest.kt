@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TrendsAxisLabelsTest {
+    private fun day(value: String) = java.time.LocalDate.parse(value).toEpochDay() * 86_400L
 
     @Test fun fewerThanTwoDatesHasNoAxisLabels() {
         assertEquals(emptyList<TrendAxisLabel>(), trendAxisLabels(emptyList()))
@@ -36,6 +37,57 @@ class TrendsAxisLabelsTest {
                     "2026-07-16",
                 ),
             ),
+        )
+    }
+
+    @Test fun sparseWindowLabelsUseTheSelectedCalendarBoundaries() {
+        assertEquals(
+            listOf(
+                TrendAxisLabel("2026-09-01", TrendAxisAnchor.START),
+                TrendAxisLabel("2026-09-06", TrendAxisAnchor.CENTER),
+                TrendAxisLabel("2026-09-11", TrendAxisAnchor.END),
+            ),
+            trendAxisLabels(listOf("2026-09-03", "2026-09-05"), day("2026-09-01")..day("2026-09-11")),
+        )
+    }
+
+    @Test fun legacySparseDatesUseTheCalendarMidpointRatherThanTheMiddleReading() {
+        assertEquals(
+            listOf(
+                TrendAxisLabel("2026-09-01", TrendAxisAnchor.START),
+                TrendAxisLabel("2026-09-06", TrendAxisAnchor.CENTER),
+                TrendAxisLabel("2026-09-11", TrendAxisAnchor.END),
+            ),
+            trendAxisLabels(listOf("2026-09-01", "2026-09-02", "2026-09-11")),
+        )
+    }
+
+    @Test fun oneReadingKeepsTheWindowAndOneDayWindowsHaveOneCenteredLabel() {
+        assertEquals(
+            listOf(
+                TrendAxisLabel("2026-09-01", TrendAxisAnchor.START),
+                TrendAxisLabel("2026-09-06", TrendAxisAnchor.CENTER),
+                TrendAxisLabel("2026-09-11", TrendAxisAnchor.END),
+            ),
+            trendAxisLabels(listOf("2026-09-05"), day("2026-09-01")..day("2026-09-11")),
+        )
+        assertEquals(
+            listOf(TrendAxisLabel("2026-09-05", TrendAxisAnchor.CENTER)),
+            trendAxisLabels(listOf("2026-09-05"), day("2026-09-05")..day("2026-09-05")),
+        )
+    }
+
+    @Test fun invalidDomainKeepsDefaultCalendarLabelsAndBadDatesKeepTheirFallback() {
+        val dates = listOf("2026-09-01", "2026-09-02", "2026-09-11")
+        assertEquals(trendAxisLabels(dates), trendAxisLabels(dates, day("2026-09-02")..day("2026-09-11")))
+        assertEquals(trendAxisLabels(dates), trendAxisLabels(dates, day("2026-09-11")..day("2026-09-01")))
+        assertEquals(
+            listOf(
+                TrendAxisLabel("a", TrendAxisAnchor.START),
+                TrendAxisLabel("b", TrendAxisAnchor.CENTER),
+                TrendAxisLabel("c", TrendAxisAnchor.END),
+            ),
+            trendAxisLabels(listOf("a", "b", "c"), day("2026-09-01")..day("2026-09-11")),
         )
     }
 }

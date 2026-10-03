@@ -4,6 +4,46 @@ import GRDB
 
 final class MetricSeriesStoreTests: XCTestCase {
 
+    func testChargeHrvProofJoinsOnlyTheSameSourceAndDay() async throws {
+        let store = try await WhoopStore.inMemory()
+        func daily(_ day: String, _ value: Double?) -> DailyMetric {
+            DailyMetric(day: day, totalSleepMin: nil, efficiency: nil, deepMin: nil, remMin: nil,
+                lightMin: nil, disturbances: nil, restingHr: nil, avgHrv: value,
+                recovery: nil, strain: nil, exerciseCount: nil)
+        }
+        _ = try await store.upsertDailyMetrics([daily("2026-10-01", 44), daily("2026-10-02", 45),
+            daily("2026-10-03", nil)], deviceId: "active-noop")
+        _ = try await store.upsertDailyMetrics([daily("2026-10-01", 60)], deviceId: "canonical-noop")
+        _ = try await store.upsertMetricSeries([
+            MetricPoint(day: "2026-10-01", key: "hrv_fresh_scoring_valid", value: 0),
+            MetricPoint(day: "2026-10-02", key: "unrelated", value: 1),
+            MetricPoint(day: "2026-10-03", key: "hrv_fresh_scoring_valid", value: 1),
+        ], deviceId: "active-noop")
+        _ = try await store.upsertMetricSeries([
+            MetricPoint(day: "2026-10-01", key: "hrv_fresh_scoring_valid", value: 1),
+        ], deviceId: "canonical-noop")
+        let active = try await store.chargeHrvProof(deviceId: "active-noop", from: "2026-10-01", to: "2026-10-03")
+        XCTAssertEqual(active, [ChargeHrvProof(day: "2026-10-01", value: 44, freshScoringValid: 0),
+            ChargeHrvProof(day: "2026-10-02", value: 45, freshScoringValid: nil)])
+        let canonical = try await store.chargeHrvProof(deviceId: "canonical-noop", from: "2026-10-01", to: "2026-10-01")
+        XCTAssertEqual(canonical, [ChargeHrvProof(day: "2026-10-01", value: 60, freshScoringValid: 1)])
+    }
+
+    func testChargeHrvProofChangesWithTheAtomicScoreSnapshot() async throws {
+        let store = try await WhoopStore.inMemory()
+        let day = "2026-10-03"
+        let row = DailyMetric(day: day, totalSleepMin: 480, efficiency: 0.9, deepMin: nil, remMin: nil,
+            lightMin: nil, disturbances: nil, restingHr: 60, avgHrv: 44,
+            recovery: 72, strain: nil, exerciseCount: nil)
+        for valid in [1.0, 0.0] {
+            try await store.persistComputedScores(dailyMetrics: [row],
+                metricPoints: [MetricPoint(day: day, key: "hrv_fresh_scoring_valid", value: valid)],
+                provenance: [], deviceId: "active-noop", from: day, to: day)
+            let inputs = try await store.chargeHrvProof(deviceId: "active-noop", from: day, to: day)
+            XCTAssertEqual(inputs, [ChargeHrvProof(day: day, value: 44, freshScoringValid: valid)])
+        }
+    }
+
     // MARK: - migration (v9 creates the table with the right PK + index)
 
     func testV9CreatesMetricSeriesTable() async throws {

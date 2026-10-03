@@ -136,7 +136,7 @@ class WhoopCsvImporterTest {
         )
         assertEquals(1, rows.size)
         // 91.58 °F → (91.58 − 32) × 5/9 = 33.1 °C — the same stored value a Celsius import produces.
-        assertEquals(33.1, rows.single().skinTempDevC!!, 1e-3)
+        assertEquals(33.1, rows.single().skinTempC!!, 1e-3)
     }
 
     /**
@@ -152,7 +152,7 @@ class WhoopCsvImporterTest {
             """
         )
         assertEquals(1, rows.size)
-        assertEquals(33.1, rows.single().skinTempDevC!!, 1e-3)
+        assertEquals(33.1, rows.single().skinTempC!!, 1e-3)
     }
 
     // --- #136: imported journal keys to the WAKE day, not the onset evening -------------------

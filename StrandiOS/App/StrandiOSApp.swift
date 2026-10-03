@@ -84,6 +84,12 @@ struct StrandiOSApp: App {
         let router = NavRouter()
         _router = StateObject(wrappedValue: router)
         NotificationPresenter.shared.onCoachBriefTapped = { [weak router] in router?.openCoach() }
+        NotificationPresenter.shared.onLocalNotificationContextTapped = { [weak router] context in
+            router?.openLocalNotification(context: context)
+        }
+        NotificationPresenter.shared.onLocalNotificationTapped = { [weak router] route in
+            router?.openLocalNotification(route: route)
+        }
         let model = AppModel()
         _model = StateObject(wrappedValue: model)
         CoachBriefScheduler.register(generateBrief: { [weak coach = model.coach] in
@@ -586,53 +592,6 @@ enum DemoScreens {
         case "stress":   return AnyView(StressView())
         case "workouts": return AnyView(WorkoutsView())
         case "health":   return AnyView(HealthView())
-        case "weeklyplan": return AnyView(WeeklyPlanView())
-        case "insights": return AnyView(InsightsView())
-        case "explore":  return AnyView(MetricExplorerView())
-        case "compare":  return AnyView(CompareView())
-        case "settings": return AnyView(SettingsView())
-        case "chargebreakdown": return AnyView(ChargeBreakdownDemoHost())
-        case "devices":  return AnyView(DevicesView())
-        case "devicescatalog": return AnyView(DeviceCardCatalog())
-        case "fitnessage": return AnyView(FitnessAgeDemoScreen())
-        case "vitality": return AnyView(VitalityDemoScreen())
-        case "addwizard": return AnyView(AddWizardDemoHost())
-        // Oura onboarding: the Add-device wizard deep-linked straight to the Oura factory-reset-and-adopt
-        // prep step (the Beta banner + get/lose card + the red irreversible-consent gate), screenshot-able
-        // WITHOUT a ring.
-        case "ouraonboarding": return AnyView(OuraOnboardingDemoHost())
-        // Oura device card: the locally-adopted Oura ring card (Beta chip + per-gen honest capability copy
-        // + battery + local-state note), rendered with mock data, no ring required.
-        case "ouradevice": return AnyView(OuraDeviceDemoScreen())
-        // #221: a WHOOP 5/MG whose encrypted bond was refused (#78) — the "Connected · not paired" pill
-        // + self-service pairing guidance, screenshot-able WITHOUT reproducing the bond refusal on real
-        // hardware.
-        case "bondrefused": return AnyView(BondRefusedDemoScreen())
-        default:         return RecoveryStrainDemoScreens.screen(named: args[i + 1].lowercased())
-        }
-    }
-}
-#endif
-#endif
-
-#if DEBUG
-/// DEBUG-only host so `--demo-screen addwizard` can render the multi-step Add-a-device wizard.
-/// A SwiftUI View body is main-actor, so it can pull the injected LiveState and hand it to the
-/// wizard's `init(live:)` (the nonisolated DemoScreens switch can't construct a LiveState itself).
-private struct AddWizardDemoHost: View {
-    @EnvironmentObject var live: LiveState
-    var body: some View { AddDeviceWizard(live: live, onClose: {}) }
-}
-
-/// DEBUG-only host so `--demo-screen ouraonboarding` renders the Add-device wizard deep-linked to the
-/// Oura factory-reset-and-adopt prep step (the Beta banner + what-you-get/what-you-lose card + the red
-/// irreversible-consent gate). A SwiftUI View body is main-actor, so it can pull the injected LiveState
-/// and seed the wizard's `startAt` into the Oura prep step without a ring present.
-private struct OuraOnboardingDemoHost: View {
-    @EnvironmentObject var live: LiveState
-    var body: some View {
-        AddDeviceWizard(live: live, onClose: {}, startAt: (.oura, .prep))
-    }
-
-}
-#endif
+        case "healthmonitor": return AnyView(HealthMonitorView())
+        case "healthspan": return AnyView(HealthspanView())
+        case "stressmonitor": return AnyView(StressMonitorView())

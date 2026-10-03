@@ -27,4 +27,6 @@
     <string name="whoop_sleep_raw_stages">Raw on-device stages</string>
     <string name="whoop_sleep_estimated_stages">Approximate on-device stages</string>
     <string name="whoop_sleep_requested_missing">No sleep data for this day.</string>
+    <string name="whoop_sleep_recorded_subtitle">%1$s recorded · %2$s efficiency</string>
+    <string name="whoop_sleep_in_bed_duration">%1$s in bed</string>
 </resources>

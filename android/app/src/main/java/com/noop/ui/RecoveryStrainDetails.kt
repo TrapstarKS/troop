@@ -57,6 +57,8 @@ fun RecoveryDetailScreen(
     onBack: () -> Unit,
 ) {
     val today by vm.today.collectAsStateWithLifecycle()
+    val chargeBaselines by vm.chargeBaselines.collectAsStateWithLifecycle()
+    val hrvRegimeEpoch by vm.hrvRegimeEpoch.collectAsStateWithLifecycle()
     val registryId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val activeId = registryId ?: vm.activeStrapId
     val days = detailDays(vm, activeId)
@@ -65,9 +67,10 @@ fun RecoveryDetailScreen(
     val selected = days.firstOrNull { it.day == selectedKey }
     val score = selected?.recovery?.takeIf { RecoveryStrainDetailLogic.recoveryPercent(it) != null }
     val context = LocalContext.current
-    val epoch = NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble()
+    val epoch = maxOf(NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(), hrvRegimeEpoch)
     val calibration = if (selectedKey == (today?.day ?: logicalDayNow().toString())) recoveryCalibrationNights(
-        days.filter { it.day <= selectedKey }, score != null, epoch,
+        chargeBaselines?.hrvHistory?.values.orEmpty(), chargeBaselines?.hrvHistory?.dayKeys.orEmpty(),
+        score != null, epoch,
     ) else null
     var sleepPerformance by remember(selectedKey, activeId) { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
     var showInsights by remember { mutableStateOf(false) }

@@ -164,6 +164,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.noop.R
 import com.noop.ai.AiKeyStore
 import com.noop.analytics.Baselines
+import com.noop.analytics.ChargeBaselines
 import com.noop.analytics.BatteryEstimator
 import com.noop.analytics.ChargeDriver
 import com.noop.analytics.ChargeDriverLabel
@@ -342,6 +343,8 @@ fun TodayScreen(
     val today by viewModel.today.collectAsStateWithLifecycle()
     val alert by viewModel.healthAlert.collectAsStateWithLifecycle()
     val days by viewModel.recentDays.collectAsStateWithLifecycle()
+    val chargeBaselines by viewModel.chargeBaselines.collectAsStateWithLifecycle()
+    val hrvRegimeEpoch by viewModel.hrvRegimeEpoch.collectAsStateWithLifecycle()
     val activeDayCycle by viewModel.activeDayCycle.collectAsStateWithLifecycle()
     val spo2CandidateByDay by viewModel.spo2CandidateByDay.collectAsStateWithLifecycle()
     // #2208: `connected` alone never said WHOSE charge liveSnap.batteryPct is. It goes true the moment any
@@ -990,8 +993,9 @@ fun TodayScreen(
         // Thread the persisted "Recalibrate HRV baseline" epoch (0 = none) so N folds the SAME
         // epoch-aware history the recovery engine folds — otherwise a post-recalibration user's pre-epoch
         // nights inflate the count past the seed gate and the score side wrongly reads NeedsStrap (Bug B).
-        val hrvEpoch = NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble()
-        recoveryCalibrationNights(days, displayMetric?.recovery != null, hrvEpoch)
+        val hrvEpoch = maxOf(NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble(), hrvRegimeEpoch)
+        recoveryCalibrationNights(chargeBaselines?.hrvHistory?.values.orEmpty(),
+            chargeBaselines?.hrvHistory?.dayKeys.orEmpty(), displayMetric?.recovery != null, hrvEpoch)
     } else {
         null
     }
@@ -1638,6 +1642,7 @@ fun TodayScreen(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             ChargeBreakdownSheet(
+                chargeBaselines = chargeBaselines,
                 days = days,
                 displayDay = displayMetric,
                 carriedDay = lastScoredRecoveryDay,
@@ -4948,6 +4953,7 @@ internal fun ChargeBreakdownSheet(
     // navigation at all, so a link there would be a dead one. A host that cannot go somewhere should
     // not offer to.
     onOpenTrend: (() -> Unit)? = null,
+    chargeBaselines: ChargeBaselines.Resolved? = null,
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -4977,7 +4983,7 @@ internal fun ChargeBreakdownSheet(
             ) {
                 // The breakdown self-gates: a calibrating night (empty drivers) renders nothing here, the
                 // Contributors + Readiness below still give an honest read, never a blank sheet.
-                RecoveryDriversSection(days = days, displayDay = displayDay, carriedDay = carriedDay)
+                RecoveryDriversSection(chargeBaselines = chargeBaselines, displayDay = displayDay, carriedDay = carriedDay)
                 RecoveryContributorsSection(day = displayDay, carriedDay = carriedDay)
                 // S4: the SEPARATE Readiness block now lives here behind the Charge-ring tap (today-only,
                 // matching the old inline gate). A one-word read (Push / Maintain / Rest) stays on the hero.
@@ -5090,21 +5096,18 @@ internal fun ChargeBreakdownSheet(
 
 @Composable
 private fun RecoveryDriversSection(
-    days: List<DailyMetric>,
+    chargeBaselines: ChargeBaselines.Resolved?,
     displayDay: DailyMetric?,
     carriedDay: DailyMetric? = null,
 ) {
-    // #2315: the same recalibration epoch the engine folds with. Read here rather than threaded from the
-    // caller because this section is the only consumer, and the pref read is one getLong behind remember.
-    val context = LocalContext.current
-    val hrvEpoch = remember { NoopPrefs.of(context).getLong(Baselines.hrvBaselineEpochKey, 0L).toDouble() }
+    // The resolved source already carries the engine's history window and both recalibration epochs.
     // Read the row the Charge ring itself reads: today's own when scored, else the carried last-scored
     // day (#543) so the breakdown matches the carried ring instead of vanishing at the rollover.
     val readDay = carriedDay ?: displayDay
-    val drivers = remember(days, readDay, hrvEpoch) { recoveryChargeDrivers(days, readDay, hrvEpoch) }
+    val drivers = remember(chargeBaselines, readDay) { recoveryChargeDrivers(chargeBaselines, readDay) }
     if (drivers.isEmpty()) return
 
-    val tier = remember(days, readDay, hrvEpoch) { chargeConfidenceTier(days, readDay, hrvEpoch) }
+    val tier = remember(chargeBaselines, readDay) { chargeConfidenceTier(chargeBaselines, readDay) }
     val overline = carriedDay?.let { uiString(R.string.today_charge_carried, carriedCaption(it.day).localized()) }
         ?: uiString(R.string.trends_charge)
 

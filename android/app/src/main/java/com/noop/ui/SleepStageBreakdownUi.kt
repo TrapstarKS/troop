@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -269,14 +270,14 @@ internal fun FilledHypnogram(
     // left the hypnogram axis in 24h while the sleep card above it changed - the setting half-applied.
     val is24h = ClockPrefs.uses24Hour(LocalContext.current)
     val axisTicks = if (showsAxis) hypnogramAxisTicks(onsetTs!!, wakeTs!!, maxAxisLabels, is24h) else emptyList()
-    var scrub by remember(intervals) { mutableStateOf<ScrubHit?>(null) }
+    var selectionFraction by remember(originSec) { mutableStateOf<Float?>(null) }
+    val scrub = selectionFraction?.let { scrubHitAt(it, 1f, intervals, originSec, spanSec) }
     // The crosshair tracks the FINGER. Snapping it to the resolved segment would put the line up to
     // half a segment from the touch while the readout named the time where the finger actually was.
     val currentStageLabel = localizedSleepStage(scrub?.stage.orEmpty())
     val scrubState = scrub?.let { "${clockTimeLabel(it.timestamp, is24h)}, $currentStageLabel" }
     fun inspectFraction(fraction: Float) {
-        val clamped = fraction.coerceIn(0f, 1f)
-        scrub = scrubHitAt(clamped, 1f, intervals, originSec, spanSec)
+        selectionFraction = fraction.coerceIn(0f, 1f)
     }
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space6)) {
         Text(stringResource(R.string.whoop_sleep_scrub_hint), style = NoopType.footnote, color = Palette.textSecondary)
@@ -297,7 +298,7 @@ internal fun FilledHypnogram(
                     if (scrubState != null) stateDescription = scrubState
                     if (showsAxis) {
                         progressBarRangeInfo = ProgressBarRangeInfo(
-                            scrub?.let { ((it.timestamp - originSec) / spanSec).toFloat() } ?: 0f,
+                            selectionFraction ?: 0f,
                             0f..1f,
                         )
                         setProgress { inspectFraction(it); true }
@@ -305,7 +306,7 @@ internal fun FilledHypnogram(
                 }
                 .onKeyEvent { event ->
                     if (!showsAxis || event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                    val fraction = scrub?.let { ((it.timestamp - originSec) / spanSec).toFloat() } ?: 0f
+                    val fraction = selectionFraction ?: 0f
                     when (event.key) {
                         Key.DirectionLeft -> inspectFraction(fraction - (60.0 / spanSec).toFloat())
                         Key.DirectionRight -> inspectFraction(fraction + (60.0 / spanSec).toFloat())
@@ -317,27 +318,27 @@ internal fun FilledHypnogram(
                 }
                 .focusable()
                 .then(
-                    // #1855: drag to read the clock time under your finger. Offered only when the
+                    // #1855: tap or drag to read the clock time under your finger. Offered only when the
                     // night supplies a clock window, because without one there is no real time to
                     // report and a number would have to be invented.
                     if (showsAxis) {
                         Modifier.pointerInput(intervals, originSec, spanSec) {
-                            fun hit(x: Float) = scrubHitAt(
-                                xPx = x,
-                                widthPx = size.width.toFloat(),
-                                intervals = intervals,
-                                originSec = originSec,
-                                spanSec = spanSec,
-                            )
+                            fun inspect(x: Float) {
+                                if (size.width > 0) inspectFraction(x / size.width.toFloat())
+                            }
                             detectHorizontalDragGestures(
-                                onDragStart = { scrub = hit(it.x) },
+                                onDragStart = { inspect(it.x) },
                                 onDragEnd = {},
                                 onDragCancel = {},
                                 onHorizontalDrag = { change, _ ->
-                                    scrub = hit(change.position.x)
+                                    inspect(change.position.x)
                                     change.consume()
                                 },
                             )
+                        }.pointerInput(intervals, originSec, spanSec) {
+                            detectTapGestures(onTap = { position ->
+                                if (size.width > 0) inspectFraction(position.x / size.width.toFloat())
+                            })
                         }
                     } else {
                         Modifier
@@ -420,7 +421,7 @@ internal fun FilledHypnogram(
             // paints from its level down to the baseline, so a crosshair drawn earlier is covered by
             // the next rect and effectively invisible across most of the chart.
             if (scrub != null) {
-                val cx = (((scrub!!.timestamp - originSec) / spanSec) * w).toFloat().coerceIn(0f, w)
+                val cx = ((selectionFraction ?: 0f) * w).coerceIn(0f, w)
                 drawLine(
                     color = Palette.textPrimary,
                     start = Offset(cx, 0f),
@@ -496,7 +497,7 @@ internal fun SleepStageLegend(palette: SleepStagePalette) {
  * (minute precision, [axisEdgeLabel]), plus round-hour marks between at a "nice" step chosen so the interior
  * count is ≤ [maxLabels]−2 — so a WIDER screen (larger [maxLabels]) shows MORE marks. Interior marks read as
  * the hour only ([axisHourLabel] — "06:00" / "6 AM"), which is shorter than an edge label, so more fit. Marks
- * within ~18% of either edge are dropped so a round-hour label can't collide with the onset/wake label.
+ * within ~18% of either edge are dropped as an initial budget; the layout checks measured label widths.
  * [is24h] (from `DateFormat.is24HourFormat`) picks 12/24h formatting. Pure/unit-testable.
  */
 internal fun hypnogramAxisTicks(
@@ -521,13 +522,37 @@ internal fun hypnogramAxisTicks(
     var t = (((onsetTs + offset) / stepSec) + 1L) * stepSec - offset // first LOCAL hour boundary after onset
     while (t < wakeTs) {
         val frac = ((t - onsetTs).toDouble() / span).toFloat()
-        // Drop marks within ~18% of an edge so a round-hour label can't overlap the onset/wake label — sized
-        // for the WIDER 12h edge ("10:25 AM"), plus half the mark's own width, on a phone.
+        // Initial edge budget; the layout removes any remaining collision using measured widths.
         if (frac > 0.18f && frac < 0.82f) out.add(frac to axisHourLabel(t, is24h))
         t += stepSec
     }
     out.add(1f to axisEdgeLabel(wakeTs, is24h))
     return out
+}
+
+internal fun hypnogramAxisLabelPositions(
+    fractions: List<Float>, widths: List<Int>, width: Int, gap: Int,
+): List<Pair<Int, Int>?> {
+    if (widths.isEmpty()) return emptyList()
+    val x = widths.mapIndexed { index, labelWidth ->
+        (fractions[index] * width - labelWidth / 2f).roundToInt()
+            .coerceIn(0, (width - labelWidth).coerceAtLeast(0))
+    }
+    val positions = MutableList<Pair<Int, Int>?>(widths.size) { null }
+    positions[0] = x[0] to 0
+    if (widths.size == 1) return positions
+    val last = widths.lastIndex
+    val endpointsOverlap = x[0] + widths[0] + gap > x[last]
+    positions[last] = x[last] to if (endpointsOverlap) 1 else 0
+    if (endpointsOverlap) return positions
+    var previousEnd = x[0] + widths[0]
+    for (index in 1 until last) {
+        if (x[index] >= previousEnd + gap && x[index] + widths[index] + gap <= x[last]) {
+            positions[index] = x[index] to 0
+            previousEnd = x[index] + widths[index]
+        }
+    }
+    return positions
 }
 
 /**
@@ -549,11 +574,12 @@ private fun HypnogramTimeAxis(ticks: List<Pair<Float, String>>, modifier: Modifi
         val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0)) }
         val wpx = constraints.maxWidth
         val hpx = placeables.maxOfOrNull { it.height } ?: 0
-        layout(wpx, hpx) {
-            placeables.forEachIndexed { i, p ->
-                val centerX = ticks[i].first * wpx
-                val x = (centerX - p.width / 2f).roundToInt().coerceIn(0, (wpx - p.width).coerceAtLeast(0))
-                p.place(x, 0)
+        val gap = Metrics.space8.roundToPx()
+        val positions = hypnogramAxisLabelPositions(ticks.map { it.first }, placeables.map { it.width }, wpx, gap)
+        val lastRow = positions.mapNotNull { it?.second }.maxOrNull() ?: 0
+        layout(wpx, hpx * (lastRow + 1) + gap * lastRow) {
+            placeables.forEachIndexed { index, placeable ->
+                positions[index]?.let { (x, row) -> placeable.place(x, row * (hpx + gap)) }
             }
         }
     }

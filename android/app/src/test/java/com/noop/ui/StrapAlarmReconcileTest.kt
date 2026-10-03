@@ -1,5 +1,6 @@
 package com.noop.ui
 
+import com.noop.alarm.SmartAlarmScheduler
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -13,10 +14,10 @@ import java.util.TimeZone
  * whichever ran last won the time.
  *
  * [reconcileStrapAlarm] in AppViewModel is now the sole arm/disarm caller; its decision is the pure
- * [earliestStrapAlarmEpochSec] over each feature's requested epoch. BOTH now resolve through
- * [nextSmartAlarmEpochSec]: the companion arms the strap at the PHONE alarm's time, so once the phone
- * alarm gained its own weekday selection the companion had to honour it too, or the band would buzz on
- * a morning that alarm is switched off. It passes no per-day overrides — the phone alarm has none.
+ * [earliestStrapAlarmEpochSec] over each feature's requested epoch. The standalone wake resolves through
+ * [nextSmartAlarmEpochSec], while the companion subtracts the elapsed window from the phone deadline.
+ * Both honour the phone alarm's selected days and per-day times, including a window that opens on the
+ * previous evening.
  * These tests exercise that pure decision against a fixed clock, no BLE stack needed.
  * Calendar.DAY_OF_WEEK: 1 = Sun ... 7 = Sat.
  */
@@ -42,7 +43,16 @@ class StrapAlarmReconcileTest {
         minuteOfDay: Int,
         nowMs: Long,
         weekdays: Set<Int> = emptySet(),
-    ): Long? = if (enabled) nextSmartAlarmEpochSec(minuteOfDay, weekdays, nowMs, ::utcCalendar) else null
+        windowMinutes: Int = 30,
+        skippedOccurrence: String = "",
+        calendarFactory: () -> Calendar = ::utcCalendar,
+    ): Long? = if (enabled) {
+        SmartAlarmScheduler.nextFutureWindowStart(
+            calendarFactory().apply { timeInMillis = nowMs }, weekdays, windowMinutes,
+            skippedOccurrence = skippedOccurrence,
+        ) { minuteOfDay }
+            ?.timeInMillis?.div(1000L)
+    } else null
 
     @Test
     fun bothOff_disarms() {
@@ -179,5 +189,69 @@ class StrapAlarmReconcileTest {
             buzzReq(true, 8 * 60, now),
         )
         assertEquals(wedAt(8, 0) / 1000, slot)
+    }
+
+    @Test fun sharedSlotCompanionUsesThePreviousEveningOfAMidnightDeadline() {
+        val now = ms(2026, 8, 23, 23, 0)
+        val smart = smartReq(true, 7 * 60, setOf(Calendar.MONDAY), now)
+        val companion = buzzReq(true, 23 * 60 + 50, now, setOf(Calendar.MONDAY))
+        assertEquals(ms(2026, 8, 23, 23, 50) / 1000, earliestStrapAlarmEpochSec(smart, companion))
+        val unrelatedSkip = buzzReq(
+            true, 23 * 60 + 50, now, setOf(Calendar.MONDAY), skippedOccurrence = "2026-08-24|1430",
+        )
+        assertEquals(companion, unrelatedSkip)
+        val skipped = buzzReq(
+            true, 23 * 60 + 50, now, setOf(Calendar.MONDAY), skippedOccurrence = "2026-08-23|1430",
+        )
+        assertEquals(smart, earliestStrapAlarmEpochSec(smart, skipped))
+    }
+
+    @Test fun anAlreadyOpenWindowKeepsTheNextCompanionAndTheOtherSlot() {
+        val now = ms(2026, 8, 24, 6, 45)
+        val companion = buzzReq(true, 6 * 60 + 30, now)
+        assertEquals(ms(2026, 8, 25, 6, 30) / 1000, companion)
+        val smart = smartReq(true, 7 * 60, setOf(Calendar.MONDAY), now)
+        assertEquals(ms(2026, 8, 24, 7, 0) / 1000, earliestStrapAlarmEpochSec(smart, companion))
+        val deadline = SmartAlarmScheduler.nextDeadline(
+            utcCalendar().apply { timeInMillis = now }, emptySet(), 30,
+        ) { 6 * 60 + 30 }
+        assertEquals(ms(2026, 8, 24, 7, 0), deadline!!.timeInMillis)
+    }
+
+    @Test fun companionOnlyRearmsTheFollowingOccurrenceAfterFiring() {
+        val beforeFire = buzzReq(true, 8 * 60, wedAt(7, 59))
+        assertEquals(wedAt(8, 0) / 1000, earliestStrapAlarmEpochSec(null, beforeFire))
+        val afterFire = buzzReq(true, 8 * 60, wedAt(8, 0))
+        assertEquals(ms(2026, 6, 18, 8, 0) / 1000, earliestStrapAlarmEpochSec(null, afterFire))
+    }
+
+    @Test fun skippingOneWeeklyCompanionRetainsItsFutureOccurrences() {
+        val now = wedAt(8, 15)
+        val next = buzzReq(
+            true, 8 * 60, now, setOf(Calendar.WEDNESDAY),
+            skippedOccurrence = "2026-06-24|480",
+        )
+        assertEquals(ms(2026, 7, 1, 8, 0) / 1000, earliestStrapAlarmEpochSec(null, next))
+    }
+
+    @Test fun companionAndPhoneWindowUseTheSameElapsedDstStart() {
+        for ((month, day, target) in listOf(
+            Triple(Calendar.MARCH, 8, 2 * 60 + 40),
+            Triple(Calendar.NOVEMBER, 1, 40),
+        )) {
+            val now = Calendar.getInstance(TimeZone.getTimeZone("America/New_York")).apply {
+                clear()
+                set(2026, month, day, 0, 0, 0)
+            }
+            val deadline = SmartAlarmScheduler.nextDeadline(now, setOf(Calendar.SUNDAY), 30) { target }!!
+            val companion = buzzReq(
+                true, target, now.timeInMillis, setOf(Calendar.SUNDAY),
+                calendarFactory = { now.clone() as Calendar },
+            )
+            assertEquals((deadline.timeInMillis - 30 * 60_000L) / 1000, companion)
+            val start = (now.clone() as Calendar).apply { timeInMillis = companion!! * 1000 }
+            assertEquals(1, start.get(Calendar.HOUR_OF_DAY))
+            assertEquals(40, start.get(Calendar.MINUTE))
+        }
     }
 }

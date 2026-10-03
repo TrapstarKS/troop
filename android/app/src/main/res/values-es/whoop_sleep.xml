@@ -27,4 +27,6 @@
     <string name="whoop_sleep_raw_stages">Fases sin procesar del dispositivo</string>
     <string name="whoop_sleep_estimated_stages">Fases estimadas en el dispositivo</string>
     <string name="whoop_sleep_requested_missing">No hay datos de sueño para este día.</string>
+    <string name="whoop_sleep_recorded_subtitle">%1$s registrados · %2$s de eficiencia</string>
+    <string name="whoop_sleep_in_bed_duration">%1$s en la cama</string>
 </resources>

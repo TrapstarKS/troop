@@ -27,4 +27,6 @@
     <string name="whoop_sleep_raw_stages">Nieprzetworzone fazy z urządzenia</string>
     <string name="whoop_sleep_estimated_stages">Szacowane fazy na urządzeniu</string>
     <string name="whoop_sleep_requested_missing">Brak danych snu dla tego dnia.</string>
+    <string name="whoop_sleep_recorded_subtitle">%1$s zarejestrowano · %2$s efektywności</string>
+    <string name="whoop_sleep_in_bed_duration">%1$s w łóżku</string>
 </resources>

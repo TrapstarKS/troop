@@ -38,7 +38,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.noop.data.JournalEntry
@@ -203,10 +207,16 @@ fun JournalLogCard(
     var baselineNumeric by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var draftAnswers by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var draftNumeric by rememberSaveable(selectedDay) { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var draftNumericText by rememberSaveable(selectedDay) { mutableStateOf<Map<String, String>>(emptyMap()) }
     var saving by remember { mutableStateOf(false) }
     var saveFailed by remember { mutableStateOf(false) }
     var pendingOffset by remember { mutableStateOf<Long?>(null) }
-    val dirty = draftAnswers != baselineAnswers || draftNumeric != baselineNumeric
+    val dirty = draftAnswers != baselineAnswers || draftNumeric != baselineNumeric || draftNumericText.any { (question, text) ->
+        text != (baselineNumeric[question]?.let(::formatNumeric) ?: "")
+    }
+    val invalidNumeric = draftNumericText.any { (question, text) ->
+        text.isNotBlank() && journalNumericValue(text, allowNegative = journalAllowsNegative(question)) == null
+    }
     val answersReady = answersDayKey == selectedDay
     LaunchedEffect(dirty) { onDirtyChanged(dirty) }
     val liveAnchorDay by rememberUpdatedState(anchorDay)
@@ -217,6 +227,7 @@ fun JournalLogCard(
         if (answersDayKey == journalDayKey(dayOffset, LocalDate.parse(anchorDay)) && !dirty) {
             baselineAnswers = answers; baselineNumeric = numericAnswers
             draftAnswers = answers; draftNumeric = numericAnswers
+            draftNumericText = emptyMap()
         }
     }
     val scope = rememberCoroutineScope()
@@ -224,6 +235,17 @@ fun JournalLogCard(
     fun selectDay(offset: Long) {
         if (liveSaving || offset == liveDayOffset) return
         if (liveDirty) pendingOffset = offset else onDayOffset(offset)
+    }
+    // Swift twin: `JournalLogCard.editNumeric`.
+    fun editNumeric(question: String, text: String) {
+        if (saving || !answersReady) return
+        draftNumericText = draftNumericText + (question to text)
+        if (text.isBlank()) {
+            draftNumeric = draftNumeric - question; draftAnswers = draftAnswers - question
+        } else journalNumericValue(text, allowNegative = journalAllowsNegative(question))?.let { value ->
+            draftNumeric = draftNumeric + (question to value); draftAnswers = draftAnswers + (question to true)
+        }
+        saveFailed = false
     }
     var editing by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<JournalCatalogItem?>(null) }
@@ -311,11 +333,14 @@ fun JournalLogCard(
                             editing = editing,
                             answers = draftAnswers,
                             numericAnswers = draftNumeric,
-                            onAnswer = { q, yes -> if (!saving && answersReady) { draftAnswers = draftAnswers + (q to yes); draftNumeric = draftNumeric - q } },
-                            onNumeric = { q, value -> if (!saving && answersReady && value.isFinite() && (value >= 0 || JournalFactor.find(q)?.unit == "°C")) {
+                            numericText = draftNumericText,
+                            onNumericText = ::editNumeric,
+                            onAnswer = { q, yes -> if (!saving && answersReady) { draftAnswers = draftAnswers + (q to yes); draftNumeric = draftNumeric - q; draftNumericText = draftNumericText - q } },
+                            onNumeric = { q, value -> if (!saving && answersReady && value.isFinite() && (value >= 0 || journalAllowsNegative(q))) {
                                 draftNumeric = draftNumeric + (q to value); draftAnswers = draftAnswers + (q to true)
+                                draftNumericText = draftNumericText - q
                             } },
-                            onClear = { q -> if (!saving && answersReady) { draftAnswers = draftAnswers - q; draftNumeric = draftNumeric - q } },
+                            onClear = { q -> if (!saving && answersReady) { draftAnswers = draftAnswers - q; draftNumeric = draftNumeric - q; draftNumericText = draftNumericText - q } },
                             onStartRename = { renaming = it },
                             onSetGroup = onSetGroup,
                             onSetKind = onSetKind,
@@ -332,11 +357,12 @@ fun JournalLogCard(
                         Text(uiString(R.string.plan_answered, items.count { !it.hidden && draftAnswers.containsKey(it.canonical) }, items.count { !it.hidden }),
                             style = NoopType.captionNumber, color = Palette.textSecondary, modifier = Modifier.weight(1f))
                         JournalChip(uiString(R.string.plan_discard), selected = false) {
-                            if (!saving && answersReady) { draftAnswers = baselineAnswers; draftNumeric = baselineNumeric; saveFailed = false }
+                            if (!saving && answersReady) { draftAnswers = baselineAnswers; draftNumeric = baselineNumeric; draftNumericText = emptyMap(); saveFailed = false }
                         }
                     }
-                    JournalChip(uiString(if (saving) R.string.plan_saving else R.string.plan_save_journal), selected = dirty) {
-                        if (dirty && !saving && answersReady) {
+                    JournalChip(uiString(if (saving) R.string.plan_saving else R.string.plan_save_journal), selected = dirty && !invalidNumeric,
+                        enabled = dirty && !invalidNumeric && !saving && answersReady) {
+                        if (dirty && !invalidNumeric && !saving && answersReady) {
                             val day = journalDayKey(dayOffset, LocalDate.parse(anchorDay))
                             val nextAnswers = draftAnswers
                             val nextNumeric = draftNumeric
@@ -346,11 +372,12 @@ fun JournalLogCard(
                             saving = true
                             scope.launch {
                                 saveFailed = !onSave(day, nextAnswers, nextNumeric, questions)
-                                if (!saveFailed) { baselineAnswers = nextAnswers; baselineNumeric = nextNumeric }
+                                if (!saveFailed) { baselineAnswers = nextAnswers; baselineNumeric = nextNumeric; draftNumericText = emptyMap() }
                                 saving = false
                             }
                         }
                     }
+                    if (invalidNumeric) Text(uiString(R.string.plan_numeric_invalid), style = NoopType.footnote, color = Palette.statusWarning)
                     if (saveFailed) Text(uiString(R.string.plan_save_failed), style = NoopType.footnote, color = Palette.statusWarning)
                 }
             }
@@ -380,6 +407,8 @@ private fun JournalGroupBlock(
     editing: Boolean,
     answers: Map<String, Boolean>,
     numericAnswers: Map<String, Double>,
+    numericText: Map<String, String>,
+    onNumericText: (String, String) -> Unit,
     onAnswer: (String, Boolean) -> Unit,
     onNumeric: (String, Double) -> Unit,
     onClear: (String) -> Unit,
@@ -390,16 +419,24 @@ private fun JournalGroupBlock(
     onRestoreQuestion: (String) -> Unit,
 ) {
     var collapsed by remember(group) { mutableStateOf(false) }
+    val groupTitle = group.title
+    val groupCount = uiString(R.string.l10n_journal_log_items_size_f76ab912, items.size)
+    val groupState = uiString(if (collapsed) R.string.settings_disclosure_collapsed else R.string.settings_disclosure_expanded)
+    val groupDescription = uiString(R.string.l10n_fused_record_screen_contrib_source_displayname_fusionformat_value_contrib_d182dd7f, groupCount, groupState)
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { collapsed = !collapsed },
+            modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { collapsed = !collapsed }
+                .semantics(mergeDescendants = true) {
+                    contentDescription = groupTitle
+                    stateDescription = groupDescription
+                },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(group.title.uppercase(), style = NoopType.overline, color = Palette.textTertiary)
+            Text(groupTitle.uppercase(), style = NoopType.overline, color = Palette.textTertiary)
             Spacer(Modifier.width(Metrics.space6))
-            Text(uiString(R.string.l10n_journal_log_items_size_f76ab912, items.size), style = NoopType.caption, color = Palette.textTertiary)
+            Text(groupCount, style = NoopType.caption, color = Palette.textTertiary)
             Spacer(Modifier.weight(1f))
-            Text(if (collapsed) "▸" else "▾", style = NoopType.caption, color = Palette.textTertiary)
+            Text(if (collapsed) "▸" else "▾", style = NoopType.caption, color = Palette.textTertiary, modifier = Modifier.clearAndSetSemantics {})
         }
         if (!collapsed) {
             items.forEach { item ->
@@ -425,6 +462,8 @@ private fun JournalGroupBlock(
                         item.kind.isNumeric -> JournalNumericField(
                             item = item,
                             value = numericAnswers[item.canonical],
+                            text = numericText[item.canonical] ?: numericAnswers[item.canonical]?.let(::formatNumeric) ?: "",
+                            onText = { onNumericText(item.canonical, it) },
                             onCommit = { onNumeric(item.canonical, it) },
                             onClear = { onClear(item.canonical) },
                         )
@@ -449,34 +488,33 @@ private fun JournalGroupBlock(
 private fun JournalNumericField(
     item: JournalCatalogItem,
     value: Double?,
+    text: String,
+    onText: (String) -> Unit,
     onCommit: (Double) -> Unit,
     onClear: () -> Unit,
 ) {
-    var text by remember(item.canonical) { mutableStateOf(value?.let { formatNumeric(it) } ?: "") }
-    var focused by remember { mutableStateOf(false) }
-    LaunchedEffect(value, focused) { if (!focused) text = value?.let { formatNumeric(it) } ?: "" }
+    val fieldLabel = listOfNotNull(journalLocalizedLabel(item), item.kind.unitLabel).joinToString(" ")
     Row(verticalAlignment = Alignment.CenterVertically) {
-        JournalChip("−", selected = false) { onCommit(if (item.kind.unitLabel == "°C") (value ?: 0.0) - 1 else ((value ?: 0.0) - 1).coerceAtLeast(0.0)) }
+        JournalChip("−", selected = false,
+            accessibilityLabel = uiString(R.string.l10n_components_decrease_accessibility_df5f1511, fieldLabel)) { onCommit(if (journalAllowsNegative(item.canonical)) (value ?: 0.0) - 1 else ((value ?: 0.0) - 1).coerceAtLeast(0.0)) }
         Spacer(Modifier.width(Metrics.space4))
         OutlinedTextField(
             value = text,
-            onValueChange = { new ->
-                text = new
-                if (new.isBlank()) onClear() else new.replace(',', '.').toDoubleOrNull()?.let { onCommit(it) }
-            },
+            onValueChange = onText,
             placeholder = { Text("—", style = NoopType.body, color = Palette.textTertiary) },
             singleLine = true,
             textStyle = NoopType.body,
             colors = journalFieldColors(),
             shape = RoundedCornerShape(Metrics.cornerSm),
-            modifier = Modifier.width((Metrics.iconButton * 2)).onFocusChanged { focused = it.isFocused },
+            modifier = Modifier.width((Metrics.iconButton * 2)).semantics { contentDescription = fieldLabel },
         )
         item.kind.unitLabel?.takeIf { it.isNotEmpty() }?.let { unit ->
             Spacer(Modifier.width(Metrics.space4))
-            Text(unit, style = NoopType.footnote, color = Palette.textTertiary)
+            Text(unit, style = NoopType.footnote, color = Palette.textTertiary, maxLines = 1, softWrap = false)
         }
         Spacer(Modifier.width(Metrics.space4))
-        JournalChip("+", selected = false) { onCommit((value ?: 0.0) + 1) }
+        JournalChip("+", selected = false,
+            accessibilityLabel = uiString(R.string.l10n_components_increase_accessibility_0949c0e9, fieldLabel)) { onCommit((value ?: 0.0) + 1) }
         if (value != null) {
             Spacer(Modifier.width(Metrics.space4))
             Text("✕", style = NoopType.caption, color = Palette.textTertiary, modifier = Modifier.clickable { onClear() })
@@ -484,8 +522,20 @@ private fun JournalNumericField(
     }
 }
 
-private fun formatNumeric(v: Double): String =
-    if (!v.isFinite()) "—" else String.format(if (v == Math.floor(v)) "%.0f" else "%.1f", v)
+// Swift twin: `journalAllowsNegative`.
+private fun journalAllowsNegative(question: String): Boolean =
+    JournalFactor.find(question)?.unit.let { it == null || it == "°C" }
+
+// Swift twin: `journalNumericValue`.
+private fun journalNumericValue(text: String, allowNegative: Boolean): Double? =
+    text.replace(',', '.').trim().toDoubleOrNull()?.takeIf { it.isFinite() && (it >= 0 || allowNegative) }
+
+// Swift twin: `NumericLogField.format`.
+private fun formatNumeric(v: Double): String = when {
+    !v.isFinite() -> "—"
+    v == Math.floor(v) -> String.format(java.util.Locale.ROOT, "%.0f", v)
+    else -> String.format(java.util.Locale.ROOT, "%.1f", Math.rint(v * 10) / 10)
+}
 
 /** Edit-mode per-item controls: rename, change group, convert type, remove. */
 @Composable
@@ -623,7 +673,7 @@ private fun JournalDivider() {
 /** A pill chip, filled with the accent when selected, hairline-bordered otherwise. Shared by the
  *  day toggle, the yes/no answers, and the "Add" action so they read identically. */
 @Composable
-private fun JournalChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun JournalChip(label: String, selected: Boolean, enabled: Boolean = true, accessibilityLabel: String? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
     Text(
         label,
@@ -633,7 +683,8 @@ private fun JournalChip(label: String, selected: Boolean, onClick: () -> Unit) {
             .clip(shape)
             .background(if (selected) Palette.accent else Palette.surfaceInset)
             .border(Metrics.divider, if (selected) Palette.accent else Palette.hairline, shape)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { if (accessibilityLabel != null) contentDescription = accessibilityLabel }
             .padding(horizontal = Metrics.space16, vertical = Metrics.space10),
     )
 }

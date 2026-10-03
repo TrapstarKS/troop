@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,10 +65,13 @@ fun ScoreDial(
     target: Float? = null,
     targetRange: ClosedFloatingPointRange<Float>? = null,
     accessibilityLabel: String? = null,
+    viewportWidth: Dp? = null,
 ) {
     val compact = size == ScoreDialSize.Compact
-    val diameter = if (compact) Metrics.compactDial else Metrics.detailDial
-    val stroke = if (compact) Metrics.compactDialStroke else Metrics.detailDialStroke
+    val diameter = if (compact) Metrics.compactDial else viewportWidth
+        ?.takeIf { it.value.isFinite() && it.value > 0f }?.times(Metrics.fullScoreDialWidthFraction) ?: Metrics.detailDial
+    val scale = if (compact) 1f else diameter / Metrics.detailDial
+    val stroke = if (compact) Metrics.compactDialStroke else Metrics.detailDialStroke * scale
     Column(modifier.clearAndSetSemantics {
         contentDescription = accessibilityLabel ?: listOf(label, value + unit)
             .filter { it.isNotBlank() }.joinToString(", ")
@@ -104,10 +108,10 @@ fun ScoreDial(
             Column(horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(value, style = if (compact) NoopType.dialValueCompact else NoopType.dialValueFull,
+                    Text(value, style = if (compact) NoopType.dialValueCompact else NoopType.dialValueFull.copy(fontSize = NoopType.dialValueFull.fontSize * scale),
                         color = Palette.textPrimary, maxLines = 1)
                     if (unit.isNotEmpty()) Text(unit,
-                        style = if (compact) NoopType.dialUnitCompact else NoopType.dialUnitFull,
+                        style = if (compact) NoopType.dialUnitCompact else NoopType.dialUnitFull.copy(fontSize = NoopType.dialUnitFull.fontSize * scale),
                         color = Palette.textPrimary, modifier = Modifier.padding(bottom = Metrics.space4))
                 }
                 if (!compact) Text(label.uppercase(Locale.getDefault()), style = NoopType.overline,

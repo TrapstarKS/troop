@@ -15,9 +15,7 @@ import StrandDesign
 /// history, logged and imported, stays joined under the original question.
 struct JournalLogCard: View {
     @EnvironmentObject var repo: Repository
-    /// The journal catalog is single-user state owned here (UserDefaults-backed), so hosting the card
-    /// needs no app-level injection.
-    @StateObject private var catalog = JournalCatalogStore()
+    @ObservedObject private var catalog: JournalCatalogStore
 
     /// Distinct imported question strings (from InsightsView's load), adopted into the catalog so
     /// logged answers and imported history group under the same behaviour.
@@ -32,9 +30,10 @@ struct JournalLogCard: View {
     let onDirtyChanged: (Bool) -> Void
     let onChanged: () -> Void              // parent re-runs load() after a write
 
-    init(importedQuestions: [String], answers: [String: Bool],
+    init(catalog: JournalCatalogStore, importedQuestions: [String], answers: [String: Bool],
          numericAnswers: [String: Double] = [:], dayOffset: Binding<Int>, answersDayKey: String, anchorDay: String,
          onDirtyChanged: @escaping (Bool) -> Void, onChanged: @escaping () -> Void) {
+        _catalog = ObservedObject(wrappedValue: catalog)
         self.importedQuestions = importedQuestions
         self.answers = answers
         self.numericAnswers = numericAnswers
@@ -47,6 +46,7 @@ struct JournalLogCard: View {
 
     @State private var draftAnswers: [String: Bool] = [:]
     @State private var draftNumeric: [String: Double] = [:]
+    @State private var draftNumericText: [String: String] = [:]
     @State private var baselineAnswers: [String: Bool] = [:]
     @State private var baselineNumeric: [String: Double] = [:]
     @State private var saving = false
@@ -55,7 +55,17 @@ struct JournalLogCard: View {
     @State private var calendarDate = Date()
     @State private var pendingOffset: Int?
 
-    private var dirty: Bool { draftAnswers != baselineAnswers || draftNumeric != baselineNumeric }
+    private var dirty: Bool {
+        draftAnswers != baselineAnswers || draftNumeric != baselineNumeric || draftNumericText.contains {
+            $0.value != (baselineNumeric[$0.key].map(NumericLogField.format) ?? "")
+        }
+    }
+    private var invalidNumeric: Bool {
+        draftNumericText.contains { question, text in
+            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                journalNumericValue(text, allowNegative: journalAllowsNegative(question)) == nil
+        }
+    }
     private var selectedDate: Date {
         JournalCalendar.date(dayKey) ?? Date()
     }
@@ -181,7 +191,12 @@ struct JournalLogCard: View {
                                 .disabled(!dirty || saving)
                             Button(action: saveDraft) { Text(saving ? String(localized: "Saving…") : String(localized: "Save journal")) }
                                 .buttonStyle(.borderedProminent)
-                                .disabled(!dirty || saving)
+                                .disabled(!dirty || saving || invalidNumeric)
+                        }
+                        if invalidNumeric {
+                            Text("Enter a valid number to save.")
+                                .font(StrandFont.footnote)
+                                .foregroundStyle(StrandPalette.statusWarning)
                         }
                         if saveFailed {
                             Text("Journal could not be saved. Try again.")
@@ -235,6 +250,7 @@ struct JournalLogCard: View {
         baselineNumeric = numericAnswers
         draftAnswers = answers
         draftNumeric = numericAnswers
+        draftNumericText = [:]
         saveFailed = false
     }
 
@@ -248,11 +264,13 @@ struct JournalLogCard: View {
         baselineNumeric = [:]
         draftAnswers = [:]
         draftNumeric = [:]
+        draftNumericText = [:]
         dayOffset = offset
         onChanged()
     }
 
     private func saveDraft() {
+        guard dirty, !saving, !invalidNumeric else { return }
         let day = dayKey
         let nextAnswers = draftAnswers
         let nextNumeric = draftNumeric
@@ -275,6 +293,7 @@ struct JournalLogCard: View {
             if !saveFailed {
                 baselineAnswers = nextAnswers
                 baselineNumeric = nextNumeric
+                draftNumericText = [:]
                 repo.noteJournalChanged()
             }
             onChanged()
@@ -304,9 +323,13 @@ struct JournalLogCard: View {
                             .font(StrandFont.caption)
                             .foregroundStyle(StrandPalette.textTertiary)
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(group.title), \(groupItems.count) items, \(collapsed ? "collapsed" : "expanded")")
+                .accessibilityLabel(Text(verbatim: group.title))
+                .accessibilityValue(Text(verbatim: String(format: String(localized: "%@, %@"),
+                    String(format: String(localized: "%lld"), groupItems.count),
+                    collapsed ? String(localized: "Collapsed") : String(localized: "Expanded"))))
 
                 if !collapsed {
                     ForEach(groupItems) { item in itemRow(item) }
@@ -341,28 +364,32 @@ struct JournalLogCard: View {
         return HStack(spacing: NoopMetrics.space2) {
             stepperButton("minus", q: item.canonical, current: current)
             NumericLogField(
-                value: current,
+                text: Binding(get: { draftNumericText[item.canonical] ?? draftNumeric[item.canonical].map(NumericLogField.format) ?? "" },
+                              set: { editNumeric(item.canonical, text: $0) }),
                 placeholder: "—",
-                onCommit: { v in commitNumeric(item.canonical, value: v) },
-                onClear: { draftNumeric.removeValue(forKey: item.canonical); draftAnswers.removeValue(forKey: item.canonical) })
+                label: [item.localizedDisplay, item.kind.unitLabel].compactMap { $0 }.joined(separator: " "),
+                allowsNegative: journalAllowsNegative(item.canonical))
             .frame(width: NoopMetrics.space4 * 4)
             if let unit = item.kind.unitLabel, !unit.isEmpty {
                 Text(verbatim: unit)
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             stepperButton("plus", q: item.canonical, current: current)
             if current != nil {
                 Button {
                     draftNumeric.removeValue(forKey: item.canonical)
                     draftAnswers.removeValue(forKey: item.canonical)
+                    draftNumericText.removeValue(forKey: item.canonical)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textTertiary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear \(item.display)")
+                .accessibilityLabel(Text(verbatim: String(format: String(localized: "Clear %@"), item.localizedDisplay)))
             }
         }
     }
@@ -370,7 +397,7 @@ struct JournalLogCard: View {
     private func stepperButton(_ symbol: String, q: String, current: Double?) -> some View {
         Button {
             let base = current ?? 0
-            let next = JournalFactor.find(q)?.unit == "°C" ? (symbol == "plus" ? base + 1 : base - 1) : max(0, symbol == "plus" ? base + 1 : base - 1)
+            let next = symbol == "plus" ? base + 1 : (journalAllowsNegative(q) ? base - 1 : max(0, base - 1))
             commitNumeric(q, value: next)
         } label: {
             Image(systemName: "\(symbol).circle")
@@ -378,13 +405,27 @@ struct JournalLogCard: View {
                 .foregroundStyle(StrandPalette.textSecondary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(symbol == "plus" ? "Increase" : "Decrease")
+        .accessibilityLabel(Text(verbatim: symbol == "plus" ? String(localized: "Increase") : String(localized: "Decrease")))
     }
 
     private func commitNumeric(_ q: String, value: Double) {
-        guard value.isFinite, value >= 0 || JournalFactor.find(q)?.unit == "°C" else { return }
+        guard value.isFinite, value >= 0 || journalAllowsNegative(q) else { return }
+        draftNumericText.removeValue(forKey: q)
         draftNumeric[q] = value
         draftAnswers[q] = true
+        saveFailed = false
+    }
+
+    private func editNumeric(_ q: String, text: String) {
+        guard !saving, answersDayKey == dayKey else { return }
+        draftNumericText[q] = text
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draftNumeric.removeValue(forKey: q)
+            draftAnswers.removeValue(forKey: q)
+        } else if let value = journalNumericValue(text, allowNegative: journalAllowsNegative(q)) {
+            draftNumeric[q] = value
+            draftAnswers[q] = true
+        }
         saveFailed = false
     }
 
@@ -523,6 +564,7 @@ struct JournalLogCard: View {
     private func answerPill(_ label: LocalizedStringKey, q: String, value: Bool) -> some View {
         let selected = draftAnswers[q] == value
         return pillButton(label, selected: selected) {
+            draftNumericText.removeValue(forKey: q)
             if selected {
                 draftAnswers.removeValue(forKey: q)
                 draftNumeric.removeValue(forKey: q)
@@ -551,41 +593,39 @@ struct JournalLogCard: View {
     }
 }
 
-/// A compact numeric log field: shows the current value or a ghost placeholder, commits a Double on
-/// return / focus-out. Kept small so the numeric row reads like the yes/no pills.
-private struct NumericLogField: View {
-    let value: Double?
-    let placeholder: String
-    let onCommit: (Double) -> Void
-    let onClear: () -> Void
+private func journalAllowsNegative(_ question: String) -> Bool {
+    let unit = JournalFactor.find(question)?.unit
+    return unit == nil || unit == "°C"
+}
 
-    @FocusState private var focused: Bool
-    @State private var text = ""
+private func journalNumericValue(_ text: String, allowNegative: Bool) -> Double? {
+    let cleaned = text.replacingOccurrences(of: ",", with: ".").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let value = Double(cleaned), value.isFinite, value >= 0 || allowNegative else { return nil }
+    return value
+}
+
+/// A compact numeric log field whose text stays in the parent draft, including incomplete numbers.
+private struct NumericLogField: View {
+    @Binding var text: String
+    let placeholder: String
+    let label: String
+    let allowsNegative: Bool
 
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.roundedBorder)
             .multilineTextAlignment(.center)
             .font(StrandFont.bodyNumber)
-            .focused($focused)
-            .onAppear { text = value.map(Self.format) ?? "" }
-            .onChangeCompat(of: value) { v in if !focused { text = v.map(Self.format) ?? "" } }
-            .onChangeCompat(of: focused) { active in if !active { text = value.map(Self.format) ?? "" } }
-            .onChangeCompat(of: text) { _ in commit() }
-            .onSubmit { commit() }
+            .accessibilityLabel(Text(verbatim: label))
         #if os(iOS)
-            .keyboardType(.decimalPad)
+            .keyboardType(allowsNegative ? .numbersAndPunctuation : .decimalPad)
         #endif
     }
 
-    private func commit() {
-        let cleaned = text.replacingOccurrences(of: ",", with: ".")
-        if cleaned.trimmingCharacters(in: .whitespaces).isEmpty { onClear() }
-        else if let v = Double(cleaned) { onCommit(v) }
-    }
-
-    private static func format(_ v: Double) -> String {
+    static func format(_ v: Double) -> String {
         guard v.isFinite else { return "—" }
-        return String(format: v == v.rounded() ? "%.0f" : "%.1f", v)
+        let integral = v == v.rounded()
+        let rounded = integral ? v : (v * 10).rounded(.toNearestOrEven) / 10
+        return String(format: integral ? "%.0f" : "%.1f", locale: Locale(identifier: "en_US_POSIX"), rounded)
     }
 }

@@ -159,7 +159,8 @@ final class HealthKitBridge: ObservableObject {
 
     // MARK: - Authorization
 
-    /// UserDefaults key holding the read set the user was last asked about.
+    /// UserDefaults key holding the authorization set the user was last asked about.
+    /// Retains the old key so an existing read-only fingerprint triggers one expanded request.
     private static let readTypeSignatureKey = "noop.health.readTypeSignature"
 
     /// UserDefaults key gating the one-time 90-day hourly-step backfill (see the hourly collection
@@ -167,39 +168,43 @@ final class HealthKitBridge: ObservableObject {
     /// `sync()` only walks the same window the daily collectors already use.
     private static let hourlyStepsBackfilledKey = "applehealth.hourlySteps.backfilled"
 
-    /// A stable fingerprint of the read types currently requested.
-    private static var readTypeSignature: String {
-        quantityReadIds.map(\.rawValue).sorted().joined(separator: ",")
+    /// Fingerprint the actual read and share sets, including categories and series (#2644).
+    /// Keep the roles distinct: adding share access for an already-readable type must change it.
+    /// `writeTypes` applies `writeDenied`, so forbidden share types never expand the request.
+    private var authorizationTypeSignature: String {
+        HealthWriteback.authorizationTypeSignature(read: readTypes.map(\.identifier),
+                                                   write: writeTypes.map(\.identifier))
     }
 
-    private static func persistReadTypeSignature() {
-        UserDefaults.standard.set(readTypeSignature, forKey: readTypeSignatureKey)
+    private func persistAuthorizationTypeSignature() {
+        UserDefaults.standard.set(authorizationTypeSignature, forKey: Self.readTypeSignatureKey)
     }
 
-    /// Re-request authorization when the app has STARTED reading a type it never used to (#949).
+    /// Re-request authorization when the app adds a read or share type (#949, #2644).
     ///
-    /// HealthKit never reports read authorization, and `requestAuthorization` is only called from the
-    /// connect button. So a read type added in an update stays `.notDetermined` for everyone who granted
-    /// access before it existed, and its queries return empty forever — indistinguishable from "you have
+    /// HealthKit never reports read authorization. Without a refresh, a read type added in an update
+    /// stays unrequested for everyone who granted access before it existed, and its queries return
+    /// empty forever — indistinguishable from "you have
     /// no water in Health", and silent. Water and caffeine would have done nothing at all for every
     /// existing user, which is most of them.
     ///
-    /// Comparing a stored fingerprint of the read set catches that. Re-requesting is cheap and quiet:
+    /// The same gap affects newly-added write types: their writers require `.sharingAuthorized`.
+    /// Comparing a stored fingerprint of both sets catches either expansion. Re-requesting is quiet:
     /// HealthKit presents the sheet ONLY for types that are still undetermined, so a user whose set is
     /// unchanged sees no UI, and a returning user is asked about exactly the new ones. The signature is
     /// stored only on success, so a failed request is retried rather than silently swallowed.
-    private func requestNewReadTypesIfNeeded() async {
+    private func requestNewAuthorizationTypesIfNeeded() async {
         // FOREGROUND only. `sync` is also driven by background observer wakes, and asking there would
         // spend the one request we get where no sheet can be presented — if that call reported success
         // without showing anything, the signature would be stored and the user never asked at all.
         guard auth == .authorized,
               UIApplication.shared.applicationState == .active,
               UserDefaults.standard.string(forKey: HealthKitBridge.readTypeSignatureKey)
-                  != HealthKitBridge.readTypeSignature
+                  != authorizationTypeSignature
         else { return }
         do {
             try await store.requestAuthorization(toShare: writeTypes, read: readTypes)
-            HealthKitBridge.persistReadTypeSignature()
+            persistAuthorizationTypeSignature()
         } catch {
             // Leave the signature unset so the next sync tries again. Not surfaced in `lastError`: the
             // user did not ask for this, and the rest of the sync is unaffected.
@@ -228,8 +233,8 @@ final class HealthKitBridge: ObservableObject {
             // the authoritative signal; the `.notDetermined` fallback only matters when that check can't
             // run, which on iOS means an App Store build that by definition has the entitlement.
             auth = .authorized
-            // This grant covered the CURRENT read set, so record it — see `requestNewReadTypesIfNeeded`.
-            HealthKitBridge.persistReadTypeSignature()
+            // Record the current read and share sets — see `requestNewAuthorizationTypesIfNeeded`.
+            persistAuthorizationTypeSignature()
         } catch {
             // A thrown error here is on a build that carries the entitlement (guarded above), so it's a
             // genuine denial / request failure — keep the normal `.denied` "enable in Settings" path,
@@ -261,21 +266,8 @@ final class HealthKitBridge: ObservableObject {
             // process. enableLiveDelivery is idempotent (HealthKit dedups observers + background
             // delivery per type), so calling it here as well as after a fresh requestAuthorization is safe.
             enableLiveDelivery()
-            // The high-res write-back added share types (HR stream, workouts, energy/distance) that a
-            // pre-update grant has as `.notDetermined`. Re-request once: HealthKit shows a single sheet
-            // listing ONLY the new types, and each write feature independently guards on its own type's
-            // share status, so declining any checkbox just skips that feature.
-            // Raw request, NOT requestAuthorization(): that method reclassifies a thrown error as
-            // `.denied`, which must never demote a bridge that just resumed a valid legacy grant.
-            //
-            // FOREGROUND only, for the same reason `requestNewReadTypesIfNeeded` is: this resume is now
-            // also called from the offload write-back (#1021), which runs in processes that were never
-            // foregrounded. Asking there would spend the one request we get where no sheet can be
-            // presented. The status read above is unaffected, so a legacy grant still resumes.
-            let newTypesPending = writeTypes.contains { store.authorizationStatus(for: $0) == .notDetermined }
-            if newTypesPending, UIApplication.shared.applicationState == .active {
-                Task { try? await store.requestAuthorization(toShare: writeTypes, read: readTypes) }
-            }
+            // Foreground sync owns the one awaited authorization refresh. This status-only path also
+            // runs during background writeback, where a permission sheet cannot be presented.
         }
     }
 
@@ -476,9 +468,9 @@ final class HealthKitBridge: ObservableObject {
             HealthSyncStats.recordSync(millis: Int(Date().timeIntervalSince(passStart) * 1000))
             finishHealthPass()
         }
-        // Before reading: pick up any read type this version added that the user was never asked about
-        // (#949). No-op once the stored signature matches, which is every sync after the first.
-        await requestNewReadTypesIfNeeded()
+        // Before syncing: pick up any read or share type this version added (#949, #2644).
+        // No-op once the stored signature matches, which is every sync after the first.
+        await requestNewAuthorizationTypesIfNeeded()
         guard let store = await repo.storeHandle() else { return false }
 
         let cal = Calendar.current
@@ -832,10 +824,8 @@ final class HealthKitBridge: ObservableObject {
         for s in importedSleeps { sleepsByStart[s.startTs] = s }
         // A night the strap may still be recording is held back, with its day's vitals, until it closes
         // (`HealthWriteback.nightIsStillOpen`).
-        // The strap's own heart rate, the same stream the HR write reads, so an Apple Watch still recording
-        // cannot make a strap night that stopped at its sync frontier look finished.
-        let newestHeartRateTs = (try? await whoopStore.hrFingerprint(deviceId: noopDeviceId, from: nowTs - 2 * 86_400,
-                                                                     to: nowTs).maxTs) ?? 0
+        // Resolve the same HR source union as the writer, including a re-paired strap's sync frontier.
+        let newestHeartRateTs = await repo.hrFingerprint(from: nowTs - 2 * 86_400, to: nowTs)?.maxTs ?? 0
         let openStarts = Set(computedSleeps.filter {
             HealthWriteback.nightIsStillOpen(endTs: $0.endTs, newestHeartRateTs: newestHeartRateTs, now: nowTs)
         }.map(\.startTs))
@@ -857,7 +847,7 @@ final class HealthKitBridge: ObservableObject {
         await attempt { try await migrateStrandedHealthRecords(fromTs: fromTs, nowTs: nowTs) }
         await attempt { try await writeVitals(whoopStore: whoopStore, days: days, sessions: sessions, holdingDays: openDays) }
         await attempt { try await writeSleep(sessions: sessions) }
-        await attempt { try await writeHeartRate(whoopStore: whoopStore, fromTs: fromTs, nowTs: nowTs) }
+        await attempt { try await writeHeartRate(fromTs: fromTs, nowTs: nowTs) }
         await attempt { try await writeWorkouts(whoopStore: whoopStore, fromTs: fromTs, toTs: nowTs) }
         if let firstError { throw firstError }
     }
@@ -1118,13 +1108,14 @@ final class HealthKitBridge: ObservableObject {
     /// sample external-UUID keys at this volume) and rewrites the window, so a strap offload that
     /// backfills a recent night reconciles. Offloads older than 48 h behind the cursor are missed
     /// until the cursor is cleared — accepted trade-off for not re-walking 14 days every sync.
-    private func writeHeartRate(whoopStore: WhoopStore, fromTs: Int, nowTs: Int) async throws {
+    private func writeHeartRate(fromTs: Int, nowTs: Int) async throws {
         guard let type = HKQuantityType.quantityType(forIdentifier: .heartRate),
               store.authorizationStatus(for: type) == .sharingAuthorized else { return }
         let cursor = UserDefaults.standard.integer(forKey: hrWriteCursorKey)
         let windowStart = cursor > 0 ? max(fromTs, cursor - 48 * 3600) : fromTs
-        let buckets = (try? await whoopStore.hrBuckets(deviceId: noopDeviceId, from: windowStart,
-                                                       to: nowTs, bucketSeconds: 60)) ?? []
+        // Use the same active/registered/canonical union as the charts (#2644). Re-pairing
+        // banks HR under a registry id, so reading only `noopDeviceId` silently misses it.
+        let buckets = await repo.hrBuckets(from: windowStart, to: nowTs, bucketSeconds: 60)
         guard !buckets.isEmpty else { return }
 
         let pred = NSCompoundPredicate(andPredicateWithSubpredicates: [
