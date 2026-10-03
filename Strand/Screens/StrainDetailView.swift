@@ -33,7 +33,7 @@ struct StrainDetailView: View {
     }
 
     var body: some View {
-        ScreenScaffold(title: nil, lazy: true, topBackground: recoveryStrainBackdrop()) {
+        ScreenScaffold(title: nil, lazy: false, topBackground: recoveryStrainBackdrop()) {
             Text(RecoveryStrainDetailLogic.dateLabel(key, locale: AppLanguage.activeLocale)).strandOverline().frame(maxWidth: .infinity)
             ScoreDial(label: String(localized: "Day strain"), value: strainDisplay ?? "—",
                       progress: strain.map { $0 / 21 }, color: StrandPalette.strainPrimary,
