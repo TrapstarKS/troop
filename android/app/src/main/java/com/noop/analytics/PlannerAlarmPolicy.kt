@@ -59,6 +59,24 @@ object PlannerAlarmPolicy {
         return if (start < end) currentMinute >= start && currentMinute < end else currentMinute >= start || currentMinute < end
     }
 
+    /** Canonical local advice queue. Epochs are whole UTC seconds on both platforms. */
+    fun adviceQueue(occurrences: Map<String, Long>): String = occurrences.keys.sorted().mapNotNull { key ->
+        val epoch = occurrences[key] ?: return@mapNotNull null
+        if (occurrenceParts(key) == null || epoch <= 0) null else "$key=$epoch"
+    }.joinToString("\n")
+
+    /** An elapsed queued reminder is consumed conservatively; OS delivery is not inferred. */
+    fun handledAdvice(queued: String, previous: String, nowEpoch: Long, localDay: String): String {
+        val keys = previous.split('\n').filter { occurrenceParts(it) != null }.toMutableSet()
+        for (line in queued.split('\n')) {
+            val parts = line.split('=')
+            if (parts.size != 2 || occurrenceParts(parts[0]) == null) continue
+            val epoch = parts[1].toLongOrNull() ?: continue
+            if (epoch.toString() == parts[1] && epoch > 0 && epoch <= nowEpoch) keys.add(parts[0])
+        }
+        return keys.filter { it.take(10) >= localDay }.sorted().joinToString("\n")
+    }
+
     /**
      * Pending until the saved wake instant. Scheduling still matches the exact
      * occurrence key; this comparison only gates the pending status and duplicate skip.

@@ -7,6 +7,10 @@ enum WindDownNudge {
 
     private static let requestId = "wind-down-nudge"
     private static var enableRevision = UUID()
+    private static var scheduleRevision = UUID()
+    static let occurrenceInfoKey = "windDown.occurrence"
+    private static let queueKey = "windDown.pendingAdviceQueue"
+    private static let handledKey = "windDown.handledAdviceOccurrences"
 
 
     private enum K {
@@ -154,37 +158,93 @@ enum WindDownNudge {
         reschedule()
     }
 
-    static func reschedule(from now: Date = Date()) {
-        schedule(from: now)
+    @MainActor
+    struct AdviceNotificationCenter {
+        var pending: () async -> [UNNotificationRequest]
+        var delivered: () async -> [UNNotificationRequest]
+        var removePending: ([String]) -> Void
+        var add: (UNNotificationRequest) -> Void
+
+        static func live() -> Self {
+            let center = UNUserNotificationCenter.current()
+            return Self(pending: { await center.pendingNotificationRequests() },
+                        delivered: { await center.deliveredNotifications().map(\.request) },
+                        removePending: { center.removePendingNotificationRequests(withIdentifiers: $0) },
+                        add: { center.add($0) })
+        }
     }
 
-    private static func schedule(from now: Date) {
-        let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: [requestId] + perDayRequestIds)
-        let planner = SleepPlannerSettings.shared
-        guard isEnabled || planner.debtReminderEnabled else { return }
-        let defaults = UserDefaults.standard
-        let defaultWake = defaults.object(forKey: "behavior.smartAlarmMinutes") as? Int ?? wakeMinutes
+    @discardableResult
+    static func reschedule(from now: Date = Date(), defaults: UserDefaults = .standard,
+                           planner: SleepPlannerSettings? = nil, calendar: Calendar = .current,
+                           center: AdviceNotificationCenter? = nil) -> Task<Void, Never> {
+        scheduleRevision = UUID()
+        let revision = scheduleRevision
+        let center = center ?? .live()
+        let queued = defaults.string(forKey: queueKey) ?? ""
+        let queuedIds = queued.split(separator: "\n").compactMap { line -> String? in
+            guard let key = line.split(separator: "=").first else { return nil }
+            return "\(requestId)-\(key)"
+        }
+        center.removePending([requestId] + perDayRequestIds + queuedIds)
+        return Task { @MainActor in
+            let pending = await center.pending()
+            guard revision == scheduleRevision else { return }
+            center.removePending(pending.map(\.identifier).filter { $0 == requestId || $0.hasPrefix("\(requestId)-") })
+            let delivered = await center.delivered()
+            guard revision == scheduleRevision else { return }
+            for request in delivered { recordDeliveredAdvice(request, defaults: defaults) }
+            schedule(from: now, defaults: defaults, planner: planner ?? .shared, calendar: calendar, center: center)
+        }
+    }
+
+    static func recordDeliveredAdvice(_ request: UNNotificationRequest, defaults: UserDefaults = .standard) {
+        guard request.identifier.hasPrefix("\(requestId)-"),
+              let key = request.content.userInfo[occurrenceInfoKey] as? String else { return }
+        defaults.set(key, forKey: "windDown.lastDeliveredOccurrence")
+    }
+
+    private static func schedule(from now: Date, defaults: UserDefaults, planner: SleepPlannerSettings,
+                                 calendar: Calendar, center: AdviceNotificationCenter) {
+        let nowEpoch = Int64(now.timeIntervalSince1970)
+        let localDay = String(AppModel.smartAlarmOccurrenceKey(now, calendar: calendar).prefix(10))
+        let delivered = defaults.string(forKey: "windDown.lastDeliveredOccurrence") ?? ""
+        let prior = (defaults.string(forKey: handledKey) ?? "") + "\n" + delivered
+        let handled = PlannerAlarmPolicy.handledAdvice(queued: defaults.string(forKey: queueKey) ?? "",
+                                                      previous: prior, nowEpoch: nowEpoch, localDay: localDay)
+        defaults.set(handled, forKey: handledKey)
+        defaults.set("", forKey: queueKey)
+        let enabled = defaults.bool(forKey: K.enabled)
+        guard enabled || planner.debtReminderEnabled else { return }
+        let handledKeys = Set(handled.split(separator: "\n").map(String.init))
+        var queue: [String: Int64] = [:]
+        let defaultWake = defaults.object(forKey: "behavior.smartAlarmMinutes") as? Int ?? defaults.object(forKey: K.wake) as? Int ?? 420
         let selectedDays = Set(defaults.array(forKey: "behavior.smartAlarmWeekdays") as? [Int] ?? [])
         let alarmOn = defaults.bool(forKey: "behavior.smartAlarmEnabled")
-        let calendar = Calendar.current
         var cursor = now
-        var count = 0
+        let lead = min(max(defaults.object(forKey: K.lead) as? Int ?? 30, 0), 120)
+        let rawOverrides = defaults.data(forKey: K.perDayWake).flatMap { try? JSONDecoder().decode([String: Int].self, from: $0) } ?? [:]
+        let overrides = Dictionary(uniqueKeysWithValues: rawOverrides.compactMap { key, value -> (Int, Int)? in
+            guard let day = Int(key), (1...7).contains(day) else { return nil }
+            return (day, min(max(value, 0), 1439))
+        })
         for _ in 0..<28 {
             guard let wake = AppModel.nextSmartAlarmDate(minutes: defaultWake,
                                                         weekdays: alarmOn ? selectedDays : [],
-                                                        overrides: perDayWakeOverrides,
+                                                        overrides: overrides,
                                                         skippedOccurrence: planner.skippedOccurrence,
                                                         from: cursor, calendar: calendar) else { break }
             cursor = wake
+            let key = AppModel.smartAlarmOccurrenceKey(wake, calendar: calendar)
+            guard !handledKeys.contains(key) else { continue }
             let weekday = calendar.component(.weekday, from: wake)
             let minute = calendar.component(.hour, from: wake) * 60 + calendar.component(.minute, from: wake)
-            let plan = planner.plan(weekday: weekday, wakeMinutes: minute, leadMinutes: leadMinutes)
+            let plan = planner.plan(weekday: weekday, wakeMinutes: minute, leadMinutes: lead)
             let debtAdvice = planner.debtReminderEnabled && plan.debtNudge
             let bedtime = SleepPlanner.bedtime(wake: wake, targetSleepMinutes: plan.targetSleepMinutes)
-            let reminder = bedtime.addingTimeInterval(-Double(leadMinutes * 60))
+            let reminder = bedtime.addingTimeInterval(-Double(lead * 60))
             let reminderMinute = calendar.component(.hour, from: reminder) * 60 + calendar.component(.minute, from: reminder)
-            guard isEnabled || debtAdvice,
+            guard enabled || debtAdvice,
                   !PlannerAlarmPolicy.isQuietMinute(minute: reminderMinute,
                                                     enabled: defaults.bool(forKey: "notif.quietHoursEnabled"),
                                                     startMinutes: defaults.object(forKey: "notif.quietStartMinutes") as? Int ?? 1320,
@@ -197,12 +257,14 @@ enum WindDownNudge {
                 ? String(localized: "Make room for sleep tonight. Your local plan suggests bed at \(bedtimeLabel), with recent sleep debt included in your need.")
                 : String(localized: "Your sleep plan suggests bed at \(bedtimeLabel). Take a little time to wind down.")
             content.sound = .default
+            content.userInfo = [occurrenceInfoKey: key]
             let parts = AppModel.sleepPlannerNotificationComponents(reminder)
             let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
-            center.add(UNNotificationRequest(identifier: "\(requestId)-wd\(count + 1)", content: content, trigger: trigger))
-            count += 1
-            if count == 7 { break }
+            center.add(UNNotificationRequest(identifier: "\(requestId)-\(key)", content: content, trigger: trigger))
+            queue[key] = Int64(reminder.timeIntervalSince1970)
+            if queue.count == 7 { break }
         }
+        defaults.set(PlannerAlarmPolicy.adviceQueue(queue), forKey: queueKey)
     }
 
     private static func formattedTime(_ date: Date) -> String {

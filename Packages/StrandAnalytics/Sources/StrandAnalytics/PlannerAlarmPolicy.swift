@@ -52,6 +52,27 @@ public enum PlannerAlarmPolicy {
         return start < end ? currentMinute >= start && currentMinute < end : currentMinute >= start || currentMinute < end
     }
 
+    /// Canonical local advice queue. Epochs are whole UTC seconds on both platforms.
+    public static func adviceQueue(_ occurrences: [String: Int64]) -> String {
+        occurrences.keys.sorted().compactMap { key in
+            guard occurrenceParts(key) != nil, let epoch = occurrences[key], epoch > 0 else { return nil }
+            return "\(key)=\(epoch)"
+        }.joined(separator: "\n")
+    }
+
+    /// Retains handled wakes from today onward. An elapsed queued reminder is consumed
+    /// conservatively, without claiming that the operating system actually delivered it.
+    public static func handledAdvice(queued: String, previous: String, nowEpoch: Int64, localDay: String) -> String {
+        var keys = Set(previous.split(separator: "\n").map(String.init).filter { occurrenceParts($0) != nil })
+        for line in queued.split(separator: "\n") {
+            let parts = line.split(separator: "=", omittingEmptySubsequences: false)
+            guard parts.count == 2, occurrenceParts(String(parts[0])) != nil,
+                  let epoch = Int64(parts[1]), String(epoch) == parts[1], epoch > 0, epoch <= nowEpoch else { continue }
+            keys.insert(String(parts[0]))
+        }
+        return keys.filter { String($0.prefix(10)) >= localDay }.sorted().joined(separator: "\n")
+    }
+
     /// Pending until the saved wake instant. Scheduling still matches the exact
     /// occurrence key; this comparison only gates the pending status and duplicate skip.
     public static func isSkipPending(skippedOccurrence: String, from now: Date, calendar: Calendar) -> Bool {

@@ -105,3 +105,8 @@ send a hardware alarm.
 
 Refs ryanbr/noop#758, ryanbr/noop#625, ryanbr/noop#2031, ryanbr/noop#750,
 ryanbr/noop#1611, ryanbr/noop#1613, ryanbr/noop#34.
+
+
+Advice occurrence handling (review round 1): Apple quiet-policy setters immediately replace the pending advice family, including each of the quiet toggle, start, and end settings. Wake-alarm requests are a separate family and remain exempt. Requests carry the canonical Gregorian local wake-date/minute identity instead of queue-position identity. Foreground delivery, taps, and delivered-notification reconciliation retain observed delivery state.
+
+Both platforms also keep the same canonical local advice queue and handled-occurrence strings (`windDown.pendingAdviceQueue`, `windDown.handledAdviceOccurrences`). Whole UTC epoch seconds are encoded as `wake-key=epoch`, one sorted record per line; handled wake keys are sorted one per line. These are device-local scheduling state, excluded from backup. The native Swift oracle pins the serializer and handling policy byte for byte in both language tests. An earlier queued advice time that has passed is conservatively considered handled, even when the OS delivery receipt is unavailable after dismissal or process termination. This avoids a second ordinary/debt reminder for the same wake after a goal or input edit; it does not claim that a notification was delivered. Pending edits before the advice time can still move the recommendation. History before the current local date is discarded, and a later wake remains eligible.

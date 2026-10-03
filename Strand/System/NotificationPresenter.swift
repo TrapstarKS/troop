@@ -28,7 +28,10 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound, .list])
+        Task { @MainActor in
+            WindDownNudge.recordDeliveredAdvice(notification.request)
+            completionHandler([.banner, .sound, .list])
+        }
     }
 
     /// Handle a tap on a delivered notification. Only the scheduled morning-brief category (K5) routes
@@ -39,6 +42,7 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        Task { @MainActor in WindDownNudge.recordDeliveredAdvice(response.notification.request) }
         if response.notification.request.content.categoryIdentifier == CoachBriefScheduler.notificationCategoryId {
             onCoachBriefTapped?()
         }

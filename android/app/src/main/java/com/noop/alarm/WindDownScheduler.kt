@@ -39,22 +39,37 @@ object WindDownScheduler {
         wakeMinutes: Int,
         perDayWake: Map<Int, Int> = emptyMap(),
     ) {
+        val now = Calendar.getInstance()
+        val prefs = com.noop.ui.NoopPrefs.of(context)
+        val handled = com.noop.analytics.PlannerAlarmPolicy.handledAdvice(
+            queued = prefs.getString("windDown.pendingAdviceQueue", "") ?: "",
+            previous = (prefs.getString("windDown.handledAdviceOccurrences", "") ?: "") + "\n" +
+                (prefs.getString("windDown.lastDeliveredOccurrence", "") ?: ""),
+            nowEpoch = now.timeInMillis / 1000,
+            localDay = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(now).take(10),
+        )
+        prefs.edit().putString("windDown.handledAdviceOccurrences", handled)
+            .putString("windDown.pendingAdviceQueue", "").apply()
         cancel(context)
         if (!notificationsAllowed(context)) return
         val settings = SleepPlannerStore.from(context).read()
         val weekdays = if (com.noop.ui.NoopPrefs.smartAlarmEnabled(context)) com.noop.ui.NoopPrefs.smartAlarmWeekdays(context) else emptySet()
         val reminder = nextPlannerReminder(
-            now = Calendar.getInstance(),
+            now = now,
             settings = settings,
             weekdays = weekdays,
             wakeMinutes = wakeMinutes,
             perDayWake = perDayWake,
             leadMinutes = store.leadMinutes,
             debtOnly = !store.enabled,
+            handledOccurrences = handled.split('\n').toSet(),
         ) ?: return
         com.noop.ui.NoopPrefs.of(context).edit()
             .putString("windDown.pendingOccurrence", reminder.occurrenceKey)
-            .putLong("windDown.pendingReminderMs", reminder.at.timeInMillis).apply()
+            .putLong("windDown.pendingReminderMs", reminder.at.timeInMillis)
+            .putString("windDown.pendingAdviceQueue", com.noop.analytics.PlannerAlarmPolicy.adviceQueue(
+                mapOf(reminder.occurrenceKey to reminder.at.timeInMillis / 1000),
+            )).apply()
         val intent = Intent(context, WindDownReceiver::class.java).setAction(ACTION_NUDGE)
             .putExtra("occurrence", reminder.occurrenceKey)
             .putExtra("reminderMs", reminder.at.timeInMillis)
@@ -85,6 +100,7 @@ object WindDownScheduler {
         perDayWake: Map<Int, Int>,
         leadMinutes: Int,
         debtOnly: Boolean = false,
+        handledOccurrences: Set<String> = emptySet(),
     ): PlannerReminder? {
         var next: PlannerReminder? = null
         for (offset in 0..14) {
@@ -95,7 +111,7 @@ object WindDownScheduler {
             val wake = com.noop.analytics.SleepPlanner.wakeDate(requestedMinute, day)
             val minute = wake.get(Calendar.HOUR_OF_DAY) * 60 + wake.get(Calendar.MINUTE)
             val key = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(wake)
-            if (key == settings.skippedOccurrence) continue
+            if (key == settings.skippedOccurrence || key in handledOccurrences) continue
             val plan = settings.plan(weekday, minute, leadMinutes)
             if (debtOnly && (!settings.debtReminderEnabled || !plan.debtNudge)) continue
             val bedtime = com.noop.analytics.SleepPlanner.bedtime(wake, plan.targetSleepMinutes)

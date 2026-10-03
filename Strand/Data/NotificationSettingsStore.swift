@@ -83,15 +83,16 @@ struct AppAlertPref: Codable {
 final class NotificationSettingsStore: ObservableObject {
     @Published var masterEnabled: Bool      { didSet { d.set(masterEnabled, forKey: K.master) } }
     @Published var onlyWhenWorn: Bool        { didSet { d.set(onlyWhenWorn, forKey: K.worn) } }
-    @Published var quietHoursEnabled: Bool   { didSet { d.set(quietHoursEnabled, forKey: K.quiet) } }
-    @Published var quietStartMinutes: Int    { didSet { d.set(quietStartMinutes, forKey: K.quietStart) } }
-    @Published var quietEndMinutes: Int      { didSet { d.set(quietEndMinutes, forKey: K.quietEnd) } }
+    @Published var quietHoursEnabled: Bool   { didSet { d.set(quietHoursEnabled, forKey: K.quiet); rescheduleAdvice() } }
+    @Published var quietStartMinutes: Int    { didSet { d.set(quietStartMinutes, forKey: K.quietStart); rescheduleAdvice() } }
+    @Published var quietEndMinutes: Int      { didSet { d.set(quietEndMinutes, forKey: K.quietEnd); rescheduleAdvice() } }
     @Published private var prefs: [String: AppAlertPref] { didSet { persistPrefs() } }
 
     /// Installed notification-capable apps, resolved once at init.
     let apps: [NotifApp]
 
-    private let d = UserDefaults.standard
+    private let d: UserDefaults
+    private let rescheduleAdvice: () -> Void
     private enum K {
         static let master     = "notif.masterEnabled"
         static let worn       = "notif.onlyWhenWorn"
@@ -101,7 +102,9 @@ final class NotificationSettingsStore: ObservableObject {
         static let prefs      = "notif.appPrefs"
     }
 
-    init() {
+    init(defaults: UserDefaults = .standard, rescheduleAdvice: (() -> Void)? = nil) {
+        d = defaults
+        self.rescheduleAdvice = rescheduleAdvice ?? { WindDownNudge.reschedule() }
         masterEnabled     = d.object(forKey: K.master) as? Bool ?? false  // opt-in, default OFF
         onlyWhenWorn      = d.object(forKey: K.worn) as? Bool ?? true
         quietHoursEnabled = d.object(forKey: K.quiet) as? Bool ?? false
