@@ -223,12 +223,21 @@ enum AppleDemoSeeder {
         }
 
         _ = try await store.upsertDailyMetrics(daily, deviceId: whoop)
+        sleeps.append(contentsOf: sleepDetailExamples(calendar: cal))
         _ = try await store.upsertSleepSessions(sleeps, deviceId: whoop)
         _ = try await store.upsertMetricSeries(series, deviceId: whoop)
         _ = try await store.upsertAppleDaily(appleRows, deviceId: apple)
         if !workouts.isEmpty { _ = try await store.upsertWorkouts(workouts, deviceId: whoop) }
         if !journal.isEmpty { _ = try await store.upsertJournal(journal, deviceId: whoop) }
         NSLog("AppleDemoSeeder: seeded \(daily.count) days, \(workouts.count) workouts.")
+    }
+
+    private static func sleepDetailExamples(calendar: Calendar) -> [CachedSleepSession] {
+        let day = calendar.startOfDay(for: Date())
+        guard let onset = calendar.date(bySettingHour: 14, minute: 15, second: 0, of: day) else { return [] }
+        let start = Int(onset.timeIntervalSince1970)
+        return [CachedSleepSession(startTs: start, endTs: start + 30 * 60, efficiency: 100,
+                                   stagesJSON: segmentsJSON(onset: start, deep: 0, rem: 0, light: 30, awakeMin: 0))]
     }
 
     // MARK: - helpers
