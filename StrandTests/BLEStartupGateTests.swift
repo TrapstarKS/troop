@@ -1,7 +1,37 @@
 import XCTest
+import WhoopStore
 @testable import Strand
 
 final class BLEStartupGateTests: XCTestCase {
+    @MainActor
+    func testWatchOnlySourcePreservesAuthorizedRestorationAndGenericBLEIsDenied() async {
+        func row(_ id: String, brand: String, sourceKind: SourceKind) -> PairedDevice {
+            PairedDevice(id: id, brand: brand, model: brand, sourceKind: sourceKind,
+                         capabilities: [.hr], status: .active, addedAt: 1, lastSeenAt: 1)
+        }
+        let watch = row("apple-health", brand: "Apple", sourceKind: .liveAppleWatch)
+        let whoop = row("my-whoop", brand: "WHOOP", sourceKind: .liveBLE)
+        let strap = row("belt", brand: "Polar", sourceKind: .liveBLE)
+        XCTAssertTrue(BLEStartupGate.allowsWhoopBLE(for: watch))
+        XCTAssertTrue(BLEStartupGate.allowsWhoopBLE(for: whoop))
+        XCTAssertTrue(BLEStartupGate.allowsWhoopBLE(for: nil))
+        XCTAssertFalse(BLEStartupGate.allowsWhoopBLE(for: strap))
+        let gate = BLEStartupGate()
+        let token = gate.beginRestoration(identifier: "whoop-peripheral")
+        var discoveries = 0
+        var releases = 0
+        await gate.resume(prepare: { true }, isAllowed: { BLEStartupGate.allowsWhoopBLE(for: watch) },
+                          onDenied: { releases += 1 }) {
+            if gate.claimRestoration(.discover, token: token) { discoveries += 1 }
+        }
+        XCTAssertEqual(discoveries, 1)
+        XCTAssertEqual(releases, 0)
+        await gate.resume(prepare: { true }, isAllowed: { BLEStartupGate.allowsWhoopBLE(for: strap) },
+                          onDenied: { releases += 1 }) { discoveries += 1 }
+        XCTAssertEqual(discoveries, 1)
+        XCTAssertEqual(releases, 1)
+    }
+
     @MainActor
     func testInactiveDeviceSeedPrecedesBothStartupCallbacks() async {
         let gate = BLEStartupGate()
