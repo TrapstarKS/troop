@@ -69,7 +69,16 @@ internal object PhysiologicalStepCycleEngine {
         effortMethod: StrainScorer.Method,
     ): Result {
         if (dayCycleMode == DayCycleMode.MIDNIGHT) {
-            return Result(emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyMap(), null, emptyList())
+            return Result(
+                cycleStepsByWakeDay = emptyMap(),
+                cycleStrainByWakeDay = emptyMap(),
+                cycleCaloriesByWakeDay = emptyMap(),
+                cycleActiveCaloriesByWakeDay = emptyMap(),
+                cycleWorkoutCountByWakeDay = emptyMap(),
+                boundaryOnsetByWakeDay = emptyMap(),
+                firstCycleWakeDay = null,
+                recoveredOwnerMarkerRows = emptyList(),
+            )
         }
         val editedRowsByDay = editedRows.groupBy {
             AnalyticsEngine.dayString(it.endTs, tzOffsetSeconds)
