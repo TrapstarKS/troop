@@ -126,7 +126,9 @@ fun HealthspanScreen(vm: AppViewModel) {
                 }
             }
         }
-        item { HealthspanAgeTrend(bodyAge, referenceDay) }
+        if (chronologicalAge >= 18) {
+            item { HealthspanAgeTrend(bodyAge, referenceDay) }
+        }
         item {
             HealthspanSupportingCards(vm, referenceDay, days)
         }

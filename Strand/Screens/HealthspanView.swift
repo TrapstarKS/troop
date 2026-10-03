@@ -75,7 +75,7 @@ struct HealthspanView: View {
                         Button("How this estimate works") { showMethod = true }.font(StrandFont.headline).frame(minHeight: NoopMetrics.touchTarget)
                     }
                 }
-                if !trendPoints.isEmpty { ageTrend }
+                if chronologicalAge >= 18 && !trendPoints.isEmpty { ageTrend }
                 VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                     TrackedSectionHeader(title: String(localized: "Contributors"))
                     contributor(String(localized: "Sleep"), symbol: "moon.fill", value: average(window.compactMap(\.totalSleepMin).filter { $0.isFinite && $0 > 0 }).map { healthspanDuration(Int($0.rounded())) })

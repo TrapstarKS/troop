@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,7 +84,7 @@ private data class StressMonitorData(
 
 @Composable
 fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
-    var showHistory by remember { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
     val days by vm.recentDays.collectAsStateWithLifecycle()
     val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val strapId = selectedStrap ?: vm.activeStrapId
@@ -94,10 +95,10 @@ fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
     val sex = profile.sex
     val effortMethod = NoopPrefs.effortMethod(context)
     val lifecycleOwner = LocalLifecycleOwner.current
-    var selectedDay by remember { mutableStateOf(LocalDate.now()) }
+    var selectedDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
     var data by remember(selectedDay, strapId) { mutableStateOf<StressMonitorData?>(null) }
     var nowSeconds by remember { mutableLongStateOf(System.currentTimeMillis() / 1000L) }
-    var selectedTimestamp by remember(selectedDay, strapId) { mutableStateOf<Long?>(null) }
+    var selectedTimestamp by rememberSaveable(selectedDay, strapId) { mutableStateOf<Long?>(null) }
 
     BackHandler(enabled = showHistory) { showHistory = false }
     if (showHistory) {
