@@ -543,7 +543,8 @@ fun AppRoot(
     // the Today cards and the import path post to the same inbox this sheet renders.
     val context = androidx.compose.ui.platform.LocalContext.current
     val openCoach = {
-        nav.navigate(coachDestination(com.noop.ai.AiKeyStore.hasKey(context)))
+        val route = coachDestination(com.noop.ai.AiKeyStore.hasKey(context))
+        if (route != currentRoute) nav.navigate(route) { launchSingleTop = true }
     }
     LaunchedEffect(localNotificationRoute) {
         localNotificationRoute?.let { route ->
