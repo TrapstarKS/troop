@@ -78,7 +78,7 @@ struct SmartAlarmView: View {
                      : String(localized: "Building your plan. Record at least three nights; this recommendation uses your usual need."))
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
                 if snapshot.plan.debtNudge {
-                    Text("Give yourself more room for sleep tonight. The plan includes \(duration(snapshot.plan.debtMinutes)) for recent sleep debt.")
+                    Text("Your sleep need includes \(duration(snapshot.plan.debtMinutes)) of recent debt. Consider an earlier bedtime when you can.")
                         .font(StrandFont.footnote).foregroundStyle(StrandPalette.restBright)
                 }
                 if behavior.smartAlarmEnabled {

@@ -13,6 +13,10 @@ minus the configured lead. Day-specific goals and wake overrides use the same ca
 usable nights are required before the estimate is labelled ready; otherwise the usual need remains
 visible as a preliminary estimate.
 
+Displayed planning debt is the amount added to Sleep Need before applying the selected goal. The
+goal percentage scales the whole estimated need, including debt. Debt guidance names Sleep Need
+so the raw debt amount and target duration remain distinct.
+
 Runtime bedtime and reminder dates count elapsed minutes backward from the resolved wake instant,
 so the target duration is preserved across daylight saving changes. A nonexistent wake time moves
 forward while preserving its minute; a repeated wake time uses the later occurrence on both platforms.
