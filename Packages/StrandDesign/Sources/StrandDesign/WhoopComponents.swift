@@ -54,9 +54,12 @@ public struct ScoreDial: View {
     }
 
     public var body: some View {
-        let diameter = size == .full ? viewportWidth.flatMap {
-            $0.isFinite && $0 > 0 ? $0 * NoopMetrics.fullScoreDialWidthFraction : nil
-        } ?? size.diameter : size.diameter
+        let diameterFraction = size == .full
+            ? NoopMetrics.fullScoreDialWidthFraction
+            : NoopMetrics.compactScoreDialWidthFraction
+        let diameter = viewportWidth.flatMap {
+            $0.isFinite && $0 > 0 ? $0 * diameterFraction : nil
+        } ?? size.diameter
         let scale = diameter / size.diameter
         let stroke = size.stroke * scale
         let fontSize = size.fontSize * scale
@@ -292,6 +295,8 @@ public struct TopChrome: View {
     public var profileLabel: String
     public var strapLabel: String
     public var avatarInitials: String
+    public var streakCount: Int?
+    public var streakLabel: String?
     public var batteryPercent: Int?
     public var isConnected: Bool
     public var canGoNext: Bool
@@ -302,7 +307,8 @@ public struct TopChrome: View {
     public var onStrap: () -> Void
 
     public init(dateLabel: String, previousLabel: String, nextLabel: String, profileLabel: String,
-                strapLabel: String, avatarInitials: String = "", batteryPercent: Int? = nil,
+                strapLabel: String, avatarInitials: String = "", streakCount: Int? = nil,
+                streakLabel: String? = nil, batteryPercent: Int? = nil,
                 isConnected: Bool = false, canGoNext: Bool = true, onPrevious: @escaping () -> Void,
                 onNext: @escaping () -> Void, onDate: @escaping () -> Void,
                 onProfile: @escaping () -> Void, onStrap: @escaping () -> Void) {
@@ -312,6 +318,8 @@ public struct TopChrome: View {
         self.profileLabel = profileLabel
         self.strapLabel = strapLabel
         self.avatarInitials = avatarInitials
+        self.streakCount = streakCount
+        self.streakLabel = streakLabel
         self.batteryPercent = batteryPercent
         self.isConnected = isConnected
         self.canGoNext = canGoNext
@@ -333,6 +341,18 @@ public struct TopChrome: View {
                 .background(Circle().fill(StrandPalette.surfaceElevated))
             }
             .accessibilityLabel(profileLabel)
+            if let streakCount, streakCount > 0,
+               let streakLabel, !streakLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HStack(spacing: NoopMetrics.space1) {
+                    Image(systemName: "flame.fill").foregroundStyle(StrandPalette.positive)
+                    Text(streakCount, format: .number).font(StrandFont.captionNumber)
+                }
+                .padding(.horizontal, NoopMetrics.space2)
+                .frame(minHeight: NoopMetrics.touchTarget)
+                .background(Capsule().fill(StrandPalette.surfaceRaised))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(streakLabel)
+            }
             Spacer(minLength: 0)
             HStack(spacing: 0) {
                 chromeButton("chevron.left", label: previousLabel, action: onPrevious)
@@ -402,9 +422,13 @@ public struct TabCapsule: View {
                     VStack(spacing: NoopMetrics.space1) {
                         Image(systemName: item.systemImage).font(.system(size: NoopMetrics.tabIconSize, weight: .medium))
                         Text(item.label).font(StrandFont.overlineScaled(NoopMetrics.tabLabelSize))
+                            .lineLimit(1)
+                            .minimumScaleFactor(NoopMetrics.tabLabelMinimumScale)
+                            .allowsTightening(true)
                     }
                     .foregroundStyle(selectedID == item.id ? StrandPalette.textPrimary : StrandPalette.textTertiary)
-                    .frame(maxWidth: .infinity, minHeight: NoopMetrics.tabHeight)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: NoopMetrics.tabHeight)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

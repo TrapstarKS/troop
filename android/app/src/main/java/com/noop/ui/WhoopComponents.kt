@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryStd
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -68,10 +69,12 @@ fun ScoreDial(
     viewportWidth: Dp? = null,
 ) {
     val compact = size == ScoreDialSize.Compact
-    val diameter = if (compact) Metrics.compactDial else viewportWidth
-        ?.takeIf { it.value.isFinite() && it.value > 0f }?.times(Metrics.fullScoreDialWidthFraction) ?: Metrics.detailDial
-    val scale = if (compact) 1f else diameter / Metrics.detailDial
-    val stroke = if (compact) Metrics.compactDialStroke else Metrics.detailDialStroke * scale
+    val baseDiameter = if (compact) Metrics.compactDial else Metrics.detailDial
+    val diameterFraction = if (compact) Metrics.compactScoreDialWidthFraction else Metrics.fullScoreDialWidthFraction
+    val diameter = viewportWidth?.takeIf { it.value.isFinite() && it.value > 0f }
+        ?.times(diameterFraction) ?: baseDiameter
+    val scale = diameter / baseDiameter
+    val stroke = (if (compact) Metrics.compactDialStroke else Metrics.detailDialStroke) * scale
     Column(modifier.clearAndSetSemantics {
         contentDescription = accessibilityLabel ?: listOf(label, value + unit)
             .filter { it.isNotBlank() }.joinToString(", ")
@@ -108,10 +111,12 @@ fun ScoreDial(
             Column(horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(value, style = if (compact) NoopType.dialValueCompact else NoopType.dialValueFull.copy(fontSize = NoopType.dialValueFull.fontSize * scale),
+                    Text(value, style = if (compact) NoopType.dialValueCompact.copy(fontSize = NoopType.dialValueCompact.fontSize * scale)
+                        else NoopType.dialValueFull.copy(fontSize = NoopType.dialValueFull.fontSize * scale),
                         color = Palette.textPrimary, maxLines = 1)
                     if (unit.isNotEmpty()) Text(unit,
-                        style = if (compact) NoopType.dialUnitCompact else NoopType.dialUnitFull.copy(fontSize = NoopType.dialUnitFull.fontSize * scale),
+                        style = if (compact) NoopType.dialUnitCompact.copy(fontSize = NoopType.dialUnitCompact.fontSize * scale)
+                            else NoopType.dialUnitFull.copy(fontSize = NoopType.dialUnitFull.fontSize * scale),
                         color = Palette.textPrimary, modifier = Modifier.padding(bottom = Metrics.space4))
                 }
                 if (!compact) Text(label.uppercase(Locale.getDefault()), style = NoopType.overline,
@@ -251,6 +256,8 @@ fun TopChrome(
     onProfile: () -> Unit,
     onStrap: () -> Unit,
     modifier: Modifier = Modifier,
+    streakCount: Int? = null,
+    streakLabel: String? = null,
 ) {
     Row(modifier.fillMaxWidth().heightIn(min = Metrics.chromeMinHeight),
         verticalAlignment = Alignment.CenterVertically,
@@ -260,6 +267,19 @@ fun TopChrome(
             Box(Modifier.size(Metrics.chromeAvatar).background(Palette.surfaceOverlay, CircleShape),
                 contentAlignment = Alignment.Center) {
                 Text(avatarInitials, style = NoopType.caption, color = Palette.textPrimary)
+            }
+        }
+        val visibleStreakLabel = streakLabel?.takeIf { it.isNotBlank() }
+        if (streakCount != null && streakCount > 0 && visibleStreakLabel != null) {
+            Row(Modifier.heightIn(min = Metrics.iconButton).clip(RoundedCornerShape(Metrics.cornerPill))
+                .background(Palette.surfaceRaised).padding(horizontal = Metrics.space8)
+                .clearAndSetSemantics { contentDescription = visibleStreakLabel },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Metrics.space4)) {
+                Icon(Icons.Filled.LocalFireDepartment, null, tint = Palette.positive,
+                    modifier = Modifier.size(Metrics.iconSmall))
+                Text(NumberFormat.getIntegerInstance(Locale.getDefault()).format(streakCount),
+                    style = NoopType.captionNumber, color = Palette.textPrimary, maxLines = 1)
             }
         }
         Row(Modifier.weight(1f).clip(RoundedCornerShape(Metrics.cornerPill)).background(Palette.surfaceRaised),
@@ -310,7 +330,8 @@ fun TabCapsule(items: List<TabCapsuleItem>, selectedID: String, onSelect: (Strin
                 verticalArrangement = Arrangement.Center) {
                 Icon(item.icon, null, tint = tint, modifier = Modifier.size(Metrics.space24 * BottomBarStyleStore.scale))
                 Spacer(Modifier.size(Metrics.space4))
-                Text(item.label, style = NoopType.footnote, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.label, style = NoopType.footnote, color = tint, maxLines = 1, softWrap = false,
+                    overflow = TextOverflow.Ellipsis)
             }
         }
     }
