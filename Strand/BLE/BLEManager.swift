@@ -1756,7 +1756,8 @@ public final class BLEManager: NSObject, ObservableObject {
         // unchanged, so a scan still finds a strap the user has switched to.
         if UIApplication.shared.applicationState != .active,
            let last = Self.lastConnectedPeripheralUUID,
-           let p = central.retrievePeripherals(withIdentifiers: [last]).first {
+           let p = central.retrievePeripherals(withIdentifiers: [last]).first,
+           isPreferredPeripheral(p) {
             log("Connecting to last strap \(last) — targeted (app not on screen; a background scan would not find it)")
             preparePeripheral(p)
             central.connect(p, options: nil)
@@ -2043,8 +2044,8 @@ public final class BLEManager: NSObject, ObservableObject {
     /// attach/reconnect paths consult this so they can never adopt the WRONG already-connected strap on a
     /// multi-WHOOP setup (the registry said one strap, the radio stayed on another — multi-WHOOP switch bug).
     private func isPreferredPeripheral(_ p: CBPeripheral) -> Bool {
-        guard let preferred = preferredPeripheralUUID else { return true }
-        return p.identifier == preferred
+        BLEStartupGate.allowsConnectionRequest(identifier: p.identifier,
+                                               preferredIdentifier: preferredPeripheralUUID)
     }
 
     /// #52: a strap reached a GENUINE encrypted bond. Remember its identifier as the live working strap

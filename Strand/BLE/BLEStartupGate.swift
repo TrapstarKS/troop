@@ -42,6 +42,10 @@ final class BLEStartupGate {
         return restorationActions.insert(action).inserted
     }
 
+    static func allowsConnectionRequest(identifier: UUID, preferredIdentifier: UUID?) -> Bool {
+        preferredIdentifier == nil || identifier == preferredIdentifier
+    }
+
     static func allowsConnectionCallback(identifier: String, currentIdentifier: String?,
                                          preferredIdentifier: String?, intentionalDisconnect: Bool,
                                          isConnected: Bool) -> Bool {

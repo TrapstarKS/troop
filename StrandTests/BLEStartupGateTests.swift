@@ -275,4 +275,47 @@ final class BLEStartupGateTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testBackgroundRememberedCacheFallbackRespectsTheSelectedPeripheral() {
+        let a = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let b = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let cases: [(String, UUID?, UUID?, Set<UUID>, [UUID], [UUID], Int)] = [
+            ("selected B misses but remembered A hits", b, a, [a], [b, a], [], 1),
+            ("selected B hits before remembered A", b, a, [a, b], [b], [b], 0),
+            ("unpinned remembered A hits", nil, a, [a], [a], [a], 0),
+            ("preferred and remembered B hit", b, b, [b], [b], [b], 0),
+            ("no remembered identifier or cache entry", nil, nil, [], [], [], 1),
+        ]
+        for (scenario, preferred, remembered, cached, expectedReads, expectedConnections, expectedScans) in cases {
+            var reads: [UUID] = []
+            var prepares: [UUID] = []
+            var connections: [UUID] = []
+            var scans = 0
+            func retrieve(_ identifier: UUID) -> UUID? {
+                reads.append(identifier)
+                return cached.contains(identifier) ? identifier : nil
+            }
+            let connectFromBackground = {
+                if let preferred, let peripheral = retrieve(preferred) {
+                    prepares.append(peripheral)
+                    connections.append(peripheral)
+                    return
+                }
+                if let remembered, let peripheral = retrieve(remembered),
+                   BLEStartupGate.allowsConnectionRequest(identifier: peripheral,
+                       preferredIdentifier: preferred) {
+                    prepares.append(peripheral)
+                    connections.append(peripheral)
+                    return
+                }
+                scans += 1
+            }
+            connectFromBackground()
+            XCTAssertEqual(reads, expectedReads, scenario)
+            XCTAssertEqual(prepares, expectedConnections, scenario)
+            XCTAssertEqual(connections, expectedConnections, scenario)
+            XCTAssertEqual(scans, expectedScans, scenario)
+        }
+    }
+
 }
