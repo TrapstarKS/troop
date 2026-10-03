@@ -20,7 +20,7 @@ Apple tokens live in `StrandDesign`; Android tokens live in `com.noop.ui`. Exist
 | Strain | `strainPrimary` | `#0093E7` |
 | Sleep score | `sleepPrimary` | `#7BA1BB` |
 | Favorable comparison | `positive` | `#00F19F`; distinct from Recovery lime |
-| Stress | `stressLow`, `stressMedium`, `stressHigh` | Blue `#67AEE6`, teal `#00F19F`, amber `#FFA722` |
+| Stress | `stressLow`, Apple `stressColor` / Android `stressMedium`, `stressHigh` | Blue `#67AEE6`, teal `#00F19F`, amber `#FFA722` |
 | Coach decoration | `coachViolet`, `coachCyan` | Separate violet/cyan gradient |
 | Ring track | `ringTrack` | `#353D40` |
 
@@ -55,7 +55,8 @@ Existing platform footprints remain available. These numbers are layout tokens, 
 | Full / compact dial stroke | `scoreDialStroke` 15 / `compactScoreDialStroke` 5 | `detailDialStroke` 15 / `compactDialStroke` 5 |
 | Tab capsule height | `tabHeight`: 60 | `tabHeight`: 64 |
 | Coach orb diameter | `coachDiameter`: 58 | `coachOrb`: 60 |
-| Compact header control | `compactControlSize`: 36 | `chromeAvatar`: 36 |
+| Compact header control | `compactControlSize`: 36 | `iconButton`: 48 |
+| Profile avatar | `TopChrome` uses `compactControlSize`: 36 | `chromeAvatar`: 36 inside the 48dp control |
 | Interactive target | `touchTarget`: 44 | `iconButton`: 48; Material minimum targets retained |
 
 ## Reusable components
@@ -73,7 +74,7 @@ Apple implementations are in `Packages/StrandDesign/Sources/StrandDesign/WhoopCo
 | `TopChrome` | Date label, previous/next/profile/strap accessibility labels, initials, nullable battery percentage, connection state, next-date gate and five callbacks. Use the screen's existing date resolver. Never create a second date state in the shell. Apple hosts should use the existing `LiveConsoleReadout.batteryPercent` or `StrapBatteryDisplay.resolve` path, including active-device/connection gates and the `--demo-sync` override, rather than reading a raw cached WHOOP battery field. |
 | `TabCapsule` | Items with stable `id`, localized `label`, platform icon; `selectedID`, selection callback. |
 | `CoachOrb` | Localized accessibility label and tap callback; opens the existing Coach surface. Respects the existing master switch and consent. |
-| Chart styling | `ChartTokens` plus shared domain/stage tokens and existing `TrendChart`, `Hypnogram`, sparklines and bar components. Preserve real timestamps, gaps and discrete sleep stages. |
+| Chart styling | Apple `ChartTokens` / Android `WhoopChartStyle` plus shared domain/stage tokens and existing `TrendChart`, `Hypnogram`, sparklines and bar components. Preserve real timestamps, gaps and discrete sleep stages. |
 
 Apple capsule item initializer: `TabCapsuleItem(id:label:systemImage:)`. Android uses `TabCapsuleItem(id,label,icon)`. Apple uses `ScoreDialSize.full` / `.compact`; Android uses `ScoreDialSize.Full` / `.Compact`. Percent progress is displayed score / 100. Any Strain normalization belongs to the caller's presentation layer, never storage or scoring.
 
@@ -89,9 +90,9 @@ Apple capsule item initializer: `TabCapsuleItem(id:label:systemImage:)`. Android
 
 Apple retains a `TabView` with four stable tags (Home 0, Health 1, Plan 2, More 3), independent navigation paths and scroll-to-top tokens. Its native tab bar is hidden in favor of the shared capsule. Re-tapping a selected tab refreshes and pops its path, or scrolls its root to the top. Home retains its day swipe; pushed screens retain native back gestures. Quick-action, active-workout, devices and pillar sheets stay available. `NavRouter.openTrends()` opens Trends inside Plan; `openCoach()` presents Coach; journal requests retain their day-offset handoff. Coach requests dismiss an ordinary quick-action/device sheet or minimize an open Lift Session before presenting, so a notification request cannot compete with that presentation. Minimizing preserves the running session. The routed sheet remains occupied through its closing animation; a competing Home Screen shortcut or Coach request is delivered from the dismissal callback, with the latest request winning.
 
-### Public route hooks for screen tracks
+### App route hooks for screen tracks
 
-Apple screens push `NavigationLink(value: TabRoute.<case>)` and rely on **one** `.tabRouteDestinations()` registration per stack. Do not register the same enum twice. The shell owns destination wiring; new screens can replace the existing host for their case without renaming it.
+Swift `TabRoute` and `tabRouteDestinations()` are internal to the app module and available to its screen files; they are not exports of the `StrandDesign` package. Android `WhoopRoute` is public. Apple screens push `NavigationLink(value: TabRoute.<case>)` and rely on **one** `.tabRouteDestinations()` registration per stack. Do not register the same enum twice. The shell owns destination wiring; new screens can replace the existing host for their case without renaming it.
 
 | Purpose | Apple `TabRoute` | Android `WhoopRoute` | Initial content |
 |---|---|---|---|
@@ -110,3 +111,7 @@ Old `TabRoute.sleep`, `.health`, `.stress`, metric routes and all Android route 
 ## Verification boundaries
 
 The first milestone establishes the API and shell, while the subsequent screen tracks replace screen contents. Pixel fidelity is not claimed for unobserved Health, planner, Journal-entry or hypnogram layouts. No BLE commands, schema, analytic formulas, medical classifications or remote service behavior are introduced by this foundation. Build/test results and screenshots are recorded in the external D1 verification log and track status files.
+
+For pure macOS hosted unit tests, an opt-in Debug condition `NOOP_PURE_TEST_HOST` selects `StrandPureTestHost`, an empty SwiftUI App that does not construct `AppModel` or its production services. `StrandApp` remains typechecked. Normal Debug builds and all Release builds keep the production entry. Use the existing Strand scheme with `SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG NOOP_PURE_TEST_HOST'` and separate DerivedData for the test command, through the orchestration heavy wrapper. This removes implicit app startup; selected tests must also avoid constructing production BLE services themselves.
+
+The macOS Sleep sidebar pane and iOS Debug direct-screen host each register `.tabRouteDestinations()` once in their own navigation stack, so Sleep Planner value links remain usable outside the four-tab shell.
