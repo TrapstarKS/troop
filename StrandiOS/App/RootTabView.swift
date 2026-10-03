@@ -236,7 +236,7 @@ struct RootTabView: View {
             }
             .padding(.horizontal, NoopMetrics.screenPadding)
             .padding(.vertical, NoopMetrics.gap)
-            .background(StrandPalette.surfaceBase.opacity(0.96))
+            .background(StrandPalette.surfaceBase)
         }
         .animation(.easeInOut(duration: 0.25), value: liftSession.isActive)
         // A session left running by a previous launch is back before this view exists
