@@ -253,6 +253,7 @@ struct RootTabView: View {
 
     private func presentCoach() {
         guard coachEnabled else { return }
+        guard !pendingCoach else { return }
         if pendingRoutedRequest != nil || (routedSheetActive && routedPillar == nil) {
             pendingRoutedRequest = .coach
             return
