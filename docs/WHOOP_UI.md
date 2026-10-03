@@ -26,6 +26,38 @@ Apple tokens live in `StrandDesign`; Android tokens live in `com.noop.ui`. Exist
 
 Use `StrandFont` / Android theme typography for text, and `NoopMetrics` / `Metrics` for spacing, radii and dimensions. Scores use system bold numerals with tabular digits where the platform supports them. Detail dial is about 260 points/dp; compact dial about 90. Body roles remain scalable. Stage colors retain the existing NOOP stage vocabulary because the current hypnogram colors are unverified. Never treat a missing score as zero.
 
+### Typography and geometry
+
+Apple named text styles follow SwiftUI's platform and Dynamic Type sizes. Android named styles use scalable `sp`; numeric display styles use tabular figures on both platforms. The public roles below should be used instead of a new font declaration.
+
+| Role | Apple `StrandFont` | Android `NoopType` |
+|---|---|---|
+| Main title | `title1`: system title, bold | `title1`: 26sp, semibold |
+| Section title | `title2`: system title2, semibold | `title2`: 22sp, semibold |
+| Headline | `headline`: system headline, semibold | `headline`: 17sp, semibold |
+| Body | `body`: system body, regular | `body`: 16sp, medium, 23sp line height |
+| Supporting copy | `subhead`, `caption`, `footnote`: corresponding system styles | `subhead` 13sp, `caption` 12sp, `footnote` 11sp |
+| Uppercase micro-label | `overline` / `overlineScaled`, `overlineTracking` 1.1 | `overline`: 11sp bold, `overlineTracking` 1.4 |
+| Full / compact dial value | `display(scoreDisplaySize)` 68 / `display(compactScoreDisplaySize)` 25 | `dialValueFull` 68sp / `dialValueCompact` 26sp |
+| Other numbers | `number`, `bodyNumber`, `captionNumber` | `number`, `bodyNumber`, `captionNumber` |
+| Raw logs | `mono` | `mono` |
+
+Existing platform footprints remain available. These numbers are layout tokens, not physiological limits. Apple values are points; Android values are dp.
+
+| Role | Apple `NoopMetrics` | Android `Metrics` |
+|---|---|---|
+| Structural spacing | `space1/2/3/4/5/6/8/10`: 4/8/12/16/20/24/32/40 | `space4/8/12/16/24`: 4/8/12/16/24; optical half steps also named |
+| Page inset | `screenPadding` / `screenHPadding`: 20 | `screenPadding`: 24 |
+| Card inset / gap | `cardPadding`: 16; `gap`: 12 | `cardPadding`: 16; `gap`: 12 |
+| Section gap | `sectionGap`: 24 | `sectionGap`: 28 |
+| Card / compact radius | `cardRadius`: 16; `NoopVisualStyle.compactRadius`: 12 | `cardRadius`: 18; `cornerSm`: 12 |
+| Full / compact dial diameter | `scoreDialDiameter` 260 / `compactScoreDialDiameter` 90 | `detailDial` 260 / `compactDial` 90 |
+| Full / compact dial stroke | `scoreDialStroke` 15 / `compactScoreDialStroke` 5 | `detailDialStroke` 15 / `compactDialStroke` 5 |
+| Tab capsule height | `tabHeight`: 60 | `tabHeight`: 64 |
+| Coach orb diameter | `coachDiameter`: 58 | `coachOrb`: 60 |
+| Compact header control | `compactControlSize`: 36 | `chromeAvatar`: 36 |
+| Interactive target | `touchTarget`: 44 | `iconButton`: 48; Material minimum targets retained |
+
 ## Reusable components
 
 Apple implementations are in `Packages/StrandDesign/Sources/StrandDesign/WhoopComponents.swift`; Android implementations are in `android/app/src/main/java/com/noop/ui/WhoopComponents.kt`. All text arguments are localized by the host. Components own drawing and styling; screens own date selection, resolved values, availability, comparisons, device state and navigation.
