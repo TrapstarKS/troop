@@ -29,6 +29,7 @@ struct RootTabView: View {
     /// when a hub row deep-links to it via NavRouter. nil = closed.
     @State private var routedPillar: NavRouter.Destination?
     @State private var pendingCoach = false
+    @State private var pendingRoutedRequest: RoutedSheetRequest?
     /// Selected tab — bound so tab switches can crossfade (README §Motion: ~240ms opacity swap
     /// between tab roots, calm easing). Defaults to Today.
     @State private var selectedTab: Int = 0
@@ -155,7 +156,7 @@ struct RootTabView: View {
         }
         // v5 pillar deep-links (Insights hub / Lab Book / fused record / Rhythm) present as a sheet in
         // their own nav stack — the same idiom the quick-action + Devices screens use on iPhone.
-        .sheet(item: $routedPillar) { dest in
+        .sheet(item: $routedPillar, onDismiss: presentPendingRoutedRequest) { dest in
             pillarScreen(dest)
         }
         // Honour a router request: Devices keeps its dedicated sheet; the v5 pillars route through the
@@ -249,6 +250,10 @@ struct RootTabView: View {
 
     private func presentCoach() {
         guard coachEnabled else { return }
+        if pendingRoutedRequest != nil {
+            pendingRoutedRequest = .coach
+            return
+        }
         if quickAction != nil || showDevices || liftSession.isPresented {
             pendingCoach = true
             quickAction = nil
@@ -263,6 +268,17 @@ struct RootTabView: View {
         guard pendingCoach else { return }
         pendingCoach = false
         if coachEnabled { routedPillar = .coach }
+    }
+
+    private func presentPendingRoutedRequest() {
+        guard let request = pendingRoutedRequest else { return }
+        pendingRoutedRequest = nil
+        switch request {
+        case .coach:
+            if coachEnabled { routedPillar = .coach }
+        case .quickAction(let action):
+            withAnimation(Self.sheetEase) { quickAction = action }
+        }
     }
 
     /// Mandatory launch gates defer an external action. Once the shell is available, an explicit Home
@@ -282,8 +298,13 @@ struct RootTabView: View {
         withAnimation(Self.sheetEase) {
             pendingCoach = false
             showDevices = false
-            routedPillar = nil
-            quickAction = destination
+            if routedPillar != nil || pendingRoutedRequest != nil {
+                pendingRoutedRequest = .quickAction(destination)
+                quickAction = nil
+                routedPillar = nil
+            } else {
+                quickAction = destination
+            }
         }
     }
 
@@ -348,7 +369,8 @@ struct RootTabView: View {
                 quickAction = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     guard quickAction == nil, !pendingCoach, routedPillar == nil,
-                          !showDevices, !liftSession.isPresented else { return }
+                          pendingRoutedRequest == nil, !showDevices,
+                          !liftSession.isPresented else { return }
                     withAnimation(Self.sheetEase) { quickAction = picked }
                 }
             }
@@ -701,6 +723,11 @@ private struct MoreRow: View {
 private enum QuickAction: Int, Identifiable {
     case menu, live, workout, journal, breathe
     var id: Int { rawValue }
+}
+
+private enum RoutedSheetRequest {
+    case coach
+    case quickAction(QuickAction)
 }
 
 /// The bottom sheet of quick actions presented by the centre FAB. Spec bottom sheet: surfaceOverlay
