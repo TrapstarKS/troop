@@ -597,6 +597,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     GlassBottomBar(
                         current = selectedTab,
                         onTabSelected = { dest ->
+                            if (dest != Destination.Coach) selectedTabRoute = dest.route
                             if (dest.route != currentRoute) {
                                 if (dest == Destination.Coach) nav.navigate(dest.route)
                                 else nav.navigateTopLevel(dest.route)
@@ -975,6 +976,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
         if (BottomBarStyleStore.overlay && barPresent) GlassBottomBar(
             current = selectedTab,
             onTabSelected = { dest ->
+                if (dest != Destination.Coach) selectedTabRoute = dest.route
                 if (dest.route != currentRoute) {
                     if (dest == Destination.Coach) nav.navigate(dest.route)
                     else nav.navigateTopLevel(dest.route)

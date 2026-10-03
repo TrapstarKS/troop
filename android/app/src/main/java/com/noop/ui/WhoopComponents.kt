@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
@@ -270,7 +271,7 @@ fun TopChrome(
                     tint = Palette.textPrimary.copy(alpha = if (canGoNext) 1f else Palette.disabledOpacity))
             }
         }
-        Row(Modifier.heightIn(min = Metrics.iconButton).clip(RoundedCornerShape(Metrics.cornerSm))
+        Row(Modifier.widthIn(min = Metrics.iconButton).heightIn(min = Metrics.iconButton).clip(RoundedCornerShape(Metrics.cornerSm))
             .clickable(onClick = onStrap).padding(horizontal = Metrics.space6)
             .semantics { contentDescription = strapLabel },
             verticalAlignment = Alignment.CenterVertically,
