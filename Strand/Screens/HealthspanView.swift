@@ -16,7 +16,6 @@ struct HealthspanView: View {
     @State private var reference = Calendar.current.startOfDay(for: Date())
     @State private var showMethod = false
     @State private var selectedAgeDay: String?
-    @GestureState private var ageDragIsHorizontal: Bool?
 
     private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     private var sourceLoaded: Bool { loadedSource == sourceID }
@@ -72,7 +71,7 @@ struct HealthspanView: View {
                 }
                 if snapshot.eligibility.state == .ready && !trendPoints.isEmpty { ageTrend }
                 HealthspanPillarsView(reference: reference)
-                HealthSupportingMetricCards()
+                HealthSupportingMetricCards(reference: reference)
             }
             .padding(NoopMetrics.screenPadding)
             .padding(.bottom, NoopMetrics.tabBarClearance)
@@ -144,16 +143,7 @@ struct HealthspanView: View {
                             guard let date: Date = proxy.value(atX: x) else { return }
                             selectedAgeDay = points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }?.day
                         }
-                        Rectangle().fill(.clear).contentShape(Rectangle())
-                            .simultaneousGesture(SpatialTapGesture().onEnded { select($0.location) })
-                            .simultaneousGesture(DragGesture()
-                                .updating($ageDragIsHorizontal) { event, horizontal, _ in
-                                    if horizontal == nil { horizontal = abs(event.translation.width) > abs(event.translation.height) }
-                                }
-                                .onChanged { event in
-                                    guard ageDragIsHorizontal ?? (abs(event.translation.width) > abs(event.translation.height)) else { return }
-                                    select(event.location)
-                                })
+                        HealthChartInteraction(onSelect: select)
                     }
                 }
                 if let reading {
@@ -211,29 +201,41 @@ struct HealthspanPreviewCard: View {
 }
 
 struct HealthSupportingMetricCards: View {
+    var reference: Date? = nil
     @EnvironmentObject private var repo: Repository
     @EnvironmentObject private var model: AppModel
     @State private var observedSource: String?
     @State private var loadedSource: String?
-    @State private var vo2: MetricSeriesResolution?
+    @State private var clock = Date()
+    @State private var loadedThroughDay: String?
+    @State private var vo2: ResolvedMetricPoint?
     @State private var steps: HealthspanPresentation.StepSample?
     private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
+    private var referenceDay: Date { Calendar.current.startOfDay(for: reference ?? clock) }
+    private var throughDay: String { Repository.dayString(referenceDay) }
+    private var readingIsCurrent: Bool { loadedSource == sourceID && loadedThroughDay == throughDay }
     var body: some View {
         VStack(spacing: NoopMetrics.gap) {
-            metric("VO₂max estimate", point: loadedSource == sourceID ? vo2?.points.last { $0.value.isFinite && $0.value > 0 } : nil, unit: "ml/kg/min")
-            metric("Steps", point: loadedSource == sourceID ? steps.map { ResolvedMetricPoint(day: $0.day, value: $0.count, source: $0.source, sourceKey: "steps") } : nil, unit: "")
+            metric("VO₂max estimate", point: readingIsCurrent ? vo2 : nil, unit: "ml/kg/min")
+            metric("Steps", point: readingIsCurrent ? steps.map { ResolvedMetricPoint(day: $0.day, value: $0.count, source: $0.source, sourceKey: "steps") } : nil, unit: "")
         }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { clock = $0 }
         .onReceive(healthspanSourcePublisher(model: model, repo: repo)) { observedSource = $0 }
-        .task(id: "\(sourceID)|\(repo.refreshSeq)") {
+        .task(id: "\(sourceID)|\(repo.refreshSeq)|\(throughDay)") {
             let source = sourceID
             guard await healthspanAwaitSource(source, repo: repo) else { return }
             let revision = repo.refreshSeq
-            let clock = Calendar.current.startOfDay(for: Date())
-            let fromDay = Repository.dayString(Calendar.current.date(byAdding: .day, value: -30, to: clock)!)
-            let throughDay = Repository.dayString(clock)
-            var resolvedVO2 = await repo.resolvedSeries(key: "vo2max_est", source: "my-whoop", days: 180)
-            if resolvedVO2.points.contains(where: { $0.value.isFinite && $0.value > 0 }) != true { resolvedVO2 = await repo.resolvedSeries(key: "vo2max", source: "apple-health", days: 180) }
-            let measuredSteps = await repo.resolvedSeries(key: "steps", source: "my-whoop", days: 31)
+            let day = referenceDay
+            let fromDay = Repository.dayString(Calendar.current.date(byAdding: .day, value: -30, to: day)!)
+            let vo2FromDay = Repository.dayString(Calendar.current.date(byAdding: .day, value: -179, to: day)!)
+            let throughDay = Repository.dayString(day)
+            let computedVO2 = await repo.resolvedSeries(key: "vo2max_est", source: "my-whoop", from: vo2FromDay, to: throughDay)
+            var resolvedVO2 = computedVO2.points.last { $0.day >= vo2FromDay && $0.day <= throughDay && $0.value.isFinite && $0.value > 0 }
+            if resolvedVO2 == nil {
+                let importedVO2 = await repo.resolvedSeries(key: "vo2max", source: "apple-health", from: vo2FromDay, to: throughDay)
+                resolvedVO2 = importedVO2.points.last { $0.day >= vo2FromDay && $0.day <= throughDay && $0.value.isFinite && $0.value > 0 }
+            }
+            let measuredSteps = await repo.resolvedSeries(key: "steps", source: "my-whoop", from: fromDay, to: throughDay)
             var importedSteps: [HealthspanPresentation.StepSample] = []
             if let store = await repo.storeHandle() {
                 for importedSource in ["apple-health", "health-connect"] {
@@ -244,8 +246,8 @@ struct HealthSupportingMetricCards: View {
             let resolvedSteps = HealthspanPresentation.latestSteps(
                 measured: measuredSteps.points.map { .init(day: $0.day, count: $0.value, source: $0.source) },
                 imported: importedSteps, fromDay: fromDay, throughDay: throughDay)
-            guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
-            vo2 = resolvedVO2; steps = resolvedSteps; loadedSource = source
+            guard !Task.isCancelled, healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
+            vo2 = resolvedVO2; steps = resolvedSteps; loadedSource = source; loadedThroughDay = throughDay
         }
     }
     private func metric(_ title: LocalizedStringKey, point latest: ResolvedMetricPoint?, unit: String) -> some View {

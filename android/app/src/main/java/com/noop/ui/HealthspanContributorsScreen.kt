@@ -24,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
@@ -135,8 +137,12 @@ private fun HealthspanContributorDetail(vm: AppViewModel, driver: HealthspanDriv
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
-                TextButton(onClick = { windowDays = 30 }, enabled = windowDays != 30) { Text(stringResource(R.string.healthspan_range_30)) }
-                TextButton(onClick = { windowDays = 180 }, enabled = windowDays != 180) { Text(stringResource(R.string.healthspan_range_180)) }
+                TextButton(onClick = { windowDays = 30 }, modifier = Modifier.semantics { selected = windowDays == 30 }) {
+                    Text(stringResource(R.string.healthspan_range_30), color = if (windowDays == 30) Palette.positive else Palette.textSecondary)
+                }
+                TextButton(onClick = { windowDays = 180 }, modifier = Modifier.semantics { selected = windowDays == 180 }) {
+                    Text(stringResource(R.string.healthspan_range_180), color = if (windowDays == 180) Palette.positive else Palette.textSecondary)
+                }
             }
         }
         item {

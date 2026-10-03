@@ -68,6 +68,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 
 @Composable
 fun HealthspanScreen(vm: AppViewModel, onCoach: (() -> Unit)? = null) {
@@ -138,7 +139,7 @@ fun HealthspanScreen(vm: AppViewModel, onCoach: (() -> Unit)? = null) {
         item {
             HealthspanPillarCards { selectedPillar = it }
         }
-        item { HealthSupportingMetricCards(vm) }
+        item { HealthSupportingMetricCards(vm, referenceDay) }
     }
 }
 
@@ -165,17 +166,17 @@ fun HealthspanPreviewCard(vm: AppViewModel, onClick: () -> Unit) {
 }
 
 @Composable
-fun HealthSupportingMetricCards(vm: AppViewModel) {
+fun HealthSupportingMetricCards(vm: AppViewModel, referenceDay: LocalDate? = null) {
     val datedRows = healthspanDays(vm)
     val days = datedRows.rows
     val computedVo2 = healthspanSeries(vm, "vo2max_est")
     val selectedStrap by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val strapId = selectedStrap ?: vm.activeStrapId
     val lifecycleOwner = LocalLifecycleOwner.current
-    val reference = datedRows.today
+    val reference = referenceDay ?: datedRows.today
     val vo2 = computedVo2.lastOrNull { it.day in reference.minusDays(179).toString()..reference.toString() && it.value.isFinite() && it.value > 0 }
-    var importedVo2 by remember(strapId) { mutableStateOf<Pair<String, Double>?>(null) }
-    var steps by remember(strapId) { mutableStateOf<HealthspanPresentation.StepSample?>(null) }
+    var importedVo2 by remember(vm, strapId, reference) { mutableStateOf<Pair<String, Double>?>(null) }
+    var steps by remember(vm, strapId, reference) { mutableStateOf<HealthspanPresentation.StepSample?>(null) }
     LaunchedEffect(vm, strapId, days, vo2, reference, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
@@ -183,7 +184,7 @@ fun HealthSupportingMetricCards(vm: AppViewModel) {
                     val through = reference
                     withContext(Dispatchers.Default) {
                         val imported = if (vo2 == null) vm.repo.resolvedSeries("vo2max", "apple-health", through.minusDays(179).toString(),
-                            through.toString(), strapDeviceId = strapId).points.lastOrNull { it.value.isFinite() && it.value > 0 } else null
+                            through.toString(), strapDeviceId = strapId).points.lastOrNull { it.day in through.minusDays(179).toString()..through.toString() && it.value.isFinite() && it.value > 0 } else null
                         val from = through.minusDays(30).toString()
                         val recordedSteps = vm.repo.resolvedSeries("steps", "my-whoop", from, through.toString(), strapDeviceId = strapId).points
                         val importedSteps = listOf("apple-health", "health-connect").flatMap { source ->
@@ -196,6 +197,8 @@ fun HealthSupportingMetricCards(vm: AppViewModel) {
                             imported = importedSteps, fromDay = from, throughDay = through.toString())
                         (imported?.let { it.day to it.value }) to stepReading
                     }.let { (vo2Reading, stepReading) ->
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        if (vm.activeStrapId != strapId) return@let
                         importedVo2 = vo2Reading
                         steps = stepReading
                     }
