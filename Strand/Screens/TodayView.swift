@@ -4893,9 +4893,15 @@ struct TodayView: View {
         // is keyed by the state this pass actually loaded for.
         let loadSeq = repo.refreshSeq
         let loadDayKey = selectedDayKey
+        let loadDeviceId = repo.deviceId
+        let loadLogicalDay = selectedLogicalDay
+        let loadOffset = selectedDayOffset
+        let loadMode = dayCycleMode
+        let loadNow = Date()
         func isCurrentRequest() -> Bool {
             !Task.isCancelled && liveEffortRequest == effortRequest
                 && selectedDayKey == loadDayKey && repo.refreshSeq == loadSeq
+                && repo.deviceId == loadDeviceId && selectedDayOffset == loadOffset && dayCycleMode == loadMode
         }
         if repo.todayDayScopedLoadedSeq == loadSeq,
            repo.todayDayScopedLoadedDayKey == loadDayKey,
@@ -4981,20 +4987,36 @@ struct TodayView: View {
         // full 24h to the next midnight. The logical day rolls at 04:00 (Repository.logicalDayStart), so
         // in the small hours after midnight today still starts at yesterday's midnight rather than
         // blanking to an empty new-calendar-day axis (#144).
-        let dayStart = Calendar.current.startOfDay(for: selectedLogicalDay)
-        let calendarStart = Int(dayStart.timeIntervalSince1970)
-        let calendarEnd: Int = selectedDayOffset == 0
-            ? Int(Date().timeIntervalSince1970)
-            : Int((Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart).timeIntervalSince1970)
-        let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-        let nextDayKey = Repository.localDayKey(nextDay)
-        let cycleMarkers = dayCycleMode == .sleepOnset
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: loadLogicalDay)
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let markerDay = RecoveryStrainDetailLogic.date(loadDayKey) ?? dayStart
+        let nextMarkerDay = calendar.date(byAdding: .day, value: 1, to: markerDay) ?? markerDay
+        let nextMarkerKey = Repository.localDayKey(nextMarkerDay)
+        let cycleMarkers = loadMode == .sleepOnset
             ? await repo.exploreSeries(key: DayCycleIntelligenceIntegration.onsetKey, source: "my-whoop") : []
-        let windowStart = cycleMarkers.last(where: { $0.day == selectedDayKey }).map { Int($0.value) }
-            ?? calendarStart
-        let windowEndExclusive = cycleMarkers.last(where: { $0.day == nextDayKey }).map { Int($0.value) }
-            ?? calendarEnd
-        let windowEndInclusive = max(windowStart, windowEndExclusive - 1)
+        let window = RecoveryStrainDetailLogic.strainWindow(
+            calendarStart: Int(dayStart.timeIntervalSince1970), nextCalendarStart: Int(nextDay.timeIntervalSince1970),
+            isCurrentDay: loadOffset == 0, sleepOnsetMode: loadMode == .sleepOnset,
+            onset: RecoveryStrainDetailLogic.timestampSeconds(cycleMarkers.last { $0.day == loadDayKey }?.value),
+            nextOnset: RecoveryStrainDetailLogic.timestampSeconds(cycleMarkers.last { $0.day == nextMarkerKey }?.value),
+            now: Int(loadNow.timeIntervalSince1970))
+        guard isCurrentRequest() else { return }
+        guard let window else {
+            hrPoints = []
+            hrDayMin = nil
+            hrDayMax = nil
+            stepActivityClassToday = nil
+            liveTodayStrain = nil
+            hrAxis = nil
+            hrZoomDomain = nil
+            sleepToday = nil
+            repo.todayDayScopedCache = nil
+            return
+        }
+        let windowStart = window.lowerBound
+        let windowEndInclusive = window.upperBound
+        let windowEndExclusive = windowEndInclusive + 1
         let hrBucketsLocal = await repo.hrBuckets(from: windowStart, to: windowEndInclusive, bucketSeconds: 300)
         guard isCurrentRequest() else { return }
         // A bucket with no samples is absent from the aggregate, so without a segment break the line
@@ -5033,18 +5055,14 @@ struct TodayView: View {
         // engine will eventually persist. Below StrainScorer.minReadings the scorer returns nil and the
         // gauge falls back to the stored row (never a fabricated value); a navigated past day clears it.
         let liveStrainLocal: Double?
-        if selectedDayOffset == 0 {
-            let mode = DayCycleMode.persisted(UserDefaults.standard.string(forKey: DayCycleMode.storageKey))
-            let cycleOnset = dayCycleSeries.last(where: { $0.day <= selectedDayKey })
-                .map { Int($0.value.rounded()) }
-            let effortStart = mode == .sleepOnset ? (cycleOnset ?? windowStart) : windowStart
+        if loadOffset == 0 {
             // An EXPLICIT limit, not the 8000 default: that default is chart-sized, and this read is
             // whole-window. `hrSamples` is `ORDER BY ts ASC LIMIT`, so truncation drops the NEWEST rows —
             // at the ~18k HR rows a real day banks, the default covered roughly the first ten hours and the
             // live score silently stopped climbing after that. It failed safe (`effectiveEffort` takes the
             // max, so the stored row simply won) which is why it went unnoticed. 200_000 is what every
             // other whole-window HR consumer already passes.
-            let todayHr = await repo.hrSamples(from: effortStart, to: windowEndInclusive,
+            let todayHr = await repo.hrSamples(from: windowStart, to: windowEndInclusive,
                                                limit: 200_000)
             guard isCurrentRequest() else { return }
             // #2460: the manual HR-max override, then Tanaka, exactly as AnalyticsEngine resolves it

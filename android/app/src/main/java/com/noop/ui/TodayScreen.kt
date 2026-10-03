@@ -942,22 +942,42 @@ fun TodayScreen(
     // `minReadings`, so before there's enough HR the gauge falls back to the stored value and never shows a
     // fabricated number. Any past day → null (the gauge uses the stored strain). Keyed on the same inputs
     // as the day-scoped loads so it reloads as the selector moves and as a sync/import grows the HR window.
+    val publishedHomeStrap by viewModel.activeStrapIdFlow.collectAsStateWithLifecycle()
+    val homeStrapId = effectiveActiveStrapId(publishedHomeStrap, viewModel.deviceId)
     var liveTodayStrain by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(days, selectedDayKey, selectedDayOffset, activeDayCycle, dayCycleMode) {
+    LaunchedEffect(days, selectedDayKey, selectedDayOffset, activeDayCycle, dayCycleMode, homeStrapId,
+        liveSnap.lastSyncAt, liveSnap.syncChunksThisSession) {
         liveTodayStrain = if (selectedDayOffset == 0) withContext(Dispatchers.Default) {
             val zone = ZoneId.systemDefault()
             val now = System.currentTimeMillis() / 1000
-            val start = activeDayCycleStart(
-                mode = dayCycleMode,
-                confirmedOrSyntheticOnset = activeDayCycle?.onsetTs,
+            val strapDeviceId = homeStrapId
+            val markerDay = LocalDate.parse(selectedDayKey)
+            val nextMarkerDay = markerDay.plusDays(1)
+            val markers = if (dayCycleMode == DayCycleMode.SLEEP_ONSET) try {
+                viewModel.repo.metricSeriesComputedUnion(strapDeviceId, DayCycleIntelligenceIntegration.ONSET_KEY,
+                    markerDay.toString(), nextMarkerDay.toString())
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) { emptyList() } else emptyList()
+            val window = RecoveryStrainDetailLogic.strainWindow(
                 calendarStart = selectedDay.atStartOfDay(zone).toEpochSecond(),
-            )
+                nextCalendarStart = selectedDay.plusDays(1).atStartOfDay(zone).toEpochSecond(),
+                isCurrentDay = true, sleepOnsetMode = dayCycleMode == DayCycleMode.SLEEP_ONSET,
+                onset = RecoveryStrainDetailLogic.timestampSeconds(markers.lastOrNull { it.day == markerDay.toString() }?.value),
+                nextOnset = RecoveryStrainDetailLogic.timestampSeconds(markers.lastOrNull { it.day == nextMarkerDay.toString() }?.value),
+                now = now,
+            ) ?: return@withContext null
             // #908: read the active strap ∪ canonical "my-whoop" union, NOT a hardcoded "my-whoop". A strap
             // re-added through the device manager banks its live HR under its own fresh id, so a pinned
             // "my-whoop" read returned nothing and Effort integrated to 0 off an empty series. Single-WHOOP
             // install resolves to "my-whoop" ⇒ one id ⇒ byte-identical read.
-            val todayHr = runCatching { viewModel.repo.hrSamplesUnion(viewModel.activeStrapId, start, now) }
-                .getOrDefault(emptyList())
+            val todayHr = try {
+                viewModel.repo.hrSamplesUnion(strapDeviceId, window.first, window.last)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) { emptyList() }
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (strapDeviceId != viewModel.activeStrapId) return@withContext null
             // effMaxHR resolution matches AnalyticsEngine: manual HR-max override first, else Tanaka from age.
             val effMaxHR = profileStore.hrMaxOverride.takeIf { it > 0 }?.toDouble()
                 ?: if (profileStore.age > 0) StrainScorer.tanakaHRmax(profileStore.age.toDouble()) else null
@@ -1211,8 +1231,6 @@ fun TodayScreen(
             .toInstant().toEpochMilli().coerceAtMost(nowMillis)
     }
     val homeWorkoutRows by viewModel.workouts.collectAsStateWithLifecycle()
-    val publishedHomeStrap by viewModel.activeStrapIdFlow.collectAsStateWithLifecycle()
-    val homeStrapId = effectiveActiveStrapId(publishedHomeStrap, viewModel.deviceId)
     LaunchedEffect(days, selectedDayKey, homeStrapId, homeWorkoutRows) {
         val effectDayKey = selectedDayKey
         val effectStrapId = homeStrapId
@@ -6018,22 +6036,35 @@ private fun HeartRateTrendCard(
     val live by viewModel.live.collectAsStateWithLifecycle()
     // Re-load when the day list changes (an import updates it), when the day selector moves, and, via the
     // sync tokens, when a strap offload banks fresh HR samples for the current window. Also on first compose.
-    LaunchedEffect(days, selectedDay, today, live.lastSyncAt, live.syncChunksThisSession, dayCycleMode) {
+    LaunchedEffect(days, selectedDay, today, displayMetric?.day, live.lastSyncAt, live.syncChunksThisSession, dayCycleMode) {
         val zone = ZoneId.systemDefault()
         val calendarStart = selectedDay.atStartOfDay(zone).toEpochSecond()
         val nextStart = selectedDay.plusDays(1).atStartOfDay(zone).toEpochSecond()
         val now = System.currentTimeMillis() / 1000
-        val calendarEnd = if (selectedDay == today) now else (nextStart - 1)
+        val markerDay = displayMetric?.day?.let(LocalDate::parse) ?: selectedDay
+        val nextMarkerDay = markerDay.plusDays(1)
+        val strapDeviceId = viewModel.activeStrapId
         val markerRows = if (dayCycleMode == DayCycleMode.SLEEP_ONSET) runCatching {
             viewModel.repo.metricSeriesComputedUnion(
-                viewModel.activeStrapId, DayCycleIntelligenceIntegration.ONSET_KEY,
-                selectedDay.toString(), selectedDay.plusDays(1).toString(),
+                strapDeviceId, DayCycleIntelligenceIntegration.ONSET_KEY,
+                markerDay.toString(), nextMarkerDay.toString(),
             )
         }.getOrDefault(emptyList()) else emptyList()
-        val start = markerRows.firstOrNull { it.day == selectedDay.toString() }?.value?.toLong()
-            ?: calendarStart
-        val end = markerRows.firstOrNull { it.day == selectedDay.plusDays(1).toString() }?.value?.toLong()
-            ?.minus(1L) ?: calendarEnd
+        val window = RecoveryStrainDetailLogic.strainWindow(
+            calendarStart = calendarStart, nextCalendarStart = nextStart, isCurrentDay = selectedDay == today,
+            sleepOnsetMode = dayCycleMode == DayCycleMode.SLEEP_ONSET,
+            onset = RecoveryStrainDetailLogic.timestampSeconds(markerRows.lastOrNull { it.day == markerDay.toString() }?.value),
+            nextOnset = RecoveryStrainDetailLogic.timestampSeconds(markerRows.lastOrNull { it.day == nextMarkerDay.toString() }?.value),
+            now = now,
+        )
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        if (strapDeviceId != viewModel.activeStrapId) return@LaunchedEffect
+        if (window == null) {
+            buckets = emptyList(); sleepToday = null; workoutsToday = emptyList()
+            return@LaunchedEffect
+        }
+        val start = window.first
+        val end = window.last
         // #908: the Today HR curve reads the active strap ∪ canonical "my-whoop" union, NOT a hardcoded
         // "my-whoop". A strap re-added via the device manager banks live HR under its own fresh id, so a
         // pinned read showed the "no heart rate banked yet today" empty state. Single-WHOOP ⇒ one id ⇒ same.
