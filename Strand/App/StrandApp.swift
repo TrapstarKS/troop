@@ -2,7 +2,10 @@ import SwiftUI
 import StrandDesign
 import UserNotifications
 
+// Pure hosted tests use a separate entry while the production app remains typechecked.
+#if !DEBUG || !NOOP_PURE_TEST_HOST
 @main
+#endif
 struct StrandApp: App {
     init() {
         // #1008: pin the pre-change Overnight-only default for existing installs before
@@ -100,3 +103,12 @@ struct StrandApp: App {
         .menuBarExtraStyle(.window)
     }
 }
+
+#if DEBUG && NOOP_PURE_TEST_HOST
+@main
+struct StrandPureTestHost: App {
+    var body: some Scene {
+        WindowGroup { EmptyView() }
+    }
+}
+#endif
