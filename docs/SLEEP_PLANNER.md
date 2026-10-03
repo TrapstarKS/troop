@@ -36,6 +36,9 @@ wake day. A skip is persisted as `yyyy-MM-dd|minute` for the resolved wake occur
 relaunch and follows the same civil wake date after a timezone change. It does not disable future
 weekdays or suppress a different time. Editing the alarm schedule clears the skip. A once-weekly
 alarm searches two weeks ahead so skipping next week does not lose the following occurrence.
+Skip identity uses the Gregorian date of the resolved instant in the local time zone, regardless
+of the phone's preferred calendar. Pending-key decoding uses that same representation; recurrence
+dates and selected weekdays retain the caller's calendar.
 
 ## Strap alarm
 

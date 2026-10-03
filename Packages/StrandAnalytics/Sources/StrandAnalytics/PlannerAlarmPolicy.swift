@@ -25,10 +25,20 @@ public enum PlannerAlarmPolicy {
         }
     }
 
-    /// Stable identity for a resolved local alarm date and minute. Calendar resolution
-    /// belongs to the caller; supplied components are preserved rather than normalized.
+    /// Stable identity for supplied Gregorian date components and a minute. Supplied
+    /// components are preserved rather than normalized.
     public static func occurrenceKey(year: Int, month: Int, day: Int, minutes: Int) -> String {
         "\(padded(year, width: 4))-\(padded(month, width: 2))-\(padded(day, width: 2))|\(minutes)"
+    }
+
+    /// Gregorian identity for a resolved alarm instant in the caller's timezone,
+    /// independent of the caller's preferred calendar.
+    public static func occurrenceKey(for date: Date, calendar: Calendar) -> String {
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+        let parts = gregorian.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return occurrenceKey(year: parts.year ?? 0, month: parts.month ?? 0, day: parts.day ?? 0,
+                             minutes: (parts.hour ?? 0) * 60 + (parts.minute ?? 0))
     }
 
     /// Advice quiet hours with an inclusive start and exclusive end. Equal bounds
@@ -46,12 +56,14 @@ public enum PlannerAlarmPolicy {
     /// occurrence key; this comparison only gates the pending status and duplicate skip.
     public static func isSkipPending(skippedOccurrence: String, from now: Date, calendar: Calendar) -> Bool {
         guard let saved = occurrenceParts(skippedOccurrence) else { return false }
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
         let parts = DateComponents(year: Int(saved.day.prefix(4)), month: Int(saved.day.dropFirst(5).prefix(2)),
                                    day: Int(saved.day.suffix(2)), hour: 12)
-        guard let savedDay = calendar.date(from: parts) else { return false }
-        let resolved = calendar.dateComponents([.year, .month, .day], from: savedDay)
+        guard let savedDay = gregorian.date(from: parts) else { return false }
+        let resolved = gregorian.dateComponents([.year, .month, .day], from: savedDay)
         guard resolved.year == parts.year, resolved.month == parts.month, resolved.day == parts.day,
-              let wake = SleepPlanner.wakeDate(minutes: saved.minutes, on: savedDay, calendar: calendar) else { return false }
+              let wake = SleepPlanner.wakeDate(minutes: saved.minutes, on: savedDay, calendar: gregorian) else { return false }
         return wake >= now
     }
 

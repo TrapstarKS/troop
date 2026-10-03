@@ -94,9 +94,7 @@ object WindDownScheduler {
             val requestedMinute = perDayWake[weekday] ?: wakeMinutes
             val wake = com.noop.analytics.SleepPlanner.wakeDate(requestedMinute, day)
             val minute = wake.get(Calendar.HOUR_OF_DAY) * 60 + wake.get(Calendar.MINUTE)
-            val key = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(
-                wake.get(Calendar.YEAR), wake.get(Calendar.MONTH) + 1, wake.get(Calendar.DAY_OF_MONTH), minute,
-            )
+            val key = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(wake)
             if (key == settings.skippedOccurrence) continue
             val plan = settings.plan(weekday, minute, leadMinutes)
             if (debtOnly && (!settings.debtReminderEnabled || !plan.debtNudge)) continue

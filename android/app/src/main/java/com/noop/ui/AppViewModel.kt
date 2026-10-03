@@ -2804,11 +2804,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             skippedOccurrence = _sleepPlannerSettings.value.skippedOccurrence,
         ) ?: return "disabled"
         val occurrence = java.util.Calendar.getInstance().apply { timeInMillis = epoch * 1000L }
-        val token = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(
-            occurrence.get(java.util.Calendar.YEAR), occurrence.get(java.util.Calendar.MONTH) + 1,
-            occurrence.get(java.util.Calendar.DAY_OF_MONTH),
-            occurrence.get(java.util.Calendar.HOUR_OF_DAY) * 60 + occurrence.get(java.util.Calendar.MINUTE),
-        )
+        val token = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(occurrence)
         setSleepPlannerSettings(_sleepPlannerSettings.value.copy(skippedOccurrence = token))
         if (phoneAlarmStore.enabled) SmartAlarmScheduler.arm(appContext, phoneAlarmStore)
         reconcileStrapAlarm(nowMs)
@@ -3452,11 +3448,7 @@ internal fun nextSmartAlarmEpochSec(
         val wakeMin = cleanOverrides[dow] ?: minuteOfDay
         val cal = com.noop.analytics.SleepPlanner.wakeDate(wakeMin, probe)
         if (cal.timeInMillis <= nowMs) continue
-        val occurrence = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(
-            cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH) + 1,
-            cal.get(java.util.Calendar.DAY_OF_MONTH),
-            cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE),
-        )
+        val occurrence = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(cal)
         if (occurrence == skippedOccurrence) continue
         return cal.timeInMillis / 1000
     }

@@ -258,11 +258,7 @@ object SmartAlarmScheduler {
             val windowStart = (candidate.clone() as Calendar).apply {
                 timeInMillis -= windowMinutes.toLong() * 60_000L
             }
-            val occurrence = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(
-                windowStart.get(Calendar.YEAR), windowStart.get(Calendar.MONTH) + 1,
-                windowStart.get(Calendar.DAY_OF_MONTH),
-                windowStart.get(Calendar.HOUR_OF_DAY) * 60 + windowStart.get(Calendar.MINUTE),
-            )
+            val occurrence = com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(windowStart)
             if (occurrence == skippedOccurrence) continue
             if (candidate.timeInMillis > now.timeInMillis) return candidate
         }

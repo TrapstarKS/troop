@@ -1,6 +1,7 @@
 package com.noop.analytics
 
 import java.util.Calendar
+import java.util.GregorianCalendar
 
 /**
  * Pure policy for advancing an alarm within its final hour. The caller supplies only
@@ -26,12 +27,24 @@ object PlannerAlarmPolicy {
     }
 
     /**
-     * Stable identity for a resolved local alarm date and minute. Calendar resolution
-     * belongs to the caller; supplied components are preserved rather than normalized.
+     * Stable identity for supplied Gregorian date components and a minute. Supplied
+     * components are preserved rather than normalized.
      */
     fun occurrenceKey(year: Int, month: Int, day: Int, minutes: Int): String =
         "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-" +
             "${day.toString().padStart(2, '0')}|$minutes"
+
+    /**
+     * Gregorian identity for a resolved alarm instant in the caller's timezone,
+     * independent of the caller's preferred calendar.
+     */
+    fun occurrenceKey(date: Calendar): String {
+        val gregorian = GregorianCalendar(date.timeZone).apply { timeInMillis = date.timeInMillis }
+        return occurrenceKey(
+            gregorian.get(Calendar.YEAR), gregorian.get(Calendar.MONTH) + 1, gregorian.get(Calendar.DAY_OF_MONTH),
+            gregorian.get(Calendar.HOUR_OF_DAY) * 60 + gregorian.get(Calendar.MINUTE),
+        )
+    }
 
     /**
      * Advice quiet hours with an inclusive start and exclusive end. Equal bounds
@@ -53,7 +66,7 @@ object PlannerAlarmPolicy {
     fun isSkipPending(skippedOccurrence: String, now: Calendar): Boolean {
         val saved = occurrenceParts(skippedOccurrence) ?: return false
         val parts = saved.first.split('-').map { it.toInt() }
-        val savedDay = (now.clone() as Calendar).apply {
+        val savedDay = GregorianCalendar(now.timeZone).apply {
             clear()
             set(parts[0], parts[1] - 1, parts[2], 12, 0, 0)
             set(Calendar.MILLISECOND, 0)

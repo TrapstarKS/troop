@@ -95,29 +95,27 @@ internal fun LegacyPhoneAlarmScreen(vm: AppViewModel, onClose: () -> Unit) {
             // leaving the screen open across the fire time left "06:30 → 07:00" describing today above a
             // countdown already naming tomorrow. Two lines disagreeing about one fact is the whole defect
             // this screen has been fixing.
-            val nextTargetMinutes = remember(
+            val nextDeadline = remember(
                 nowMs, targetMinutes, windowMinutes, phoneAlarmWeekdays, phoneAlarmDayOverrides, plannerSettings.skippedOccurrence,
             ) {
-                com.noop.alarm.SmartAlarmScheduler.nextWindowStartMinutes(
+                com.noop.alarm.SmartAlarmScheduler.nextDeadline(
                     now = java.util.Calendar.getInstance().apply { timeInMillis = nowMs },
                     weekdays = phoneAlarmWeekdays,
                     windowMinutes = windowMinutes,
-                    defaultTarget = targetMinutes,
+                    targetForDay = { phoneAlarmDayOverrides[it] ?: targetMinutes },
                     skippedOccurrence = plannerSettings.skippedOccurrence,
-                ) { phoneAlarmDayOverrides[it] ?: targetMinutes }
+                )
             }
+            val window = phoneAlarmWindowMinutes(nextDeadline, windowMinutes, targetMinutes)
             val countdown = alarmCountdown(
                 nowMs = nowMs,
                 armed = enabled && canSchedule,
-                weekdays = phoneAlarmWeekdays,
-                windowMinutes = windowMinutes,
-                targetForDay = { phoneAlarmDayOverrides[it] ?: targetMinutes },
-                skippedOccurrence = plannerSettings.skippedOccurrence,
+                deadline = nextDeadline,
             )
             WindowCard(
                 enabled = enabled,
-                targetMinutes = nextTargetMinutes,
-                windowMinutes = windowMinutes,
+                targetMinutes = window.first,
+                deadlineMinutes = window.second,
                 countdown = countdown,
             )
         }
@@ -236,14 +234,26 @@ internal fun LegacyPhoneAlarmScreen(vm: AppViewModel, onClose: () -> Unit) {
     }
 }
 
+internal fun phoneAlarmWindowMinutes(
+    deadline: java.util.Calendar?,
+    windowMinutes: Int,
+    defaultTarget: Int,
+): Pair<Int, Int> {
+    if (deadline == null) return defaultTarget to ((defaultTarget + windowMinutes) % (24 * 60))
+    val start = (deadline.clone() as java.util.Calendar).apply {
+        timeInMillis -= windowMinutes.toLong() * 60_000L
+    }
+    return (start.get(java.util.Calendar.HOUR_OF_DAY) * 60 + start.get(java.util.Calendar.MINUTE)) to
+        (deadline.get(java.util.Calendar.HOUR_OF_DAY) * 60 + deadline.get(java.util.Calendar.MINUTE))
+}
+
 @Composable
 private fun WindowCard(
     enabled: Boolean,
     targetMinutes: Int,
-    windowMinutes: Int,
+    deadlineMinutes: Int,
     countdown: Pair<String, String>? = null,
 ) {
-    val deadline = (targetMinutes + windowMinutes) % (24 * 60)
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -259,7 +269,7 @@ private fun WindowCard(
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(hhmm(targetMinutes), style = NoopType.number(28f), color = DomainTheme.Rest.color)
                         Text("→", style = NoopType.title2, color = Palette.textTertiary)
-                        Text(hhmm(deadline), style = NoopType.number(28f), color = DomainTheme.Rest.bright)
+                        Text(hhmm(deadlineMinutes), style = NoopType.number(28f), color = DomainTheme.Rest.bright)
                     }
                     // The countdown leads, with the absolute date and time under it, the way a clock
                     // app pairs them. Both come from one resolver, so the two lines cannot disagree.
@@ -268,7 +278,7 @@ private fun WindowCard(
                         Text(stamp, style = NoopType.footnote, color = Palette.textSecondary)
                     }
                     Text(
-                        uiString(R.string.l10n_smart_alarm_screen_a_backup_alarm_is_set_for_cf8b94fb, hhmm(deadline)),
+                        uiString(R.string.l10n_smart_alarm_screen_a_backup_alarm_is_set_for_cf8b94fb, hhmm(deadlineMinutes)),
                         style = NoopType.footnote, color = Palette.textSecondary,
                     )
                 } else {
@@ -306,20 +316,10 @@ private fun WindowCard(
 private fun alarmCountdown(
     nowMs: Long,
     armed: Boolean,
-    weekdays: Set<Int>,
-    windowMinutes: Int,
-    targetForDay: (Int) -> Int,
-    skippedOccurrence: String = "",
+    deadline: java.util.Calendar?,
 ): Pair<String, String>? {
     if (!armed) return null
-    val now = java.util.Calendar.getInstance().apply { timeInMillis = nowMs }
-    val next = com.noop.alarm.SmartAlarmScheduler.nextDeadline(
-        now = now,
-        weekdays = weekdays,
-        windowMinutes = windowMinutes,
-        targetForDay = targetForDay,
-        skippedOccurrence = skippedOccurrence,
-    ) ?: return null
+    val next = deadline ?: return null
 
     // DATE only, deliberately. The deadline time is already on this card twice, in the figures above and
     // in the "a backup alarm is set for ..." sentence below, and a third copy is noise. What neither of

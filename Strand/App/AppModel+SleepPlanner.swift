@@ -86,9 +86,6 @@ extension AppModel {
     }
 
     nonisolated static func smartAlarmOccurrenceKey(_ date: Date, calendar: Calendar = .current) -> String {
-        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
-        return PlannerAlarmPolicy.occurrenceKey(year: parts.year ?? 0, month: parts.month ?? 0,
-                                                day: parts.day ?? 0,
-                                                minutes: (parts.hour ?? 0) * 60 + (parts.minute ?? 0))
+        PlannerAlarmPolicy.occurrenceKey(for: date, calendar: calendar)
     }
 }

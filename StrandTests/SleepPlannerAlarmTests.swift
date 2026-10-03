@@ -48,6 +48,25 @@ final class SleepPlannerAlarmTests: XCTestCase {
                                                    from: now, calendar: shifted), expected)
     }
 
+    func testSkipKeyUsesGregorianLocalDateWithPreferredCalendars() throws {
+        let formatter = ISO8601DateFormatter()
+        let now = try XCTUnwrap(formatter.date(from: "2024-02-28T16:00:00Z"))
+        let wake = try XCTUnwrap(formatter.date(from: "2024-02-28T17:00:00Z"))
+        let followingWake = try XCTUnwrap(formatter.date(from: "2024-02-29T17:00:00Z"))
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "Pacific/Kiritimati"))
+        for identifier in [Calendar.Identifier.buddhist, .hebrew] {
+            var preferred = Calendar(identifier: identifier)
+            preferred.timeZone = timeZone
+            let key = AppModel.smartAlarmOccurrenceKey(wake, calendar: preferred)
+            XCTAssertEqual(key, "2024-02-29|420")
+            XCTAssertTrue(PlannerAlarmPolicy.isSkipPending(skippedOccurrence: key, from: now, calendar: preferred))
+            XCTAssertFalse(PlannerAlarmPolicy.isSkipPending(skippedOccurrence: key,
+                                                           from: wake.addingTimeInterval(1), calendar: preferred))
+            XCTAssertEqual(AppModel.nextSmartAlarmDate(minutes: 420, weekdays: [], skippedOccurrence: key,
+                                                       from: now, calendar: preferred), followingWake)
+        }
+    }
+
     @MainActor
     func testPlannerSettingsSurviveRestartWithoutEnablingAlarm() throws {
         let suite = "SleepPlannerAlarmTests.\(UUID().uuidString)"
@@ -64,6 +83,24 @@ final class SleepPlannerAlarmTests: XCTestCase {
         XCTAssertEqual(restored.alarmMode, "sleepGoal")
         XCTAssertEqual(restored.skippedOccurrence, "2026-09-16|420")
         XCTAssertFalse(defaults.bool(forKey: "behavior.smartAlarmEnabled"))
+    }
+
+    @MainActor
+    func testMalformedSavedSkipCannotSuppressWake() throws {
+        let suite = "SleepPlannerAlarmTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = SleepPlannerSettings(defaults: defaults)
+        for key in ["2026-09-16|+420", "2026-09-16|0420"] {
+            settings.skippedOccurrence = key
+            let restored = SleepPlannerSettings(defaults: defaults)
+            XCTAssertEqual(restored.skippedOccurrence, key)
+            XCTAssertFalse(PlannerAlarmPolicy.isSkipPending(skippedOccurrence: restored.skippedOccurrence,
+                                                           from: date(16), calendar: calendar))
+            XCTAssertEqual(AppModel.nextSmartAlarmDate(minutes: 420, weekdays: [],
+                                                       skippedOccurrence: restored.skippedOccurrence,
+                                                       from: date(16), calendar: calendar), date(16, hour: 7))
+        }
     }
 
     func testWakeInSpringGapPreservesRequestedMinuteAndSkipIdentity() throws {

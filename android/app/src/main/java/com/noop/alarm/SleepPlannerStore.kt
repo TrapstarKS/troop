@@ -35,7 +35,7 @@ class SleepPlannerStore(private val prefs: SharedPreferences) {
         }.toMap(),
         alarmMode = prefs.getString("sleepPlanner.alarmMode", "exact")
             ?.takeIf { it in setOf("exact", "sleepGoal", "recovery") } ?: "exact",
-        skippedOccurrence = validSkip(prefs.getString("sleepPlanner.skippedOccurrence", "") ?: ""),
+        skippedOccurrence = prefs.getString("sleepPlanner.skippedOccurrence", "") ?: "",
         baseNeedMinutes = prefs.getInt("sleepPlanner.baseNeedMinutes", 480).coerceIn(300, 660),
         debtMinutes = prefs.getInt("sleepPlanner.debtMinutes", 0).coerceAtLeast(0),
         historyNights = prefs.getInt("sleepPlanner.historyNights", 0).coerceAtLeast(0),
@@ -46,7 +46,7 @@ class SleepPlannerStore(private val prefs: SharedPreferences) {
         val edit = prefs.edit()
             .putInt("sleepPlanner.goalPercent", validGoal(settings.goalPercent))
             .putString("sleepPlanner.alarmMode", settings.alarmMode)
-            .putString("sleepPlanner.skippedOccurrence", validSkip(settings.skippedOccurrence))
+            .putString("sleepPlanner.skippedOccurrence", settings.skippedOccurrence)
             .putInt("sleepPlanner.baseNeedMinutes", settings.baseNeedMinutes)
             .putInt("sleepPlanner.debtMinutes", settings.debtMinutes)
             .putInt("sleepPlanner.historyNights", settings.historyNights)
@@ -59,15 +59,6 @@ class SleepPlannerStore(private val prefs: SharedPreferences) {
     }
 
     companion object {
-        private fun validSkip(value: String): String {
-            val parts = value.split('|')
-            if (parts.size != 2) return ""
-            val minute = parts[1].toIntOrNull() ?: return ""
-            if (minute !in 0..1439) return ""
-            val date = runCatching { java.time.LocalDate.parse(parts[0]) }.getOrNull() ?: return ""
-            return com.noop.analytics.PlannerAlarmPolicy.occurrenceKey(date.year, date.monthValue, date.dayOfMonth, minute)
-        }
-
         private fun validGoal(value: Int): Int = if (value == 85 || value == 70) value else 100
         fun from(context: Context): SleepPlannerStore = SleepPlannerStore(NoopPrefs.of(context))
     }

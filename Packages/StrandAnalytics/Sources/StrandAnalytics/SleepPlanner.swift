@@ -75,8 +75,13 @@ public enum SleepPlanner {
     /// smaller components while advancing through a gap; repeated times use the later match.
     public static func wakeDate(minutes: Int, on date: Date, calendar: Calendar) -> Date? {
         let minute = min(max(minutes, 0), 1439)
-        return calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: date,
-                             matchingPolicy: .nextTimePreservingSmallerComponents, repeatedTimePolicy: .last)
+        return calendar.nextDate(
+            after: calendar.startOfDay(for: date).addingTimeInterval(-1),
+            matching: DateComponents(hour: minute / 60, minute: minute % 60, second: 0),
+            matchingPolicy: .nextTimePreservingSmallerComponents,
+            repeatedTimePolicy: .last,
+            direction: .forward
+        )
     }
 
     /// Subtracts elapsed sleep duration rather than civil clock minutes across a DST change.

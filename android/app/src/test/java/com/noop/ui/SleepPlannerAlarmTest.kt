@@ -58,6 +58,33 @@ class SleepPlannerAlarmTest {
         }
     }
 
+    @Test fun nonGregorianCalendarsUseTheSameCanonicalSkipAcrossAllSchedulers() {
+        val now = Calendar.getInstance(
+            TimeZone.getTimeZone("UTC"), java.util.Locale.forLanguageTag("th-TH-u-ca-buddhist"),
+        ).apply { timeInMillis = java.time.Instant.parse("2026-06-17T06:00:00Z").toEpochMilli() }
+        assertEquals(2569, now.get(Calendar.YEAR))
+        val skipped = "2026-06-17|420"
+        assertTrue(PlannerAlarmPolicy.isSkipPending(skipped, now))
+        val strap = nextSmartAlarmEpochSec(
+            420, setOf(Calendar.WEDNESDAY), nowMs = now.timeInMillis,
+            calendarFactory = { now.clone() as Calendar }, skippedOccurrence = skipped,
+        )
+        assertEquals(java.time.Instant.parse("2026-06-24T07:00:00Z").epochSecond, strap)
+        val phone = SmartAlarmScheduler.nextDeadline(
+            now, setOf(Calendar.WEDNESDAY), 30, skippedOccurrence = skipped,
+        ) { 420 }
+        assertEquals(java.time.Instant.parse("2026-06-24T07:30:00Z").toEpochMilli(), phone!!.timeInMillis)
+        val reminderNow = (now.clone() as Calendar).apply {
+            timeInMillis = java.time.Instant.parse("2026-06-16T12:00:00Z").toEpochMilli()
+        }
+        val reminder = WindDownScheduler.nextPlannerReminder(
+            reminderNow, SleepPlannerSettings(skippedOccurrence = skipped),
+            setOf(Calendar.WEDNESDAY), 420, emptyMap(), 30,
+        )!!
+        assertEquals("2026-06-24|420", reminder.occurrenceKey)
+        assertEquals(java.time.Instant.parse("2026-06-23T22:30:00Z").toEpochMilli(), reminder.at.timeInMillis)
+    }
+
     @Test fun dstGapKeysUseResolvedClockMinutes() {
         val now = Calendar.getInstance(TimeZone.getTimeZone("America/New_York")).apply {
             clear()
