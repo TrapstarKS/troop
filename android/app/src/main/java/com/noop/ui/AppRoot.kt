@@ -1191,6 +1191,16 @@ private fun PlanLanding(onNavigate: (String) -> Unit) {
     }
 }
 
+/** A quick action that opens an existing destination. */
+private data class QuickAction(@StringRes val titleRes: Int, val icon: ImageVector, val route: String)
+
+private val quickActions: List<QuickAction> = listOf(
+    QuickAction(R.string.action_live_hr, Destination.Live.icon, Destination.Live.route),
+    QuickAction(R.string.action_start_workout, Icons.Filled.FitnessCenter, Destination.Workouts.route),
+    QuickAction(R.string.action_log_journal, Icons.Filled.Edit, Destination.Insights.route),
+    QuickAction(R.string.action_breathe, Icons.Filled.Air, Destination.Breathe.route),
+)
+
 // MARK: - Navigation motion (README §Motion)
 //
 // The global easing is the calm, decelerating cubic-bezier(0.22, 1, 0.36, 1) — nothing
