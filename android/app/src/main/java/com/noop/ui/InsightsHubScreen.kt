@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -86,6 +87,8 @@ import kotlin.math.roundToInt
 
 @Composable
 fun InsightsHubScreen(vm: AppViewModel) {
+    val context = LocalContext.current
+    var catalogItems by remember { mutableStateOf(loadJournalCatalogItems(context)) }
     val days by vm.recentDays.collectAsState()
     val registryActiveId by vm.activeStrapIdFlow.collectAsState()
     val activeStrapId = registryActiveId ?: vm.activeStrapId
@@ -94,7 +97,10 @@ fun InsightsHubScreen(vm: AppViewModel) {
     val state by hub.state.collectAsState()
 
     // Re-derive whenever the cached days change underneath (journal + dose are read via repo).
-    androidx.compose.runtime.LaunchedEffect(days, journalSeq, activeStrapId) { hub.load(vm, days, activeStrapId) }
+    androidx.compose.runtime.LaunchedEffect(days, journalSeq, activeStrapId) {
+        catalogItems = loadJournalCatalogItems(context)
+        hub.load(vm, days, activeStrapId)
+    }
 
     var outcome by remember { mutableStateOf(InsightsOutcome.Recovery) }
     val ranked = remember(state, outcome) { hub.rankFor(state, outcome) }
@@ -113,7 +119,7 @@ fun InsightsHubScreen(vm: AppViewModel) {
         }
 
         // --- What moves your Charge -------------------------------------------
-        item { MoversSection(outcome = outcome, onOutcome = { outcome = it }, ranked = ranked) }
+        item { MoversSection(outcome = outcome, onOutcome = { outcome = it }, ranked = ranked, catalogItems = catalogItems) }
 
         item { Spacer(Modifier.height(Metrics.sectionGap - 20.dp)) }
 
@@ -145,6 +151,7 @@ private fun MoversSection(
     outcome: InsightsOutcome,
     onOutcome: (InsightsOutcome) -> Unit,
     ranked: List<RankedEffect>,
+    catalogItems: List<JournalCatalogItem>,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
         // Header then the outcome selector on its own row below it — on a ~360dp phone the pill
@@ -171,14 +178,16 @@ private fun MoversSection(
         } else {
             // Fade + rise the ranked mover cards in sequence (mirrors iOS .staggeredAppear(index:)).
             ranked.forEachIndexed { i, r ->
-                Box(modifier = Modifier.staggeredAppear(i)) { MoverCard(r, outcome) }
+                val item = catalogItems.firstOrNull { normJournalKey(it.canonical) == normJournalKey(r.behavior) }
+                    ?: JournalCatalogItem(r.behavior)
+                Box(modifier = Modifier.staggeredAppear(i)) { MoverCard(r, outcome, item) }
             }
         }
     }
 }
 
 @Composable
-private fun MoverCard(r: RankedEffect, outcome: InsightsOutcome) {
+private fun MoverCard(r: RankedEffect, outcome: InsightsOutcome, item: JournalCatalogItem) {
     val e = r.effect
     val movedGood: Boolean? = when {
         e.delta == 0.0 -> null
@@ -210,7 +219,7 @@ private fun MoverCard(r: RankedEffect, outcome: InsightsOutcome) {
                             .drawBehind { drawCircle(tintColor) },
                     )
                     Text(
-                        journalLocalizedLabel(JournalCatalogItem(r.behavior)),
+                        journalLocalizedLabel(item),
                         style = NoopType.headline,
                         color = Palette.textPrimary,
                         maxLines = 1,

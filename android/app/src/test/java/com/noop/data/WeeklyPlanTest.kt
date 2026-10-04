@@ -46,7 +46,39 @@ fun weeklyPlanOracleOutput(): String {
     return lines.joinToString("\n")
 }
 
+fun weeklyPlanEligibilityOracleOutput(): String {
+    val today = "2026-10-05"
+    val valid = (0 until 8).map {
+        WeeklyPlanRecoveryDay(WeeklyPlanCalendar.adding(it, "2026-09-28")!!, 50.0, true)
+    }
+    val lines = mutableListOf<String>()
+    fun append(label: String, rows: List<WeeklyPlanRecoveryDay>, day: String = "2026-10-05") {
+        val result = WeeklyPlanEligibility.resolve(rows, day)
+        lines += "$label:${result.completedRecoveries}:${result.remainingRecoveries}:${result.isEligible}"
+    }
+    for (count in listOf(0, 1, 6, 7, 8)) append("count-$count", valid.take(count), today)
+    append("duplicate-seven", valid.take(7) + valid.take(7))
+    append("duplicate-one", List(7) { valid[0] })
+    val scores = listOf("missing" to null, "nan" to Double.NaN, "infinity" to Double.POSITIVE_INFINITY,
+        "negative-infinity" to Double.NEGATIVE_INFINITY, "negative" to -1.0, "above-range" to 101.0, "zero" to 0.0, "hundred" to 100.0)
+    for ((label, score) in scores) append(label, valid.take(6) + WeeklyPlanRecoveryDay("2026-10-04", score, true))
+    for (day in listOf("2026-02-30", "2026-2-01", "", "2026-10-06")) {
+        append("day-$day", valid.take(6) + WeeklyPlanRecoveryDay(day, 50.0, true))
+    }
+    append("invalid-today", valid, "2026-02-30")
+    append("before-seventh", valid.take(7), "2026-10-03")
+    append("incomplete", valid.take(6) + WeeklyPlanRecoveryDay("2026-10-04", 50.0, false))
+    append("subsequent-refresh", valid.take(7))
+    append("not-processed", valid.map { WeeklyPlanRecoveryDay(it.day, it.recovery, false) })
+    return lines.joinToString("\n")
+}
+
 class WeeklyPlanTest {
+    @Test
+    fun completedRecoveryEligibilityMatchesVerbatimSwiftOracle() {
+        assertEquals(ELIGIBILITY_ORACLE, weeklyPlanEligibilityOracleOutput())
+    }
+
     @Test
     fun matchesVerbatimSwiftOracle() {
         assertEquals(EXPECTED_ORACLE, weeklyPlanOracleOutput())
@@ -81,6 +113,33 @@ class WeeklyPlanTest {
     }
 
     companion object {
+        val ELIGIBILITY_ORACLE = """
+            count-0:0:7:false
+            count-1:1:6:false
+            count-6:6:1:false
+            count-7:7:0:true
+            count-8:8:0:true
+            duplicate-seven:7:0:true
+            duplicate-one:1:6:false
+            missing:6:1:false
+            nan:6:1:false
+            infinity:6:1:false
+            negative-infinity:6:1:false
+            negative:6:1:false
+            above-range:6:1:false
+            zero:7:0:true
+            hundred:7:0:true
+            day-2026-02-30:6:1:false
+            day-2026-2-01:6:1:false
+            day-:6:1:false
+            day-2026-10-06:6:1:false
+            invalid-today:0:7:false
+            before-seventh:6:1:false
+            incomplete:6:1:false
+            subsequent-refresh:7:0:true
+            not-processed:0:7:false
+        """.trimIndent()
+
         val EXPECTED_ORACLE = """
             preset:restRoutine:480,5,50,3,5,,any
             preset:activeWeek:480,5,60,4,5,,any

@@ -776,23 +776,18 @@ private fun BehaviourSection(
     onSelected: (EffectSelection) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
-        Row(
+        SectionHeader(
+            uiString(R.string.plan_behavior_insights),
+            overline = "What moves your ${outcome.outcomeName.lowercase(Locale.US)}",
+        )
+        SegmentedPillControl(
+            items = Outcome.entries.toList(),
+            selection = outcome,
+            label = { it.label },
+            onSelect = onOutcome,
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = Modifier.weight(1f)) {
-                SectionHeader(
-                    uiString(R.string.plan_behavior_insights),
-                    overline = "What moves your ${outcome.outcomeName.lowercase(Locale.US)}",
-                )
-            }
-            SegmentedPillControl(
-                items = Outcome.entries.toList(),
-                selection = outcome,
-                label = { it.label },
-                onSelect = onOutcome,
-            )
-        }
+            adaptsToAvailableWidth = true,
+        )
 
         Text(uiString(R.string.plan_comparison_window), style = NoopType.footnote, color = Palette.textSecondary)
         if (ranked.isEmpty()) {
@@ -832,7 +827,7 @@ private fun EffectCard(e: BehaviorEffect, outcome: Outcome, displayName: String,
         false -> if (e.significant) StrandTone.Critical else StrandTone.Warning
     }
     val tintColor = when (movedGood) { true -> Palette.statusPositive; false -> Palette.statusWarning; null -> Palette.textSecondary }
-    val deltaText = e.pctChange?.let { "${if (it > 0) "+" else if (it < 0) "−" else ""}${abs(it).roundToInt()}%" } ?: outcome.format(e.delta)
+    val deltaText = e.pctChange?.let(InsightsImpactFormatting::percentage) ?: outcome.format(e.delta)
     val sentence = uiString(R.string.plan_association_note)
     val summaryLabel = uiString(R.string.plan_behavior_comparison_summary, displayName, deltaText, outcome.label)
 
@@ -1064,6 +1059,8 @@ private fun ExperimentSetupCard(
                     selection = outcome,
                     label = { it.label },
                     onSelect = onOutcome,
+                    modifier = Modifier.fillMaxWidth(),
+                    adaptsToAvailableWidth = true,
                 )
             }
             ExperimentField("Window") {

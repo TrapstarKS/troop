@@ -7,6 +7,27 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.roundToInt
 
+data class WeeklyPlanRecoveryDay(val day: String, val recovery: Double?, val sleepProcessed: Boolean)
+
+data class WeeklyPlanEligibility(val completedRecoveries: Int) {
+    val remainingRecoveries: Int get() = (REQUIRED_RECOVERIES - completedRecoveries).coerceAtLeast(0)
+    val isEligible: Boolean get() = remainingRecoveries == 0
+
+    companion object {
+        const val REQUIRED_RECOVERIES = 7
+
+        // Swift twin: `WeeklyPlanEligibility.resolve`.
+        fun resolve(recoveries: List<WeeklyPlanRecoveryDay>, today: String): WeeklyPlanEligibility {
+            if (WeeklyPlanCalendar.date(today) == null) return WeeklyPlanEligibility(0)
+            val completed = recoveries.filter { row ->
+                row.sleepProcessed && WeeklyPlanCalendar.date(row.day) != null && row.day <= today &&
+                    row.recovery?.let { it.isFinite() && it in 0.0..100.0 } == true
+            }.map { it.day }.toSet()
+            return WeeklyPlanEligibility(completed.size)
+        }
+    }
+}
+
 enum class WeeklyPlanPreset(val key: String) {
     RestRoutine("restRoutine"), ActiveWeek("activeWeek"), BalancedWeek("balancedWeek");
 

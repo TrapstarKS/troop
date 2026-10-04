@@ -2901,4 +2901,8 @@
     <string name="firmware_sim_timeout_failure">Условное истечение времени</string>
     <string name="firmware_sim_disconnected_failure">Условное отключение</string>
     <string name="firmware_sim_mock_failure">Вызванный тестовый сбой</string>
+    <string name="weekly_plan_calibrating">Калибровка недельного плана</string>
+    <string name="weekly_plan_calibration_body">Семь завершённых оценок восстановления открывают недельный прогресс и итоги.</string>
+    <string name="weekly_plan_recoveries_complete">Завершено %1$d из 7 оценок восстановления</string>
+    <string name="weekly_plan_recoveries_remaining">Осталось оценок восстановления: %1$d</string>
 </resources>

@@ -683,6 +683,33 @@
       "platform": "kotlin",
       "rationale": "Swift app-layer IntelligenceEngine.analyzeRecent retains the same normal-nonempty skipped Charge baseline map eviction inline. Kotlin mechanically extracts the byte-for-byte unchanged block into the existing persistence helper to meet its unchanged JaCoCo instrumented coroutine budget. The call preserves cutoff calculation, empty/repair guards, scored-day membership, the four map removals, and placement before Charge baseline folding. This one-sided declaration disposition does not waive numeric parity or the native bytecode guard. Refs ryanbr/noop#2126 and ryanbr/noop#2525.",
       "twin_path": "Strand/Data/IntelligenceEngine.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-property",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WeeklyPlan.kt::remainingRecoveries@property#1",
+      "identity_sha256": "d6fc80544b408a0cbc9f9b17265adfc3ba32809afe403fbe42ddaa14ca011470",
+      "platform": "kotlin",
+      "rationale": "WeeklyPlanEligibility.remainingRecoveries has the same role in the excluded Swift app layer. Actual paired eligibility oracle output pins the seven distinct completed recovery requirement, including duplicates, invalid values and subsequent refresh; this disposition records only the inventory boundary.",
+      "twin_path": "Strand/Data/WeeklyPlan.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-property",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WeeklyPlan.kt::isEligible@property#1",
+      "identity_sha256": "06f9031adf951ba458f380f56dffdf9ded29b18adaf1c140ffbc6de3d7200b60",
+      "platform": "kotlin",
+      "rationale": "WeeklyPlanEligibility.isEligible has the same role in the excluded Swift app layer. Actual paired eligibility oracle output pins the seven distinct completed recovery requirement, including duplicates, invalid values and subsequent refresh; this disposition records only the inventory boundary.",
+      "twin_path": "Strand/Data/WeeklyPlan.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-constant",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WeeklyPlan.kt::REQUIRED_RECOVERIES",
+      "identity_sha256": "61ad873cb50ec77d4914f4a2a0fea36d183700bb6e94d47a66b24fcb7637e3f1",
+      "platform": "kotlin",
+      "rationale": "WeeklyPlanEligibility.requiredRecoveries has the same role in the excluded Swift app layer. Actual paired eligibility oracle output pins the seven distinct completed recovery requirement, including duplicates, invalid values and subsequent refresh; this disposition records only the inventory boundary.",
+      "twin_path": "Strand/Data/WeeklyPlan.swift"
     }
   ]
 }

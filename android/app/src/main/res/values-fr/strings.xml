@@ -2980,4 +2980,8 @@
     <string name="firmware_sim_timeout_failure">Délai simulé dépassé</string>
     <string name="firmware_sim_disconnected_failure">Déconnexion simulée</string>
     <string name="firmware_sim_mock_failure">Échec fictif déclenché</string>
+    <string name="weekly_plan_calibrating">Le plan hebdomadaire se calibre</string>
+    <string name="weekly_plan_calibration_body">Sept récupérations complètes ouvrent le suivi hebdomadaire et les bilans.</string>
+    <string name="weekly_plan_recoveries_complete">%1$d récupérations complètes sur 7</string>
+    <string name="weekly_plan_recoveries_remaining">Récupérations restantes : %1$d</string>
 </resources>

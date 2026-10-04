@@ -3022,4 +3022,8 @@
     <string name="firmware_sim_timeout_failure">Symulowane przekroczenie czasu</string>
     <string name="firmware_sim_disconnected_failure">Symulowane rozłączenie</string>
     <string name="firmware_sim_mock_failure">Wywołany błąd testowy</string>
+    <string name="weekly_plan_calibrating">Kalibracja planu tygodniowego</string>
+    <string name="weekly_plan_calibration_body">Siedem ukończonych pomiarów regeneracji odblokowuje postępy tygodniowe i podsumowania.</string>
+    <string name="weekly_plan_recoveries_complete">Ukończono %1$d z 7 pomiarów regeneracji</string>
+    <string name="weekly_plan_recoveries_remaining">Pozostałe pomiary regeneracji: %1$d</string>
 </resources>

@@ -2980,4 +2980,8 @@
     <string name="firmware_sim_timeout_failure">Simulated timeout</string>
     <string name="firmware_sim_disconnected_failure">Simulated disconnection</string>
     <string name="firmware_sim_mock_failure">Injected mock failure</string>
+    <string name="weekly_plan_calibrating">Weekly Plan is calibrating</string>
+    <string name="weekly_plan_calibration_body">Seven completed recoveries unlock weekly progress and reviews.</string>
+    <string name="weekly_plan_recoveries_complete">%1$d of 7 recoveries complete</string>
+    <string name="weekly_plan_recoveries_remaining">Recoveries still needed: %1$d</string>
 </resources>
