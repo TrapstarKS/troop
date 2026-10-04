@@ -86,4 +86,14 @@ class LogicalDayTest {
         val expected = LocalDate.of(2026, 6, 12).atStartOfDay(zone).toEpochSecond()
         assertEquals(expected, logicalDayStartEpochSecond(at(9, 0), zone))
     }
+
+    /** Home must count back from the row Today shows, so Yesterday is never two days back (#304 window). */
+    @Test
+    fun homeDayAnchorFollowsTheShownTodayRow() {
+        val logical = LocalDate.of(2026, 10, 3)
+        val got = listOf(null, "2026-10-04", "2026-10-03", "2026-10-02", "garbage")
+            .joinToString(",") { homeDayAnchor(it, logical).toString() }
+        // Expected literal shared with the Swift twin's test.
+        assertEquals("2026-10-03,2026-10-04,2026-10-03,2026-10-03,2026-10-03", got)
+    }
 }

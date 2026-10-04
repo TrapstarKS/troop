@@ -559,7 +559,7 @@ struct TodayView: View {
     /// `repo.today`), past offsets count back from it. Presentation-only, used to pick which stored row
     /// is on screen and to anchor the HR-trend window. Mirrors Android TodayScreen.selectedDay.
     private var selectedLogicalDay: Date {
-        let base = Repository.logicalDay(Date())
+        let base = Repository.homeDayAnchor(todayRowDay: repo.today?.day, logicalDay: Repository.logicalDay(Date()))
         return Calendar.current.date(byAdding: .day, value: -selectedDayOffset, to: base) ?? base
     }
     /// The day key the day-scoped read-outs (Rest score, HR window, sleep band) key on. At offset 0 it

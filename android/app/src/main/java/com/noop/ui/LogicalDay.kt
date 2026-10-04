@@ -55,6 +55,15 @@ internal fun logicalDayStartEpochSecond(
 ): Long = logicalDay(now, rolloverHour).atStartOfDay(zone).toEpochSecond()
 
 /**
+ * The day Home's day selector counts back from. Offset 0 shows the row [resolveTodayRow] surfaces, which
+ * before 04:00 can be the LOCAL-calendar row (#304), a day after the logical day. Counting past offsets back
+ * from the raw logical day then skipped a day (Today = Sun 4, Yesterday = Fri 2). Anchor on the shown row
+ * when it is later than the logical day; otherwise the logical day. Swift twin: Repository.homeDayAnchor.
+ */
+internal fun homeDayAnchor(todayRowDay: String?, logicalDay: LocalDate): LocalDate =
+    todayRowDay?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.takeIf { it > logicalDay } ?: logicalDay
+
+/**
  * Pure resolver behind the dashboard's "today" row (#304), extracted so the boundary is testable
  * without a live clock. Prefer the LOCAL-calendar-day row when it differs from the logical day AND has a
  * banked night (totalSleepMin != null) — the non-UTC pre-04:00 case, where the just-finished night is

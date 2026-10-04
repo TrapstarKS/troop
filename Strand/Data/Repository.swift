@@ -834,6 +834,16 @@ final class Repository: ObservableObject {
     }()
     nonisolated static func localDayKey(_ date: Date) -> String { dayKeyFormatter.string(from: date) }
 
+    /// The day Home's day selector counts back from. Offset 0 shows the row `resolveToday` surfaces, which
+    /// before 04:00 can be the LOCAL-calendar row (#304), a day after the logical day. Counting past offsets
+    /// back from the raw logical day then skipped a day (Today = Sun 4, Yesterday = Fri 2). Anchor on the
+    /// shown row when it is later than the logical day; otherwise the logical day. Kotlin twin: homeDayAnchor.
+    nonisolated static func homeDayAnchor(todayRowDay: String?, logicalDay: Date) -> Date {
+        guard let key = todayRowDay, key > localDayKey(logicalDay),
+              let date = dayKeyFormatter.date(from: key) else { return logicalDay }
+        return date
+    }
+
     /// The hour the LOGICAL day rolls (04:00 local). Between midnight and this hour, "Today" stays put.
     nonisolated static let logicalDayRolloverHour = 4
 

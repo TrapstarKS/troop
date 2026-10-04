@@ -89,4 +89,15 @@ final class TodayResolverEffortScaleTests: XCTestCase {
         let whoop = UnitFormatter.effortValue(100.0, scale: .whoop) / 21.0
         XCTAssertEqual(hundred, whoop, accuracy: 1e-9, "the gauge fraction must be scale-independent")
     }
+
+    /// Home counts back from the row Today shows, so Yesterday is never two days back (#304 window).
+    @MainActor func testHomeDayAnchorFollowsTheShownTodayRow() {
+        let now = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 4, hour: 0, minute: 50))!
+        let logical = Repository.logicalDay(now)
+        let got = [nil, "2026-10-04", "2026-10-03", "2026-10-02", "garbage"]
+            .map { Repository.localDayKey(Repository.homeDayAnchor(todayRowDay: $0, logicalDay: logical)) }
+            .joined(separator: ",")
+        // Expected literal shared with the Kotlin twin's test.
+        XCTAssertEqual(got, "2026-10-03,2026-10-04,2026-10-03,2026-10-03,2026-10-03")
+    }
 }

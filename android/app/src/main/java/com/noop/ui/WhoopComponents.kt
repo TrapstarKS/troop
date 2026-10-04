@@ -124,8 +124,10 @@ fun ScoreDial(
                     modifier = Modifier.padding(horizontal = Metrics.space24))
             }
         }
-        if (compact) Text(label.uppercase(Locale.getDefault()), style = NoopType.overline,
-            color = Palette.textPrimary, textAlign = TextAlign.Center,
+        // One line that shrinks instead of breaking mid-word ("RECOVER / Y" at font scale 2.0), like
+        // the iOS ring label's lineLimit(1) + minimumScaleFactor.
+        if (compact) AutoSizeValue(label.uppercase(Locale.getDefault()), style = NoopType.overline,
+            color = Palette.textPrimary, textAlign = TextAlign.Center, minScale = 0.5f,
             modifier = Modifier.padding(top = Metrics.space10))
     }
 }

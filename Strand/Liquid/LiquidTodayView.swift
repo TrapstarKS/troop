@@ -202,7 +202,7 @@ struct LiquidTodayView: View {
 
     /// The logical day the selector resolves to (offset 0 = today's logical day, rolls at 04:00).
     private var selectedLogicalDay: Date {
-        let base = Repository.logicalDay(Date())
+        let base = Repository.homeDayAnchor(todayRowDay: repo.today?.day, logicalDay: Repository.logicalDay(Date()))
         return Calendar.current.date(byAdding: .day, value: -selectedDayOffset, to: base) ?? base
     }
     /// The day key the day-scoped read-outs key on. At offset 0 follows repo.today?.day.

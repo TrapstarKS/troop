@@ -455,7 +455,8 @@ fun TodayScreen(
     // Anchor offset-0 to the LOGICAL day (rolls at 04:00 local), so between midnight and 4am "Today"
     // still resolves to the prior calendar day's banked row instead of an empty new-calendar-day row
     // that blanks the dashboard (#144). Past offsets count back from this anchor. Presentation-only.
-    val todayDate = logicalDayNow()
+    // Past offsets count back from the row offset 0 shows (homeDayAnchor), so the #304 carve-out cannot skip a day.
+    val todayDate = remember(today?.day) { homeDayAnchor(today?.day, logicalDayNow()) }
     // #860 item 1: the launch auto-land (#605/#739 "snap to the most recent data day when today is empty")
     // is RETIRED. It fired on a fresh process when today had no row yet, and for a calibrating user whose
     // newest data was a few days back it stranded them on that old day, overriding the snap-to-today above.
