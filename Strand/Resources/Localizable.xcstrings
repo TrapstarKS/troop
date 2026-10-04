@@ -45580,9 +45580,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд батареи %lld процентов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Заряд батареи %lld процент"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Заряд батареи %lld процента"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Заряд батареи %lld процентов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Заряд батареи %lld процента"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -189171,12 +189195,7 @@
             "value": "Bateria do anel %lld por cento"
           }
         },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд кольца %lld процентов"
-          }
-        },
+        "ru": {"variations": {"plural": {"one": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процент"}}, "few": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процента"}}, "many": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процентов"}}, "other": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процента"}}}}},
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -189229,12 +189248,7 @@
             "value": "Bateria do anel %lld por cento, a carregar"
           }
         },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд кольца %lld процентов, заряжается"
-          }
-        },
+        "ru": {"variations": {"plural": {"one": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процент, заряжается"}}, "few": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процента, заряжается"}}, "many": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процентов, заряжается"}}, "other": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процента, заряжается"}}}}},
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -213332,12 +213346,7 @@
             "value": "Bateria da pulseira %lld por cento"
           }
         },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд ремешка %lld процентов"
-          }
-        },
+        "ru": {"variations": {"plural": {"one": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процент"}}, "few": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процента"}}, "many": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процентов"}}, "other": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процента"}}}}},
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -213397,9 +213406,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Батарея браслета: %1$lld процентов%2$@%3$@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Батарея браслета: %1$lld процент%2$@%3$@"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Батарея браслета: %1$lld процента%2$@%3$@"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Батарея браслета: %1$lld процентов%2$@%3$@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Батарея браслета: %1$lld процента%2$@%3$@"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -213454,12 +213487,7 @@
             "value": "Bateria da pulseira %lld por cento, a carregar"
           }
         },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд ремешка %lld процентов, заряжается"
-          }
-        },
+        "ru": {"variations": {"plural": {"one": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процент, заряжается"}}, "few": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процента, заряжается"}}, "many": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процентов, заряжается"}}, "other": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процента, заряжается"}}}}},
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
