@@ -64,9 +64,10 @@ class MainActivity : ComponentActivity() {
 
     private fun stageLocalNotification(intent: Intent?) {
         if (intent == null) return
-        val typed = if (intent.hasExtra("localNotificationEvent")) localNotificationContext(intent) else null
+        val fields = intent.extras?.keySet()?.mapNotNull { key -> intent.getStringExtra(key)?.let { key to it } }?.toMap().orEmpty()
+        val (typed, route) = com.noop.notif.stagedLocalNotification(fields)
         pendingLocalNotificationContext = typed
-        pendingLocalNotificationRoute = if (typed == null) intent.getStringExtra(LOCAL_NOTIFICATION_ROUTE) else null
+        pendingLocalNotificationRoute = route
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -209,8 +209,13 @@ private struct LocalFamilyToggle: View {
         _enabled = AppStorage(wrappedValue: false, family.enabledKey)
     }
 
+    /// Plan families cannot deliver until a saved-plan provider is attached, so they read off and stay disabled.
+    private var available: Bool {
+        (family != .weeklyCheckIn && family != .weeklyRecap) || model.localNotifications?.weeklyPlanProvider != nil
+    }
+
     var body: some View {
-        Toggle(title, isOn: Binding(get: { enabled }, set: { on in
+        Toggle(title, isOn: Binding(get: { enabled && available }, set: { on in
             guard on else {
                 enabled = false
                 return
@@ -230,6 +235,6 @@ private struct LocalFamilyToggle: View {
                 denied = !allowed
                 if allowed { await model.localNotifications?.evaluate() }
             }
-        }))
+        })).disabled(!available)
     }
 }

@@ -4,6 +4,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ShellNotificationRoutesTest {
+    @Test fun `Coach brief route-only launch payload stages a legacy route and opens Coach chooser`() {
+        val (typed, route) = com.noop.notif.stagedLocalNotification(com.noop.notif.routeOnlyNotificationFields("coach"))
+        assertNull(typed)
+        assertEquals("coach", route)
+        assertEquals(ShellDetailDestination("more", "coach"), localNotificationDestination(route!!, true))
+        assertEquals(ShellDetailDestination("more", WhoopRoute.localBriefing), localNotificationDestination(route, false))
+    }
+
+    @Test fun `typed dated payload stages a context, not a legacy route`() {
+        val ctx = com.noop.notif.LocalNotificationContext("workouts", "workoutReady:1")
+        val (typed, route) = com.noop.notif.stagedLocalNotification(ctx.wireFields)
+        assertEquals("workouts", typed?.route)
+        assertNull(route)
+    }
+
     @Test fun `local reports ignore Coach availability and provider configuration`() {
         for (hasKey in listOf(false, true)) {
             assertEquals(ShellDetailDestination("more", "local_briefing"),

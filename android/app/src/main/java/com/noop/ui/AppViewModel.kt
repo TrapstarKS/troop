@@ -750,6 +750,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _localBriefing = MutableStateFlow<LocalNotificationSnapshot?>(null)
     val localBriefing: StateFlow<LocalNotificationSnapshot?> = _localBriefing.asStateFlow()
 
+    /** Friday/Monday Plan families can only deliver once a saved-plan provider is attached. */
+    val weeklyPlanNotificationsAvailable: Boolean get() = localNotificationDispatcher.weeklyPlanProvider != null
+
     fun setWeeklyPlanNotificationProvider(provider: com.noop.notif.WeeklyPlanNotificationProvider?) {
         localNotificationDispatcher.weeklyPlanProvider = provider
     }
