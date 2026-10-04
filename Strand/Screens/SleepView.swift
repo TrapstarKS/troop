@@ -107,9 +107,10 @@ struct SleepView: View {
     /// chart and recedes the rest (tap again to clear). Display-only selection state. (ryanAtriumAi #988)
     @State private var selectedStage: SleepStage? = nil
 
-    /// Sleeping heart-rate for the displayed night (1-min buckets), for the WHOOP-style HR chart above
-    /// the stage rows. Loaded once per night via `.task(id:)` on the stage card. (ryanAtriumAi #988)
+    /// Sleeping heart-rate for the selected window, reloaded on bounds, source or repository refresh.
+    /// Duration-only imports retain HR without inventing timestamped stages. (ryanAtriumAi #988)
     @State private var nightHR: [HRBucket] = []
+    @State private var nightHRKey: SleepHeartRateLoadKey?
 
     /// The transient UNDO banner shown after a suppressing delete (#65). Non-nil for ~7 seconds: carries
     /// the snapshot needed to restore the deleted night into its ORIGINAL namespace and the window text
@@ -153,13 +154,11 @@ struct SleepView: View {
         let detail = resolved.flatMap { detailModel(for: displayedNight($0)) }
         ScreenScaffold(title: resolved == nil ? "Sleep" : nil,
                        subtitle: nil,
-                       // PERF (scroll): lazy column — byte-identical layout (LazyVStack == eager VStack
-                       // alignment/spacing/header), builds trailing trend/ledger cards on demand. Combined
-                       // with dropping the top-level LiveState observation (the sleep-mark card + the
-                       // syncing note now own `live` in their own leaves), so a 1 Hz HR tick no longer
-                       // re-evaluates this heavy body.
+                       // Keep the single content stack eager: selected-day refreshes temporarily shrink
+                       // it to a loading state, and a lazy outer stack can retain an empty scroll viewport
+                       // after the sleep editor dismisses. Live HR observation stays in the leaf views.
                        onRefresh: { await repo.refresh() },
-                       lazy: true) {
+                       lazy: false) {
             Group {
                 if let resolved {
                     // Each top-level section fades + rises in sequence on first appear (Reduce-Motion safe).
@@ -569,13 +568,11 @@ struct SleepView: View {
     }
 
     private func percentText(_ value: Double?) -> String {
-        value.map { String(format: "%.0f%%", $0) } ?? "—"
+        value.map { String(format: "%.0f%%", $0.rounded()) } ?? "—"
     }
 
     private func sleepContributors(_ detail: SleepModel?, night: Night) -> some View {
-        let sufficiency = selectedAsleepMinutes(night).flatMap { asleep in
-            selectedNeedMinutes(night, detail: detail).flatMap { $0 > 0 ? asleep / $0 * 100 : nil }
-        }
+        let sufficiency = selectedAmounts(night, detail: detail).sufficiencyPct
         return NoopCard(tint: StrandPalette.sleepPrimary) {
             VStack(spacing: 0) {
                 sleepFactorRow(label: String(localized: "Hours vs Needed"), value: sufficiency,
@@ -633,38 +630,39 @@ struct SleepView: View {
     }
 
     static func selectedAsleepMinutes(stages: Stages, daily: Double?) -> Double? {
-        if stages.total > 0 { return stages.asleep }
-        return daily.flatMap { $0 > 0 ? $0 : nil }
+        SleepDisplayAmounts.resolve(recordedAsleep: stages.asleep, recordedTotal: stages.total,
+            dailyAsleep: daily, dailySufficiencyPct: nil, importedNeed: nil, storedEfficiency: nil).asleepMin
     }
 
     static func recordedEfficiencyPct(_ stages: Stages) -> Double? {
-        guard stages.total > 0 else { return nil }
-        return Swift.min(100, Swift.max(0, stages.asleep / stages.total * 100))
+        SleepDisplayAmounts.resolve(recordedAsleep: stages.asleep, recordedTotal: stages.total,
+            dailyAsleep: nil, dailySufficiencyPct: nil, importedNeed: nil, storedEfficiency: nil).efficiencyPct
+    }
+
+    private func selectedAmounts(_ night: Night, detail: SleepModel?) -> SleepDisplayAmounts {
+        let day = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
+        let daily = repo.days.last(where: { $0.day == day })
+        return SleepDisplayAmounts.resolve(recordedAsleep: night.stages.asleep, recordedTotal: night.stages.total,
+            dailyAsleep: daily?.totalSleepMin, dailySufficiencyPct: selectedValue(detail?.hoursVsNeeded),
+            importedNeed: repo.importedSleep[day]?.needMin,
+            storedEfficiency: night.session.efficiency ?? daily?.efficiency)
     }
 
     private func displayedEfficiencyPct(_ night: Night) -> Double? {
-        Self.recordedEfficiencyPct(night.stages) ?? efficiencyPct(night)
+        selectedAmounts(night, detail: nil).efficiencyPct
     }
 
     private func selectedAsleepMinutes(_ night: Night) -> Double? {
-        let day = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
-        return Self.selectedAsleepMinutes(stages: night.stages,
-                                         daily: repo.days.last(where: { $0.day == day })?.totalSleepMin)
-    }
-
-    private func selectedNeedMinutes(_ night: Night, detail: SleepModel?) -> Double? {
-        let day = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
-        return repo.importedSleep[day]?.needMin
-            ?? (selectedValue(detail?.hoursVsNeeded) != nil
-                ? SleepModel.sleepNeedMin(days: repo.days.filter { $0.day <= day }) : nil)
+        selectedAmounts(night, detail: nil).asleepMin
     }
 
     private func selectedNightMetrics(_ model: SleepModel, detail: SleepModel?) -> some View {
         let night = displayedNight(model)
         let day = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
-        let need = selectedNeedMinutes(night, detail: detail)
+        let amounts = selectedAmounts(night, detail: detail)
+        let need = amounts.needMin
         let dailyAsleep = repo.days.last(where: { $0.day == day })?.totalSleepMin
-        let asleep = selectedAsleepMinutes(night)
+        let asleep = amounts.asleepMin
         let debt = Self.selectedDebtMin(imported: repo.importedSleep[day]?.debtMin,
                                         asleep: dailyAsleep, latest: selectedValue(detail?.sleepDebt))
         return VStack(spacing: NoopMetrics.gap) {
@@ -918,7 +916,24 @@ struct SleepView: View {
         let subtitle = isPersisted
             ? String(localized: "\(durationText(night.timeInBed)) recorded · \(efficiencyText(night)) efficiency") + " · " + stageCaption
             : String(localized: "\(durationText(night.timeInBed)) in bed · \(efficiencyText(night)) efficiency")
+        let hrKey = SleepHeartRateLoadKey(deviceId: repo.deviceId, from: night.session.effectiveStartTs,
+                                         to: night.session.endTs, refresh: repo.refreshSeq)
         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+            NoopCard(tint: StrandPalette.sleepPrimary) {
+                VStack(alignment: .leading, spacing: NoopMetrics.space3) {
+                    Text("Sleeping heart rate through the night").strandOverline()
+                    sleepHRChart(intervals: isPersisted ? recorded : [], origin: 0,
+                                 span: max(1, TimeInterval(hrKey.to - hrKey.from)), night: night)
+                        .frame(height: NoopMetrics.chartHeight / 2)
+                    HStack {
+                        Text(night.onsetText)
+                        Spacer()
+                        Text(night.wakeText)
+                    }
+                    .font(StrandFont.caption)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                }
+            }
             if isPersisted {
                 NoopCard(tint: StrandPalette.sleepPrimary) {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
@@ -977,12 +992,14 @@ struct SleepView: View {
                 ouraRawStagesNote
             }
         }
-        // WHOOP top-chart data (ryanAtriumAi #988): 1-min sleeping-HR buckets for THIS night, reloaded
-        // only when the displayed night changes (same `.task(id:)` pattern the other per-night loads use).
-        .task(id: night.session.startTs) {
-            nightHR = await repo.hrBuckets(from: night.session.startTs,
-                                           to: night.session.endTs,
-                                           bucketSeconds: 60)
+        .task(id: hrKey) {
+            nightHR = []
+            nightHRKey = nil
+            guard hrKey.to > hrKey.from else { return }
+            let buckets = await repo.hrBuckets(from: hrKey.from, to: hrKey.to, bucketSeconds: 60)
+            guard !Task.isCancelled else { return }
+            nightHR = buckets
+            nightHRKey = hrKey
         }
     }
 
@@ -1767,10 +1784,12 @@ struct SleepView: View {
     @ViewBuilder
     private func sleepHRChart(intervals: [SleepInterval], origin: TimeInterval, span: TimeInterval, night: Night) -> some View {
         let nightStartTs = night.onsetDate.timeIntervalSince1970
-        let buckets = nightHR.filter {
-            let rel = TimeInterval($0.ts) - nightStartTs
-            return rel >= origin - 60 && rel <= origin + span + 60
-        }
+        let currentKey = SleepHeartRateLoadKey(deviceId: repo.deviceId, from: night.session.effectiveStartTs,
+                                              to: night.session.endTs, refresh: repo.refreshSeq)
+        let highlightedStage = intervals.isEmpty ? nil : selectedStage
+        let runs = SleepHeartRateSamples.runs(nightHRKey == currentKey ? nightHR : [],
+            from: Int(nightStartTs + origin), to: Int(nightStartTs + origin + span))
+        let buckets = runs.flatMap { $0 }
         if buckets.count >= 2 {
             Canvas { ctx, size in
                 let bpms = buckets.map(\.bpm)
@@ -1783,7 +1802,7 @@ struct SleepView: View {
                     return CGPoint(x: x, y: y)
                 }
                 // Selected-stage column washes UNDER everything else.
-                if let sel = selectedStage {
+                if let sel = highlightedStage {
                     let wash = StrandPalette.sleepStageColor(sel).opacity(0.13)
                     for iv in intervals where iv.stage == sel {
                         let x0 = CGFloat((iv.start - origin) / span) * size.width
@@ -1799,7 +1818,7 @@ struct SleepView: View {
                     var line = Path()
                     line.move(to: CGPoint(x: 0, y: y)); line.addLine(to: CGPoint(x: size.width, y: y))
                     ctx.stroke(line, with: .color(StrandPalette.hairline.opacity(0.5)), lineWidth: 1)
-                    ctx.draw(Text(verbatim: "\(Int(grid))").font(.system(size: 9)).foregroundColor(StrandPalette.textTertiary),
+                    ctx.draw(Text(verbatim: "\(Int(grid))").font(StrandFont.caption).foregroundColor(StrandPalette.textTertiary),
                              at: CGPoint(x: 10, y: y - 7))
                     grid += step
                 }
@@ -1809,36 +1828,39 @@ struct SleepView: View {
                 // clean measured beat. NOTE: with the default acceptance floor (0.3) no stored PPG
                 // sample carries conf < 0.3, so this weak branch is inert unless a future opt-in
                 // weak-signal mode (which needs a faithfulness eval first) lowers the floor.
-                let baseColor = selectedStage == nil
+                let baseColor = highlightedStage == nil
                     ? StrandPalette.restColor.opacity(0.9)
                     : StrandPalette.textTertiary.opacity(0.45)
                 var strong = Path()
                 var weakPath = Path()
                 var prev: (ts: Int, pt: CGPoint, strong: Bool)? = nil
-                for b in buckets {
-                    let p = point(b)
-                    let isStrong = b.conf >= 0.3
-                    if let pr = prev, b.ts - pr.ts <= 300 {
-                        // Bridge class transitions from the previous point so the trace stays
-                        // continuous — the weak segment owns the bridging stroke.
-                        if isStrong {
-                            if pr.strong { strong.addLine(to: p) }
-                            else { strong.move(to: pr.pt); strong.addLine(to: p) }
+                for run in runs {
+                    prev = nil
+                    for b in run {
+                        let p = point(b)
+                        let isStrong = b.conf >= 0.3
+                        if let pr = prev, b.ts - pr.ts <= 300 {
+                            // Bridge class transitions from the previous point so the trace stays
+                            // continuous — the weak segment owns the bridging stroke.
+                            if isStrong {
+                                if pr.strong { strong.addLine(to: p) }
+                                else { strong.move(to: pr.pt); strong.addLine(to: p) }
+                            } else {
+                                if !pr.strong { weakPath.addLine(to: p) }
+                                else { weakPath.move(to: pr.pt); weakPath.addLine(to: p) }
+                            }
                         } else {
-                            if !pr.strong { weakPath.addLine(to: p) }
-                            else { weakPath.move(to: pr.pt); weakPath.addLine(to: p) }
+                            if isStrong { strong.move(to: p) } else { weakPath.move(to: p) }
                         }
-                    } else {
-                        if isStrong { strong.move(to: p) } else { weakPath.move(to: p) }
+                        prev = (b.ts, p, isStrong)
                     }
-                    prev = (b.ts, p, isStrong)
                 }
                 ctx.stroke(strong, with: .color(baseColor), style: StrokeStyle(lineWidth: 1.2, lineJoin: .round))
                 ctx.stroke(weakPath, with: .color(baseColor.opacity(0.55)),
                            style: StrokeStyle(lineWidth: 1, lineJoin: .round, dash: [2, 3]))
                 // Selected-stage trace overlay: the HR line re-drawn in the stage colour, only
                 // inside that stage's intervals.
-                if let sel = selectedStage {
+                if let sel = highlightedStage {
                     let ranges = intervals.filter { $0.stage == sel }.map { ($0.start, $0.end) }
                     var overlay = Path()
                     var lastIn: Int? = nil
@@ -1864,7 +1886,7 @@ struct SleepView: View {
                                style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: NoopVisualStyle.compactRadius, style: .continuous))
             .accessibilityLabel(Text("Sleeping heart rate through the night"))
         } else {
             Text("No heart-rate detail for this night")
@@ -2581,6 +2603,13 @@ private struct SleepFreshnessNote: View {
 /// Cheap, Equatable fingerprint of the repo inputs SleepView derives from. Two snapshots are
 /// equal iff the data the screen reads is unchanged, so the heavy `SleepModel` rebuild is
 /// skipped on the many `body` re-evaluations that don't touch sleep data.
+private struct SleepHeartRateLoadKey: Equatable {
+    let deviceId: String
+    let from: Int
+    let to: Int
+    let refresh: Int
+}
+
 private struct SleepInputKey: Equatable {
     let loaded: Bool
     let daysCount: Int

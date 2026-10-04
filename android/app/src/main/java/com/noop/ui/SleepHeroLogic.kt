@@ -10,6 +10,9 @@ internal fun requestedSleepNightOffset(navDays: List<List<SleepSession>>, dayKey
         .takeIf { it >= 0 }
 }
 
+internal fun selectedSleepDayKey(navDays: List<List<SleepSession>>, offset: Int): String? =
+    if (offset <= 0) null else navDays.getOrNull(offset)?.firstOrNull()?.let { localDayString(it.endTs) }
+
 internal fun sleepEditGroupFor(session: SleepSession, heroGroup: List<SleepSession>): List<SleepSession> =
     if (heroGroup.any { it.deviceId == session.deviceId && it.startTs == session.startTs }) heroGroup
     else listOf(session)
@@ -23,19 +26,11 @@ internal fun selectedNightStages(night: HeroNight?): Stages? = night?.let {
         ?.takeIf { group -> group.total > 0.0 } ?: recordedSleepStages(it.session)
 }
 
-internal data class SelectedSleepAmounts(val asleepMin: Double?, val needMin: Double?, val sufficiencyPct: Double?)
-
 internal fun selectedSleepAmounts(
     stages: Stages?, day: DailyMetric?, dailySufficiencyPct: Double?, importedNeedMin: Double?,
-): SelectedSleepAmounts {
-    val dailyAsleep = day?.totalSleepMin?.takeIf { it > 0.0 }
-    val asleep = stages?.takeIf { it.total > 0.0 }?.asleep ?: dailyAsleep
-    // Recover the existing need from its original daily numerator, before choosing recorded asleep.
-    val need = importedNeedMin?.takeIf { it > 0.0 }
-        ?: dailySufficiencyPct?.takeIf { it > 0.0 }?.let { ratio -> dailyAsleep?.let { it / ratio * 100.0 } }
-    val sufficiency = if (dailySufficiencyPct != null && need != null) asleep?.let { it / need * 100.0 } else null
-    return SelectedSleepAmounts(asleep, need, sufficiency)
-}
+): SleepDisplayAmounts = SleepDisplayAmounts.resolve(
+    stages?.asleep, stages?.total, day?.totalSleepMin, dailySufficiencyPct, importedNeedMin, null,
+)
 
 internal fun napAsleepMinutes(naps: List<SleepSession>): Double? {
     var total = 0.0
@@ -49,9 +44,8 @@ internal fun selectedSleepEfficiency(
     night: HeroNight?, days: List<DailyMetric>, stages: Stages? = selectedNightStages(night),
 ): Double? {
     val session = night?.session ?: return null
-    if (stages != null && stages.total > 0.0) return (stages.asleep / stages.total * 100.0).coerceIn(0.0, 100.0)
-    val efficiency = session.efficiency ?: days.lastOrNull { it.day == night.dayKey }?.efficiency
-    return efficiency?.takeIf { it.isFinite() }?.let { if (it <= 1.0) it * 100.0 else it }
+    return SleepDisplayAmounts.resolve(stages?.asleep, stages?.total, null, null, null,
+        session.efficiency ?: days.lastOrNull { it.day == night.dayKey }?.efficiency).efficiencyPct
 }
 
 /** A short Rest state word for the hero gauge — same banding the synthesis hero uses. */

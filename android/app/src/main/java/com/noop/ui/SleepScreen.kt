@@ -219,12 +219,9 @@ fun SleepScreen(
     // session row is gone, giving each suppressed window a "Recompute this night" escape hatch (#515).
     var dismissedSleeps by remember { mutableStateOf<List<DismissedSleep>>(emptyList()) }
     var recomputingSleep by remember { mutableStateOf<Pair<String, Long>?>(null) }
-    // 0 = latest night, N = N sleep-sessions back. Reset to the newest night only on a REAL data
-    // reload (new sync / re-import via `days` changing). The optimistic bed/wake edit rewrites
-    // `sleeps` in place WITHOUT touching `days`, so it must not reset the browse — keeping the
-    // user on the night they just edited. (#160)
+    // A historical wake-day survives edits and reloads; latest follows newly arriving nights. (#160)
     var nightOffset by remember(initialDayKey, vm.activeStrapId) { mutableIntStateOf(0) }
-    var pendingInitialDayKey by remember(initialDayKey, vm.activeStrapId) {
+    var selectedDayKey by remember(initialDayKey, vm.activeStrapId) {
         mutableStateOf(initialDayKey)
     }
     LaunchedEffect(days, vm.activeStrapId) {
@@ -493,13 +490,13 @@ fun SleepScreen(
     }
 
     val requestedOffset = if (sleepRowsReady)
-        requestedSleepNightOffset(navDays, pendingInitialDayKey) else null
-    val visibleNightOffset = if (pendingInitialDayKey != null) requestedOffset else nightOffset
-    val unavailableRequestedDay = pendingInitialDayKey?.takeIf { sleepRowsReady && requestedOffset == null }
+        requestedSleepNightOffset(navDays, selectedDayKey) else null
+    val visibleNightOffset = if (selectedDayKey != null) requestedOffset else nightOffset
+    val unavailableRequestedDay = selectedDayKey?.takeIf { sleepRowsReady && requestedOffset == null }
     val onNavigateNight: (Int) -> Unit = { offset ->
         if (sleepRowsReady) {
-            pendingInitialDayKey = null
             nightOffset = offset.coerceIn(0, max(navDays.lastIndex, 0))
+            selectedDayKey = selectedSleepDayKey(navDays, nightOffset)
         }
     }
 
@@ -519,7 +516,7 @@ fun SleepScreen(
     // data (strap off-body) is skipped by the carousel, so labelling by index makes two nights either
     // side of it read as consecutive and desyncs the "N nights ago" labels. Shared by the Rest hero
     // overline and the nav header so both name the SAME calendar night.
-    val nightLabel = pendingInitialDayKey?.takeIf { visibleNightOffset == null }
+    val nightLabel = selectedDayKey?.takeIf { visibleNightOffset == null }
         ?: nightRelativeLabel(calendarNightsAgo(navDays, visibleNightOffset ?: nightOffset,
             java.util.TimeZone.getDefault()))
 
@@ -821,20 +818,21 @@ fun SleepScreen(
             }
             item(key = "sleepSelectedStages") {
                 Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
-                    // #1537: the night's heart rate for the Classic view's line chart. Loaded here
-                    // because Hero takes data rather than a repo, and keyed on the night so paging the
-                    // carousel refetches. 60-second buckets, matching the iOS Sleep tab's hrBuckets call.
-                    val hrFrom = night?.session?.effectiveStartTs
-                    val hrTo = night?.session?.endTs
-                    var nightHr by remember(hrFrom, hrTo) { mutableStateOf(emptyList<HrBucket>()) }
-                    LaunchedEffect(hrFrom, hrTo, vm.activeStrapId) {
-                        nightHr = if (hrFrom != null && hrTo != null && hrTo > hrFrom) {
+                    // #1537: selected whole-night HR, independent of stage representation. Bounds,
+                    // source and refreshed rows invalidate the 60-second buckets after an edit.
+                    val hrFrom = night?.heroOnsetTs ?: night?.session?.effectiveStartTs
+                    val hrTo = night?.heroWakeTs ?: night?.session?.endTs
+                    var nightHr by remember(hrFrom, hrTo, vm.activeStrapId, days, night?.session) { mutableStateOf(emptyList<HrBucket>()) }
+                    LaunchedEffect(hrFrom, hrTo, vm.activeStrapId, days, night?.session) {
+                        val loadedHr = if (hrFrom != null && hrTo != null && hrTo > hrFrom) {
                             runCatching {
                                 vm.repo.hrBucketsUnion(vm.activeStrapId, hrFrom, hrTo, bucketSeconds = 60L)
                             }.getOrDefault(emptyList())
                         } else {
                             emptyList()
                         }
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        nightHr = loadedHr
                     }
                     Hero(
                         display = display,
@@ -1255,6 +1253,8 @@ private fun Hero(
         // ends mid-night and its endTs contradicted the header pill two lines above.
         if (heroGroup.size > 1) StatusPill(stringResource(R.string.whoop_sleep_fragmented), color = Palette.sleepPrimary)
         session?.let { SleepWindowRow(windowOnsetTs ?: it.effectiveStartTs, windowWakeTs ?: it.endTs) }
+        SleepHeartRateCard(nightHr, windowOnsetTs ?: session?.effectiveStartTs,
+            windowWakeTs ?: session?.endTs)
         if (display == null) {
             // Honest fallback: this night recorded no usable stage data — never silently
             // substitute another night's hypnogram. (#160)
@@ -1354,25 +1354,6 @@ private fun Hero(
                     // Reconstructed architecture (light → deep → light → rem → light → awake) as the
                     // flat proportional strip. No MotionStrip and no fake steps here: invented
                     // architecture has no genuine timeline to anchor to (mirrors the iOS else-branch).
-                    // #1537: heart rate across the night, above the stage strip — the twin of the iOS
-                    // Classic view's `sleepHRChart`, which Android never had. Same window as the stage
-                    // strip below (the night's own onset..wake), and the same 60-second buckets iOS asks
-                    // for, so the two platforms plot the same shape from the same rows. Drawn only with
-                    // at least two buckets, matching iOS's `buckets.count >= 2`: one point is not a line,
-                    // and a night the strap never sampled should show nothing rather than a flat stub.
-                    if (nightHr.size >= 2) {
-                        LineChart(
-                            values = nightHr.map { it.avgBpm },
-                            modifier = Modifier.fillMaxWidth().height(Metrics.compactChartHeight)
-                                .semantics {
-                                    contentDescription = uiString(R.string.l10n_sleep_screen_sleep_heart_rate_chart_8ec47ae1)
-                                },
-                            color = Palette.metricRose,
-                            fill = false,
-                            timestamps = nightHr.map { it.bucket },
-                            formatValue = { "${Math.round(it)} bpm" },
-                        )
-                    }
                     Text(stringResource(R.string.whoop_sleep_duration_only),
                         style = NoopType.caption, color = Palette.textSecondary)
                     SleepStageTotalsBar(s)
