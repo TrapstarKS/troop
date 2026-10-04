@@ -68,7 +68,7 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
     val registryActiveId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val activeStrapId = registryActiveId ?: vm.activeStrapId
     val journalSeq by vm.repo.journalRevision.collectAsStateWithLifecycle()
-    val effortScale = UnitPrefs.effortScale(context)
+    val effortScale = EffortScale.WHOOP // Strain screens read 0–21; the stored goal stays Effort 0–100.
     var today by remember { mutableStateOf(LocalDate.now().toString()) }
     var resumeRevision by remember { mutableStateOf(0) }
     var weekOffset by remember { mutableStateOf(0) }

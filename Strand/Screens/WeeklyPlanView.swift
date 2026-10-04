@@ -12,7 +12,6 @@ struct WeeklyPlanView: View {
     @EnvironmentObject private var repo: Repository
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var catalog = JournalCatalogStore()
-    @AppStorage(UnitPrefs.effortScaleKey) private var effortScaleRaw = EffortScale.hundred.rawValue
     @State private var today = Repository.localDayKey(Date())
     @State private var resumeRevision = 0
     @State private var weekOffset = 0
@@ -26,7 +25,8 @@ struct WeeklyPlanView: View {
 
     private let preferences = WeeklyPlanPreferences()
     private let dayTicker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
-    private var effortScale: EffortScale { UnitPrefs.resolveEffortScale(effortScaleRaw) }
+    // Strain screens always read 0–21; the stored goal stays Effort 0–100, only its display changes.
+    private let effortScale = EffortScale.whoop
     private var currentWeek: String { WeeklyPlanCalendar.weekStart(today) ?? today }
     private var selectedWeek: String { WeeklyPlanCalendar.adding(days: weekOffset * 7, to: currentWeek) ?? currentWeek }
     private var days: [WeeklyPlanDay] {
