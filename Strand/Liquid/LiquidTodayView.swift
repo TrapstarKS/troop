@@ -1546,7 +1546,7 @@ struct LiquidTodayView: View {
             day: displayDay, sleepScore: restScore, recovery: cachedChargeDisplay.pct,
             recoveryDayKey: cachedRecoveryDayKey ?? selectedDayKey,
             recoveryCaption: chargeCarryCaption, strain: effortStrain(displayDay),
-            stress: selectedDayOffset == 0 ? stress : homeStressByDay[selectedDayKey], workouts: workouts,
+            stress: homeStressByDay[selectedDayKey], workouts: workouts,
             onEdit: { customizationDestination = .keyMetrics },
             onWorkout: { homeWorkout = HomeWorkoutTarget(row: $0) },
             onActivitySaved: { await load() },
