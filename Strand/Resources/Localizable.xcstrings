@@ -5216,9 +5216,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ ↔ %2$@: r = %3$@ (%4$@ %5$@) за %6$lld общих дней."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@ ↔ %2$@: r = %3$@ (%4$@ %5$@) за %6$lld общий день."
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@ ↔ %2$@: r = %3$@ (%4$@ %5$@) за %6$lld общих дня."
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@ ↔ %2$@: r = %3$@ (%4$@ %5$@) за %6$lld общих дней."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@ ↔ %2$@: r = %3$@ (%4$@ %5$@) за %6$lld общих дня."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -13759,9 +13783,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld пар"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld пара"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld пары"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld пар"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld пары"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
