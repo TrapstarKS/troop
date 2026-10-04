@@ -35,7 +35,10 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound, .list])
+        Task { @MainActor in
+            WindDownNudge.recordDeliveredAdvice(notification.request)
+            completionHandler([.banner, .sound, .list])
+        }
     }
 
     /// Route report and device taps to their explicit destination. Retain a cold-start local route
@@ -45,6 +48,7 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        Task { @MainActor in WindDownNudge.recordDeliveredAdvice(response.notification.request) }
         let content = response.notification.request.content
         if content.categoryIdentifier == "local-report",
            let notification = LocalNotificationContext(wireFields: content.userInfo.reduce(into: [String: String]()) {

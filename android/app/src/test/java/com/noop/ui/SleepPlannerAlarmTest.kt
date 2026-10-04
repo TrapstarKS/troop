@@ -133,6 +133,22 @@ class SleepPlannerAlarmTest {
         assertTrue(next.plan.debtNudge)
     }
 
+    @Test fun anElapsedAdviceOccurrenceStaysHandledAcrossGoalEdits() {
+        val before = calendar(day = 16, hour = 22)
+        val first = WindDownScheduler.nextPlannerReminder(before, SleepPlannerSettings(), emptySet(), 420, emptyMap(), 30)!!
+        val after = (before.clone() as Calendar).apply { add(Calendar.MINUTE, 40) }
+        val handled = PlannerAlarmPolicy.handledAdvice(
+            PlannerAlarmPolicy.adviceQueue(mapOf(first.occurrenceKey to first.at.timeInMillis / 1000)),
+            "", after.timeInMillis / 1000, PlannerAlarmPolicy.occurrenceKey(after).take(10),
+        )
+        val next = WindDownScheduler.nextPlannerReminder(
+            after, SleepPlannerSettings(goalPercent = 85), emptySet(), 420, emptyMap(), 30,
+            handledOccurrences = handled.split('\n').toSet(),
+        )!!
+        assertEquals("2026-06-17|420", first.occurrenceKey)
+        assertEquals("2026-06-18|420", next.occurrenceKey)
+    }
+
     @Test fun resolvedGoalAndTargetStayTogetherInTheSelectedWakeSnapshot() {
         val now = calendar(hour = 12)
         for ((goals, expectedGoal, expectedTarget) in listOf(
