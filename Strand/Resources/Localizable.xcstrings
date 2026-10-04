@@ -6317,9 +6317,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@, последнее %2$@, %3$lld измерений"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, последнее %2$@, %3$lld измерение"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, последнее %2$@, %3$lld измерения"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, последнее %2$@, %3$lld измерений"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, последнее %2$@, %3$lld измерения"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -207918,9 +207942,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Разреженно, расширено до %1$@ · %2$lld измерений"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Разреженно, расширено до %1$@ · %2$lld измерение"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Разреженно, расширено до %1$@ · %2$lld измерения"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Разреженно, расширено до %1$@ · %2$lld измерений"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Разреженно, расширено до %1$@ · %2$lld измерения"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
