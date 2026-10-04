@@ -1380,6 +1380,7 @@ struct SleepView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(label).strandOverline()
                 Text(value).font(StrandFont.number(22)).foregroundStyle(StrandPalette.textPrimary)
+                    .lineLimit(1).minimumScaleFactor(0.6)
             }
         }
         .accessibilityElement(children: .combine)
