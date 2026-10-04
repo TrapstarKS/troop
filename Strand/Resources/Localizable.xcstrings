@@ -7178,9 +7178,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@: %2$@ прошлой ночью, %3$lld процентов ночи"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процент ночи"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процента ночи"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процентов ночи"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процента ночи"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -7307,9 +7331,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@: %2$@ прошлой ночью, %3$lld процентов ночи, обычно %4$@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процент ночи, обычно %4$@"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процента ночи, обычно %4$@"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процентов ночи, обычно %4$@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процента ночи, обычно %4$@"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -7947,9 +7995,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@: %2$@, %3$lld процентов ночи"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@, %3$lld процент ночи"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@, %3$lld процента ночи"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@, %3$lld процентов ночи"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@, %3$lld процента ночи"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
