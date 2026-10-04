@@ -1609,20 +1609,14 @@ fun TodayScreen(
     }
 
     recoveryDetailDayKey?.let { dayKey ->
-        Dialog(
-            onDismissRequest = { recoveryDetailDayKey = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
+        DetailFullScreenDialog(onDismiss = { recoveryDetailDayKey = null }) {
             Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
                 RecoveryDetailScreen(vm = viewModel, dayKey = dayKey, onBack = { recoveryDetailDayKey = null })
             }
         }
     }
     strainDetailRequest?.let { request ->
-        Dialog(
-            onDismissRequest = { strainDetailRequest = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
+        DetailFullScreenDialog(onDismiss = { strainDetailRequest = null }) {
             Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
                 StrainDetailScreen(vm = viewModel, dayKey = request.first, effortOverride = request.second,
                     windowDayKey = request.third,

@@ -45,7 +45,7 @@
     <string name="d2b_hr_zones">Пульсовые зоны</string>
     <string name="d2b_no_zones">В этом интервале нет данных о времени в зонах 1–5.</string>
     <string name="d2b_strap_zones_note">Время в существующих личных зонах %HRmax, рассчитанное по пульсу браслета с учётом источника. Пробелы не считаются записанными упражнениями.</string>
-    <string name="d2b_imported_zones_note">Импортированные проценты по зонам для этой тренировки, взвешенные по её записанной длительности.</string>
+    <string name="d2b_imported_zones_note">Минуты по зонам используют сохранённое распределение и записанную длительность.</string>
     <string name="d2b_zone">Зона %1$d</string>
     <string name="d2b_below_zone_one">Ниже зоны 1</string>
     <string name="d2b_minutes">мин</string>
@@ -73,4 +73,5 @@
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">Для этого диапазона нет сохранённых оценок.</string>
     <string name="d2b_labeled_percent">%1$s %2$s%%</string>
+    <string name="d2b_classified_zone_share">Доля времени, отнесённого к зонам 1–5</string>
 </resources>

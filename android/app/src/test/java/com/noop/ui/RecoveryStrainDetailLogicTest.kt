@@ -6,6 +6,45 @@ import org.junit.Test
 
 class RecoveryStrainDetailLogicTest {
     @Test
+    fun displayedComparisonPrecisionAndSignedZeroMatchStandaloneSwiftOracle() {
+        val values = listOf(null, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
+            -0.0, 0.0, 0.01, -0.01, 0.05, -0.05, 0.15, -0.15, 0.5, -0.5,
+            Math.nextDown(0.5), Math.nextUp(0.5), Math.nextDown(-0.5), Math.nextUp(-0.5),
+            56.49, 56.5, 1e300, Double.MAX_VALUE)
+        val lines = mutableListOf<String>()
+        for (decimals in listOf(-1, 0, 1, 2)) {
+            lines += values.joinToString(",") {
+                RecoveryStrainDetailLogic.comparisonValue(it, decimals)?.toRawBits()?.toULong()?.toString() ?: "unavailable"
+            }
+        }
+        val pairs: List<Triple<Double?, Double?, Int>> = listOf(
+            Triple(56.0, 55.999, 0), Triple(56.0, 56.01, 0), Triple(56.0, 55.5, 0),
+            Triple(56.49, 55.5, 0), Triple(56.5, 55.5, 0), Triple(14.6, 14.61, 1),
+            Triple(14.6, 14.65, 1), Triple(77.1, 80.4, 1), Triple(null, 56.0, 0),
+            Triple(56.0, null, 0), Triple(Double.NaN, 56.0, 0), Triple(56.0, Double.POSITIVE_INFINITY, 0),
+            Triple(-1e308, 1e308, 1),
+        )
+        lines += pairs.joinToString(",") { (current, mean, decimals) ->
+            RecoveryStrainDetailLogic.comparisonDelta(current, mean, decimals)?.toRawBits()?.toULong()?.toString() ?: "unavailable"
+        }
+        val expected = """
+        unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable
+        unavailable,unavailable,unavailable,unavailable,0,0,0,0,0,0,0,0,4607182418800017408,13830554455654793216,0,4607182418800017408,13830554455654793216,0,4633078116657397760,4633218854145753088,9094988921128908188,9218868437227405311
+        unavailable,unavailable,unavailable,unavailable,0,0,0,0,4591870180066957722,13815242216921733530,4596373779694328218,13819745816549104026,4602678819172646912,13826050856027422720,4602678819172646912,4602678819172646912,13826050856027422720,13826050856027422720,4633148485401575424,4633148485401575424,9094988921128908188,9218868437227405311
+        unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable
+        0,0,0,0,4607182418800017408,0,13815242216921733530,13837985395039954534,unavailable,unavailable,unavailable,unavailable,unavailable
+        """.trimIndent()
+        assertEquals(expected, lines.joinToString("\n"))
+    }
+
+    @Test
+    fun equalDisplayedReadingsHaveUnsignedZeroChangeAtTheirOwnPrecision() {
+        assertEquals(0L, RecoveryStrainDetailLogic.comparisonDelta(56.0, 55.999, 0)!!.toRawBits())
+        assertEquals(0L, RecoveryStrainDetailLogic.comparisonDelta(56.0, 56.01, 0)!!.toRawBits())
+        assertEquals(0L, RecoveryStrainDetailLogic.comparisonDelta(14.6, 14.61, 1)!!.toRawBits())
+    }
+
+    @Test
     fun windowsTimestampsAndZoneProvenanceMatchStandaloneSwiftOracle() {
         data class WindowCase(val start: Long, val next: Long, val current: Boolean,
             val sleep: Boolean, val onset: Long?, val nextOnset: Long?, val now: Long)
@@ -101,7 +140,7 @@ class RecoveryStrainDetailLogicTest {
         val wholeValues = listOf(null, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
             -1.0, -0.0, 0.0, 0.49, 0.5, 1.49, 1.5, 1e300,
             9_223_372_036_854_775_808.0, Math.nextDown(9_223_372_036_854_775_808.0))
-        val durations = listOf(-1.0, Double.NaN, 1e300, 59.0, 60.0, 89.0, 90.0, 119.9, 120.0)
+        val durations = listOf(-1.0, Double.NaN, 1e300, 29.9, 30.0, 59.0, 60.0, 89.0, 90.0, 119.9, 120.0, 1482.5, 1499.0, 1500.0)
         val durationFallbacks: List<Pair<Double?, Double?>> = listOf(null to null, null to 3661.0, 0.0 to 3661.0,
             59.0 to 3661.0, 60.0 to 3661.0, null to -1.0, null to Double.NaN, null to Double.POSITIVE_INFINITY,
             null to 1e300, -1.0 to 3600.0, Double.NaN to 3600.0, Double.POSITIVE_INFINITY to 3600.0, 1e300 to 3600.0)
@@ -118,8 +157,8 @@ class RecoveryStrainDetailLogicTest {
         unavailable,unavailable,under,under,optimal,optimal,over,over
         unavailable,unavailable,unavailable,unavailable,0,33,33,34,66,66,67,99,100,unavailable
         unavailable,unavailable,unavailable,unavailable,unavailable,0,0,0,1,1,2,unavailable,unavailable,9223372036854774784
-        unavailable,unavailable,unavailable,0,1,1,1,1,2
-        unavailable,61,0,0,1,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable
+        unavailable,unavailable,unavailable,0,1,1,1,1,2,2,2,25,25,25
+        unavailable,61,0,1,1,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable,unavailable
         """.trimIndent() + "\n"
         assertEquals(expected, actual)
     }

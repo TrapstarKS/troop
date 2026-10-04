@@ -440,6 +440,7 @@ object HealthConnectWriter {
 
     /** Pure: build the records for one workout (testable without a client). */
     fun buildExerciseRecords(row: WorkoutRow, exerciseType: Int): List<Record> {
+        if (com.noop.data.WorkoutCopyIdentity.isCopy(row.source)) return emptyList()
         val start = Instant.ofEpochSecond(row.startTs)
         val end = Instant.ofEpochSecond(row.endTs)
         val offset = ZoneId.systemDefault().rules.getOffset(start)
@@ -466,6 +467,7 @@ object HealthConnectWriter {
     /** Insert one workout's records into Health Connect. Opt-in caller. Returns a [WritebackResult] so a
      *  failed exercise share is visible instead of silently swallowed, and records the outcome (#660). */
     suspend fun writeExercise(context: Context, row: WorkoutRow, exerciseType: Int): WritebackResult {
+        if (com.noop.data.WorkoutCopyIdentity.isCopy(row.source)) return WritebackResult(0, emptyList())
         if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) return WritebackResult.UNAVAILABLE
         val recs = buildExerciseRecords(row, exerciseType)
         val result = runCatching { HealthConnectClient.getOrCreate(context).insertRecords(recs); recs.size }

@@ -45,7 +45,7 @@
     <string name="d2b_hr_zones">心率区间</string>
     <string name="d2b_no_zones">此时间段内暂无区间1–5的时间数据。</string>
     <string name="d2b_strap_zones_note">根据手环心率并考虑数据来源，估算在现有个人%HRmax区间中的时间。缺失数据不算作已记录运动。</string>
-    <string name="d2b_imported_zones_note">此活动导入的各区间百分比，按记录时长加权。</string>
+    <string name="d2b_imported_zones_note">各区间分钟数使用已保存的分布和记录时长。</string>
     <string name="d2b_zone">区间%1$d</string>
     <string name="d2b_below_zone_one">低于区间1</string>
     <string name="d2b_minutes">分钟</string>
@@ -73,4 +73,5 @@
     <string name="d2b_date_window">%1$s–%2$s</string>
     <string name="d2b_no_trend">此范围暂无已保存分数。</string>
     <string name="d2b_labeled_percent">%1$s %2$s%%</string>
+    <string name="d2b_classified_zone_share">1–5 区间内已分类时间的占比</string>
 </resources>

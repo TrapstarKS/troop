@@ -8,6 +8,7 @@ import StrandAnalytics   // WorkoutsTrace: the dedup-decision line formatter for
 ///   - "whoop"        — WhoopImporter (imported WHOOP session)
 ///   - "apple_health" / "apple-health" — AppleHealthImport
 ///   - "manual"       — AppModel.endWorkout (v1.67 live session) AND the retro add/edit sheet
+///   - "manual-copy"  — a distinct, on-device manual copy; excluded from Health writeback
 ///   - "my-whoop-noop"— legacy IntelligenceEngine detected bouts (source == the computed deviceId,
 ///                       i.e. it ends in "-noop"). These remain readable/editable but are no longer
 ///                       created or reconciled by `analyzeRecent`.
@@ -25,7 +26,7 @@ enum WorkoutSource: Equatable {
     static func classify(_ source: String) -> WorkoutSource {
         let s = source.lowercased()
         if s.hasSuffix("-noop") { return .detected }   // BEFORE whoop: "my-whoop-noop" contains "whoop"
-        if s == "manual" { return .manual }
+        if s == "manual" || s == WorkoutCopyIdentity.source { return .manual }
         if s == "lifting" { return .lifting }          // imported Hevy / Liftosaur strength session
         if s == "activity-file" { return .activityFile } // imported GPX / TCX / FIT activity file
         if isAppleHealth(s) { return .apple }          // both spellings → Apple Health
@@ -324,7 +325,7 @@ enum WorkoutSource: Equatable {
     static func preservingCaptured(_ row: WorkoutRow, from old: WorkoutRow?) -> WorkoutRow {
         guard let old else { return row }
         return WorkoutRow(startTs: row.startTs, endTs: row.endTs, sport: row.sport,
-                          source: row.source, durationS: row.durationS,
+                          source: WorkoutCopyIdentity.isCopy(old.source) ? WorkoutCopyIdentity.source : row.source, durationS: row.durationS,
                           energyKcal: row.energyKcal, avgHr: row.avgHr,
                           maxHr: old.maxHr, strain: old.strain, distanceM: row.distanceM,
                           zonesJSON: old.zonesJSON, notes: old.notes, steps: old.steps)

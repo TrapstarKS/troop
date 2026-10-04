@@ -179,6 +179,37 @@ extension WhoopStore {
         }
     }
 
+    /// Insert a new workout key, rejecting collisions without modifying existing history.
+    public func insertWorkout(_ row: WorkoutRow, deviceId: String) async throws {
+        try syncWrite { db in try Self.insertWorkoutRow(row, deviceId: deviceId, db: db) }
+    }
+
+    private static func insertWorkoutRow(_ row: WorkoutRow, deviceId: String, db: Database) throws {
+        try db.execute(sql: """
+                INSERT INTO workout
+                    (deviceId, startTs, endTs, sport, source, durationS, energyKcal,
+                     avgHr, maxHr, strain, distanceM, zonesJSON, notes, steps)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, arguments: [deviceId, row.startTs, row.endTs, row.sport, row.source, row.durationS,
+                    row.energyKcal, row.avgHr, row.maxHr, row.strain, row.distanceM, row.zonesJSON,
+                    row.notes, row.steps])
+    }
+
+    /// Allocate and insert a distinct manual copy in one transaction. Existing rows are never updated.
+    public func insertManualWorkoutCopy(_ row: WorkoutRow, deviceId: String) async throws -> WorkoutRow {
+        try syncWrite { db in
+            let occupied = try String.fetchAll(db,
+                sql: "SELECT sport FROM workout WHERE deviceId = ? AND startTs = ?",
+                arguments: [deviceId, row.startTs])
+            let copy = WorkoutRow(startTs: row.startTs, endTs: row.endTs,
+                sport: WorkoutCopyIdentity.sport(row.sport, occupied: occupied), source: WorkoutCopyIdentity.source,
+                durationS: row.durationS, energyKcal: row.energyKcal, avgHr: row.avgHr, maxHr: row.maxHr,
+                strain: row.strain, distanceM: row.distanceM, zonesJSON: row.zonesJSON, notes: row.notes, steps: row.steps)
+            try Self.insertWorkoutRow(copy, deviceId: deviceId, db: db)
+            return copy
+        }
+    }
+
     /// Delete one source's workouts of a given sport whose startTs is in [from, to]. Automatic
     /// detected-workout reconciliation no longer calls this; explicit edit/dismiss paths still do.
     /// Returns rows deleted. Port of Android WhoopDao.deleteWorkoutsBySport (#78/#2187).

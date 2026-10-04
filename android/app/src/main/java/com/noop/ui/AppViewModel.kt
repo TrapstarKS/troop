@@ -2470,9 +2470,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Save a retroactive / edited manual workout, then reload. [replacing] is the original on edit. */
-    fun saveManualWorkout(row: WorkoutRow, replacing: WorkoutRow? = null) {
+    fun saveManualWorkout(row: WorkoutRow, replacing: WorkoutRow? = null, asCopy: Boolean = false) {
         viewModelScope.launch {
-            runCatching { repository.saveManualWorkout(row, replacing) }
+            if (runCatching { repository.saveManualWorkout(row, replacing, asCopy) }.isFailure) return@launch
             // #598: rescore the just-added workout from the strap's HR for its window NOW, so its average /
             // peak HR, strain and calories appear immediately instead of waiting for the next analyze tick.
             // No-ops when there's no strap HR for the window; never overrides a value the user typed.
@@ -2486,7 +2486,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // only when the start MOVED would leave a stale distance record when a same-start edit clears or
             // drops the distance (writeExercise upserts the session but writes no distance record to
             // overwrite it), or a moved-start record orphaned.
-            if (_hcWriteback.value) {
+            if (_hcWriteback.value && !asCopy && !com.noop.data.WorkoutCopyIdentity.isCopy(row.source)) {
                 runCatching {
                     replacing?.let { HealthConnectWriter.deleteExercise(appContext, it.startTs) }
                     HealthConnectWriter.writeExercise(appContext, row, WorkoutSport.exerciseTypeForName(row.sport))
@@ -2519,7 +2519,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // #1195 follow-up: a workout removed in NOOP is removed from Health Connect too, so a session
             // we wrote (manual or live) doesn't linger there after the user deletes it here. Opt-in, keyed
             // on the same "noop-workout-*" client id; a no-op for a workout we never wrote.
-            if (_hcWriteback.value) {
+            if (_hcWriteback.value && !com.noop.data.WorkoutCopyIdentity.isCopy(row.source)) {
                 runCatching { HealthConnectWriter.deleteExercise(appContext, row.startTs) }
             }
         }

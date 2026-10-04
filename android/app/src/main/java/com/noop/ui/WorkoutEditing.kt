@@ -3,6 +3,7 @@ package com.noop.ui
 import com.noop.analytics.WorkoutsTrace
 import com.noop.data.DismissedWorkout
 import com.noop.data.WorkoutRow
+import com.noop.data.WorkoutCopyIdentity
 import kotlin.math.roundToInt
 
 /*
@@ -29,7 +30,7 @@ object WorkoutEditing {
         val s = source.lowercase()
         return when {
             s.endsWith("-noop") -> WorkoutSource.DETECTED // BEFORE whoop: "my-whoop-noop" contains "whoop"
-            s == "manual" -> WorkoutSource.MANUAL
+            s == "manual" || s == WorkoutCopyIdentity.SOURCE -> WorkoutSource.MANUAL
             s == "lifting" -> WorkoutSource.LIFTING       // imported Hevy / Liftosaur strength session
             s == "activity-file" -> WorkoutSource.ACTIVITY_FILE // imported GPX / TCX / FIT activity file
             s.contains("whoop") -> WorkoutSource.WHOOP
@@ -346,6 +347,7 @@ object WorkoutEditing {
     fun preservingCaptured(row: WorkoutRow, old: WorkoutRow?): WorkoutRow {
         if (old == null) return row
         return row.copy(
+            source = if (WorkoutCopyIdentity.isCopy(old.source)) WorkoutCopyIdentity.SOURCE else row.source,
             maxHr = old.maxHr,
             strain = old.strain,
             distanceM = row.distanceM,

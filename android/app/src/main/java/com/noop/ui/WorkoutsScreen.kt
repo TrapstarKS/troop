@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -125,6 +126,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.noop.analytics.WorkoutSport
 import com.noop.analytics.HeartRateRecovery
 import com.noop.data.WorkoutRow
@@ -375,7 +377,7 @@ fun WorkoutsScreen(vm: AppViewModel) {
             isCopy = target.isCopy,
             onDismiss = { dialog = null },
             onSave = { row, replacing ->
-                vm.saveManualWorkout(row, replacing)
+                vm.saveManualWorkout(row, replacing, asCopy = target.isCopy)
                 pendingNoteSport = WorkoutEditing.displaySport(row.sport)
                 dialog = null
             },
@@ -1460,11 +1462,7 @@ private fun SessionRow(
 @Composable
 internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetails: Boolean = false, onDismiss: () -> Unit) {
     if (!expandedDetails) {
-        ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = Palette.surfaceBase,
-        ) {
+        DetailFullScreenDialog(onDismiss = onDismiss) {
             ActivityDetailScreen(vm, row, onBack = onDismiss)
         }
         return
@@ -1610,7 +1608,7 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
                 val captured = row.strain != null || !row.zonesJSON.isNullOrEmpty()
                 if (captured && row.avgHr != null && kotlin.math.abs(row.avgHr - traceMean) > 3.0) {
                     Text(
-                        uiString(R.string.l10n_workouts_screen_the_average_above_was_edited_the_0a7881f0),
+                        uiString(R.string.d2b_average_disclosure),
                         style = NoopType.footnote,
                         color = Palette.textTertiary,
                     )
@@ -1645,6 +1643,7 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
                         style = NoopType.footnote,
                         color = Palette.textTertiary,
                     )
+                    Text(uiString(R.string.d2b_zone_denominator), style = NoopType.footnote, color = Palette.textTertiary)
                 }
             }
 
@@ -2026,6 +2025,8 @@ internal fun ManualWorkoutDialog(
     }
 
     AlertDialog(
+        modifier = Modifier.imePadding(),
+        properties = DialogProperties(decorFitsSystemWindows = false),
         onDismissRequest = onDismiss,
         containerColor = Palette.surfaceOverlay,
         title = {
@@ -2046,12 +2047,17 @@ internal fun ManualWorkoutDialog(
                     )
                 }
                 Spacer(Modifier.width(10.dp))
-                Text(if (editing == null) "Add Workout" else "Edit Workout",
+                Text(if (isCopy) uiString(R.string.d2b_copy_activity) else if (editing == null) "Add Workout" else "Edit Workout",
                     style = NoopType.title2, color = Palette.textPrimary)
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                Modifier.heightIn(max = Metrics.dialogScrollableMaxHeight)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Metrics.space12),
+            ) {
+                if (isCopy) Text(uiString(R.string.d2b_copy_note), style = NoopType.footnote, color = Palette.textSecondary)
                 SportPickerField(sport, onChange = { sport = it })
                 SpanTimeField(
                     uiString(R.string.l10n_workouts_screen_started_faa9e7e7),

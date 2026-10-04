@@ -1244,7 +1244,7 @@ final class HealthKitBridge: ObservableObject {
         let mine = mineRead ?? []
         let computed = computedRead ?? []
         var byKey: [String: WorkoutRow] = [:]
-        for w in computed + mine where w.source != HealthKitBridge.appleWorkoutSource {
+        for w in computed + mine where w.source != HealthKitBridge.appleWorkoutSource && !WorkoutCopyIdentity.isCopy(w.source) {
             byKey["\(w.startTs):\(w.sport)"] = w
         }
         let rows = byKey.values.sorted { $0.startTs < $1.startTs }

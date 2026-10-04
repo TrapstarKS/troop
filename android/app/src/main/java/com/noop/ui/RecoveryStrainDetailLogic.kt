@@ -8,6 +8,22 @@ internal object RecoveryStrainDetailLogic {
 
     data class ZoneDistribution(val minutes: List<Double>, val imported: Boolean)
 
+    fun comparisonValue(value: Double?, decimals: Int): Double? {
+        if (value == null || !value.isFinite() || decimals !in 0..1) return null
+        val factor = if (decimals == 0) 1.0 else 10.0
+        val scaled = value * factor
+        val magnitude = kotlin.math.abs(scaled)
+        val whole = floor(magnitude)
+        val rounded = if (scaled.isFinite()) Math.copySign(whole + if (magnitude - whole >= 0.5) 1.0 else 0.0, scaled) / factor else value
+        return if (rounded == 0.0) 0.0 else rounded
+    }
+
+    fun comparisonDelta(current: Double?, mean: Double?, decimals: Int): Double? {
+        val shownCurrent = comparisonValue(current, decimals) ?: return null
+        val shownMean = comparisonValue(mean, decimals) ?: return null
+        return comparisonValue(shownCurrent - shownMean, decimals)
+    }
+
     fun zoneDistribution(
         importedPercentages: List<Double>?,
         durationSeconds: Double,
@@ -49,7 +65,7 @@ internal object RecoveryStrainDetailLogic {
         value?.takeIf { it.isFinite() && it >= 0 && it < Long.MAX_VALUE.toDouble() }?.roundToLong()
 
     fun durationMinutes(seconds: Double?, fallbackSeconds: Double? = null): Long? =
-        (seconds ?: fallbackSeconds)?.let { wholeNumber(floor(it / 60)) }
+        (seconds ?: fallbackSeconds)?.let { wholeNumber(it / 60) }
 
     fun priorMean(
         dayKeys: List<String>,

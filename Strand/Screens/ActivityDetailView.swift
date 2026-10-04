@@ -5,6 +5,7 @@ import WhoopStore
 
 struct ActivityDetailView: View {
     @EnvironmentObject private var repo: Repository
+    @State private var viewportWidth: CGFloat? = nil
     @Environment(\.dismiss) private var dismiss
     @StateObject private var profile = ProfileStore()
     @State private var row: WorkoutRow
@@ -49,20 +50,20 @@ struct ActivityDetailView: View {
                     .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
             }.frame(maxWidth: .infinity)
             ScoreDial(label: String(localized: "Activity strain"), value: strain.map { UnitFormatter.effortDisplay($0, scale: .whoop) } ?? "—",
-                      progress: strain.map { UnitFormatter.effortValue($0, scale: .whoop) / 21 }, color: StrandPalette.strainPrimary)
+                      progress: strain.map { UnitFormatter.effortValue($0, scale: .whoop) / 21 }, color: StrandPalette.strainPrimary, viewportWidth: viewportWidth)
                 .frame(maxWidth: .infinity)
             NoopCard {
                 VStack(spacing: NoopMetrics.space4) {
-                    ContributorRow(label: String(localized: "Average heart rate"), value: row.avgHr.map(String.init) ?? "—", unit: "bpm", systemImage: "heart")
+                    DetailContributorRow(label: String(localized: "Average heart rate"), value: row.avgHr.map(String.init) ?? "—", unit: "bpm", systemImage: "heart")
                     Divider().overlay(StrandPalette.hairline)
-                    ContributorRow(label: String(localized: "Max heart rate"), value: row.maxHr.map(String.init) ?? "—", unit: "bpm", systemImage: "heart.fill")
+                    DetailContributorRow(label: String(localized: "Max heart rate"), value: row.maxHr.map(String.init) ?? "—", unit: "bpm", systemImage: "heart.fill")
                     Divider().overlay(StrandPalette.hairline)
-                    ContributorRow(label: energyLabel, value: energy.map(String.init) ?? "—", unit: "kcal", systemImage: "flame")
+                    DetailContributorRow(label: energyLabel, value: energy.map(String.init) ?? "—", unit: "kcal", systemImage: "flame")
                     Text("The recorded calorie value does not identify active versus total energy. It is shown as recorded, without adding resting energy.")
                         .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                     if let distance = row.distanceM, distance.isFinite, distance >= 0 {
                         Divider().overlay(StrandPalette.hairline)
-                        ContributorRow(label: String(localized: "Distance"), value: UnitFormatter.distanceFromMeters(distance, system: UnitPrefs.resolveDistance(system: UnitSystem(rawValue: UserDefaults.standard.string(forKey: UnitPrefs.systemKey) ?? "") ?? .metric, override: UserDefaults.standard.string(forKey: UnitPrefs.distanceSystemKey) ?? "")))
+                        DetailContributorRow(label: String(localized: "Distance"), value: UnitFormatter.distanceFromMeters(distance, system: UnitPrefs.resolveDistance(system: UnitSystem(rawValue: UserDefaults.standard.string(forKey: UnitPrefs.systemKey) ?? "") ?? .metric, override: UserDefaults.standard.string(forKey: UnitPrefs.distanceSystemKey) ?? "")))
                     }
                 }
             }
@@ -84,6 +85,10 @@ struct ActivityDetailView: View {
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
             }.buttonStyle(.plain)
         }
+        .background(GeometryReader { geometry in
+            Color.clear.onAppear { viewportWidth = geometry.size.width }
+                .onChange(of: geometry.size.width) { viewportWidth = $0 }
+        })
         .navigationTitle(WorkoutSource.displaySport(row.sport))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -95,10 +100,12 @@ struct ActivityDetailView: View {
         }
         .task(id: "\(row.startTs)|\(row.endTs)|\(row.source)|\(repo.deviceId)|\(repo.refreshSeq)") { await load() }
         .sheet(isPresented: $showEdit) {
-            ManualWorkoutSheet(editing: editRow) { saved, replacing in
+            ManualWorkoutSheet(editing: editRow, isCopy: !canEdit) { saved, replacing in
                 let replacingOriginal = canEdit
+                let original = row
                 Task {
-                    await repo.saveManualWorkout(saved, replacing: replacingOriginal ? replacing : nil)
+                    await repo.saveManualWorkout(saved, replacing: replacingOriginal ? replacing : nil,
+                                                 asCopy: !replacingOriginal, copying: original)
                     await repo.refresh()
                     if let stored = await repo.workoutRows().first(where: {
                         $0.startTs == saved.startTs && $0.sport == saved.sport && WorkoutSource.classify($0.source) == .manual

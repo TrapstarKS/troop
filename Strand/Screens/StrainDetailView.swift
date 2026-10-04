@@ -8,6 +8,7 @@ struct StrainDetailView: View {
     var effortOverride: Double? = nil
     var windowDayKey: String? = nil
     @EnvironmentObject private var repo: Repository
+    @State private var viewportWidth: CGFloat? = nil
     @StateObject private var profile = ProfileStore()
     @AppStorage(DayCycleMode.storageKey) private var cycleMode = DayCycleMode.sleepOnset.rawValue
     @State private var points: [TrendPoint] = []
@@ -15,6 +16,7 @@ struct StrainDetailView: View {
     @State private var belowZoneMinutes: Double? = nil
     @State private var workouts: [WorkoutRow] = []
     @State private var loaded = false
+    @State private var showGuide = false
     @State private var openedDeviceId: String?
 
     private var key: String { dayKey ?? repo.today?.day ?? Repository.logicalDayKey(Date()) }
@@ -31,16 +33,17 @@ struct StrainDetailView: View {
     }
 
     var body: some View {
-        ScreenScaffold(title: nil, lazy: true, topBackground: recoveryStrainBackdrop()) {
+        ScreenScaffold(title: nil, lazy: false, topBackground: recoveryStrainBackdrop()) {
             Text(RecoveryStrainDetailLogic.dateLabel(key, locale: AppLanguage.activeLocale)).strandOverline().frame(maxWidth: .infinity)
             ScoreDial(label: String(localized: "Day strain"), value: strainDisplay ?? "—",
                       progress: strain.map { $0 / 21 }, color: StrandPalette.strainPrimary,
                       target: band.map { Double($0.lowerBound) / 21 },
-                      targetRange: band.map { Double($0.lowerBound) / 21...Double($0.upperBound) / 21 })
+                      targetRange: band.map { Double($0.lowerBound) / 21...Double($0.upperBound) / 21 }, viewportWidth: viewportWidth)
                 .frame(maxWidth: .infinity)
             target
-            DetailHeartRateChart(points: points, loaded: loaded)
-            DetailZoneBars(minutes: zoneMinutes, zoneSet: profile.hrZoneSet, belowZoneMinutes: belowZoneMinutes)
+            DetailStrainContributors(minutes: zoneMinutes, row: row, history: repo.days, dayKey: key)
+            InsightCallout(text: String(localized: "This local guidance range is not a training prescription. A missing recovery score leaves the target unavailable."),
+                           actionLabel: String(localized: "How your scores work"), onAction: { showGuide = true })
             TrackedSectionHeader(title: String(localized: "Activities"))
             if workouts.isEmpty {
                 NoopCard {
@@ -55,35 +58,31 @@ struct StrainDetailView: View {
                     }.buttonStyle(.plain)
                 }
             }
+            DetailHeartRateChart(points: points, loaded: loaded)
+            DetailZoneBars(minutes: zoneMinutes, zoneSet: profile.hrZoneSet, belowZoneMinutes: belowZoneMinutes)
             Text("Strain here presents NOOP’s local Effort on a 0–21 axis. It is a change of display units, not the official WHOOP scoring model. Stored Effort and your history stay unchanged.")
                 .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
         }
+        .background(GeometryReader { geometry in
+            Color.clear.onAppear { viewportWidth = geometry.size.width }
+                .onChange(of: geometry.size.width) { viewportWidth = $0 }
+        })
         .navigationTitle(String(localized: "Strain"))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .sheet(isPresented: $showGuide) { ScoringGuideView(initialSection: .effort, onClose: { showGuide = false }) }
         .task(id: "\(key)|\(windowDayKey ?? "")|\(repo.deviceId)|\(repo.refreshSeq)|\(cycleMode)") { await load() }
     }
 
     private var target: some View {
-        NoopCard {
-            VStack(alignment: .leading, spacing: NoopMetrics.space3) {
-                TrackedSectionHeader(title: String(localized: "Suggested range"), microLabel: String(localized: "Based on this day’s recovery"))
-                HStack(alignment: .firstTextBaseline, spacing: NoopMetrics.space3) {
-                    Text(band.map { "\($0.lowerBound)–\($0.upperBound)" } ?? "—")
-                        .font(StrandFont.title1).foregroundStyle(StrandPalette.textPrimary)
-                    Text("of 21").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
-                    Spacer(minLength: 0)
-                }
-                StatusPill(label: statusLabel, color: targetStatus == .over ? StrandPalette.statusWarning : StrandPalette.strainPrimary)
-                Text("This local guidance range is not a training prescription. A missing recovery score leaves the target unavailable.")
-                    .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
-                if let rawEffort {
-                    Text(String(localized: "Stored Effort: \(UnitFormatter.effortDisplay(rawEffort, scale: .hundred)) of 100"))
-                        .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
-                }
-            }
+        VStack(spacing: NoopMetrics.space2) {
+            StatusPill(label: statusLabel, color: targetStatus == .unavailable ? StrandPalette.textTertiary : targetStatus == .over ? StrandPalette.statusWarning : StrandPalette.strainPrimary)
+            Text(band.map { String(localized: "Suggested range: \(Int64($0.lowerBound))–\(Int64($0.upperBound)) out of 21") }
+                 ?? String(localized: "Target unavailable"))
+                .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var statusLabel: String {
@@ -182,7 +181,11 @@ struct DetailZoneBars: View {
             TrackedSectionHeader(title: String(localized: "Heart rate zones"), microLabel: imported ? String(localized: "Imported distribution") : String(localized: "From recorded heart rate"))
             NoopCard {
                 if let minutes, let displayedMinutes {
+                    let classifiedMinutes = minutes.reduce(0, +)
                     VStack(spacing: NoopMetrics.space4) {
+                        Text("Share of classified time in Zones 1–5")
+                            .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         ForEach((0..<5).reversed(), id: \.self) { index in
                             VStack(alignment: .leading, spacing: NoopMetrics.space2) {
                                 HStack(spacing: NoopMetrics.space2) {
@@ -200,16 +203,16 @@ struct DetailZoneBars: View {
                                     ZStack(alignment: .leading) {
                                         Capsule().fill(StrandPalette.ringTrack)
                                         Capsule().fill(StrandPalette.hrZoneColor(index + 1))
-                                            .frame(width: geometry.size.width * min(1, max(0, minutes[index] / max(minutes.reduce(0, +), 1))))
+                                            .frame(width: geometry.size.width * (classifiedMinutes > 0 ? minutes[index] / classifiedMinutes : 0))
                                     }
                                 }.frame(height: NoopMetrics.indicatorTrackHeight)
                             }.accessibilityElement(children: .combine)
                         }
                         if let belowZoneMinutes, belowZoneMinutes > 0,
                            let displayedBelowZone = RecoveryStrainDetailLogic.wholeNumber(belowZoneMinutes) {
-                            ContributorRow(label: String(localized: "Below Zone 1"), value: String(displayedBelowZone), unit: String(localized: "min"))
+                            DetailContributorRow(label: String(localized: "Below Zone 1"), value: String(displayedBelowZone), unit: String(localized: "min"))
                         }
-                        Text(imported ? String(localized: "Zone times use the split saved with this activity.") : String(localized: "Zone times use your configured heart-rate zones and available recording coverage. Gaps are not filled."))
+                        Text(imported ? String(localized: "Zone minutes use the saved split and recorded duration.") : String(localized: "Zone times use your configured heart-rate zones and available recording coverage. Gaps are not filled."))
                             .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                     }
                 } else {

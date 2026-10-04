@@ -35,6 +35,18 @@ class WorkoutEditingTest {
 
     // MARK: - classify
 
+    @Test fun manualCopyRemainsEditableAndRetainsOnDeviceProvenance() {
+        val original = row("my-whoop", 1_000, 2_000, "Running (manual copy)", com.noop.data.WorkoutCopyIdentity.SOURCE,
+            maxHr = 170, strain = 52.0)
+        val edited = row("my-whoop", 1_000, 2_100, original.sport, "manual", avgHr = 140)
+        assertEquals(WorkoutSource.MANUAL, WorkoutEditing.classify(original.source))
+        assertEquals(WorkoutSource.MANUAL, WorkoutEditing.classify("MANUAL-COPY"))
+        val saved = WorkoutEditing.preservingCaptured(edited, original)
+        assertEquals(com.noop.data.WorkoutCopyIdentity.SOURCE, saved.source)
+        assertEquals(original.maxHr, saved.maxHr)
+        assertEquals(original.strain, saved.strain)
+    }
+
     @Test
     fun classify_ordersNoopBeforeWhoop() {
         // "my-whoop-noop" contains "whoop" — the -noop suffix MUST win, else a detected bout would

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="d2b_zone_group_low">Temps en zones 1–3</string>
+    <string name="d2b_zone_group_high">Temps en zones 4–5</string>
+    <string name="d2b_strength_duration">Durée de musculation</string>
+    <string name="d2b_zone_denominator">Les barres et les pourcentages indiquent la part du temps enregistré dans les zones 1–5.</string>
+    <string name="d2b_copy_note">Créez une copie manuelle séparée. Elle reste sur cet appareil et ne remplace pas l’original.</string>
+</resources>

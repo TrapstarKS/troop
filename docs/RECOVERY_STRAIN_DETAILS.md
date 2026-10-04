@@ -6,7 +6,13 @@ Recovery uses the requested resolved day. A Home read carried from a previous ni
 
 Recovery's whole-percent display truncates toward zero through one shared presentation helper. The scorer stores a continuous value; rounding 66.75 to 67 would otherwise show a high-band number with a moderate-band color. Truncation keeps the displayed number in the raw score's 0–33, 34–66 or 67–100 band. Stored scores, chart heights, comparisons and classifications retain their original precision. Home should use the same helper.
 
+Contributor panels use compact icon rows, separators and a shared comparison legend. The secondary number is the preceding 30-day mean; accessibility also names the mean and signed change. Comparisons quantize the reading and mean at the displayed precision before computing change. Equal displayed readings produce unsigned zero and a neutral indicator. The paired standalone Swift oracle includes values on either side of half ties, nonfinite values and overflow cases.
+
+Above the default text size, detail contributors place the label above the value and comparison. Both layouts reuse the shared contributor component and its tokens; the full label no longer competes with two numeric readouts for horizontal space.
+
 Strain uses the existing `UnitFormatter` display conversion: stored Effort × 21/100. This reversible change of units leaves stored values, imports and analytics untouched; decimal formatting only rounds the visible number. The score is from NOOP's local model and does not claim the official proprietary model. The suggested range reuses the existing recovery-dependent Coupled view bands. A missing recovery leaves the range unavailable. Both endpoints are included in the within-range state.
+
+The Strain summary groups recorded time in Zones 1–3 and 4–5, preserves a stored Steps value when present, and leaves strength duration unavailable. It does not infer muscular work from heart rate or workout names. The summary and guidance precede activities, the day HR trace and complete zone bars. The guidance action opens the existing local scoring guide. Full detail dials use the design owner's responsive viewport API; compact Home dials retain their own size.
 
 Day HR, zones and activity membership use Home's configured calendar or sleep-onset day window. Whole-day zone reads keep the 200,000-row limit used by day scoring instead of the shorter workout default. Chart lines break across absent buckets. Activity ownership follows the start timestamp in the same half-open cycle interval used by the daily workout count.
 
@@ -20,8 +26,24 @@ The expanded activity drill-down omits its former Effort summary. Activity's sha
 
 Android detail reads collect the registry's active strap and reset the day/HR read state when it changes. Workout curves, zones and HR recovery accept that snapshot instead of the startup-only device ID; workout-list loads discard results after a source switch. Swift's repository already updates its read device ID from the registry.
 
+Android's primary Recovery, Strain and Activity dialogs draw the shared canvas gradient through the system bars and inset their scrollable content by the safe drawing area. Home content is not used as a navigation-bar backdrop. The expanded legacy activity details remain reachable through their existing sheet.
+
+The detail wrapper explicitly uses a match-parent window laid out inside the screen with system-bar fit insets disabled. Its Compose dialog keeps platform measurement enabled: Compose UI 1.6.8's alternate measurement path caps height at `screenHeightDp` and rewrites the window size during layout. The wrapper therefore receives the full window constraints without that cap, while retaining the dialog's lifecycle, state restoration, dismissal and keyboard handling.
+
 `WorkoutRow.energyKcal` does not persist an active/total discriminator. Its display is therefore “Recorded energy”, with an explicit explanation. No resting energy is added and no stored row is reinterpreted.
 
 Debug demo seeding adds a separate recent-HR function and a completed activity. In the first 45 minutes of a day, the activity belongs to the previous day. It runs only within the original empty-store demo seed, preserving the protection for real stores. The iOS direct demo names are `recovery`, `strain` and `activity`. A fresh demo fixture is required to acquire the added samples.
 
 Apple constructors are `RecoveryDetailView(dayKey:)`, `StrainDetailView(dayKey:effortOverride:windowDayKey:)` and `ActivityDetailView(row:)`. Android equivalents are `RecoveryDetailScreen`, `StrainDetailScreen` and `ActivityDetailScreen`. Home must forward its selected date and logical window anchor; the optional effort override is the already-resolved stored-axis live read shown by Home. Apple's first detail push uses the shell owner's day-aware value route so Home tab reselection clears the bound navigation path. The shell owns route registration; these screens own no independent Home date state.
+
+Manual copies use a dedicated insert-only transaction rather than import/edit upserts. The transaction allocates a stable sport label (`Cycling (manual copy)`, then numbered suffixes) against existing keys at the destination start time. Timestamps and original rows are never rewritten; the Swift route side store is cloned under the new key. The stored `manual-copy` source is classified as editable manual provenance on both platforms and retained on subsequent edits. Copies remain on-device and are excluded from optional HealthKit/Health Connect writeback because those existing provider identities are keyed by start time. Deleting a copy likewise does not delete a same-start original's Health record. No schema or provider identity migration is added. Moving an edited manual key uses an insert that rejects collisions before deleting the old row, so renaming a copy cannot replace the imported original or another copy. Swift key comparison follows SQLite’s bytewise string equality, matching Kotlin.
+
+Expanded detail disclosures describe the difference between a recorded average and the available trace without asserting user edits. Zone bar widths and percentages use recorded time in Zones 1–5 as their denominator; imported minutes still come from the stored duration-weighted percentages.
+
+The visible zone caption identifies percentages as the share of classified time in Zones 1–5. It does not imply that a partial imported split covers the whole activity or add unrecorded zone minutes.
+
+Strain uses the scaffold’s eager column so its daily chart, zones and bounded day activity list enter scroll layout together. This is the isolated response to the c15 iOS lazy-layout hang; native scroll acceptance is recorded separately and remains required.
+
+Displayed activity durations use nearest whole minutes, with positive half ties rounded up, matching the editor’s precision. Detail and list displays prefer a stored duration; editors resolve the selected start/end span. Neither presentation helper changes exact timestamps, stored duration or scoring. The paired standalone Swift oracle includes sub-minute ties and the reported 1,482.5-second example.
+
+Android’s manual activity dialog applies keyboard insets once at the dialog and keeps its form in a bounded scroll area, with save and cancel actions outside that area. Copy and replacement behavior remain unchanged.

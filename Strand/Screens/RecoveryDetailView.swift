@@ -7,6 +7,7 @@ import Charts
 struct RecoveryDetailView: View {
     var dayKey: String? = nil
     @EnvironmentObject private var repo: Repository
+    @State private var viewportWidth: CGFloat? = nil
     @State private var trendDays = 7
     @State private var showInsights = false
     @State private var showGuide = false
@@ -34,9 +35,13 @@ struct RecoveryDetailView: View {
             Text(RecoveryStrainDetailLogic.dateLabel(key, locale: AppLanguage.activeLocale)).strandOverline()
                 .frame(maxWidth: .infinity)
             ScoreDial(label: String(localized: "Recovery"), value: RecoveryStrainDetailLogic.recoveryPercent(score).map(String.init) ?? "—",
-                      unit: score == nil ? "" : "%", progress: score.map { $0 / 100 }, color: tint)
+                      unit: score == nil ? "" : "%", progress: score.map { $0 / 100 }, color: tint,
+                      accessibilityLabel: score.map { value in
+                          let band = value >= 67 ? String(localized: "High recovery") : value >= 34 ? String(localized: "Moderate recovery") : String(localized: "Low recovery")
+                          return [String(localized: "Recovery"), (RecoveryStrainDetailLogic.recoveryPercent(value).map(String.init) ?? "—") + "%", band].joined(separator: ", ")
+                      }, viewportWidth: viewportWidth)
                 .frame(maxWidth: .infinity)
-            availability
+            if score == nil { availability }
             metrics
             InsightCallout(text: String(localized: "Overnight heart-rate variability, resting heart rate and sleep provide context for recovery. Comparisons show your previous 30 days; the local scoring model uses its own weighted baseline."),
                            actionLabel: String(localized: "Behavior insights"), onAction: { showInsights = true })
@@ -47,6 +52,10 @@ struct RecoveryDetailView: View {
             }
             .buttonStyle(.plain)
         }
+        .background(GeometryReader { geometry in
+            Color.clear.onAppear { viewportWidth = geometry.size.width }
+                .onChange(of: geometry.size.width) { viewportWidth = $0 }
+        })
         .navigationTitle(String(localized: "Recovery"))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -58,14 +67,10 @@ struct RecoveryDetailView: View {
     }
 
     @ViewBuilder private var availability: some View {
-        if let score {
-            StatusPill(label: score >= 67 ? String(localized: "High recovery") :
-                        score >= 34 ? String(localized: "Moderate recovery") : String(localized: "Low recovery"), color: tint)
-                .frame(maxWidth: .infinity)
-        } else if let calibration {
+        if let calibration {
             NoopCard {
                 VStack(alignment: .leading, spacing: NoopMetrics.space2) {
-                    StatusPill(label: String(localized: "Calibrating"), systemImage: "moon")
+                    StatusPill(label: String(localized: "Calibrating"), systemImage: "moon", color: StrandPalette.textTertiary)
                     Text(String(localized: "\(calibration) of \(Baselines.minNightsSeed) nights collected"))
                         .font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
                     Text("Wear your strap overnight to establish a personal baseline. A recovery score appears when enough valid nights are available.")
@@ -82,14 +87,15 @@ struct RecoveryDetailView: View {
 
     private var metrics: some View {
         NoopCard {
-            VStack(spacing: NoopMetrics.space4) {
+            VStack(spacing: NoopMetrics.spaceHalf) {
                 metric(String(localized: "Heart rate variability"), value: row?.avgHrv, unit: "ms", icon: "waveform.path.ecg", higherIsBetter: true, values: history.map(\.avgHrv))
                 Divider().overlay(StrandPalette.hairline)
-                metric(String(localized: "Resting heart rate"), value: row?.restingHr.map(Double.init), unit: "bpm", icon: "heart", higherIsBetter: false, values: history.map { $0.restingHr.map(Double.init) })
+                metric(String(localized: "Resting heart rate"), value: row?.restingHr.map(Double.init), unit: "bpm", icon: "heart", higherIsBetter: false, values: history.map { $0.restingHr.map(Double.init) }, decimals: 0)
                 Divider().overlay(StrandPalette.hairline)
                 metric(String(localized: "Respiratory rate"), value: row?.respRateBpm, unit: String(localized: "rpm"), icon: "lungs", higherIsBetter: nil, values: history.map(\.respRateBpm))
                 Divider().overlay(StrandPalette.hairline)
-                ContributorRow(label: String(localized: "Sleep performance"), value: format(sleepPerformance), unit: "%", systemImage: "moon.zzz")
+                metric(String(localized: "Sleep performance"), value: sleepPerformance, unit: "%", icon: "moon.zzz",
+                       higherIsBetter: nil, values: history.map { repo.importedSleep[$0.day]?.performancePct ?? AnalyticsEngine.Rest.composite(daily: $0) }, decimals: 0)
                 if let spo2 = row?.spo2Pct, spo2.isFinite {
                     Divider().overlay(StrandPalette.hairline)
                     metric(String(localized: "Blood oxygen"), value: spo2, unit: "%", icon: "drop", higherIsBetter: nil, values: history.map(\.spo2Pct))
@@ -100,7 +106,7 @@ struct RecoveryDetailView: View {
                     let unit = UnitPrefs.resolveTemperature(system: UnitSystem(rawValue: unitSystem) ?? .metric, override: temperature)
                     Divider().overlay(StrandPalette.hairline)
                     VStack(alignment: .trailing, spacing: NoopMetrics.space2) {
-                        ContributorRow(label: String(localized: "Skin temperature"),
+                        DetailContributorRow(label: String(localized: "Skin temperature"),
                                        value: kind == .absolute ? UnitFormatter.temperatureFromCelsius(reading.value, unit: unit) : UnitFormatter.temperatureDeltaFromCelsius(reading.value, unit: unit),
                                        systemImage: "thermometer")
                         Text(kind == .absolute ? String(localized: "Wrist temperature") : String(localized: "From your baseline"))
@@ -108,30 +114,17 @@ struct RecoveryDetailView: View {
                             .multilineTextAlignment(.trailing)
                     }
                 }
-                Text("Only available measurements are shown. Missing values are not treated as zero.")
-                    .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+                DetailComparisonLegend()
             }
         }
     }
 
-    private func metric(_ label: String, value: Double?, unit: String, icon: String, higherIsBetter: Bool?, values: [Double?]) -> some View {
+    private func metric(_ label: String, value: Double?, unit: String, icon: String, higherIsBetter: Bool?,
+                        values: [Double?], decimals: Int = 1) -> some View {
         let baseline = RecoveryStrainDetailLogic.priorMean(dayKeys: history.map(\.day), values: values,
-                                                          fromDay: RecoveryStrainDetailLogic.startKey(selectedDay: key, days: 30), selectedDay: key)
-        let delta = value.flatMap { value in value.isFinite ? baseline.map { value - $0 } : nil }
-        let favorable = delta.flatMap { delta in abs(delta) < 0.05 ? nil : higherIsBetter.map { $0 ? delta > 0 : delta < 0 } }
-        let comparison = baseline.map { String(localized: "30-day average: \(format($0)) \(unit)") } ?? String(localized: "Baseline unavailable")
-        let comparisonText = delta.map { delta in
-            let change = String(format: "%+.1f", locale: AppLanguage.activeLocale, delta)
-            return String(localized: "\(change) \(unit) · \(comparison)")
-        } ?? comparison
-        return VStack(alignment: .trailing, spacing: NoopMetrics.space2) {
-            ContributorRow(label: label, value: format(value), unit: unit, systemImage: icon)
-            Text(comparisonText)
-                .font(StrandFont.caption)
-                .foregroundStyle(favorable.map { $0 ? StrandPalette.positive : StrandPalette.statusWarning } ?? StrandPalette.textSecondary)
-                .multilineTextAlignment(.trailing)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+            fromDay: RecoveryStrainDetailLogic.startKey(selectedDay: key, days: 30), selectedDay: key)
+        return DetailComparisonRow(label: label, value: value, baseline: baseline, unit: unit,
+            systemImage: icon, decimals: decimals, higherIsBetter: higherIsBetter)
     }
 
     private var trend: some View {
@@ -155,9 +148,6 @@ struct RecoveryDetailView: View {
         }
     }
 
-    private func format(_ value: Double?) -> String {
-        value.flatMap { $0.isFinite ? String(format: "%.1f", locale: AppLanguage.activeLocale, $0) : nil } ?? "—"
-    }
 }
 
 private struct RecoveryHistoryPlot: View {

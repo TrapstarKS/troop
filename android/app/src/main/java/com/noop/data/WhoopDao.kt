@@ -573,6 +573,20 @@ interface WhoopDao : DeviceRegistryDao {
     @Upsert
     suspend fun upsertWorkouts(rows: List<WorkoutRow>)
 
+    @Query("SELECT sport FROM workout WHERE deviceId = :deviceId AND startTs = :startTs")
+    suspend fun workoutSportsAtStart(deviceId: String, startTs: Long): List<String>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertWorkout(row: WorkoutRow)
+
+    @Transaction
+    suspend fun insertManualWorkoutCopy(row: WorkoutRow): WorkoutRow {
+        val copy = row.copy(source = WorkoutCopyIdentity.SOURCE,
+            sport = WorkoutCopyIdentity.sport(row.sport, workoutSportsAtStart(row.deviceId, row.startTs)))
+        insertWorkout(copy)
+        return copy
+    }
+
     @Upsert
     suspend fun upsertAppleDaily(rows: List<AppleDaily>)
 

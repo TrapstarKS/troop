@@ -24,6 +24,7 @@ private struct SuggestionsHeightKey: PreferenceKey {
 struct ManualWorkoutSheet: View {
     /// The row being edited, or nil for a new manual workout.
     let editing: WorkoutRow?
+    let isCopy: Bool
     /// Called with the validated row (and the original, when editing) once the user taps Save.
     let onSave: (_ row: WorkoutRow, _ replacing: WorkoutRow?) -> Void
 
@@ -64,9 +65,10 @@ struct ManualWorkoutSheet: View {
     /// itself (capped at 168) instead of being squeezed to the text field's height. See `suggestionList`.
     @State private var suggestionsHeight: CGFloat = 0
 
-    init(editing: WorkoutRow? = nil, initialEndDate: Date? = nil,
+    init(editing: WorkoutRow? = nil, isCopy: Bool = false, initialEndDate: Date? = nil,
          onSave: @escaping (_ row: WorkoutRow, _ replacing: WorkoutRow?) -> Void) {
         self.editing = editing
+        self.isCopy = isCopy
         self.onSave = onSave
         // Pre-fill from the edited row (display "detected" as "Activity" so a re-label starts clean).
         let e = editing
@@ -328,12 +330,12 @@ struct ManualWorkoutSheet: View {
                 .background(StrandPalette.effortColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(editing == nil ? "Add Workout" : "Edit Workout")
+                Text(LocalizedStringKey(isCopy ? "Edit a copy" : editing == nil ? "Add Workout" : "Edit Workout"))
                     .font(StrandFont.title2)
                     .foregroundStyle(StrandPalette.textPrimary)
-                Text(editing == nil
+                Text(LocalizedStringKey(isCopy ? "Create a separate manual copy. It stays on this device and does not replace the original." : editing == nil
                      ? "Log a session you tracked elsewhere."
-                     : "Adjust this session's details.")
+                     : "Adjust this session's details."))
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
             }

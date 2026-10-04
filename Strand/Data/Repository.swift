@@ -3087,8 +3087,17 @@ final class Repository: ObservableObject {
     ///    then retires the stale strap row. A failed write therefore preserves the original;
     ///  - an IMPORTED row is never passed here as `replacing` (duplicating one is a pure add), so its
     ///    history is never touched.
-    func saveManualWorkout(_ row: WorkoutRow, replacing old: WorkoutRow? = nil) async {
+    func saveManualWorkout(_ row: WorkoutRow, replacing old: WorkoutRow? = nil,
+                           asCopy: Bool = false, copying original: WorkoutRow? = nil) async {
         guard let store = await ensureStore() else { return }
+        if asCopy {
+            guard let copy = try? await store.insertManualWorkoutCopy(row, deviceId: deviceId) else { return }
+            let routeKey = original ?? row
+            if let route = RouteStore.loadWithPoints(startTs: routeKey.startTs, sport: routeKey.sport) {
+                RouteStore.store(route, startTs: copy.startTs, sport: copy.sport)
+            }
+            return
+        }
         if let old, WorkoutSource.classify(old.source) == .detected {
             // Write the replacement first. If that insert fails, the grandfathered source row and its
             // visibility remain untouched; a failed explicit edit must not turn into data loss.
@@ -3096,11 +3105,12 @@ final class Repository: ObservableObject {
             catch { return }
             await dismissDetected(old)
             return
-        } else if let old, old.startTs != row.startTs || old.sport != row.sport {
+        } else if let old, WorkoutCopyIdentity.keyMoved(oldStart: old.startTs, oldSport: old.sport,
+                                                      newStart: row.startTs, newSport: row.sport) {
             // Write the replacement before deleting anything. If SQLite rejects the insert, leave both the
             // original row and its route untouched; if the later delete fails, the recoverable result is two
             // rows rather than lost history.
-            do { _ = try await store.upsertWorkouts([row], deviceId: deviceId) }
+            do { try await store.insertWorkout(row, deviceId: deviceId) }
             catch { return }
             // #10: the GPS route lives in RouteStore keyed by the natural key (startTs + sport), NOT in the
             // DB row. Copy it only after the replacement row is durable. Keep the old copy until the old

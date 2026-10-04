@@ -1648,7 +1648,11 @@ class WhoopRepository(
      *    that case and made a save look successful while changing nothing (#1488);
      *  - an IMPORTED row is never passed here as `replacing` (duplicating one is a pure add).
      */
-    suspend fun saveManualWorkout(row: WorkoutRow, replacing: WorkoutRow? = null) {
+    suspend fun saveManualWorkout(row: WorkoutRow, replacing: WorkoutRow? = null, asCopy: Boolean = false) {
+        if (asCopy) {
+            dao.insertManualWorkoutCopy(row)
+            return
+        }
         if (replacing != null && replacing.source.lowercase().endsWith("-noop")) {
             dao.upsertWorkouts(listOf(row))
             dismissDetected(replacing)
@@ -1657,7 +1661,7 @@ class WhoopRepository(
         if (replacing != null && supersedesStoredRow(replacing, row)) {
             // A failed insert must not erase history. If the later delete fails, retaining both rows is
             // safer and recoverable; the caller can retry the edit.
-            dao.upsertWorkouts(listOf(row))
+            dao.insertWorkout(row)
             dao.deleteWorkoutByKey(replacing.deviceId, replacing.startTs, replacing.sport)
             return
         }
@@ -2654,8 +2658,8 @@ class WhoopRepository(
          *  built on the "my-whoop" seed. [dedupWorkoutsByKey] then hides the newer row behind the stale one,
          *  so the save silently does nothing. (#1488) */
         internal fun supersedesStoredRow(replacing: WorkoutRow, row: WorkoutRow): Boolean =
-            replacing.deviceId != row.deviceId || replacing.startTs != row.startTs ||
-                replacing.sport != row.sport
+            replacing.deviceId != row.deviceId || WorkoutCopyIdentity.keyMoved(
+                replacing.startTs, replacing.sport, row.startTs, row.sport)
 
         /** Drop exact-duplicate workouts sharing an identical (startTs, sport) natural key — the same
          *  session read under two #814 union ids — keeping the FIRST seen (callers pass active-strap-first
