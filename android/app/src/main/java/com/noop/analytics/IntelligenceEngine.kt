@@ -1537,18 +1537,10 @@ object IntelligenceEngine {
 
         // Match stale eviction: normal nonempty passes remove skipped rows inside their scan range.
         // Cached-only repair and completely empty passes preserve stored history.
-        val scanFromDay = Baselines.cutoffKey(chargeAnchorDay, maxDays - 1)
-        if (!preserveUnscoredHistoryForRun && scoredNights.isNotEmpty()) {
-            val scoredKeys = scoredNights.map { it.daily.day }.toSet()
-            for (row in baselineOwn) {
-                if (row.day >= scanFromDay && row.day <= chargeAnchorDay && row.day !in scoredKeys) {
-                    nightlyHrvByDay.remove(row.day)
-                    nightlyRhrByDay.remove(row.day)
-                    nightlyRespByDay.remove(row.day)
-                    nightlySkinByDay.remove(row.day)
-                }
-            }
-        }
+        IntelligencePersistence.evictSkippedChargeBaselineDays(
+            preserveUnscoredHistoryForRun, scoredNights, baselineOwn, chargeAnchorDay, maxDays,
+            nightlyHrvByDay, nightlyRhrByDay, nightlyRespByDay, nightlySkinByDay,
+        )
 
         // ── Charge baselines (#2525). Each baseline is folded from the wearer's OWN nights over the last
         // [ChargeBaselines.windowDays] calendar days, counted back from today; imported vendor nights only

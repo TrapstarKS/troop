@@ -28,9 +28,29 @@ final class BLEStartupGate {
         return token
     }
 
-    func claimRestoration(_ action: RestorationAction, token: RestorationToken) -> Bool {
-        guard token == restoration else { return false }
+    func invalidateRestoration(token: RestorationToken?) {
+        guard let token, token == restoration else { return }
+        restorationGeneration += 1
+        restoration = nil
+        restorationActions.removeAll()
+    }
+
+    func claimRestoration(_ action: RestorationAction, token: RestorationToken,
+                          preferredIdentifier: String? = nil) -> Bool {
+        guard token == restoration,
+              preferredIdentifier == nil || token.identifier == preferredIdentifier else { return false }
         return restorationActions.insert(action).inserted
+    }
+
+    static func allowsConnectionRequest(identifier: UUID, preferredIdentifier: UUID?) -> Bool {
+        preferredIdentifier == nil || identifier == preferredIdentifier
+    }
+
+    static func allowsConnectionCallback(identifier: String, currentIdentifier: String?,
+                                         preferredIdentifier: String?, intentionalDisconnect: Bool,
+                                         isConnected: Bool) -> Bool {
+        !intentionalDisconnect && isConnected && identifier == currentIdentifier
+            && (preferredIdentifier == nil || identifier == preferredIdentifier)
     }
 
     func prepare(_ operation: @escaping @MainActor () async -> Bool) async -> Bool {

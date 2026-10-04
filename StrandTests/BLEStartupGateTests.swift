@@ -172,4 +172,150 @@ final class BLEStartupGateTests: XCTestCase {
         XCTAssertTrue(gate.claimRestoration(.discover, token: current))
     }
 
+    @MainActor
+    func testPreferredWhoopSwitchRejectsPendingRestorationWithOrWithoutInvalidation() async {
+        let actions: [BLEStartupGate.RestorationAction] = [.connect, .discover]
+        for invalidates in [false, true] {
+            for action in actions {
+                let gate = BLEStartupGate()
+                let restoredA = gate.beginRestoration(identifier: "strap-a")
+                var preferred = "strap-a"
+                var intentionalDisconnect = false
+                let allowsWhoop = true
+                var releaseStore: CheckedContinuation<Void, Never>?
+                var boundaries = 0
+                var adoptions = 0
+                var connects = 0
+                var discoveries = 0
+                let pending = Task { @MainActor in
+                    await gate.resume(prepare: {
+                        await withCheckedContinuation { releaseStore = $0 }
+                        return true
+                    }, isAllowed: { allowsWhoop && !intentionalDisconnect }) {
+                        boundaries += 1
+                        guard gate.claimRestoration(action, token: restoredA,
+                            preferredIdentifier: preferred) else { return }
+                        adoptions += 1
+                        switch action {
+                        case .connect: connects += 1
+                        case .discover: discoveries += 1
+                        }
+                    }
+                }
+                while releaseStore == nil { await Task.yield() }
+                intentionalDisconnect = true
+                preferred = "strap-b"
+                if invalidates { gate.invalidateRestoration(token: restoredA) }
+                intentionalDisconnect = false
+                XCTAssertTrue(allowsWhoop)
+                XCTAssertFalse(intentionalDisconnect)
+                releaseStore?.resume()
+                await pending.value
+                let scenario = "action=\(action), invalidates=\(invalidates)"
+                XCTAssertEqual(boundaries, 1, scenario)
+                XCTAssertEqual(adoptions, 0, scenario)
+                XCTAssertEqual(connects, 0, scenario)
+                XCTAssertEqual(discoveries, 0, scenario)
+                let restoredB = gate.beginRestoration(identifier: "strap-b")
+                for freshAction in actions {
+                    XCTAssertTrue(gate.claimRestoration(freshAction, token: restoredB,
+                        preferredIdentifier: preferred), scenario)
+                    XCTAssertFalse(gate.claimRestoration(freshAction, token: restoredB,
+                        preferredIdentifier: preferred), scenario)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testRestorationInvalidationOnlyAffectsTheMatchingGeneration() {
+        let gate = BLEStartupGate()
+        let oldA = gate.beginRestoration(identifier: "strap-a")
+        gate.invalidateRestoration(token: oldA)
+        let actions: [BLEStartupGate.RestorationAction] = [.connect, .discover]
+        for action in actions {
+            XCTAssertFalse(gate.claimRestoration(action, token: oldA,
+                preferredIdentifier: "strap-a"))
+        }
+        let currentB = gate.beginRestoration(identifier: "strap-b")
+        gate.invalidateRestoration(token: oldA)
+        gate.invalidateRestoration(token: nil)
+        for action in actions {
+            XCTAssertTrue(gate.claimRestoration(action, token: currentB,
+                preferredIdentifier: "strap-b"))
+            XCTAssertFalse(gate.claimRestoration(action, token: currentB,
+                preferredIdentifier: "strap-b"))
+        }
+        let replacementB = gate.beginRestoration(identifier: "strap-b")
+        gate.invalidateRestoration(token: currentB)
+        for action in actions {
+            XCTAssertTrue(gate.claimRestoration(action, token: replacementB,
+                preferredIdentifier: "strap-b"))
+            XCTAssertFalse(gate.claimRestoration(action, token: replacementB,
+                preferredIdentifier: "strap-b"))
+        }
+    }
+
+    @MainActor
+    func testConnectionCallbacksRequireTheCurrentSelectedConnectedAndRunningPeripheral() {
+        let cases: [(String, String, String?, String?, Bool, Bool, Bool)] = [
+            ("stopped A", "strap-a", "strap-a", "strap-a", true, true, false),
+            ("old A after B is current", "strap-a", "strap-b", "strap-b", false, true, false),
+            ("A remains current after B is selected", "strap-a", "strap-a", "strap-b", false, true, false),
+            ("current peripheral unavailable", "strap-b", nil, "strap-b", false, true, false),
+            ("B is disconnected", "strap-b", "strap-b", "strap-b", false, false, false),
+            ("legacy selection has no preferred ID", "strap-a", "strap-a", nil, false, true, true),
+            ("valid B", "strap-b", "strap-b", "strap-b", false, true, true),
+            ("B is no longer selected", "strap-b", "strap-b", "strap-a", false, true, false),
+        ]
+        for (scenario, identifier, current, preferred, stopped, connected, expected) in cases {
+            XCTAssertEqual(BLEStartupGate.allowsConnectionCallback(identifier: identifier,
+                currentIdentifier: current, preferredIdentifier: preferred,
+                intentionalDisconnect: stopped, isConnected: connected), expected, scenario)
+        }
+    }
+
+    @MainActor
+    func testBackgroundRememberedCacheFallbackRespectsTheSelectedPeripheral() {
+        let a = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let b = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let cases: [(String, UUID?, UUID?, Set<UUID>, [UUID], [UUID], Int)] = [
+            ("selected B misses but remembered A hits", b, a, [a], [b, a], [], 1),
+            ("selected B hits before remembered A", b, a, [a, b], [b], [b], 0),
+            ("unpinned remembered A hits", nil, a, [a], [a], [a], 0),
+            ("preferred and remembered B hit", b, b, [b], [b], [b], 0),
+            ("no remembered identifier or cache entry", nil, nil, [], [], [], 1),
+        ]
+        for (scenario, preferred, remembered, cached, expectedReads, expectedConnections, expectedScans) in cases {
+            var reads: [UUID] = []
+            var prepares: [UUID] = []
+            var connections: [UUID] = []
+            var scans = 0
+            func retrieve(_ identifier: UUID) -> UUID? {
+                reads.append(identifier)
+                return cached.contains(identifier) ? identifier : nil
+            }
+            let connectFromBackground = {
+                if let preferred, let peripheral = retrieve(preferred) {
+                    prepares.append(peripheral)
+                    connections.append(peripheral)
+                    return
+                }
+                if let remembered, let peripheral = retrieve(remembered),
+                   BLEStartupGate.allowsConnectionRequest(identifier: peripheral,
+                       preferredIdentifier: preferred) {
+                    prepares.append(peripheral)
+                    connections.append(peripheral)
+                    return
+                }
+                scans += 1
+            }
+            connectFromBackground()
+            XCTAssertEqual(reads, expectedReads, scenario)
+            XCTAssertEqual(prepares, expectedConnections, scenario)
+            XCTAssertEqual(connections, expectedConnections, scenario)
+            XCTAssertEqual(scans, expectedScans, scenario)
+        }
+    }
+
 }

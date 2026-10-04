@@ -1,11 +1,8 @@
 import XCTest
 @testable import Strand
 
-/// Pins when Today's liquid sky runs its 20 fps frame loop: only while a star can be drawn AND seen to twinkle.
-///
-/// The breath of light is the sky's one other moving layer, and it changes no pixel by more than a few of 255
-/// levels, so an hour with no drawable star gains nothing from redrawing and the loop stands down. Pure, so it
-/// needs no view, no clock and no simulator.
+/// Pins frame gating for Today's current starless sky.
+/// Pure checks need no view, clock or simulator.
 final class LiquidSkyMotionTests: XCTestCase {
 
     func testStarlessDaytimeHoursPauseTheLoop() {
@@ -17,9 +14,12 @@ final class LiquidSkyMotionTests: XCTestCase {
         }
     }
 
-    func testStarryHoursKeepTheTwinkleInDarkAppearance() {
-        for hour in [0.0, 3.0, 5.0, 21.5, 23.5] {
-            XCTAssertFalse(LiquidSky.pausesFrames(hour: hour, light: false, poseStill: false), "hour \(hour)")
+    func testDarkAppearanceHasNoStarsAndKeepsTheLoopPaused() {
+        for minute in 0..<(24 * 60) {
+            let hour = Double(minute) / 60
+            XCTAssertEqual(liquidSkyAt(hour, light: false).stars, 0, "minute \(minute)")
+            XCTAssertTrue(LiquidSky.pausesFrames(hour: hour, light: false, poseStill: false),
+                          "minute \(minute)")
         }
     }
 
@@ -33,8 +33,7 @@ final class LiquidSkyMotionTests: XCTestCase {
         }
     }
 
-    /// Dark appearance is untouched: at every minute the loop runs exactly when a star can be drawn, as before the
-    /// lift rule, because a drawable star on the dark sky always lifts its pixel past `liquidStarMinLift`.
+    /// The frame gate remains consistent with the current dark keyframes, which have no drawable stars.
     func testDarkAppearanceStillFollowsTheDrawableStars() {
         for minute in 0..<(24 * 60) {
             let hour = Double(minute) / 60
@@ -48,20 +47,17 @@ final class LiquidSkyMotionTests: XCTestCase {
         }
     }
 
-    /// Reduce Motion, Low Power Mode and the in-app toggle still pause it at any hour.
+    /// Reduce Motion, Low Power Mode and the in-app toggle keep the loop paused at any hour.
     func testPoseStillPausesEvenUnderStars() {
         XCTAssertTrue(LiquidSky.pausesFrames(hour: 0, light: false, poseStill: true))
         XCTAssertTrue(LiquidSky.pausesFrames(hour: 23.5, light: true, poseStill: true))
     }
 
-    /// A star is drawn once the nearest one, at the peak of its twinkle, reaches opacity 0.02: a star amount of
-    /// 0.02 / 0.48. Dark keyframes 6.5 h (0.06) → 8.5 h (0) and 17.5 h (0) → 19.5 h (0.05) cross it near 7:07 and
-    /// 19:10. (Light appearance never runs the loop: `testLightAppearanceNeverRunsTheLoop`.)
-    func testTheLoopFollowsTheDrawableStarsAtDawnAndDusk() {
-        XCTAssertFalse(LiquidSky.pausesFrames(hour: 7.05, light: false, poseStill: false))
-        XCTAssertTrue(LiquidSky.pausesFrames(hour: 7.15, light: false, poseStill: false))
-        XCTAssertTrue(LiquidSky.pausesFrames(hour: 19.1, light: false, poseStill: false))
-        XCTAssertFalse(LiquidSky.pausesFrames(hour: 19.25, light: false, poseStill: false))
+    /// Former dawn/dusk transition samples remain paused with the current zero-star keyframes.
+    func testFormerDawnAndDuskSamplesKeepTheLoopPaused() {
+        for hour in [7.05, 7.15, 19.1, 19.25] {
+            XCTAssertTrue(LiquidSky.pausesFrames(hour: hour, light: false, poseStill: false), "hour \(hour)")
+        }
     }
 
     /// At every minute of the day, in both appearances: while the loop is stopped no star, at any depth and at any

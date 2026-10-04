@@ -1,6 +1,6 @@
 import XCTest
 import Foundation
-import GRDB
+import SQLite3
 import WhoopStore
 @testable import Strand
 
@@ -23,11 +23,20 @@ final class ImportedEnergyMappingTests: XCTestCase {
     func testXiaomiActiveOnlyImportLeavesTotalUnknown() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("xiaomi-energy-\(UUID().uuidString).db")
         defer { try? FileManager.default.removeItem(at: url) }
-        let database = try DatabaseQueue(path: url.path)
-        try await database.write { db in
-            try db.execute(sql: "CREATE TABLE steps (sid TEXT, key TEXT, time INTEGER, value TEXT, zone_offset INTEGER, time_zero INTEGER, deleted INTEGER DEFAULT 0)")
-            try db.execute(sql: "CREATE TABLE calories_day (sid TEXT, key TEXT, time INTEGER, value TEXT, zone_offset INTEGER, time_zero INTEGER, deleted INTEGER DEFAULT 0)")
-            try db.execute(sql: #"INSERT INTO calories_day VALUES ('default','calories_day',1742601600,'{"calories":312}',0,1742601600,0)"#)
+        var database: OpaquePointer?
+        guard sqlite3_open(url.path, &database) == SQLITE_OK else {
+            return XCTFail("Cannot open the Xiaomi SQLite fixture")
+        }
+        defer { sqlite3_close(database) }
+        let fixtureSQL = """
+        BEGIN;
+        CREATE TABLE steps (sid TEXT, key TEXT, time INTEGER, value TEXT, zone_offset INTEGER, time_zero INTEGER, deleted INTEGER DEFAULT 0);
+        CREATE TABLE calories_day (sid TEXT, key TEXT, time INTEGER, value TEXT, zone_offset INTEGER, time_zero INTEGER, deleted INTEGER DEFAULT 0);
+        INSERT INTO calories_day VALUES ('default','calories_day',1742601600,'{"calories":312}',0,1742601600,0);
+        COMMIT;
+        """
+        guard sqlite3_exec(database, fixtureSQL, nil, nil, nil) == SQLITE_OK else {
+            return XCTFail("Cannot populate the Xiaomi SQLite fixture")
         }
         let store = try await WhoopStore.inMemory()
         _ = try await XiaomiImporter.importExport(url: url, into: store)

@@ -444,12 +444,14 @@ class Whoop5RRSqliteTest {
         val now = 1_780_272_000L
         val offset = java.util.TimeZone.getDefault().getOffset(now * 1000L) / 1000L
         val end = now - Math.floorMod(now + offset, 86_400L)
+        // A quiet day must not include the scored night through the 30-hour lookback.
         val scoredEnd = if (quiet) end - 2 * 86_400L else end
         val start = scoredEnd - 4 * 3_600L
         val anchor = AnalyticsEngine.dayString(end, offset)
-        val baselineAnchor = AnalyticsEngine.dayString(scoredEnd, offset)
-        for (back in 2L..15L) {
-            val day = java.time.LocalDate.parse(baselineAnchor).minusDays(back).toString()
+        // Keep fourteen known valid nights outside every day this pass replaces.
+        val firstHistoryBack = if (quiet) 3L else 2L
+        for (back in firstHistoryBack until firstHistoryBack + 14L) {
+            val day = java.time.LocalDate.parse(anchor).minusDays(back).toString()
             days["$id-noop" to day] = DailyMetric(deviceId = "$id-noop", day = day,
                 totalSleepMin = 480.0, efficiency = 0.9, restingHr = 60, avgHrv = 32.0, recovery = 60.0)
         }
@@ -461,6 +463,8 @@ class Whoop5RRSqliteTest {
             efficiency = 1.0, stagesJSON = AnalyticsEngine.encodeStages(listOf(StageSegment(start, scoredEnd, "light"))))))
         if (quiet) {
             repo.insert(StreamBatch(hr = (0L until 100L).map { HrRow(end + 3_600L + it, 60) }), id)
+            assertEquals("quiet anchor contains only the sparse current-day samples", 100,
+                repo.hrSamplesForDevice(id, end - 30L * 3_600L, now + 7_200L).size)
             days["$id-noop" to anchor] = DailyMetric(deviceId = "$id-noop", day = anchor,
                 totalSleepMin = 480.0, efficiency = 0.9, restingHr = 45, avgHrv = 100.0, recovery = 80.0)
             assertEquals("quiet fixture must stay below the scorer's lookback HR floor", 100,
@@ -482,6 +486,9 @@ class Whoop5RRSqliteTest {
         if (quiet) {
             assertEquals(if (preserve) 100.0 else null, days["$id-noop" to anchor]?.avgHrv)
             assertEquals(preserve, resolved.hrvHistory.dayKeys.contains(anchor))
+            assertEquals(if (preserve) 15 else 14, resolved.hrvHistory.values.count { it != null })
+            // The retained 100 ms night stays in history but is a hard outlier for this settled baseline.
+            assertEquals(14, resolved.hrvHistory.ownValidNights)
         }
     }
 

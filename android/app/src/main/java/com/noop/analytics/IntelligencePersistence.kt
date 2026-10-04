@@ -57,6 +57,31 @@ internal object IntelligencePersistence {
         }
     }
 
+    fun evictSkippedChargeBaselineDays(
+        preserveUnscoredHistoryForRun: Boolean,
+        scoredNights: List<DayResult>,
+        baselineOwn: List<DailyMetric>,
+        chargeAnchorDay: String,
+        maxDays: Int,
+        nightlyHrvByDay: MutableMap<String, Double?>,
+        nightlyRhrByDay: MutableMap<String, Double?>,
+        nightlyRespByDay: MutableMap<String, Double?>,
+        nightlySkinByDay: MutableMap<String, Double?>,
+    ) {
+        val scanFromDay = Baselines.cutoffKey(chargeAnchorDay, maxDays - 1)
+        if (!preserveUnscoredHistoryForRun && scoredNights.isNotEmpty()) {
+            val scoredKeys = scoredNights.map { it.daily.day }.toSet()
+            for (row in baselineOwn) {
+                if (row.day >= scanFromDay && row.day <= chargeAnchorDay && row.day !in scoredKeys) {
+                    nightlyHrvByDay.remove(row.day)
+                    nightlyRhrByDay.remove(row.day)
+                    nightlyRespByDay.remove(row.day)
+                    nightlySkinByDay.remove(row.day)
+                }
+            }
+        }
+    }
+
     suspend fun prepareComputedWindow(
         repo: WhoopRepository,
         importedDeviceId: String,

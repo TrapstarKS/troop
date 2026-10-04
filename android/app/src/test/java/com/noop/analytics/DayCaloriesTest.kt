@@ -102,22 +102,22 @@ class DayCaloriesTest {
             listOf(sample(0, 150), sample(0, 60), sample(60, 60)),
             hrDay(130, 120) + hrDay(130, 120, start = 200),
         )
-        // Verbatim standalone swiftc -O stdout, including sparse/gap/duplicate cases.
+        // Verbatim standalone swiftc -O IEEE-754 bit patterns, including sparse/gap/duplicate cases.
         val expected = """
-            0|0.000000000000|0.000000000000|0.000000000000|0.000000000000
-            1|12.675326388889|0.000000000000|12.675326388889|600.000000000000
-            2|12.675326388889|103.105766084605|115.781092473494|600.000000000000
-            3|12.675326388889|103.105766084603|115.781092473492|600.000000000000
-            4|2.535065277778|20.621153216921|23.156218494698|120.000000000000
-            5|2.535065277778|0.000000000000|2.535065277778|120.000000000000
-            6|6.316537650463|41.242306433841|47.558844084304|299.000000000000
+            0|0000000000000000|0000000000000000|0000000000000000|0000000000000000
+            1|402959c46164ce9f|0000000000000000|402959c46164ce9f|4082c00000000000
+            2|402959c46164ce9f|4059c6c4df1c99cf|405cf1fd6b4933a3|4082c00000000000
+            3|402959c46164ce9f|4059c6c4df1c996a|405cf1fd6b49333e|4082c00000000000
+            4|400447d04dea3ee6|40349f03e5b07ab9|403727fdef6dc296|405e000000000000
+            5|400447d04dea3ee6|0000000000000000|400447d04dea3ee6|405e000000000000
+            6|401944227222c3b2|40449f03e5b07ab2|4047c78833f4d328|4072b00000000000
         """.trimIndent()
-        val rows = expected.lines().map { it.split('|').drop(1).map(String::toDouble) }
+        val rows = expected.lines().map { it.split('|').drop(1).map { java.lang.Long.parseUnsignedLong(it, 16) } }
         assertEquals(cases.size, rows.size)
         cases.zip(rows).forEach { (samples, oracle) ->
             val value = Calories.estimateDayEnergy(samples, profile, hrmax = 185.0, restingHR = 55.0)
             listOf(value.restingKcal, value.activeKcal, value.totalKcal, value.observedSeconds)
-                .zip(oracle).forEach { (actual, expected) -> assertEquals(expected, actual, 1e-9) }
+                .zip(oracle).forEach { (actual, expected) -> assertEquals(expected, actual.toRawBits()) }
         }
     }
 
