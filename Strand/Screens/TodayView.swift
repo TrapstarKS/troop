@@ -1613,7 +1613,7 @@ struct TodayView: View {
             recovery: displayDay?.recovery ?? lastScoredCharge?.value,
             recoveryDayKey: chargeBreakdownRow?.day ?? selectedDayKey,
             recoveryCaption: displayDay?.recovery == nil ? lastScoredCharge?.caption : nil,
-            strain: effortStrain(displayDay), stress: selectedDayOffset == 0 ? stressToday : homeStressByDay[selectedDayKey],
+            strain: effortStrain(displayDay), stress: homeStressByDay[selectedDayKey],
             workouts: workouts, onEdit: { customizationDestination = .keyMetrics },
             onWorkout: { workoutDetail = WorkoutDetailTarget(row: $0) },
             onActivitySaved: { await reloadHomeActivities() },

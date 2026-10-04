@@ -914,7 +914,7 @@ struct SleepView: View {
             ? String(localized: "raw on-device stages")
             : String(localized: "stages approximate (on-device)")
         let subtitle = isPersisted
-            ? String(localized: "\(durationText(night.timeInBed)) recorded · \(efficiencyText(night)) efficiency") + " · " + stageCaption
+            ? String(localized: "\(durationText(night.timeInBed)) in bed · \(efficiencyText(night)) efficiency") + " · " + stageCaption
             : String(localized: "\(durationText(night.timeInBed)) in bed · \(efficiencyText(night)) efficiency")
         let hrKey = SleepHeartRateLoadKey(deviceId: repo.deviceId, from: night.session.effectiveStartTs,
                                          to: night.session.endTs, refresh: repo.refreshSeq)
@@ -1380,6 +1380,7 @@ struct SleepView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(label).strandOverline()
                 Text(value).font(StrandFont.number(22)).foregroundStyle(StrandPalette.textPrimary)
+                    .lineLimit(1).minimumScaleFactor(0.6)
             }
         }
         .accessibilityElement(children: .combine)

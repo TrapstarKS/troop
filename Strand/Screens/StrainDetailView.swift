@@ -15,6 +15,7 @@ struct StrainDetailView: View {
     @State private var zoneMinutes: [Double]? = nil
     @State private var belowZoneMinutes: Double? = nil
     @State private var workouts: [WorkoutRow] = []
+    @State private var steps: Double?
     @State private var loaded = false
     @State private var showGuide = false
     @State private var openedDeviceId: String?
@@ -41,8 +42,12 @@ struct StrainDetailView: View {
                       targetRange: band.map { Double($0.lowerBound) / 21...Double($0.upperBound) / 21 }, viewportWidth: viewportWidth)
                 .frame(maxWidth: .infinity)
             target
-            DetailStrainContributors(minutes: zoneMinutes, row: row, history: repo.days, dayKey: key)
-            InsightCallout(text: String(localized: "This local guidance range is not a training prescription. A missing recovery score leaves the target unavailable."),
+            DetailStrainContributors(minutes: zoneMinutes, row: row, history: repo.days, dayKey: key,
+                strengthSeconds: RecoveryStrainDetailLogic.strengthSeconds(workouts.map { ($0.sport, $0.source, $0.durationS, $0.startTs, $0.endTs) }),
+                steps: steps)
+            InsightCallout(text: band == nil
+                               ? String(localized: "This day has no recovery score, so no strain target is suggested. A score from another day is not used.")
+                               : String(localized: "The suggested range uses the existing recovery category from this same day. It is guidance for the local model, not a measured physiological threshold."),
                            actionLabel: String(localized: "How your scores work"), onAction: { showGuide = true })
             TrackedSectionHeader(title: String(localized: "Activities"))
             if workouts.isEmpty {
@@ -101,6 +106,7 @@ struct StrainDetailView: View {
         zoneMinutes = nil
         belowZoneMinutes = nil
         workouts = []
+        steps = nil
         let now = Date()
         let requestedKey = dayKey ?? repo.today?.day ?? Repository.logicalDayKey(now)
         let requestedWindowKey = windowDayKey
@@ -128,6 +134,18 @@ struct StrainDetailView: View {
         let buckets = await repo.hrBuckets(from: window.lowerBound, to: window.upperBound, bucketSeconds: 300)
         let samples = await repo.hrSamples(from: window.lowerBound, to: window.upperBound, limit: 200_000)
         let rows = await repo.workoutRows()
+        // Same per-day step resolver as the Health tab and Healthspan (measured first, else imported).
+        let measuredSteps = await repo.resolvedSeries(key: "steps", source: "my-whoop", from: requestedKey, to: requestedKey)
+        var importedSteps: [HealthspanPresentation.StepSample] = []
+        if let store = await repo.storeHandle() {
+            for importedSource in ["apple-health", "health-connect"] {
+                let daily = (try? await store.appleDaily(deviceId: importedSource, from: requestedKey, to: requestedKey)) ?? []
+                importedSteps += daily.compactMap { row in row.steps.map { .init(day: row.day, count: Double($0), source: importedSource) } }
+            }
+        }
+        let resolvedSteps = HealthspanPresentation.latestSteps(
+            measured: measuredSteps.points.map { .init(day: $0.day, count: $0.value, source: $0.source) },
+            imported: importedSteps, fromDay: requestedKey, throughDay: requestedKey)
         let segments = hrGapSegments(bucketTs: buckets.map(\.ts), bucketSeconds: 300)
         guard key == requestedKey, windowDayKey == requestedWindowKey, repo.deviceId == deviceId,
               cycleMode == requestedMode, !Task.isCancelled else { return }
@@ -138,6 +156,7 @@ struct StrainDetailView: View {
         zoneMinutes = split?.seconds.map { $0 / 60 }
         belowZoneMinutes = split.map { $0.belowZone1 / 60 }
         workouts = rows.filter { window.contains($0.startTs) }
+        steps = resolvedSteps?.count
         loaded = true
     }
 }

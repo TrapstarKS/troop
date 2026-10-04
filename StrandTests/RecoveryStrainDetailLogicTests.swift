@@ -178,4 +178,18 @@ final class RecoveryStrainDetailLogicTests: XCTestCase {
         """
         XCTAssertEqual(lines.joined(separator: "\n"), expected)
     }
+
+    func testStrengthSecondsSumsOnlyStrengthSessions() {
+        typealias R = (sport: String, source: String, durationS: Double?, startTs: Int, endTs: Int)
+        let cases: [[R]] = [
+            [],
+            [(sport: "Running", source: "manual", durationS: 1800, startTs: 0, endTs: 1800)],
+            [(sport: "Strength", source: "manual", durationS: 1500, startTs: 0, endTs: 9999)],
+            [(sport: "Functional Strength Training", source: "apple-health", durationS: nil, startTs: 100, endTs: 700),
+             (sport: "Yoga", source: "lifting", durationS: 300, startTs: 0, endTs: 300),
+             (sport: "Cycling", source: "manual", durationS: 900, startTs: 0, endTs: 900)],
+        ]
+        let out = cases.map { RecoveryStrainDetailLogic.strengthSeconds($0).map { String(Int($0)) } ?? "none" }.joined(separator: ",")
+        XCTAssertEqual(out, "none,none,1500,900")
+    }
 }

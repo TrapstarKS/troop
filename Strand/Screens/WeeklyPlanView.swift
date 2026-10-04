@@ -12,7 +12,6 @@ struct WeeklyPlanView: View {
     @EnvironmentObject private var repo: Repository
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var catalog = JournalCatalogStore()
-    @AppStorage(UnitPrefs.effortScaleKey) private var effortScaleRaw = EffortScale.hundred.rawValue
     @State private var today = Repository.localDayKey(Date())
     @State private var resumeRevision = 0
     @State private var weekOffset = 0
@@ -26,7 +25,8 @@ struct WeeklyPlanView: View {
 
     private let preferences = WeeklyPlanPreferences()
     private let dayTicker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
-    private var effortScale: EffortScale { UnitPrefs.resolveEffortScale(effortScaleRaw) }
+    // Strain screens always read 0–21; the stored goal stays Effort 0–100, only its display changes.
+    private let effortScale = EffortScale.whoop
     private var currentWeek: String { WeeklyPlanCalendar.weekStart(today) ?? today }
     private var selectedWeek: String { WeeklyPlanCalendar.adding(days: weekOffset * 7, to: currentWeek) ?? currentWeek }
     private var days: [WeeklyPlanDay] {
@@ -53,9 +53,12 @@ struct WeeklyPlanView: View {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                         Text(preferences.hasPlan(weekStart: selectedWeek) ? String(localized: "Overall progress") : String(localized: "Suggested goals")).strandOverline()
                         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
-                            Text(preferences.hasPlan(weekStart: selectedWeek) ? (snapshot.overallPercent.map { "\($0)%" } ?? "—") : "—")
-                                .font(StrandFont.display()).foregroundStyle(StrandPalette.textPrimary)
-                                .lineLimit(1).minimumScaleFactor(0.5)
+                            // No plan yet: the suggested goals are listed below, so no bare dash here.
+                            if preferences.hasPlan(weekStart: selectedWeek) {
+                                Text(snapshot.overallPercent.map { "\($0)%" } ?? "—")
+                                    .font(StrandFont.display()).foregroundStyle(StrandPalette.textPrimary)
+                                    .lineLimit(1).minimumScaleFactor(0.5)
+                            }
                             if weekOffset == 0 {
                                 NoopButton(preferences.hasPlan(weekStart: selectedWeek) ? "Edit goals" : "Create plan", systemImage: "pencil", kind: .secondary, fullWidth: true) { openEditor() }
                             }

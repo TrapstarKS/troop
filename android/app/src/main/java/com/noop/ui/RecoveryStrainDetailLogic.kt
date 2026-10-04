@@ -67,6 +67,13 @@ internal object RecoveryStrainDetailLogic {
     fun durationMinutes(seconds: Double?, fallbackSeconds: Double? = null): Long? =
         (seconds ?: fallbackSeconds)?.let { wholeNumber(it / 60) }
 
+    /** Summed seconds of the strength sessions, null when none. Swift twin: `strengthSeconds`. */
+    fun strengthSeconds(rows: List<com.noop.data.WorkoutRow>): Double? {
+        val strength = rows.filter { com.noop.analytics.HealthspanHistory.isStrength(it.sport, it.source) }
+        if (strength.isEmpty()) return null
+        return strength.sumOf { it.durationS ?: (it.endTs - it.startTs).toDouble() }
+    }
+
     fun priorMean(
         dayKeys: List<String>,
         values: List<Double?>,

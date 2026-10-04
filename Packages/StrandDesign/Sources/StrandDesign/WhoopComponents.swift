@@ -358,7 +358,7 @@ public struct TopChrome: View {
                 chromeButton("chevron.left", label: previousLabel, action: onPrevious)
                 Button(action: onDate) {
                     Text(dateLabel).font(StrandFont.overline).tracking(StrandFont.overlineTracking)
-                        .textCase(.uppercase).padding(.horizontal, NoopMetrics.space2)
+                        .textCase(.uppercase).lineLimit(1).minimumScaleFactor(0.6).padding(.horizontal, NoopMetrics.space2)
                         .frame(minHeight: NoopMetrics.touchTarget)
                 }
                 chromeButton("chevron.right", label: nextLabel, action: onNext).disabled(!canGoNext)

@@ -68,7 +68,7 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
     val registryActiveId by vm.activeStrapIdFlow.collectAsStateWithLifecycle()
     val activeStrapId = registryActiveId ?: vm.activeStrapId
     val journalSeq by vm.repo.journalRevision.collectAsStateWithLifecycle()
-    val effortScale = UnitPrefs.effortScale(context)
+    val effortScale = EffortScale.WHOOP // Strain screens read 0–21; the stored goal stays Effort 0–100.
     var today by remember { mutableStateOf(LocalDate.now().toString()) }
     var resumeRevision by remember { mutableStateOf(0) }
     var weekOffset by remember { mutableStateOf(0) }
@@ -228,7 +228,7 @@ fun WeeklyPlanScreen(vm: AppViewModel) {
                 Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
                     Text(stringResource(if (preferences.hasPlan(selectedWeek)) R.string.weekly_plan_overall else R.string.weekly_plan_suggested), style = NoopType.overline, color = Palette.textSecondary)
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
-                        Text(if (preferences.hasPlan(selectedWeek)) snapshot.overallPercent?.let { stringResource(R.string.weekly_plan_percent, it) } ?: "—" else "—",
+                        if (preferences.hasPlan(selectedWeek)) Text(snapshot.overallPercent?.let { stringResource(R.string.weekly_plan_percent, it) } ?: "—",
                             style = NoopType.display(), color = Palette.textPrimary, maxLines = 1)
                         if (weekOffset == 0) NoopButton(stringResource(if (preferences.hasPlan(selectedWeek)) R.string.weekly_plan_edit else R.string.weekly_plan_create), kind = NoopButtonKind.Secondary, fullWidth = true, onClick = { openEditor() })
                     }

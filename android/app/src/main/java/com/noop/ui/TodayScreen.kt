@@ -1408,7 +1408,7 @@ fun TodayScreen(
                 displayMetric?.spo2Pct,
                 displayMetric?.skinTempC ?: displayMetric?.skinTempDevC,
             ).count { it != null && it.isFinite() }
-            HomeMonitorTiles(available, if (selectedDayOffset == 0) stressToday else homeDayStress, onOpenHealth, onOpenStress)
+            HomeMonitorTiles(available, homeDayStress, onOpenHealth, onOpenStress)
         }
         item(key = "home-my-day") {
             Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
