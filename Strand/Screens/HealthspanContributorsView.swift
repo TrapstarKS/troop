@@ -102,8 +102,9 @@ private struct HealthspanContributorDetailView: View {
     @State private var samples: [HealthspanHistory.Sample] = []
     @State private var windowDays = 180
     @State private var selectedOffset: Int?
-    @GestureState private var horizontalDrag: Bool?
     @AppStorage("noop.coachEnabled") private var coachEnabled = true
+    @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
+    private var unitSystem: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
     private var sourceID: String { healthspanSourceID(observedSource ?? model.deviceRegistry?.activeDeviceId, repo: repo) }
     private var points: [HealthspanHistory.Sample] { loadedSource == sourceID ? HealthspanHistory.points(samples: samples, windowDays: windowDays) : [] }
     var body: some View {
@@ -121,8 +122,12 @@ private struct HealthspanContributorDetailView: View {
                     }
                 }
                 HStack(spacing: NoopMetrics.gap) {
-                    Button("30 days") { windowDays = 30; selectedOffset = nil }.disabled(windowDays == 30)
-                    Button("Six months") { windowDays = 180; selectedOffset = nil }.disabled(windowDays == 180)
+                    Button("30 days") { windowDays = 30; selectedOffset = nil }
+                        .foregroundStyle(windowDays == 30 ? StrandPalette.positive : StrandPalette.textSecondary)
+                        .accessibilityAddTraits(windowDays == 30 ? .isSelected : [])
+                    Button("Six months") { windowDays = 180; selectedOffset = nil }
+                        .foregroundStyle(windowDays == 180 ? StrandPalette.positive : StrandPalette.textSecondary)
+                        .accessibilityAddTraits(windowDays == 180 ? .isSelected : [])
                 }.font(StrandFont.headline).frame(minHeight: NoopMetrics.touchTarget)
                 NoopCard {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
@@ -131,7 +136,7 @@ private struct HealthspanContributorDetailView: View {
                         } else {
                             Chart {
                                 ForEach(points, id: \.daysAgo) { point in
-                                    PointMark(x: .value("Date", day(point.daysAgo)), y: .value("Value", point.value))
+                                    PointMark(x: .value("Date", day(point.daysAgo)), y: .value("Value", chartValue(point.value)))
                                         .foregroundStyle(StrandPalette.positive)
                                 }
                                 if let reading {
@@ -139,6 +144,7 @@ private struct HealthspanContributorDetailView: View {
                                 }
                             }.frame(height: NoopMetrics.chartHeight)
                                 .chartYScale(domain: .automatic(includesZero: false))
+                                .chartYAxisLabel(driver == .leanMass ? UnitFormatter.massUnit(unitSystem) : driver.unit)
                                 .chartXScale(domain: day(windowDays - 1)...reference)
                                 .chartOverlay { proxy in
                                     GeometryReader { geometry in
@@ -146,20 +152,14 @@ private struct HealthspanContributorDetailView: View {
                                             guard let date: Date = proxy.value(atX: location.x - geometry[proxy.plotAreaFrame].origin.x) else { return }
                                             selectedOffset = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: date), to: reference).day
                                         }
-                                        Rectangle().fill(.clear).contentShape(Rectangle())
-                                            .simultaneousGesture(SpatialTapGesture().onEnded { select($0.location) })
-                                            .simultaneousGesture(DragGesture().updating($horizontalDrag) { event, state, _ in
-                                                if state == nil { state = abs(event.translation.width) > abs(event.translation.height) }
-                                            }.onChanged { event in
-                                                if horizontalDrag ?? (abs(event.translation.width) > abs(event.translation.height)) { select(event.location) }
-                                            })
+                                        HealthChartInteraction(onSelect: select)
                                     }
                                 }
                             if let reading {
                                 HStack {
                                     Text(day(reading.daysAgo), style: .date)
                                     Spacer()
-                                    Text(String(format: "%.1f", locale: .current, reading.value) + " " + driver.unit)
+                                    Text(formattedValue(reading.value))
                                 }.font(StrandFont.caption)
                             }
                         }
@@ -191,11 +191,18 @@ private struct HealthspanContributorDetailView: View {
                 samples = resolved[driver] ?? []; loadedSource = source
             }
     }
+    private func formattedValue(_ value: Double) -> String {
+        driver == .leanMass ? UnitFormatter.massFromKilograms(value, system: unitSystem)
+            : String(format: "%.1f", locale: .current, value) + " " + driver.unit
+    }
+    private func chartValue(_ value: Double) -> Double {
+        driver == .leanMass && unitSystem == .imperial ? UnitFormatter.kgToPounds(value) : value
+    }
     private func day(_ offset: Int) -> Date { Calendar.current.date(byAdding: .day, value: -offset, to: reference)! }
     private func comparisonRow(_ title: String, _ tenths: Int?, _ count: Int) -> some View {
         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
             Text(title).strandOverline()
-            Text(tenths.map { String(format: "%.1f", locale: .current, Double($0) / 10) + " " + driver.unit } ?? String(localized: "Unavailable")).font(StrandFont.title2)
+            Text(tenths.map { formattedValue(Double($0) / 10) } ?? String(localized: "Unavailable")).font(StrandFont.title2)
             Text(String.localizedStringWithFormat(String(localized: "%lld recorded observations"), count)).font(StrandFont.caption)
         }
     }
