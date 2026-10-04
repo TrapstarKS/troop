@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -36,9 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -60,6 +60,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -85,6 +86,15 @@ internal fun homeRecordingState(
     else -> HomeRecordingState.Idle
 }
 
+internal fun homeManualActivityEnd(dayKey: String, now: ZonedDateTime = ZonedDateTime.now()): Long =
+    LocalDate.parse(dayKey).atTime(now.toLocalTime()).atZone(now.zone)
+        .toInstant().toEpochMilli().coerceAtMost(now.toInstant().toEpochMilli())
+
+internal fun homeActivityWindow(dayKey: String, zone: ZoneId = ZoneId.systemDefault()): LongRange {
+    val date = LocalDate.parse(dayKey)
+    return date.atStartOfDay(zone).toEpochSecond()..(date.plusDays(1).atStartOfDay(zone).toEpochSecond() - 1)
+}
+
 @Composable
 internal fun HomeChrome(
     day: LocalDate,
@@ -108,8 +118,6 @@ internal fun HomeChrome(
             profileLabel = uiString(R.string.home_profile),
             strapLabel = uiString(if (connected) R.string.home_device_connected else R.string.home_device_disconnected),
             avatarInitials = uiString(R.string.home_avatar),
-            streakCount = streak,
-            streakLabel = uiPlural(R.plurals.settings_streak_run, streak, streak),
             batteryPercent = (battery as? HeaderBatteryDisplay.State.Charge)?.pct?.roundToInt(),
             isConnected = connected,
             canGoNext = offset > 0,
@@ -125,6 +133,8 @@ internal fun HomeChrome(
             },
             onProfile = onProfile,
             onStrap = onDevices,
+            streakCount = streak,
+            streakLabel = uiPlural(R.plurals.settings_streak_run, streak, streak),
         )
         recordingState?.let { state ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { HomeRecordingStatus(state) }
@@ -144,31 +154,28 @@ internal fun HomeDials(
     val availableRecovery = homeScoreValue(recovery)
     val availableStrain = homeScoreValue(strain)
     val sleepValue = homeScoreValue(sleep)
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val viewportWidth = maxWidth + Metrics.screenPadding * 2
-        Row(Modifier.fillMaxWidth().padding(vertical = Metrics.space16),
-            horizontalArrangement = Arrangement.spacedBy(Metrics.space8), verticalAlignment = Alignment.Top) {
-            HomeDial(uiString(R.string.home_sleep), sleepValue?.roundToInt()?.toString(), "%", sleepValue,
-                Palette.sleepPrimary, Modifier.weight(1f), viewportWidth, onSleep)
-            HomeDial(uiString(R.string.home_recovery), RecoveryStrainDetailLogic.recoveryPercent(availableRecovery)?.toString(), "%", availableRecovery,
-                availableRecovery?.let { Palette.recoveryColor(it) } ?: Palette.ringTrack, Modifier.weight(1f), viewportWidth, onRecovery)
-            HomeDial(uiString(R.string.home_strain), availableStrain?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) }, "", availableStrain,
-                Palette.strainPrimary, Modifier.weight(1f), viewportWidth, onStrain)
-        }
+    Row(Modifier.fillMaxWidth().padding(vertical = Metrics.space16),
+        horizontalArrangement = Arrangement.spacedBy(Metrics.space8), verticalAlignment = Alignment.Top) {
+        HomeDial(uiString(R.string.home_sleep), sleepValue?.roundToInt()?.toString(), "%", sleepValue,
+            Palette.sleepPrimary, Modifier.weight(1f), onSleep)
+        HomeDial(uiString(R.string.home_recovery), RecoveryStrainDetailLogic.recoveryPercent(availableRecovery)?.toString(), "%", availableRecovery,
+            availableRecovery?.let { Palette.recoveryColor(it) } ?: Palette.ringTrack, Modifier.weight(1f), onRecovery)
+        HomeDial(uiString(R.string.home_strain), availableStrain?.let { UnitFormatter.effortDisplay(it, EffortScale.WHOOP) }, "", availableStrain,
+            Palette.strainPrimary, Modifier.weight(1f), onStrain)
     }
 }
 
 @Composable
 private fun HomeDial(label: String, value: String?, unit: String, progress: Double?, color: Color,
-    modifier: Modifier, viewportWidth: Dp, onClick: () -> Unit) {
+    modifier: Modifier, onClick: () -> Unit) {
     val displayValue = value ?: uiString(R.string.home_no_value)
     val displayUnit = if (value != null) unit else ""
     Column(modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         ScoreDial(label = uiString(R.string.home_dial_label, label), value = displayValue,
             unit = displayUnit, progress = progress?.div(100)?.toFloat(),
             color = color, size = ScoreDialSize.Compact,
-            accessibilityLabel = listOf(label, displayValue + displayUnit).joinToString(", "),
-            viewportWidth = viewportWidth)
+            viewportWidth = LocalConfiguration.current.screenWidthDp.dp,
+            accessibilityLabel = listOf(label, displayValue + displayUnit).joinToString(", "))
     }
 }
 
@@ -197,7 +204,7 @@ internal fun HomeGuidance(title: String, detail: String, onCoach: (() -> Unit)?)
             .offset(y = Metrics.space8).background(Palette.surfaceOverlay, shape))
         Box(Modifier.matchParentSize().padding(horizontal = Metrics.space8)
             .offset(y = Metrics.space4).background(Palette.surfaceRaised, shape))
-        Column(Modifier.fillMaxWidth().background(Palette.surfaceBase, shape).padding(Metrics.cardPadding),
+        Column(Modifier.fillMaxWidth().background(Palette.surfaceRaised, shape).padding(Metrics.cardPadding),
             verticalArrangement = Arrangement.spacedBy(Metrics.space8)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = NoopType.headline, color = Palette.textPrimary, modifier = Modifier.weight(1f))

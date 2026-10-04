@@ -25,6 +25,22 @@ final class HomeDayActivitiesTests: XCTestCase {
         XCTAssertEqual(HomeDayActivities.manualEnd(dayKey: "invalid", now: now, calendar: calendar), now)
     }
 
+    func testManualEntryUsesISODayRegardlessOfThePreferredCalendar() {
+        let now = Date(timeIntervalSince1970: 1_791_003_600)
+        let expected: [(String, TimeInterval)] = [
+            ("2026-10-03", 1_791_003_600),
+            ("2026-10-02", 1_790_917_200),
+        ]
+        for identifier in [Calendar.Identifier.gregorian, .buddhist, .islamic] {
+            var calendar = Calendar(identifier: identifier)
+            calendar.timeZone = TimeZone(identifier: "America/Sao_Paulo")!
+            for (dayKey, timestamp) in expected {
+                XCTAssertEqual(HomeDayActivities.manualEnd(dayKey: dayKey, now: now, calendar: calendar),
+                               Date(timeIntervalSince1970: timestamp), "\(identifier) \(dayKey)")
+            }
+        }
+    }
+
     func testDayFeedUsesSelectedCivilDateAndKeepsChronologicalOrder() {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -37,6 +53,25 @@ final class HomeDayActivitiesTests: XCTestCase {
         XCTAssertEqual(HomeDayActivities.rows(rows, dayKey: Repository.localDayKey(today)).map(\.startTs),
                        [morning.startTs, afternoon.startTs])
         XCTAssertTrue(HomeDayActivities.rows(rows, dayKey: "1900-01-01").isEmpty)
+    }
+
+    func testPreFourBankedNightKeepsPostMidnightActivityAndDisplayedManualDate() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Sao_Paulo")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 3, hour: 2))!
+        let midnightActivity = workout(start: now.addingTimeInterval(-1_800))
+        let previousActivity = workout(start: now.addingTimeInterval(-10_800))
+        let days = ["2026-10-02", "2026-10-03"].map {
+            DailyMetric(day: $0, totalSleepMin: 430, efficiency: nil, deepMin: nil, remMin: nil,
+                        lightMin: nil, disturbances: nil, restingHr: nil, avgHrv: nil,
+                        recovery: 50, strain: 40, exerciseCount: nil)
+        }
+        let displayedDay = Repository.resolveToday(days: days, logicalKey: "2026-10-02", localKey: "2026-10-03")!.day
+        XCTAssertEqual(displayedDay, "2026-10-03")
+        XCTAssertEqual(HomeDayActivities.rows([previousActivity, midnightActivity], dayKey: displayedDay,
+                                             calendar: calendar).map(\.startTs), [midnightActivity.startTs])
+        XCTAssertEqual(HomeDayActivities.manualEnd(dayKey: displayedDay, now: now, calendar: calendar), now)
+        XCTAssertNotEqual(HomeDayActivities.manualEnd(dayKey: "2026-10-02", now: now, calendar: calendar), now)
     }
 
     func testDashboardVitalRoutesResolveRealCatalogKeys() {
