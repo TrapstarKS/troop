@@ -53,9 +53,12 @@ struct WeeklyPlanView: View {
                     VStack(alignment: .leading, spacing: NoopMetrics.space3) {
                         Text(preferences.hasPlan(weekStart: selectedWeek) ? String(localized: "Overall progress") : String(localized: "Suggested goals")).strandOverline()
                         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
-                            Text(preferences.hasPlan(weekStart: selectedWeek) ? (snapshot.overallPercent.map { "\($0)%" } ?? "—") : "—")
-                                .font(StrandFont.display()).foregroundStyle(StrandPalette.textPrimary)
-                                .lineLimit(1).minimumScaleFactor(0.5)
+                            // No plan yet: the suggested goals are listed below, so no bare dash here.
+                            if preferences.hasPlan(weekStart: selectedWeek) {
+                                Text(snapshot.overallPercent.map { "\($0)%" } ?? "—")
+                                    .font(StrandFont.display()).foregroundStyle(StrandPalette.textPrimary)
+                                    .lineLimit(1).minimumScaleFactor(0.5)
+                            }
                             if weekOffset == 0 {
                                 NoopButton(preferences.hasPlan(weekStart: selectedWeek) ? "Edit goals" : "Create plan", systemImage: "pencil", kind: .secondary, fullWidth: true) { openEditor() }
                             }
