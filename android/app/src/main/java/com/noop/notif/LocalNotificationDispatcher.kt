@@ -22,8 +22,20 @@ import java.time.ZoneId
 
 const val LOCAL_NOTIFICATION_ROUTE = "localNotificationRoute"
 
+/** Route-only producers (Coach brief, battery) keep the legacy contract: no event, so no typed context. */
 fun localNotificationLaunchIntent(context: Context, route: String): Intent =
-    localNotificationLaunchIntent(context, LocalNotificationContext(route, route))
+    appLaunchIntent(context).apply {
+        routeOnlyNotificationFields(route).forEach { (key, value) -> putExtra(key, value) }
+        data = Uri.Builder().scheme("noop").authority("local-notification").appendPath(route).build()
+    }
+
+fun routeOnlyNotificationFields(route: String): Map<String, String> = mapOf(LOCAL_NOTIFICATION_ROUTE to route)
+
+/** Splits launch extras into a typed dated context (has an event) or a legacy route, never both. */
+fun stagedLocalNotification(fields: Map<String, String>): Pair<LocalNotificationContext?, String?> {
+    val typed = if (fields.containsKey("localNotificationEvent")) LocalNotificationContext.fromWireFields(fields) else null
+    return typed to (if (typed == null) fields[LOCAL_NOTIFICATION_ROUTE] else null)
+}
 
 fun localNotificationLaunchIntent(context: Context, notification: LocalNotificationContext): Intent =
     appLaunchIntent(context).apply {

@@ -157,7 +157,9 @@ fun LocalNotificationsScreen(
         MoreHubSection(uiString(R.string.local_notify_plan_group)) {
             Text(uiString(R.string.local_notify_plan_detail), style = NoopType.footnote, color = Palette.textSecondary)
             listOf(LocalNotificationFamily.FRIDAY_CHECK_IN, LocalNotificationFamily.MONDAY_RECAP).forEach { family ->
-                LocalNotificationToggle(uiString(family.titleRes), LocalNotificationPrefs.enabled(context, family)) {
+                val available = vm.weeklyPlanNotificationsAvailable
+                LocalNotificationToggle(uiString(family.titleRes), available && LocalNotificationPrefs.enabled(context, family),
+                    enabled = available) {
                     change { LocalNotificationPrefs.setEnabled(context, family, it) }
                 }
             }
