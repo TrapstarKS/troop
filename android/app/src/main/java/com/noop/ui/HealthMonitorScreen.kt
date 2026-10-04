@@ -48,11 +48,13 @@ fun HealthMonitorScreen(
     onVitalClick: (String) -> Unit = {},
     onOpenLiveHr: () -> Unit = {},
 ) {
-    val days by vm.recentDays.collectAsStateWithLifecycle()
+    val cachedDays by vm.recentDays.collectAsStateWithLifecycle()
+    val evidence = rememberHealthMonitorEvidence(vm, cachedDays)
+    val days = evidence?.vitalDays ?: cachedDays
     val day = rememberHealthMonitorDay(days)
-    val evidence = rememberHealthMonitorEvidence(vm, days)
     val readings = rememberHealthMonitorReadings(vm, days, day, evidence)
     val context = androidx.compose.ui.platform.LocalContext.current
+    val temperatureUnit = UnitPrefs.temperature(context)
     val skinPreference = UnitPrefs.skinTempPreferred(context)
     val skinKind = healthMonitorReportSkinKind(readings.last().vital.value, skinPreference)
     val reliability = evidence?.hrvReliabilityByDay
@@ -78,11 +80,11 @@ fun HealthMonitorScreen(
         item { HealthMonitorLiveHr(vm, onOpenLiveHr) }
         item { HealthMonitorAlerts(vm) }
         item {
-            HealthMonitorReportCard(report, reportDays, skinKind, healthMonitorRecoveryCount(days, day), sharing, onSelect = { reportDays = it },
+            HealthMonitorReportCard(report, reportDays, skinKind, healthMonitorRecoveryCount(days, day), sharing, evidence != null, onSelect = { reportDays = it },
                 onShare = {
                     sharing = true
                     scope.launch {
-                        try { HealthMonitorReportShare.export(context, report, skinKind) }
+                        try { HealthMonitorReportShare.export(context, report, skinKind, temperatureUnit) }
                         finally { sharing = false }
                     }
                 })
@@ -129,9 +131,10 @@ private fun rememberHealthMonitorReadings(vm: AppViewModel, days: List<DailyMetr
 
 @Composable
 internal fun HealthMonitorPreview(vm: AppViewModel, days: List<DailyMetric>, onClick: () -> Unit) {
-    val day = rememberHealthMonitorDay(days)
     val evidence = rememberHealthMonitorEvidence(vm, days)
-    val readings = rememberHealthMonitorReadings(vm, days, day, evidence)
+    val vitalDays = evidence?.vitalDays ?: days
+    val day = rememberHealthMonitorDay(vitalDays)
+    val readings = rememberHealthMonitorReadings(vm, vitalDays, day, evidence)
     NoopCard(Modifier.clickable(role = Role.Button, onClick = onClick)) {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
             HealthFeatureHeader(stringResource(R.string.health_monitor_title))
@@ -257,7 +260,7 @@ private fun HealthFeatureHeader(title: String) {
 }
 
 @Composable
-private fun HealthMonitorReportCard(report: HealthMonitorReport, windowDays: Int, skinKind: SkinTempDisplay.Kind, recordedRecoveries: Int, sharing: Boolean,
+private fun HealthMonitorReportCard(report: HealthMonitorReport, windowDays: Int, skinKind: SkinTempDisplay.Kind, recordedRecoveries: Int, sharing: Boolean, snapshotReady: Boolean,
     onSelect: (Int) -> Unit, onShare: () -> Unit) {
     NoopCard {
         Column(verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
@@ -271,8 +274,8 @@ private fun HealthMonitorReportCard(report: HealthMonitorReport, windowDays: Int
                 style = NoopType.footnote, color = Palette.textTertiary)
             if (recordedRecoveries < 14) Text(stringResource(R.string.health_report_not_ready, recordedRecoveries),
                 style = NoopType.caption, color = Palette.textSecondary)
-            TextButton(onClick = onShare, enabled = recordedRecoveries >= 14 && !sharing) {
-                Text(stringResource(R.string.health_report_share), color = if (recordedRecoveries >= 14) Palette.accent else Palette.textTertiary)
+            TextButton(onClick = onShare, enabled = snapshotReady && recordedRecoveries >= 14 && !sharing) {
+                Text(stringResource(R.string.health_report_share), color = if (snapshotReady && recordedRecoveries >= 14) Palette.accent else Palette.textTertiary)
             }
         }
     }

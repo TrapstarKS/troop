@@ -745,34 +745,65 @@ final class Repository: ObservableObject {
         return days.filter { $0.day >= cutoff }
     }
 
-    /// Value-bound eligibility before source coalescing; both signals share one committed read snapshot.
-    func signalReliabilityByDay(from: String, to: String) async throws ->
-        (hrv: [String: HealthSignalReliability.Record], resp: [String: HealthSignalReliability.Record]) {
+    struct HealthSignalsSnapshot: Equatable {
+        let days: [DailyMetric]
+        let sourceRows: [SourcedDailyMetric]
+        let hrv: [String: HealthSignalReliability.Record]
+        let resp: [String: HealthSignalReliability.Record]
+    }
+
+    /// Values and same-source eligibility share one committed read before source coalescing.
+    func signalReliabilityByDay(from: String, to: String) async throws -> HealthSignalsSnapshot {
         let importedIds = importedReadIds
         let computedIds = computedReadIds
         let sourceIds = importedIds + computedIds + [Self.appleHealthSource]
+        let editedDays = Self.userEditedDays(sleeps)
         guard let store = await ensureStore() else { throw CancellationError() }
-        let rows = try await store.hrvProvenance(deviceIds: sourceIds, from: from, to: to)
+        let rows = try await store.hrvProvenance(deviceIds: sourceIds + [Self.activityFileSource], from: from, to: to)
         guard !Task.isCancelled, importedIds == importedReadIds, computedIds == computedReadIds else {
             throw CancellationError()
         }
+        let bySource = Dictionary(grouping: rows, by: \.deviceId)
+        var importedByDay: [String: DailyMetric] = [:]
+        var computedByDay: [String: DailyMetric] = [:]
+        for id in importedIds {
+            for row in bySource[id] ?? [] {
+                guard let metric = row.metric else { continue }
+                importedByDay[metric.day] = importedByDay[metric.day].map { Self.coalesceDay($0, metric) } ?? metric
+            }
+        }
+        for id in computedIds {
+            for row in bySource[id] ?? [] {
+                guard let metric = row.metric else { continue }
+                computedByDay[metric.day] = computedByDay[metric.day].map { Self.coalesceDay($0, metric) } ?? metric
+            }
+        }
+        let imported = importedByDay.values.sorted { $0.day < $1.day }
+        let computed = computedByDay.values.sorted { $0.day < $1.day }
+        let apple = (bySource[Self.appleHealthSource] ?? []).compactMap(\.metric)
+        let activityFile = (bySource[Self.activityFileSource] ?? []).compactMap(\.metric)
         var hrv: [String: [String: HealthSignalReliability.Record]] = [:]
         var resp: [String: [String: HealthSignalReliability.Record]] = [:]
         for row in rows {
+            guard let metric = row.metric else { continue }
             let computed = computedIds.contains(row.deviceId)
-            if let value = row.value {
+            if let value = metric.avgHrv {
                 let eligible = HealthSignalReliability.hrv(value, computed: computed,
                     freshScoringValid: row.freshScoringValid, overcount: row.overcount) != nil
-                hrv[row.day, default: [:]][row.deviceId] = HealthSignalReliability.Record(value: value, eligible: eligible)
+                hrv[metric.day, default: [:]][row.deviceId] = HealthSignalReliability.Record(value: value, eligible: eligible)
             }
-            if let value = row.respValue {
+            if let value = metric.respRateBpm {
                 let eligible = HealthSignalReliability.respiration(value, computed: computed,
                     freshScoringValid: row.respFreshScoringValid) != nil
-                resp[row.day, default: [:]][row.deviceId] = HealthSignalReliability.Record(value: value, eligible: eligible)
+                resp[metric.day, default: [:]][row.deviceId] = HealthSignalReliability.Record(value: value, eligible: eligible)
             }
         }
-        return (hrv.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) },
-                resp.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) })
+        return HealthSignalsSnapshot(
+            days: Self.mergeActivityFileSteps(
+                into: Self.mergeDaily(imported: imported, computed: computed, userEditedDays: editedDays), activityFile),
+            sourceRows: Self.sourceRows(imported: imported, computed: computed, apple: apple),
+            hrv: hrv.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) },
+            resp: resp.compactMapValues { HealthSignalReliability.firstRecord(sourceIds: sourceIds, bySource: $0) })
     }
 
     /// Source-aware rows for vital-sign cards. During previews/tests that set `days` directly,
