@@ -1,4 +1,12 @@
 import SwiftUI
+import StrandDesign
+import StrandAnalytics
+
+struct LocalNotificationRoutePayload: Hashable {
+    let context: LocalNotificationContext
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.context == rhs.context }
+    func hash(into hasher: inout Hasher) { hasher.combine(context.identity) }
+}
 
 // MARK: - TabRoute
 //
@@ -35,42 +43,101 @@ enum TabRoute: Hashable {
     case health
     case hydration
     case coupled
+    case recoveryDetail
+    case strainDetail
+    case recoveryDetailForDay(dayKey: String?)
+    case strainDetailForDay(dayKey: String?, effortOverride: Double?, windowDayKey: String? = nil)
+    case sleepDetailForDay(dayKey: String?)
+    case localBriefing
+    case localNotice(LocalNotificationRoutePayload)
+    case sleepDetail
+    case sleepPlanner
+    case healthMonitor
+    case healthspan
+    case stressMonitor
+    case weeklyPlan
+    case journal
 }
 
 extension View {
     /// Maps every `TabRoute` push to its screen. Apply once to the ROOT content of each
     /// `NavigationStack` that hosts a tab-root view (the iOS tab shell's stacks; the macOS
     /// Today detail pane and TrendsView's own macOS wrap).
-    func tabRouteDestinations() -> some View {
+    func tabRouteDestinations(onVerticalScroll: ((CGFloat, CGFloat) -> Void)? = nil) -> some View {
         navigationDestination(for: TabRoute.self) { route in
-            switch route {
-            case .fullDayChart: FullDayChartView()
-            case .metric(let key):
-                // Every caller passes a catalog key, so the fallback is theoretical; Health is the
-                // catch-all vitals surface. (Pre-#198 Trends fell back to the Explorer instead —
-                // unified here rather than carrying two never-taken branches.)
-                if let m = MetricCatalog.all.first(where: { $0.key == key }) {
-                    MetricDetailView(metric: m)
-                } else {
-                    HealthView()
+            Group {
+                switch route {
+                case .fullDayChart: FullDayChartView()
+                case .metric(let key):
+                    // Every caller passes a catalog key, so the fallback is theoretical; Health is the
+                    // catch-all vitals surface. (Pre-#198 Trends fell back to the Explorer instead —
+                    // unified here rather than carrying two never-taken branches.)
+                    if let m = MetricCatalog.all.first(where: { $0.key == key }) {
+                        MetricDetailView(metric: m)
+                    } else {
+                        HealthView()
+                    }
+                case .metricSourced(let key, let source):
+                    // Exact (key, source) resolution, order-independent. Fall back to the bare-key entry,
+                    // then Health, so a stale route can never dead-end.
+                    if let m = MetricCatalog.metric(key: key, source: source)
+                        ?? MetricCatalog.all.first(where: { $0.key == key }) {
+                        MetricDetailView(metric: m)
+                    } else {
+                        HealthView()
+                    }
+                case .metricExplorer: MetricExplorerView()
+                case .workouts: WorkoutsView()
+                case .dataSources: DataSourcesView()
+                case .stress: StressView()
+                case .sleep: SleepView()
+                case .health: HealthView()
+                case .hydration: HydrationView()
+                case .coupled: CoupledView()
+                case .recoveryDetail: RecoveryDetailView()
+                case .strainDetail: StrainDetailView()
+                case .recoveryDetailForDay(let dayKey): RecoveryDetailView(dayKey: dayKey)
+                case .strainDetailForDay(let dayKey, let effortOverride, let windowDayKey): StrainDetailView(dayKey: dayKey, effortOverride: effortOverride, windowDayKey: windowDayKey)
+                case .sleepDetailForDay(let dayKey): SleepView(initialDayKey: dayKey)
+                case .localBriefing: LocalBriefingView()
+                case .localNotice(let payload):
+                    if payload.context.route == "local_briefing" {
+                        LocalBriefingView(notificationContext: payload.context)
+                    } else {
+                        LocalRecordedNoticeView(notificationContext: payload.context)
+                    }
+                case .sleepDetail: SleepView()
+                case .sleepPlanner: SmartAlarmView()
+                case .healthMonitor: HealthMonitorView()
+                case .healthspan: HealthspanView()
+                case .stressMonitor: StressMonitorView()
+                case .weeklyPlan: WeeklyPlanView()
+                case .journal: InsightsView()
                 }
-            case .metricSourced(let key, let source):
-                // Exact (key, source) resolution, order-independent. Fall back to the bare-key entry,
-                // then Health, so a stale route can never dead-end.
-                if let m = MetricCatalog.metric(key: key, source: source)
-                    ?? MetricCatalog.all.first(where: { $0.key == key }) {
-                    MetricDetailView(metric: m)
-                } else {
-                    HealthView()
-                }
-            case .metricExplorer: MetricExplorerView()
-            case .workouts: WorkoutsView()
-            case .dataSources: DataSourcesView()
-            case .stress: StressView()
-            case .sleep: SleepView()
-            case .health: HealthView()
-            case .hydration: HydrationView()
-            case .coupled: CoupledView()
+            }
+            .tabChromeScrollObserver(onVerticalScroll)
+        }
+    }
+}
+
+@ViewBuilder
+private func heroMetricDestination(_ key: String) -> some View {
+    if let metric = MetricCatalog.all.first(where: { $0.key == key }) {
+        MetricDetailView(metric: metric)
+    } else {
+        HealthView()
+    }
+}
+
+struct TabRoutePlaceholder: View {
+    let title: LocalizedStringKey
+
+    var body: some View {
+        ScreenScaffold(title: title) {
+            NoopCard {
+                Text("Weekly planning will appear here. Journal, insights and trends are available in Plan.")
+                    .font(StrandFont.body)
+                    .foregroundStyle(StrandPalette.textSecondary)
             }
         }
     }

@@ -31,13 +31,21 @@ enum AppleDemoSeeder {
     /// launch … --demo-seed`).
     static var requested: Bool { CommandLine.arguments.contains("--demo-seed") }
 
-    /// Seed only if requested AND the store is empty. Safe to call on every launch.
+    /// Seed daily history only when empty, then add the raw demo fixture once. Safe on every launch.
     static func seedIfRequested(into store: WhoopStore) async {
         guard requested else { return }
         seedDemoDeviceIfNeeded(into: store)
+        await seedSleepPlannerPreferencesIfNeeded()
         let existing = (try? await store.dailyMetrics(deviceId: whoop, from: "0000-00-00", to: "9999-99-99")) ?? []
-        guard existing.isEmpty else { return }
-        do { try await seed(into: store) }
+        do {
+            var pristineBeforeBaseSeed = false
+            if existing.isEmpty {
+                pristineBeforeBaseSeed = try await HealthspanStressDemoSeed.hasEmptyStreams(into: store)
+                try await seed(into: store)
+            }
+            try await HealthspanStressDemoSeed.seedIfDemo(into: store,
+                                                         pristineBeforeBaseSeed: pristineBeforeBaseSeed)
+        }
         catch { NSLog("AppleDemoSeeder: seed failed — \(error)") }
     }
 
@@ -56,6 +64,24 @@ enum AppleDemoSeeder {
             sourceKind: .liveBLE, capabilities: [.hr, .hrv], status: .paired,
             addedAt: now - 86_400, lastSeenAt: now - 3_600)
         try? registry.add(polar)
+    }
+
+    private static func seedSleepPlannerPreferencesIfNeeded() async {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: "sleepPlanner.goalPercent") == nil else { return }
+        defaults.set(100, forKey: "sleepPlanner.goalPercent")
+        defaults.set(85, forKey: "sleepPlanner.goal.6")
+        defaults.set(70, forKey: "sleepPlanner.goal.7")
+        defaults.set("exact", forKey: "sleepPlanner.alarmMode")
+        defaults.set(480, forKey: "sleepPlanner.baseNeedMinutes")
+        defaults.set(75, forKey: "sleepPlanner.debtMinutes")
+        defaults.set(14, forKey: "sleepPlanner.historyNights")
+        await MainActor.run {
+            let planner = SleepPlannerSettings.shared
+            planner.goalPercent = 100
+            planner.goalOverrides = [6: 85, 7: 70]
+            planner.alarmMode = "exact"
+        }
     }
 
     private static func seed(into store: WhoopStore) async throws {
@@ -223,12 +249,49 @@ enum AppleDemoSeeder {
         }
 
         _ = try await store.upsertDailyMetrics(daily, deviceId: whoop)
+        try await seedHealthMonitor(into: store, days: daily)
+        sleeps.append(contentsOf: sleepDetailExamples(calendar: cal))
         _ = try await store.upsertSleepSessions(sleeps, deviceId: whoop)
         _ = try await store.upsertMetricSeries(series, deviceId: whoop)
         _ = try await store.upsertAppleDaily(appleRows, deviceId: apple)
         if !workouts.isEmpty { _ = try await store.upsertWorkouts(workouts, deviceId: whoop) }
         if !journal.isEmpty { _ = try await store.upsertJournal(journal, deviceId: whoop) }
+        try await RecoveryStrainDemoSeed.seed(into: store, deviceId: whoop)
+        try await seedPlanJournal(into: store)
+        seedWeeklyPlanDemo(today: Repository.localDayKey(Date()))
         NSLog("AppleDemoSeeder: seeded \(daily.count) days, \(workouts.count) workouts.")
+    }
+
+    /// Kotlin twin: `DemoSeeder.seedHealthMonitor`.
+    private static func seedHealthMonitor(into store: WhoopStore, days: [DailyMetric]) async throws {
+        let points = days.flatMap { day in
+            [MetricPoint(day: day.day, key: "hrv_fresh_scoring_valid", value: day.avgHrv?.isFinite == true ? 1 : 0),
+             MetricPoint(day: day.day, key: "resp_fresh_scoring_valid", value: day.respRateBpm?.isFinite == true ? 1 : 0),
+             MetricPoint(day: day.day, key: "hrv_rr_overcount", value: 0)]
+        }
+        _ = try await store.upsertMetricSeries(points, deviceId: whoop + "-noop")
+    }
+
+    private static func seedPlanJournal(into store: WhoopStore) async throws {
+        let today = Repository.localDayKey(Date())
+        var rows: [JournalEntry] = []
+        for offset in 1...90 {
+            guard let day = WeeklyPlanCalendar.adding(days: -offset, to: today) else { continue }
+            rows.append(JournalEntry(day: day, question: "Did you read before bed?", answeredYes: offset % 3 != 0, notes: nil))
+            rows.append(JournalEntry(day: day, question: "Did you drink any alcohol?", answeredYes: offset % 4 == 0, notes: nil))
+            rows.append(JournalEntry(day: day, question: "How much caffeine did you consume?", answeredYes: true, notes: nil, numericValue: Double(50 + offset % 4 * 50)))
+        }
+        _ = try await store.upsertJournal(rows, deviceId: Repository.journalDeviceId)
+    }
+
+    private static func sleepDetailExamples(calendar: Calendar) -> [CachedSleepSession] {
+        let today = calendar.startOfDay(for: Date())
+        guard let day = calendar.date(byAdding: .day, value: -1, to: today),
+              let onset = calendar.date(bySettingHour: 14, minute: 15, second: 0, of: day) else { return [] }
+        let start = Int(onset.timeIntervalSince1970)
+        return [CachedSleepSession(startTs: start, endTs: start + 30 * 60, efficiency: 100,
+                                   restingHr: nil, avgHrv: nil,
+                                   stagesJSON: segmentsJSON(onset: start, deep: 0, rem: 0, light: 30, awakeMin: 0))]
     }
 
     // MARK: - helpers

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
@@ -43,6 +42,9 @@ import com.noop.R
 import com.noop.ble.WhoopModel
 import com.noop.data.DemoSeeder
 import com.noop.data.WhoopRepository
+import com.noop.notif.LOCAL_NOTIFICATION_ROUTE
+import com.noop.notif.LocalNotificationContext
+import com.noop.notif.localNotificationContext
 import com.noop.push.SelfHostedPushScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -57,6 +59,21 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * dark-only, so we draw edge-to-edge over the near-black [Palette.surfaceBase].
  */
 class MainActivity : ComponentActivity() {
+    private var pendingLocalNotificationRoute by mutableStateOf<String?>(null)
+    private var pendingLocalNotificationContext by mutableStateOf<LocalNotificationContext?>(null)
+
+    private fun stageLocalNotification(intent: Intent?) {
+        if (intent == null) return
+        val typed = if (intent.hasExtra("localNotificationEvent")) localNotificationContext(intent) else null
+        pendingLocalNotificationContext = typed
+        pendingLocalNotificationRoute = if (typed == null) intent.getStringExtra(LOCAL_NOTIFICATION_ROUTE) else null
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        stageLocalNotification(intent)
+    }
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguagePrefs.wrap(newBase))
@@ -70,6 +87,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        stageLocalNotification(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         // NOTE: `crash` stays RAW here on purpose. acknowledge() fingerprints what it is given, and
         // pendingCrash() fingerprints the stored file — hand it redacted text and the two hashes never
@@ -78,6 +96,7 @@ class MainActivity : ComponentActivity() {
         CrashCapture.pendingCrash(this)?.let { crash ->
             setContent {
                 NoopTheme {
+                    DebugExportReviewHost()
                     CrashRecoveryScreen(
                         crash = crash,
                         onContinue = {
@@ -96,7 +115,7 @@ class MainActivity : ComponentActivity() {
         // out of the box (no strap, no import). No-op once seeded; never runs on the full app.
         if (BuildConfig.ENABLE_DEMO) {
             lifecycleScope.launch(Dispatchers.IO) {
-                runCatching { DemoSeeder.seedIfEmpty(WhoopRepository.from(applicationContext)) }
+                runCatching { DemoSeeder.seedIfEmpty(WhoopRepository.from(applicationContext), applicationContext) }
                 // Also seed a 2nd PAIRED device (Polar H10) so the Devices screen shows WHOOP (Active)
                 // + a paired strap out of the box. No-op once seeded / if a real pairing exists.
                 runCatching {
@@ -153,13 +172,32 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             NoopTheme {
-                NoopRoot()
+                NoopRoot(
+                    localNotificationRoute = pendingLocalNotificationRoute,
+                    notificationContext = pendingLocalNotificationContext,
+                    onNotificationContextConsumed = { context ->
+                        if (pendingLocalNotificationContext == context) {
+                            pendingLocalNotificationContext = null
+                            context.wireFields.keys.forEach { intent.removeExtra(it) }
+                        }
+                    },
+                    onLocalNotificationRouteConsumed = { route ->
+                        if (pendingLocalNotificationRoute == route) {
+                            pendingLocalNotificationRoute = null
+                            intent.removeExtra(LOCAL_NOTIFICATION_ROUTE)
+                        }
+                    },
+                )
             }
         }
     }
 
     /** Request the BLE permissions appropriate to the running OS version. */
-    private fun requestBlePermissions() {
+    internal fun requestBlePermissions(
+        runtimePolicy: com.noop.DemoRuntimePolicy = com.noop.DemoRuntimePolicy.current,
+        launch: (Array<String>) -> Unit = { permissionLauncher.launch(it) },
+    ) {
+        if (!runtimePolicy.allowsBluetooth) return
         val needed = buildList {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 // Android 12+: granular Bluetooth permissions.
@@ -174,20 +212,21 @@ class MainActivity : ComponentActivity() {
             }
         }.toTypedArray()
 
-        if (needed.isNotEmpty()) permissionLauncher.launch(needed)
+        if (needed.isNotEmpty()) launch(needed)
     }
 }
 
 @Composable
 private fun CrashRecoveryScreen(crash: String, onContinue: () -> Unit) {
     val clipboard = LocalClipboardManager.current
-    // Masked for the two paths that leave the device — the visible trace and the clipboard. The stored
-    // file stays verbatim for anything that needs it, and the acknowledgement fingerprint is taken on
-    // the raw text by the caller. redactStrapLogPii is the same sink the strap log and the test bundle
-    // use (BLE MACs and WHOOP serials) and is documented as total, so it cannot throw here. A BLE
-    // exception carrying a device address is exactly its shape, and this screen's copy button exists
-    // to paste into public bug reports.
-    val shown = remember(crash) { com.noop.ble.redactStrapLogPii(crash) }
+    val copyScope = androidx.compose.runtime.rememberCoroutineScope()
+    // Acknowledgement keeps the caller's raw fingerprint; display and copy use the bounded debug policy.
+    val shown by androidx.compose.runtime.produceState(initialValue = "", key1 = crash) {
+        value = kotlinx.coroutines.withContext(Dispatchers.IO) {
+            String(DebugExportReview.prepare(listOf("report.txt" to crash.toByteArray(Charsets.UTF_8)))
+                .single().second, Charsets.UTF_8)
+        }
+    }
     Surface(Modifier.fillMaxSize(), color = Palette.surfaceBase) {
         Column(
             Modifier.padding(horizontal = 20.dp, vertical = 32.dp).verticalScroll(rememberScrollState()),
@@ -195,16 +234,32 @@ private fun CrashRecoveryScreen(crash: String, onContinue: () -> Unit) {
         ) {
             Text(stringResource(R.string.crash_recovery_title), style = NoopType.title1, color = Palette.textPrimary)
             Text(stringResource(R.string.crash_recovery_body), style = NoopType.body, color = Palette.textSecondary)
-            Button(onClick = { clipboard.setText(AnnotatedString(shown)) }) {
+            Button(onClick = {
+                copyScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    DebugExportReview.shared.stageCopy(crash) { clipboard.setText(AnnotatedString(it)) }
+                }
+            }) {
                 Text(stringResource(R.string.crash_recovery_copy))
             }
             Button(onClick = onContinue) {
                 Text(stringResource(R.string.crash_recovery_continue))
             }
-            SelectionContainer {
-                Text(shown, style = NoopType.caption, color = Palette.textSecondary)
-            }
+            Text(shown, style = NoopType.caption, color = Palette.textSecondary)
         }
+    }
+}
+
+@Composable
+private fun DebugExportReviewHost() {
+    val reviewScope = androidx.compose.runtime.rememberCoroutineScope()
+    DebugExportReview.shared.pending?.let { pending ->
+        ReportReviewDialog(
+            previewText = pending.gate.previewText,
+            modeInactive = false,
+            onCancel = { DebugExportReview.shared.cancel() },
+            onShare = { reviewScope.launch { DebugExportReview.shared.confirm(pending.id) } },
+            isCopy = pending.isCopy,
+        )
     }
 }
 
@@ -959,12 +1014,11 @@ object NoopPrefs {
         of(context).edit().putBoolean(KEY_ZONE_COACH_RECOVERY, enabled).apply()
     }
 
-    /** Illness early-warning (banner + notification). Default ON, the watch has always run on
-     *  Android, so this is an opt-OUT; macOS is opt-in (behavior.illnessWatch, default off). */
+    /** Illness early-warning (banner + notification). Opt-in and default OFF on both platforms. */
     const val KEY_ILLNESS_WATCH = "noop.illnessWatch"
 
     fun illnessWatch(context: Context): Boolean =
-        of(context).getBoolean(KEY_ILLNESS_WATCH, true)
+        of(context).getBoolean(KEY_ILLNESS_WATCH, false)
 
     fun setIllnessWatch(context: Context, enabled: Boolean) {
         of(context).edit().putBoolean(KEY_ILLNESS_WATCH, enabled).apply()
@@ -1578,7 +1632,12 @@ object NoopPrefs {
  * state on each transition.
  */
 @Composable
-fun NoopRoot() {
+fun NoopRoot(
+    localNotificationRoute: String? = null,
+    onLocalNotificationRouteConsumed: (String) -> Unit = {},
+    notificationContext: LocalNotificationContext? = null,
+    onNotificationContextConsumed: (LocalNotificationContext) -> Unit = {},
+) {
     val context = LocalContext.current
     val prefs = remember { NoopPrefs.of(context) }
     val appViewModel: AppViewModel = viewModel()
@@ -1665,7 +1724,15 @@ fun NoopRoot() {
 
     // Existing, onboarded user: render the app, and if they've updated since last launch
     // (stored version behind current), show "What's New" once over the top.
-    AppRoot(viewModel = appViewModel)
+    AppRoot(
+        viewModel = appViewModel,
+        localNotificationRoute = localNotificationRoute,
+        onLocalNotificationRouteConsumed = onLocalNotificationRouteConsumed,
+        notificationContext = notificationContext,
+        onNotificationContextConsumed = onNotificationContextConsumed,
+    )
+
+    DebugExportReviewHost()
 
     if (lastSeenChangelog != AppChangelog.CURRENT_VERSION) {
         Dialog(

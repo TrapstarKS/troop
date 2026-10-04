@@ -213,7 +213,7 @@ internal fun mergeStepsReadings(
 
 /** #616: per-day precedence merge for a metric with disjoint stores (first non-null per day wins),
  *  ascending. The N-store generalisation of [mergeStepsReadings]; calories reuse it as the two-store
- *  on-device (`activeKcalEst`) ?: imported (Apple/Health-Connect `activeKcal`) union. Pure for testability. */
+ *  on-device (`activeEnergyKcalEst`) ?: imported (Apple/Health-Connect `activeKcal`) union. Pure for testability. */
 internal fun mergeReadings(vararg stores: Map<String, VitalReading>): List<VitalReading> =
     stores.flatMap { it.keys }.toSortedSet()
         .mapNotNull { day -> stores.firstNotNullOfOrNull { it[day] } }

@@ -1,6 +1,17 @@
 import Foundation
 import GRDB
 
+/// One physical source's stored HRV, respiration and same-source fresh-scan evidence from one read snapshot.
+public struct HrvProvenanceRow: Equatable, Sendable {
+    public let deviceId: String
+    public let day: String
+    public let value: Double?
+    public let freshScoringValid: Double?
+    public let overcount: Double?
+    public let respValue: Double?
+    public let respFreshScoringValid: Double?
+}
+
 // MARK: - v9 cache: generic long-format metric store
 // The substrate for a metric explorer. Where MetricsCache / JournalWorkoutAppleCache use a
 // WIDE column-per-metric layout (one table per source, typed nullable columns), this is the
@@ -17,6 +28,16 @@ public struct MetricPoint: Equatable, Codable, Sendable {
     public let value: Double
     public init(day: String, key: String, value: Double) {
         self.day = day; self.key = key; self.value = value
+    }
+}
+
+/// A source/day HRV value and its freshness marker read together. Kotlin twin: `ChargeHrvProof`.
+public struct ChargeHrvProof: Equatable, Sendable {
+    public let day: String
+    public let value: Double
+    public let freshScoringValid: Double?
+    public init(day: String, value: Double, freshScoringValid: Double?) {
+        self.day = day; self.value = value; self.freshScoringValid = freshScoringValid
     }
 }
 
@@ -51,6 +72,50 @@ extension WhoopStore {
     }
 
     // MARK: - Reads
+
+    /// Joins before source coalescing so markers cannot validate another strap's HRV or respiration.
+    /// Kotlin twin: `WhoopDao.hrvProvenanceFlow`.
+    public func hrvProvenance(deviceIds: [String], from: String, to: String) async throws -> [HrvProvenanceRow] {
+        guard !deviceIds.isEmpty else { return [] }
+        return try syncRead { db in
+            let placeholders = Array(repeating: "?", count: deviceIds.count).joined(separator: ",")
+            return try Row.fetchAll(db, sql: """
+                SELECT d.deviceId, d.day, d.avgHrv AS value,
+                       fresh.value AS freshScoringValid, overcount.value AS overcount,
+                       d.respRateBpm AS respValue, respFresh.value AS respFreshScoringValid
+                FROM dailyMetric d
+                LEFT JOIN metricSeries fresh ON fresh.deviceId = d.deviceId AND fresh.day = d.day
+                    AND fresh.key = 'hrv_fresh_scoring_valid'
+                LEFT JOIN metricSeries overcount ON overcount.deviceId = d.deviceId AND overcount.day = d.day
+                    AND overcount.key = 'hrv_rr_overcount'
+                LEFT JOIN metricSeries respFresh ON respFresh.deviceId = d.deviceId AND respFresh.day = d.day
+                    AND respFresh.key = 'resp_fresh_scoring_valid'
+                WHERE d.deviceId IN (\(placeholders)) AND d.day >= ? AND d.day <= ? AND (d.avgHrv IS NOT NULL OR d.respRateBpm IS NOT NULL)
+                ORDER BY d.day, d.deviceId
+                """, arguments: StatementArguments(deviceIds + [from, to])).map {
+                    HrvProvenanceRow(deviceId: $0["deviceId"], day: $0["day"], value: $0["value"],
+                                     freshScoringValid: $0["freshScoringValid"], overcount: $0["overcount"],
+                                     respValue: $0["respValue"], respFreshScoringValid: $0["respFreshScoringValid"])
+                }
+        }
+    }
+
+    /// Join before source coalescing; a marker cannot describe a different source or scoring snapshot.
+    /// Kotlin twin: `WhoopDao.chargeHrvProof` and its reactive flow.
+    public func chargeHrvProof(deviceId: String, from: String, to: String) async throws -> [ChargeHrvProof] {
+        try syncRead { db in
+            try Row.fetchAll(db, sql: """
+                SELECT d.day, d.avgHrv AS value, fresh.value AS freshScoringValid
+                FROM dailyMetric d
+                LEFT JOIN metricSeries fresh ON fresh.deviceId = d.deviceId AND fresh.day = d.day
+                    AND fresh.key = 'hrv_fresh_scoring_valid'
+                WHERE d.deviceId = ? AND d.day >= ? AND d.day <= ? AND d.avgHrv IS NOT NULL
+                ORDER BY d.day
+                """, arguments: [deviceId, from, to]).map {
+                    ChargeHrvProof(day: $0["day"], value: $0["value"], freshScoringValid: $0["freshScoringValid"])
+                }
+        }
+    }
 
     /// Points for a single `key` on days in [from, to] (lexicographic YYYY-MM-DD compare),
     /// oldest day first. Served index-only by idx_metricSeries_device_key_day.

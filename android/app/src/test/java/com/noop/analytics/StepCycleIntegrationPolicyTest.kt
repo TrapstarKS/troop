@@ -29,6 +29,7 @@ class StepCycleIntegrationPolicyTest {
             cycleStepsByWakeDay = mapOf(day to 42),
             cycleStrainByWakeDay = mapOf(day to 61.0),
             cycleCaloriesByWakeDay = mapOf(day to 1840.0),
+            cycleActiveCaloriesByWakeDay = mapOf(day to 420.0),
             cycleWorkoutCountByWakeDay = mapOf(day to 2),
             boundaryOnsetByWakeDay = emptyMap(), firstCycleWakeDay = day,
             recoveredOwnerMarkerRows = emptyList(),
@@ -43,7 +44,24 @@ class StepCycleIntegrationPolicyTest {
         assertEquals(42, updated.steps)
         assertEquals(61.0, updated.strain)
         assertEquals(1840.0, updated.activeKcalEst)
+        assertEquals(420.0, updated.activeEnergyKcalEst)
         assertEquals(2, updated.exerciseCount)
+    }
+
+    @Test fun cycleWithoutHrDoesNotBorrowCalendarActiveEnergy() {
+        val daily = DailyMetric(deviceId = "my-whoop-noop", day = "2026-09-04", recovery = 72.0,
+            activeKcalEst = 2345.0, activeEnergyKcalEst = 456.0)
+        val before = PhysiologicalStepCycleEngine.Result(
+            cycleStepsByWakeDay = emptyMap(), cycleStrainByWakeDay = emptyMap(),
+            cycleCaloriesByWakeDay = emptyMap(), cycleWorkoutCountByWakeDay = emptyMap(),
+            boundaryOnsetByWakeDay = emptyMap(), firstCycleWakeDay = null,
+            recoveredOwnerMarkerRows = emptyList(),
+        )
+        assertEquals(456.0, DayCycleIntelligenceIntegration.apply(daily, before, daily.deviceId, mutableListOf()).activeEnergyKcalEst)
+        val updated = DayCycleIntelligenceIntegration.apply(daily, before.copy(firstCycleWakeDay = daily.day), daily.deviceId, mutableListOf())
+        assertNull(updated.activeEnergyKcalEst)
+        assertNull(updated.activeKcalEst)
+        assertEquals(72.0, updated.recovery)
     }
 
     @Test fun warmUnchangedCycleDoesNotReadStepRowsAgain() {

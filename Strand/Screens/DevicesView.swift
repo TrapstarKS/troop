@@ -506,7 +506,7 @@ private struct DevicesContent: View {
         if let v = d.skinTempDevC { out[.skinTemp] = v }
         if let v = d.steps { out[.steps] = Double(v) }
         if let v = d.totalSleepMin { out[.sleep] = v }
-        if let v = d.activeKcalEst { out[.calories] = v }
+        if let v = d.activeEnergyKcalEst { out[.calories] = v }
         return out
     }
 
@@ -1325,7 +1325,7 @@ private struct ExtendedBatteryProbeResultView: View {
                     Text(text)
                         .font(StrandFont.mono)
                         .foregroundStyle(StrandPalette.textSecondary)
-                        .textSelection(.enabled)
+                        .textSelection(.disabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 #if os(iOS)
@@ -1334,7 +1334,7 @@ private struct ExtendedBatteryProbeResultView: View {
             }
             HStack {
                 if !waiting {
-                    Button("Copy") { PlatformPasteboard.copy(text) }
+                    Button("Copy") { FileExport.copyDebugText(text) }
                 }
                 Spacer()
                 Button("Close") { onClose() }
@@ -1430,7 +1430,7 @@ private struct BodyLocationProbeResultView: View {
                     Text(text)
                         .font(StrandFont.mono)
                         .foregroundStyle(StrandPalette.textSecondary)
-                        .textSelection(.enabled)
+                        .textSelection(.disabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 #if os(iOS)
@@ -1439,7 +1439,7 @@ private struct BodyLocationProbeResultView: View {
             }
             HStack {
                 if !waiting {
-                    Button("Copy") { PlatformPasteboard.copy(text) }
+                    Button("Copy") { FileExport.copyDebugText(text) }
                 }
                 Spacer()
                 Button("Close") { onClose() }
@@ -1529,7 +1529,7 @@ private struct EcgProbeSheets: ViewModifier {
 }
 
 /// The #761 enumeration report (the strap's own flag-name list + the exchange trace), or a "waiting…"
-/// state while the walk runs. Selectable text + a Copy button, structurally identical to the #592/#690
+/// state while the walk runs. Copy requires export review, structurally identical to the #592/#690
 /// result views. Twin of the Android feature-flag probe result dialog.
 private struct FeatureFlagProbeResultView: View {
     let text: String
@@ -1552,7 +1552,7 @@ private struct FeatureFlagProbeResultView: View {
                     Text(text)
                         .font(StrandFont.mono)
                         .foregroundStyle(StrandPalette.textSecondary)
-                        .textSelection(.enabled)
+                        .textSelection(.disabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 #if os(iOS)
@@ -1561,7 +1561,7 @@ private struct FeatureFlagProbeResultView: View {
             }
             HStack {
                 if !waiting {
-                    Button("Copy") { PlatformPasteboard.copy(text) }
+                    Button("Copy") { FileExport.copyDebugText(text) }
                 }
                 Spacer()
                 Button("Close") { onClose() }
@@ -1608,7 +1608,7 @@ private struct EcgWristSheet: View {
 }
 
 /// The MG ECG probe's report (verdict + per-command outcomes + candidate packet lines), or a "waiting…"
-/// state while the listen window is open. Read-only, selectable, copyable — structurally identical to
+/// state while the listen window is open. Read-only, with reviewed copying — structurally identical to
 /// `BodyLocationProbeResultView`, with the non-medical framing pinned above the text so it is read first.
 private struct EcgProbeResultView: View {
     let text: String
@@ -1633,7 +1633,7 @@ private struct EcgProbeResultView: View {
                     Text(text)
                         .font(StrandFont.mono)
                         .foregroundStyle(StrandPalette.textSecondary)
-                        .textSelection(.enabled)
+                        .textSelection(.disabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 #if os(iOS)
@@ -1642,7 +1642,7 @@ private struct EcgProbeResultView: View {
             }
             HStack {
                 if !waiting {
-                    Button("Copy") { PlatformPasteboard.copy(text) }
+                    Button("Copy") { FileExport.copyDebugText(text) }
                 }
                 Spacer()
                 Button("Close") { onClose() }
@@ -1707,7 +1707,7 @@ private struct DeviceConfigProbeResultView: View {
                     Text(text)
                         .font(StrandFont.mono)
                         .foregroundStyle(StrandPalette.textSecondary)
-                        .textSelection(.enabled)
+                        .textSelection(.disabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 #if os(iOS)
@@ -1716,7 +1716,7 @@ private struct DeviceConfigProbeResultView: View {
             }
             HStack {
                 if !waiting {
-                    Button("Copy") { PlatformPasteboard.copy(text) }
+                    Button("Copy") { FileExport.copyDebugText(text) }
                 }
                 Spacer()
                 Button("Close") { onClose() }

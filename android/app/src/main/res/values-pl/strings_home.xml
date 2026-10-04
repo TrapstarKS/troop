@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_previous_day">Poprzedni dzień</string>
+    <string name="home_next_day">Następny dzień</string>
+    <string name="home_profile">Otwórz profil</string>
+    <string name="home_device_connected">Urządzenie połączone</string>
+    <string name="home_device_disconnected">Urządzenie rozłączone</string>
+    <string name="home_sleep">Sen</string>
+    <string name="home_recovery">Regeneracja</string>
+    <string name="home_strain">Wysiłek</string>
+    <string name="home_status_disconnected">Rozłączono</string>
+    <string name="home_status_scanning">Szukanie urządzenia</string>
+    <string name="home_status_backfill">Synchronizowanie historii</string>
+    <string name="home_status_capture">Rejestracja na żywo</string>
+    <string name="home_status_connected_no_data">Połączono · brak danych</string>
+    <string name="home_status_idle">Połączono · bezczynne</string>
+    <string name="home_health_monitor">Monitor zdrowia</string>
+    <string name="home_stress_monitor">Monitor stresu</string>
+    <string name="home_metrics_available">Dostępne pomiary</string>
+    <string name="home_stress_unavailable">Brak odczytu dla tego dnia</string>
+    <string name="home_stress_local">Lokalne oszacowanie dzienne</string>
+    <string name="home_my_day">Mój dzień</string>
+    <string name="home_add_activity">Dodaj aktywność</string>
+    <string name="home_sleep_duration">%1$dg %2$dmin</string>
+    <string name="home_no_sleep_yet">Nie zarejestrowano jeszcze snu</string>
+    <string name="home_activity_time">%1$s – %2$s</string>
+    <string name="home_no_activities">Brak aktywności zarejestrowanych dla tego dnia</string>
+    <string name="home_my_plan">Mój plan</string>
+    <string name="home_weekly_plan">Plan tygodniowy</string>
+    <string name="home_plan_summary">Zobacz lokalne cele, nawyki i postępy.</string>
+    <string name="home_my_dashboard">Mój panel</string>
+    <string name="home_save">Zapisz</string>
+    <string name="home_sleep_pending_sync">Wynik snu czeka na synchronizację</string>
+    <string name="home_daily_guidance">Codzienne wskazówki</string>
+    <string name="home_avatar" translatable="false">N</string>
+    <string name="home_no_value" translatable="false">—</string>
+    <string name="home_metrics_count" translatable="false">%1$d/5</string>
+    <string name="home_dial_label" translatable="false">%1$s ›</string>
+    <string name="home_status_capture_experimental">Rejestracja na żywo · historia eksperymentalna</string>
+    <string name="home_dashboard_edit_description">Wybierz kafelki dla Mojego panelu. Przeciągnij je, aby zmienić kolejność, lub użyj strzałek.</string>
+</resources>

@@ -11,6 +11,27 @@ public enum NoopMetrics {
     public static let gap: CGFloat = NoopVisualStyle.itemGap
     public static let sectionGap: CGFloat = NoopVisualStyle.sectionGap
     public static let screenPadding: CGFloat = NoopVisualStyle.pagePadding
+    public static let pageInset: CGFloat = NoopVisualStyle.pagePadding
+    public static let touchTarget: CGFloat = 44
+    public static let iconSize: CGFloat = 20
+    public static let tabHeight: CGFloat = 60
+    public static let coachDiameter: CGFloat = 58
+    public static let scoreDialDiameter: CGFloat = 260
+    public static let fullScoreDialWidthFraction: CGFloat = 0.662
+    public static let compactScoreDialDiameter: CGFloat = 90
+    public static let compactScoreDialWidthFraction: CGFloat = 0.232
+    public static let scoreDialStroke: CGFloat = 15
+    public static let compactScoreDialStroke: CGFloat = 5
+    public static let scoreDisplaySize: CGFloat = 68
+    public static let compactScoreDisplaySize: CGFloat = 25
+    public static let metricValueSize: CGFloat = 24
+    public static let coachStroke: CGFloat = 2
+    public static let scoreTargetWidth: CGFloat = 2
+    public static let tabIconSize: CGFloat = 22
+    public static let tabLabelSize: CGFloat = 10
+    public static let tabLabelMinimumScale: CGFloat = 0.55
+    public static let chartLineWidth: CGFloat = 2
+    public static let chartBarRadius: CGFloat = 3
     public static let tileHeight: CGFloat = 96   // Design Reset: tighter metric tile
     // Key Metrics grid: one fixed height every tile snaps to, so a sparkline-and-caption tile and a
     // plain value tile read the same. maxHeight: .infinity can't equalise them inside a LazyVGrid (the
@@ -597,19 +618,19 @@ public extension View {
 // CTAs. Drop in via `.buttonStyle(.noopPrimary)` etc. on any `Button`. All read off
 // the new gold tokens so they match Apple ⇄ Android. Pressed = subtle dim + scale.
 
-/// Primary call-to-action: gold-gradient fill, dark gold-deep ink (700), rounded 13.
+/// Primary call-to-action: white fill with dark text.
 public struct NoopPrimaryButtonStyle: ButtonStyle {
     public init() {}
     public func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
         return configuration.label
             .font(StrandFont.body.weight(.bold))
-            .foregroundStyle(StrandPalette.goldDeepText)
+            .foregroundStyle(StrandPalette.onPrimaryAction)
             .padding(.vertical, 11).padding(.horizontal, 18)
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .fill(LinearGradient(gradient: StrandPalette.goldGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .fill(StrandPalette.primaryAction)
             )
             // A crisp, subtle NEUTRAL elevation — the gold cast-glow read as too much against the
             // clean design, so it's a soft dark lift now, no bloom.

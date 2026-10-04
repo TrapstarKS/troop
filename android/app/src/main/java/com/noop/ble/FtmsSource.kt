@@ -1,5 +1,7 @@
 package com.noop.ble
 
+import com.noop.DemoRuntimePolicy
+
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -56,6 +58,7 @@ class FtmsSource(
     /** Diagnostic sink for the connect lifecycle — the SAME exportable strap log (issue #421). Every line
      *  is prefixed "FTMS: " so it's distinguishable in the shared log. Default no-op keeps tests silent. */
     private val log: (String) -> Unit = {},
+    private val runtimePolicy: DemoRuntimePolicy = DemoRuntimePolicy.current,
 ) : LiveHrSource {
 
     /** An FTMS machine seen during a scan (UI affordance). */
@@ -79,8 +82,9 @@ class FtmsSource(
     // MARK: - Android Bluetooth handles (OWN scanner + GATT, separate from WHOOP)
 
     private val appContext = context.applicationContext
-    private val bluetoothManager: BluetoothManager? =
+    private val bluetoothManager: BluetoothManager? = runtimePolicy.createBluetooth {
         appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    }
     private val adapter: BluetoothAdapter? = bluetoothManager?.adapter
     private val scanner: BluetoothLeScanner? get() = adapter?.bluetoothLeScanner
 
@@ -97,6 +101,7 @@ class FtmsSource(
 
     /** Begin scanning for FTMS machines advertising the 0x1826 service. */
     override fun scan() {
+        if (!runtimePolicy.allowsBluetooth) return
         seen.clear()
         _discovered.value = emptyList()
         _scanning.value = true
@@ -126,6 +131,7 @@ class FtmsSource(
 
     /** Connect to the chosen machine (by address) and start streaming its machine data. */
     override fun connect(address: String) {
+        if (!runtimePolicy.allowsBluetooth) return
         stopScan()
         val device = seen[address] ?: runCatching { adapter?.getRemoteDevice(address) }.getOrNull()
         if (device == null) { pendingConnectAddress = address; return }

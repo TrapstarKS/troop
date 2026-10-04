@@ -5,6 +5,12 @@ import Foundation
 /// the parsing/clamping logic is covered by `swift test` — HealthKit itself can't be unit-tested.
 public enum HealthWriteback {
 
+    /// Fingerprint HealthKit's requested sets, keeping read and share roles distinct.
+    public static func authorizationTypeSignature(read: [String], write: [String]) -> String {
+        Set(read.map { "read:" + $0 }).union(write.map { "write:" + $0 })
+            .sorted().joined(separator: ",")
+    }
+
     /// A HealthKit-agnostic sleep stage. The bridge maps these onto `HKCategoryValueSleepAnalysis`
     /// (`awake → .awake`, `light → .asleepCore`, `deep → .asleepDeep`, `rem → .asleepREM`,
     /// `unspecified → .asleepUnspecified` — the honest block for a fragment whose `stagesJSON`

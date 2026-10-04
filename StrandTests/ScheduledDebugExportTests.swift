@@ -61,4 +61,22 @@ final class ScheduledDebugExportTests: XCTestCase {
         XCTAssertTrue(ScheduledDebugExport.backgroundTaskShouldResubmit(enabled: true))
         XCTAssertFalse(ScheduledDebugExport.backgroundTaskShouldResubmit(enabled: false))
     }
+
+    func testCaptureWriteFailureDoesNotMarkScheduledDayComplete() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let capture = directory.appendingPathComponent("source.jsonl")
+        try Data("{\"console\":\"WHOOP 4C1594026\"}\n".utf8).write(to: capture)
+        let now = Date(timeIntervalSince1970: 1_781_500_320)
+        let blocked = directory.appendingPathComponent("noop-raw-capture-\(FileExport.timestamp(now)).json")
+        try FileManager.default.createDirectory(at: blocked, withIntermediateDirectories: true)
+        let key = "debugExport.lastRunDayKey"
+        let old = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(old, forKey: key) }
+        UserDefaults.standard.set("previous-day", forKey: key)
+        XCTAssertNil(ScheduledDebugExport.performExport(markDay: true, captureURL: capture, directory: directory, now: now))
+        XCTAssertEqual(UserDefaults.standard.string(forKey: key), "previous-day")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: capture.path))
+    }
 }

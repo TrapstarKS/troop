@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_previous_day">Jour précédent</string>
+    <string name="home_next_day">Jour suivant</string>
+    <string name="home_profile">Ouvrir le profil</string>
+    <string name="home_device_connected">Appareil connecté</string>
+    <string name="home_device_disconnected">Appareil déconnecté</string>
+    <string name="home_sleep">Sommeil</string>
+    <string name="home_recovery">Récupération</string>
+    <string name="home_strain">Effort</string>
+    <string name="home_status_disconnected">Déconnecté</string>
+    <string name="home_status_scanning">Recherche de l’appareil</string>
+    <string name="home_status_backfill">Synchronisation de l’historique</string>
+    <string name="home_status_capture">Enregistrement en direct</string>
+    <string name="home_status_connected_no_data">Connecté · pas encore de données</string>
+    <string name="home_status_idle">Connecté · inactif</string>
+    <string name="home_health_monitor">Moniteur de santé</string>
+    <string name="home_stress_monitor">Moniteur de stress</string>
+    <string name="home_metrics_available">Mesures disponibles</string>
+    <string name="home_stress_unavailable">Aucune mesure pour ce jour</string>
+    <string name="home_stress_local">Estimation quotidienne locale</string>
+    <string name="home_my_day">Ma journée</string>
+    <string name="home_add_activity">Ajouter une activité</string>
+    <string name="home_sleep_duration">%1$dh %2$dmin</string>
+    <string name="home_no_sleep_yet">Aucun sommeil enregistré pour le moment</string>
+    <string name="home_activity_time">%1$s – %2$s</string>
+    <string name="home_no_activities">Aucune activité enregistrée pour ce jour</string>
+    <string name="home_my_plan">Mon plan</string>
+    <string name="home_weekly_plan">Plan hebdomadaire</string>
+    <string name="home_plan_summary">Consultez les objectifs, habitudes et progrès locaux.</string>
+    <string name="home_my_dashboard">Mon tableau de bord</string>
+    <string name="home_save">Enregistrer</string>
+    <string name="home_sleep_pending_sync">Score de sommeil en attente de synchronisation</string>
+    <string name="home_daily_guidance">Conseils du jour</string>
+    <string name="home_avatar" translatable="false">N</string>
+    <string name="home_no_value" translatable="false">—</string>
+    <string name="home_metrics_count" translatable="false">%1$d/5</string>
+    <string name="home_dial_label" translatable="false">%1$s ›</string>
+    <string name="home_status_capture_experimental">Enregistrement en direct · historique expérimental</string>
+    <string name="home_dashboard_edit_description">Choisissez les éléments de Mon tableau de bord. Faites-les glisser ou utilisez les flèches pour les réordonner.</string>
+</resources>

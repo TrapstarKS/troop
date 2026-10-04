@@ -12,8 +12,8 @@ import java.io.File
  * Today before opening the destination, which makes Android Back skip More entirely.
  *
  * This source audit is deliberately paired with the existing navigation wiring: it proves every generated
- * [MoreRow] still flows through the shared push callback while the actual bottom bar retains the separate
- * top-level state-save/restore policy. It follows the source-locating pattern used by
+ * [MoreHubRow] still flows through the shared push callback while the actual bottom bar retains the separate
+ * top-level navigation and root-reselection policy. It follows the source-locating pattern used by
  * [ResolvedSeriesCallSiteAuditTest].
  */
 class MoreNavigationContractTest {
@@ -36,19 +36,32 @@ class MoreNavigationContractTest {
 
         assertTrue(
             "More destinations must be pushed so Back returns to More",
-            source.contains("MoreScreen(onNavigate = { nav.navigate(it) })"),
+            source.contains("MoreHubScreen(viewModel, onNavigate = { nav.navigate(it) },"),
         )
         assertFalse(
             "More destinations must not clear the stack through navigateTopLevel",
-            source.contains("MoreScreen(onNavigate = { nav.navigateTopLevel(it) })"),
+            source.contains("MoreHubScreen(viewModel, onNavigate = { nav.navigateTopLevel(it) },"),
         )
+        val moreSource = File(sourceFile.parentFile, "MoreHubScreen.kt").readText().replace(Regex("\\s+"), " ")
         assertTrue(
             "Every generated More row must keep using the shared navigation callback",
-            source.contains("MoreRow(dest = dest, onClick = { onNavigate(dest.route) })"),
+            moreSource.contains("MoreHubRow(uiString(destination.titleRes), destination.icon) { onNavigate(if (destination.route == \"coach\" && !AiKeyStore.hasKey(context)) \"local_briefing\" else destination.route) }"),
         )
         assertTrue(
-            "Bottom-tab selections must retain top-level state save/restore",
-            source.contains("if (dest.route != currentRoute) nav.navigateTopLevel(dest.route)"),
+            "Bottom-tab selections must return to their root or use top-level navigation",
+            source.contains("if (dest.route != currentRoute) { if (dest == Destination.Coach) openCoach() else if (!nav.popBackStack(dest.route, false)) nav.navigateTopLevel(dest.route) }"),
+        )
+        assertTrue(
+            "The Coach orb must preserve the selected primary tab",
+            source.contains("if (dest != Destination.Coach) selectedTabRoute = dest.route"),
         )
     }
+    @Test
+    fun primaryAppleHealthRowOpensItsOwnIntegration() {
+        val root = appRootSource()!!
+        val source = File(root.parentFile, "MoreHubScreen.kt").readText().replace(Regex("\\s+"), " ")
+        assertTrue(source.contains("MoreHubRow(uiString(R.string.nav_apple_health), Icons.Filled.Storage) { onNavigate(\"apple_health\") }"))
+        assertFalse(source.contains("MoreHubRow(uiString(R.string.nav_apple_health), Icons.Filled.Storage) { onNavigate(\"data_sources\") }"))
+    }
+
 }

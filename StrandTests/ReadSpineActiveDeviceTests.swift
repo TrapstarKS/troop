@@ -151,6 +151,44 @@ final class ReadSpineActiveDeviceTests: XCTestCase {
         XCTAssertTrue(rows[0].userEdited)
     }
 
+    @MainActor
+    func testVisibleSleepOwnerRoutesEditDeleteAndUndoWithoutMutatingHiddenTwin() async throws {
+        let store = try await WhoopStore.inMemory()
+        let start = Int(Date().timeIntervalSince1970) - 3 * 86_400
+        let end = start + 4 * 3_600
+        let session = CachedSleepSession(startTs: start, endTs: end, efficiency: 0.9,
+                                         restingHr: 52, avgHrv: 60, stagesJSON: nil)
+        _ = try await store.upsertSleepSessions([session], deviceId: canonicalId)
+        _ = try await store.upsertSleepSessions([session], deviceId: canonicalId + "-noop")
+        let repo = Repository(deviceId: canonicalId)
+        repo.setStoreForTesting(store)
+        let visibleRows = await repo.allSleepSessions()
+        let visible = try XCTUnwrap(visibleRows.first { $0.startTs == start })
+        XCTAssertEqual(visible.deviceId, canonicalId)
+        await repo.editSleepTimes(detectedStartTs: start, oldEndTs: end, storedStagesJSON: nil,
+            newStartTs: start + 120, newEndTs: end - 120, visibleOwnerDeviceId: visible.deviceId)
+        let imported = try await store.sleepSessions(deviceId: canonicalId, from: start, to: end, limit: 4)
+        let hidden = try await store.sleepSessions(deviceId: canonicalId + "-noop", from: start, to: end, limit: 4)
+        XCTAssertEqual(imported.first?.effectiveStartTs, start + 120)
+        XCTAssertEqual(hidden.first?.effectiveStartTs, start)
+        let deletedSnapshot = await repo.deleteSleepSession(detectedStartTs: start,
+            endTs: end - 120, visibleOwnerDeviceId: visible.deviceId)
+        let snapshot = try XCTUnwrap(deletedSnapshot)
+        XCTAssertEqual(snapshot.ownerDeviceId, canonicalId)
+        let deleted = try await store.sleepSessions(deviceId: canonicalId, from: start, to: end, limit: 4)
+        XCTAssertTrue(deleted.isEmpty)
+        let kept = try await store.sleepSessions(deviceId: canonicalId + "-noop", from: start, to: end, limit: 4)
+        XCTAssertEqual(kept.first?.effectiveStartTs, start)
+        await repo.undoDeleteSleepSession(snapshot)
+        let restored = try await store.sleepSessions(deviceId: canonicalId, from: start, to: end, limit: 4)
+        XCTAssertEqual(restored.first?.effectiveStartTs, start + 120)
+        let missing = await repo.deleteSleepSession(detectedStartTs: start, endTs: end,
+                                                    visibleOwnerDeviceId: "removed-owner")
+        XCTAssertNil(missing)
+        let untouched = try await store.sleepSessions(deviceId: canonicalId + "-noop", from: start, to: end, limit: 4)
+        XCTAssertEqual(untouched.count, 1)
+    }
+
     /// THE union-model regression (#814 follow-up): import history under the CANONICAL "my-whoop", THEN
     /// re-add a strap so the active id becomes "whoop-uuid" and write LIVE HR under it. Assert (i) the
     /// imported canonical days STILL surface in refresh(), (ii) the new live HR under the re-added id also

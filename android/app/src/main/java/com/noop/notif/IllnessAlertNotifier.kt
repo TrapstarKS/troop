@@ -15,6 +15,9 @@ import com.noop.ui.appLaunchIntent
 
 /** Small pure policy so the once-per-day gate is JVM-testable (CallAlertPolicy idiom). */
 internal object IllnessAlertPolicy {
+    /** Swift twin: `IllnessAlertPolicy.shouldRecordEvaluation`. */
+    fun shouldRecordEvaluation(enabled: Boolean, valid: Boolean): Boolean = enabled && valid
+
     /**
      * Notify only on a genuine clear-to-raised transition, at most once a day.
      *
@@ -23,6 +26,7 @@ internal object IllnessAlertPolicy {
      * and the day gate, meant only to dedupe the two call sites against each other, became permission
      * to re-notify. A two-day scoring window keeps one bad night raised into the next day, so the
      * second notification arrived about a night the wearer had already been told about.
+     * Swift twin: `IllnessAlertPolicy.shouldNotify`.
      */
     fun shouldNotify(
         alert: String?,
@@ -50,7 +54,8 @@ object IllnessAlertNotifier {
     }
 
     @SuppressLint("MissingPermission") // guarded by areNotificationsEnabled() + runCatching
-    fun onEvaluated(context: Context, alert: String?) {
+    fun onEvaluated(context: Context, alert: String?, enabled: Boolean, valid: Boolean) {
+        if (!IllnessAlertPolicy.shouldRecordEvaluation(enabled, valid)) return
         val today = java.time.LocalDate.now().toString()
         val wasRaised = NoopPrefs.illnessWasRaised(context)
         val notify = IllnessAlertPolicy.shouldNotify(

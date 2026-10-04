@@ -234,7 +234,7 @@ class PushDao internal constructor(private val db: WhoopDatabase) : PushSnapshot
             listOf(
                 "totalSleepMin", "efficiency", "deepMin", "remMin", "lightMin",
                 "disturbances", "restingHr", "avgHrv", "recovery", "strain", "exerciseCount", "spo2Pct",
-                "skinTempDevC", "respRateBpm", "steps", "activeKcalEst", "spo2Red", "spo2Ir",
+                "skinTempDevC", "respRateBpm", "steps", "activeKcalEst", "activeEnergyKcalEst", "spo2Red", "spo2Ir",
             ),
         )
         val SLEEP = TableSpec(

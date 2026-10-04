@@ -15,16 +15,18 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * Resolve what the hero shows: the day-metric model when it resolved for the selected
- * night; else the session's own persisted segments (the day row can miss while the
- * segments exist); else null → the honest fallback. Never another night's data. (#160)
+ * Recorded stages own the selected-night totals; the exact-day model supplies their fallback.
+ * A session can still show its recorded stages when its daily row is missing. (#160)
  */
-internal fun heroDisplay(model: SleepModel?, night: HeroNight?): HeroDisplay? {
+internal fun heroDisplay(
+    model: SleepModel?, night: HeroNight?, recordedStages: Stages? = selectedNightStages(night),
+): HeroDisplay? {
     if (model != null) {
-        return HeroDisplay(model.stages, model.realSegments, model.hypnogramSegments, model.efficiencyText)
+        return HeroDisplay(recordedStages ?: model.stages, model.realSegments, model.hypnogramSegments, model.efficiencyText)
     }
-    val segments = night?.realSegments ?: return null
-    val stages = stagesFromSegments(segments) ?: return null
+    night ?: return null
+    val segments = night.realSegments
+    val stages = recordedStages ?: segments?.let(::stagesFromSegments) ?: return null
     val eff = night.session.efficiency
         ?.let { e -> "${(if (e <= 1.0) e * 100.0 else e).roundToInt()}%" } ?: "—"
     // Timestamped segments for the FILLED chart on the fallback path too: the group's full-night segments

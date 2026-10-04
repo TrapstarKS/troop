@@ -69,6 +69,7 @@ import com.noop.testcentre.TestReportFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -120,7 +121,8 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
 
     // A report awaiting the mandatory review-before-share gate (spec section 12). Non-null shows the
     // review dialog; confirming runs TestReportFlow.run.
-    var pendingReport by remember { mutableStateOf<PendingReport?>(null) }
+    val reports = remember { PendingReportReview() }
+    val pendingReport = reports.pending
 
     // #646/#651: TestReportFlow.run now awaits LogExport.exportBundle's off-main zip build instead of
     // blocking the caller, so a re-entrancy guard is needed on the dialog's Share button — without it a
@@ -141,7 +143,7 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
                 vm.ble.externalLog(line, TestDomain.DISPLAY)
             }
         }
-        onDispose { DisplayPerformanceMonitor.stop() }
+        onDispose { DisplayPerformanceMonitor.stop(); reports.cancel() }
     }
     // CAPTURE-D: emit the data-volume line once when the Display mode is active on entry. Kept off the
     // (non-suspend) DisposableEffect: the read hits the store, so it runs from a coroutine.
@@ -217,7 +219,9 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
                         },
                         onReport = {
                             // Launched (#1002): buildPending is now suspend (storage probe reads the store).
-                            scope.launch { pendingReport = buildPending(context, mode, vm.ble.exportLogText(), vm) }
+                            scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                                reports.prepare { buildPending(context, mode, vm.ble.exportLogText(), vm) }
+                            }
                         },
                     )
                 }
@@ -454,7 +458,9 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
             vm = vm,
             onReport = {
                 // Launched (#1002): buildPending is now suspend (storage probe reads the store).
-                scope.launch { pendingReport = buildPending(context, MASTER_REPORT_MODE, vm.ble.exportLogText(), vm) }
+                scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    reports.prepare { buildPending(context, MASTER_REPORT_MODE, vm.ble.exportLogText(), vm) }
+                }
             },
         )
 
@@ -467,11 +473,11 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
         ReportReviewDialog(
             previewText = p.gate.previewText,
             modeInactive = p.modeInactive,
-            onCancel = { pendingReport = null },
+            onCancel = { reports.cancel() },
             onShare = {
                 // Guard against a fast double-tap firing TestReportFlow.run twice before the dialog
                 // dismisses (#646/#651 — run() now awaits the off-main zip build instead of blocking).
-                if (!reportShareBusy) {
+                if (!reportShareBusy && reports.take(p)) {
                     reportShareBusy = true
                     p.gate.confirm()
                     scope.launch {
@@ -491,7 +497,6 @@ fun TestCentreScreen(vm: AppViewModel, onOpenGroundTruthCollector: () -> Unit = 
                             reportShareBusy = false
                         }
                     }
-                    pendingReport = null
                 }
             },
         )
@@ -523,13 +528,38 @@ private fun DeveloperToggleRow(
  *  hand TestReportFlow.run the same list it reviews. [modeInactive] (#1002): the selected profile's test
  *  mode is not on at report time, so the bundle carries no capture for the very thing being reported -
  *  the review dialog warns off it (the #812 capture_check only grades ACTIVE modes, so it can't). */
-private class PendingReport(
+internal class PendingReport(
     val profile: TestDomain,
     val title: String,
     val entries: List<Pair<String, ByteArray>>,
     val gate: ReportReviewGate,
     val modeInactive: Boolean = false,
 )
+
+internal class PendingReportReview {
+    private val preparations = DebugExportReview()
+    var pending by mutableStateOf<PendingReport?>(null)
+        private set
+
+    suspend fun prepare(build: suspend () -> PendingReport?) {
+        val ticket = preparations.beginPreparation()
+        pending = null
+        val report = build()
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        if (preparations.isCurrentPreparation(ticket)) pending = report
+    }
+
+    fun cancel() {
+        preparations.cancel()
+        pending = null
+    }
+
+    fun take(report: PendingReport): Boolean {
+        if (pending !== report) return false
+        cancel()
+        return true
+    }
+}
 
 /** The "whole app" report profile for the section-3 manual Report button. MASTER is not a registry mode
  *  (it has no wear-and-capture flow), so the deep-link self-applies the test:all label via this. */
@@ -550,7 +580,7 @@ private suspend fun buildPending(
     // joined text. Its two callers are user taps, not the 250 ms refresh.
     logText: String,
     vm: AppViewModel,
-): PendingReport {
+): PendingReport? {
     // #1002 REAL storage probe, replacing the Phase-1 zeros in meta.json:
     //  - db_bytes: the Room store's on-disk footprint (noop_whoop.db + its -wal/-shm sidecars);
     //  - rows: per-table row counts via the store (WhoopRepository.storageRowCounts);
@@ -590,7 +620,14 @@ private suspend fun buildPending(
     // it reflects the strap that actually linked; the display name matches the Swift wire value.
     val strapModel = NoopPrefs.of(context).getString("noop.selectedWhoopModel", null)
         ?.let { name -> runCatching { WhoopModel.valueOf(name).displayName }.getOrNull() }
-    val entries = TestBundleAssembler.assemble(context, mode.domain, logText, storage, strapModel)
+    val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching { DebugExportReview.prepare(TestBundleAssembler.assemble(context, mode.domain, logText, storage, strapModel)) }
+    }
+    val entries = prepared.getOrElse {
+        android.widget.Toast.makeText(context, context.getString(R.string.ground_truth_export_failed, it.message),
+            android.widget.Toast.LENGTH_LONG).show()
+        return null
+    }
     val modeInactive = mode.domain != TestDomain.MASTER && !TestCentre.from(context).active(mode.domain)
     return PendingReport(mode.domain, mode.title, entries, ReportReviewGate(entries), modeInactive)
 }
@@ -1255,16 +1292,17 @@ private fun ToggleRowTC(
 }
 
 @Composable
-private fun ReportReviewDialog(
+internal fun ReportReviewDialog(
     previewText: String,
     modeInactive: Boolean,
     onCancel: () -> Unit,
     onShare: () -> Unit,
+    isCopy: Boolean = false,
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
         containerColor = Palette.surfaceOverlay,
-        title = { Text(uiString(R.string.l10n_test_centre_screen_review_before_sharing_d7050383), style = NoopType.title2, color = Palette.textPrimary) },
+        title = { Text(uiString(if (isCopy) R.string.l10n_devices_screen_copy_af74f7c5 else R.string.l10n_test_centre_screen_review_before_sharing_d7050383), style = NoopType.title2, color = Palette.textPrimary) },
         text = {
             Column {
                 if (modeInactive) {
@@ -1277,10 +1315,12 @@ private fun ReportReviewDialog(
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
-                Text(
-                    uiString(R.string.l10n_test_centre_screen_this_is_exactly_what_your_report_77278bdd),
-                    style = NoopType.subhead, color = Palette.textSecondary,
-                )
+                if (!isCopy) {
+                    Text(
+                        uiString(R.string.l10n_test_centre_screen_this_is_exactly_what_your_report_77278bdd),
+                        style = NoopType.subhead, color = Palette.textSecondary,
+                    )
+                }
                 Text(
                     previewText.ifBlank { "(nothing to share yet)" },
                     style = NoopType.footnote,
@@ -1293,7 +1333,7 @@ private fun ReportReviewDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onShare) { Text(uiString(R.string.l10n_test_centre_screen_share_09ca55ca), style = NoopType.body, color = Palette.accent) }
+            TextButton(onClick = onShare) { Text(uiString(if (isCopy) R.string.l10n_devices_screen_copy_af74f7c5 else R.string.l10n_test_centre_screen_share_09ca55ca), style = NoopType.body, color = Palette.accent) }
         },
         dismissButton = {
             TextButton(onClick = onCancel) { Text(uiString(R.string.l10n_test_centre_screen_cancel_77dfd213), style = NoopType.body, color = Palette.textSecondary) }

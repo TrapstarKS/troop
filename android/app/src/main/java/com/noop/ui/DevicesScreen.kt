@@ -61,7 +61,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -638,7 +637,7 @@ private fun strapMetricValues(d: DailyMetric): Map<MetricArbitrationPolicy.Metri
     d.skinTempDevC?.let { out[MetricArbitrationPolicy.MetricKind.SKIN_TEMP] = it }
     d.steps?.let { out[MetricArbitrationPolicy.MetricKind.STEPS] = it.toDouble() }
     d.totalSleepMin?.let { out[MetricArbitrationPolicy.MetricKind.SLEEP] = it }
-    d.activeKcalEst?.let { out[MetricArbitrationPolicy.MetricKind.CALORIES] = it }
+    d.activeEnergyKcalEst?.let { out[MetricArbitrationPolicy.MetricKind.CALORIES] = it }
     return out
 }
 
@@ -1294,6 +1293,7 @@ private fun BatteryInfoProbeResultDialog(
     onDismiss: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val copyScope = rememberCoroutineScope()
     val waiting = text == WhoopBleClient.WAITING_EXTENDED_BATTERY_PROBE
     val shown = if (waiting) uiString(R.string.l10n_devices_screen_waiting_for_the_straps_reply_5a06e7ac) else text
     AlertDialog(
@@ -1302,14 +1302,16 @@ private fun BatteryInfoProbeResultDialog(
         title = { Text(uiString(R.string.l10n_devices_screen_battery_info_probe_result_592_b97c0bb8), style = NoopType.title2, color = Palette.textPrimary) },
         text = {
             Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                SelectionContainer {
-                    Text(shown, style = if (waiting) NoopType.subhead else NoopType.mono, color = Palette.textSecondary)
-                }
+                Text(shown, style = if (waiting) NoopType.subhead else NoopType.mono, color = Palette.textSecondary)
             }
         },
         confirmButton = {
             if (!waiting) {
-                TextButton(onClick = { clipboard.setText(AnnotatedString(text)) }) {
+                TextButton(onClick = {
+                    copyScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                        DebugExportReview.shared.stageCopy(text) { clipboard.setText(AnnotatedString(it)) }
+                    }
+                }) {
                     Text(uiString(R.string.l10n_devices_screen_copy_af74f7c5), style = NoopType.body, color = Palette.accent)
                 }
             }
@@ -1391,6 +1393,7 @@ private fun BatteryPackProbeResultDialog(
     onDismiss: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val copyScope = rememberCoroutineScope()
     val waiting = text == WhoopBleClient.WAITING_BATTERY_PACK_PROBE
     val shown = if (waiting) uiString(R.string.l10n_devices_screen_waiting_for_the_straps_reply_5a06e7ac) else text
     AlertDialog(
@@ -1399,14 +1402,16 @@ private fun BatteryPackProbeResultDialog(
         title = { Text(uiString(R.string.l10n_devices_screen_battery_pack_probe_result_151_df43dff2), style = NoopType.title2, color = Palette.textPrimary) },
         text = {
             Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                SelectionContainer {
-                    Text(shown, style = if (waiting) NoopType.subhead else NoopType.mono, color = Palette.textSecondary)
-                }
+                Text(shown, style = if (waiting) NoopType.subhead else NoopType.mono, color = Palette.textSecondary)
             }
         },
         confirmButton = {
             if (!waiting) {
-                TextButton(onClick = { clipboard.setText(AnnotatedString(text)) }) {
+                TextButton(onClick = {
+                    copyScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                        DebugExportReview.shared.stageCopy(text) { clipboard.setText(AnnotatedString(it)) }
+                    }
+                }) {
                     Text(uiString(R.string.l10n_devices_screen_copy_af74f7c5), style = NoopType.body, color = Palette.accent)
                 }
             }
@@ -1427,6 +1432,7 @@ private fun BodyLocationProbeResultDialog(
     onDismiss: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val copyScope = rememberCoroutineScope()
     val waiting = text == WhoopBleClient.WAITING_BODY_LOCATION_PROBE
     val shown = if (waiting) uiString(R.string.l10n_devices_screen_waiting_for_the_straps_reply_5a06e7ac) else text
     AlertDialog(
@@ -1435,14 +1441,16 @@ private fun BodyLocationProbeResultDialog(
         title = { Text(uiString(R.string.l10n_devices_screen_body_location_probe_result_690_60c5ee79), style = NoopType.title2, color = Palette.textPrimary) },
         text = {
             Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                SelectionContainer {
-                    Text(shown, style = if (waiting) NoopType.subhead else NoopType.mono, color = Palette.textSecondary)
-                }
+                Text(shown, style = if (waiting) NoopType.subhead else NoopType.mono, color = Palette.textSecondary)
             }
         },
         confirmButton = {
             if (!waiting) {
-                TextButton(onClick = { clipboard.setText(AnnotatedString(text)) }) {
+                TextButton(onClick = {
+                    copyScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                        DebugExportReview.shared.stageCopy(text) { clipboard.setText(AnnotatedString(it)) }
+                    }
+                }) {
                     Text(uiString(R.string.l10n_devices_screen_copy_af74f7c5), style = NoopType.body, color = Palette.accent)
                 }
             }
@@ -1495,6 +1503,7 @@ private fun FeatureFlagProbeResultDialog(
     onDismiss: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val copyScope = rememberCoroutineScope()
     val waiting = text == WhoopBleClient.WAITING_FEATURE_FLAG_PROBE
     val shown = if (waiting) uiString(R.string.l10n_devices_screen_waiting_for_the_straps_reply_5a06e7ac) else text
     AlertDialog(
@@ -1503,14 +1512,16 @@ private fun FeatureFlagProbeResultDialog(
         title = { Text(uiString(R.string.l10n_devices_screen_feature_flag_probe_result_761_c50ef4d4), style = NoopType.title2, color = Palette.textPrimary) },
         text = {
             Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                SelectionContainer {
-                    Text(shown, style = if (waiting) NoopType.subhead else NoopType.mono, color = Palette.textSecondary)
-                }
+                Text(shown, style = if (waiting) NoopType.subhead else NoopType.mono, color = Palette.textSecondary)
             }
         },
         confirmButton = {
             if (!waiting) {
-                TextButton(onClick = { clipboard.setText(AnnotatedString(text)) }) {
+                TextButton(onClick = {
+                    copyScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                        DebugExportReview.shared.stageCopy(text) { clipboard.setText(AnnotatedString(it)) }
+                    }
+                }) {
                     Text(uiString(R.string.l10n_devices_screen_copy_af74f7c5), style = NoopType.body, color = Palette.accent)
                 }
             }
@@ -1564,6 +1575,7 @@ private fun DeviceConfigProbeResultDialog(
     onDismiss: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val copyScope = rememberCoroutineScope()
     val waiting = text == WhoopBleClient.WAITING_DEVICE_CONFIG_PROBE
     val shown = if (waiting) uiString(R.string.l10n_devices_screen_waiting_for_the_straps_reply_5a06e7ac) else text
     AlertDialog(
@@ -1572,14 +1584,16 @@ private fun DeviceConfigProbeResultDialog(
         title = { Text(uiString(R.string.l10n_devices_screen_device_config_read_probe_result_103_67d02ec9), style = NoopType.title2, color = Palette.textPrimary) },
         text = {
             Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                SelectionContainer {
-                    Text(shown, style = if (waiting) NoopType.subhead else NoopType.mono, color = Palette.textSecondary)
-                }
+                Text(shown, style = if (waiting) NoopType.subhead else NoopType.mono, color = Palette.textSecondary)
             }
         },
         confirmButton = {
             if (!waiting) {
-                TextButton(onClick = { clipboard.setText(AnnotatedString(text)) }) {
+                TextButton(onClick = {
+                    copyScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                        DebugExportReview.shared.stageCopy(text) { clipboard.setText(AnnotatedString(it)) }
+                    }
+                }) {
                     Text(uiString(R.string.l10n_devices_screen_copy_af74f7c5), style = NoopType.body, color = Palette.accent)
                 }
             }

@@ -1,14 +1,76 @@
 import Foundation
 import WhoopStore
 import StrandImport
+import StrandAnalytics
 
 /// Maps a parsed Whoop CSV export into the on-device WhoopStore tables the UI reads
 /// (dailyMetric + sleepSession), so importing lights up the full history immediately.
 enum WhoopImporter {
+    static let importedDeviceId = "my-whoop"
+    static let skinTempRepairFlagKey = "noop.whoopImport.skinTempDeviationRepair.v1.done"
+
+    /// Derive each imported deviation from preceding absolute nights. Incoming rows replace the same
+    /// stored day before folding, so partial imports and repeated imports never count a night twice.
+    /// Duplicate incoming days use the last row, matching the store's upsert order.
+    /// Kotlin twin: `WhoopCsvImporter.withSkinTempDeviations`.
+    static func withSkinTempDeviations(_ rows: [DailyMetric], history: [DailyMetric] = []) -> [DailyMetric] {
+        guard let cfg = Baselines.metricCfg["skin_temp"] else { return rows }
+        var byDay: [String: DailyMetric] = [:]
+        for row in history + rows { byDay[row.day] = row }
+        let incomingDays = Set(rows.map(\.day))
+        var state: BaselineState?
+        var result: [DailyMetric] = []
+        for row in byDay.values.sorted(by: { $0.day < $1.day }) {
+            var mapped = row
+            if let celsius = row.skinTempC {
+                let deviation = state.flatMap { $0.usable ? Baselines.roundedDelta2dp(celsius, state: $0) : nil }
+                mapped = row.with(recovery: row.recovery, skinTempDevC: deviation, skinTempC: celsius)
+                state = Baselines.update(state, value: celsius, cfg: cfg)
+            }
+            if incomingDays.contains(row.day) { result.append(mapped) }
+        }
+        return result
+    }
+
+    /// Only a matching WHOOP-import series point proves the old absolute-in-deviation shape. Magnitude
+    /// alone cannot distinguish a manual/native value. Existing absolute/deviation rows stay unchanged.
+    /// Kotlin twin: `WhoopCsvImporter.skinTempRepair`.
+    static func skinTempRepair(_ rows: [DailyMetric], importedTemperatures: [MetricPoint],
+                               deviceId: String = importedDeviceId) -> [DailyMetric] {
+        guard deviceId == importedDeviceId else { return [] }
+        var imported: [String: Double] = [:]
+        for point in importedTemperatures where point.key == "skin_temp" { imported[point.day] = point.value }
+        let moved = rows.compactMap { row -> DailyMetric? in
+            guard row.skinTempC == nil, let absolute = row.skinTempDevC,
+                  absolute >= 20, imported[row.day] == absolute else { return nil }
+            return row.with(recovery: row.recovery, skinTempDevC: nil, skinTempC: absolute)
+        }
+        let history = rows.filter { row in
+            guard let absolute = row.skinTempC else { return false }
+            return imported[row.day] == absolute
+        }
+        return withSkinTempDeviations(moved, history: history)
+    }
+
+    /// Kotlin twin: `WhoopCsvImporter.repairAbsoluteSkinTempIfNeeded`.
+    @discardableResult
+    static func repairAbsoluteSkinTempIfNeeded(store: WhoopStore, deviceId: String = importedDeviceId,
+                                               defaults: UserDefaults = .standard) async -> Bool {
+        guard deviceId == importedDeviceId, !defaults.bool(forKey: skinTempRepairFlagKey) else { return false }
+        guard let rows = try? await store.dailyMetrics(deviceId: deviceId, from: "0000-01-01", to: "9999-12-31"),
+              let imported = try? await store.metricSeries(deviceId: deviceId, key: "skin_temp", from: "0000-01-01", to: "9999-12-31")
+        else { return false }
+        let changed = skinTempRepair(rows, importedTemperatures: imported, deviceId: deviceId)
+        if !changed.isEmpty {
+            guard (try? await store.upsertDailyMetrics(changed, deviceId: deviceId)) != nil else { return false }
+        }
+        defaults.set(true, forKey: skinTempRepairFlagKey)
+        return !changed.isEmpty
+    }
 
     /// The WHOOP CSV mapping revision, stamped into the Import test-mode parser line. Bump when this
     /// importer's column->store mapping changes so a shared report's parser version is unambiguous.
-    static let importerVersion = 1
+    static let importerVersion = 2
 
     @discardableResult
     static func importExport(url: URL, into store: WhoopStore, deviceId: String,
@@ -36,8 +98,23 @@ enum WhoopImporter {
                 strain: WhoopExportImporter.effortFromImportedDayStrain(c.dayStrain),
                 exerciseCount: nil,
                 spo2Pct: c.bloodOxygenPct,
-                skinTempDevC: c.skinTempCelsius,   // NOTE: Whoop export gives absolute °C, not a baseline deviation
-                respRateBpm: c.respiratoryRate))
+                respRateBpm: c.respiratoryRate,
+                skinTempC: c.skinTempCelsius))
+        }
+        var historyUpdates: [DailyMetric] = []
+        if !metrics.isEmpty {
+            var history: [DailyMetric] = []
+            if deviceId == importedDeviceId {
+                let stored = try await store.dailyMetrics(deviceId: deviceId, from: "0000-01-01", to: "9999-12-31")
+                let points = try await store.metricSeries(deviceId: deviceId, key: "skin_temp", from: "0000-01-01", to: "9999-12-31")
+                let imported = Dictionary(uniqueKeysWithValues: points.map { ($0.day, $0.value) })
+                history = stored.filter { $0.skinTempC != nil && imported[$0.day] == $0.skinTempC }
+            }
+            let incomingDays = Set(metrics.map(\.day))
+            let original = Dictionary(uniqueKeysWithValues: history.map { ($0.day, $0) })
+            let recalculated = withSkinTempDeviations(history + metrics)
+            historyUpdates = recalculated.filter { !incomingDays.contains($0.day) && original[$0.day]?.skinTempDevC != $0.skinTempDevC }
+            metrics = recalculated.filter { incomingDays.contains($0.day) }
         }
 
         // sleeps → CachedSleepSession (stage durations encoded as JSON; export has no per-epoch timeline)
@@ -63,6 +140,7 @@ enum WhoopImporter {
         // report mapped-vs-persisted per stage. Capturing the existing return value changes nothing about
         // what is saved; the calls, their order and their effect are identical with the trace on or off.
         let metricsWritten = try await store.upsertDailyMetrics(metrics, deviceId: deviceId)
+        if !historyUpdates.isEmpty { _ = try await store.upsertDailyMetrics(historyUpdates, deviceId: deviceId) }
         let sessionsWritten = try await store.upsertSleepSessions(sessions, deviceId: deviceId)
 
         // Generic metric series — every cycle field, keyed, for the explorer + correlations.

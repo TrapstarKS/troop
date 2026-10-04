@@ -246,6 +246,8 @@ final class AppModel: ObservableObject {
     /// Daily re-arm timer for the single-instant firmware smart alarm (see scheduleDailySmartAlarmRearm).
     private var smartAlarmRearmTimer: Timer?
 
+    private(set) var localNotifications: LocalNotificationDispatcher?
+
     init() {
         let live = LiveState()
         self.live = live
@@ -253,7 +255,8 @@ final class AppModel: ObservableObject {
         // aren't open yet here, so the registry's active id can't be read synchronously; `bootstrapStore`
         // (write side) and `wireSourceCoordinator → adoptActiveDevice` (read spine, #814) re-point them to
         // the registry active id once the store opens. Single-device install keeps "my-whoop" throughout.
-        self.ble = BLEManager(state: live, deviceId: deviceId)
+        self.ble = BLEManager(state: live, deviceId: deviceId,
+                              allowsLiveTransports: LiveTransportPolicy.enabled)
         self.repo = Repository(deviceId: deviceId)
         self.coach = AICoachEngine(repo: repo)
         self.intelligence = IntelligenceEngine(repo: repo, profile: profile, deviceId: deviceId)
@@ -363,6 +366,17 @@ final class AppModel: ObservableObject {
             // Keep the battery night-guard's learned bedtime warm off the same signal (throttled inside).
             self?.refreshHabitualMidsleep()
         }.store(in: &hrCancellables)
+        // Fresh scan eligibility can change even when a legacy daily score is retained verbatim.
+        intelligence.$computing.dropFirst().filter { !$0 }.sink { [weak self] _ in
+            guard let self else { return }
+            self.evaluateIllness(self.repo.days)
+        }.store(in: &hrCancellables)
+        repo.$refreshSeq.dropFirst().sink { [weak self] revision in
+            self?.refreshSleepPlannerInputs(revision: revision)
+        }.store(in: &hrCancellables)
+        NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
+            .sink { [weak self] _ in self?.applySmartAlarm() }
+            .store(in: &hrCancellables)
         // Re-arm the strap's firmware alarm once the connection has SETTLED — not the instant it (re)bonds.
         // A smart-alarm time changed while the strap was away never reached it , the send is gated on bond
         // , so the strap kept the OLD time and fired at it (#59).
@@ -494,6 +508,10 @@ final class AppModel: ObservableObject {
             // BEFORE the Effort rescore + analyzeRecent loop so both operate on a cleaned DB. Persisted
             // flag → no-op on every subsequent launch; idempotent on a clean DB.
             await self.intelligence.runTimestampHealIfNeeded()
+            if let store = await self.repo.storeHandle(),
+               await WhoopImporter.repairAbsoluteSkinTempIfNeeded(store: store) {
+                await self.repo.refresh()
+            }
             // One-shot on-upgrade Effort rescore (#313): recompute strain from source across the FULL
             // history and repair sleep rejected by unmatched WRIST_OFF in one pass. Both persisted flags
             // describe that shared pass; either pending flag triggers it.
@@ -542,6 +560,7 @@ final class AppModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_800_000_000_000)  // 30 min backstop (#836 battery)
             }
         }
+        localNotifications = LocalNotificationDispatcher(model: self)
     }
 
     /// Build the device registry + source coordinator once the store is open, then start observing.
@@ -647,7 +666,8 @@ final class AppModel: ObservableObject {
             straplog: { [weak self] line in
                 self?.live.append(log: "[\(AppModel.logTimeFormatter.string(from: Date()))] \(line)")
             },
-            ouraNightBand: { [weak self] in self?.ouraNightBand() })   // item 27
+            ouraNightBand: { [weak self] in self?.ouraNightBand() },
+            allowsLiveTransports: LiveTransportPolicy.enabled)   // item 27
         coordinator.start()
         self.deviceRegistry = registry
         // #1303: adoption re-points the strap onto its stable `whoop-<serial>` id inside BLEManager (which
@@ -1537,107 +1557,50 @@ final class AppModel: ObservableObject {
     private static let smartAlarmBackupId = "smart-alarm-wake-backup"
     private static var smartAlarmBackupIds: [String] {
         [smartAlarmBackupId] + (1...7).map { "\(smartAlarmBackupId)-d\($0)" }
+            + (0..<28).map { "\(smartAlarmBackupId)-occurrence\($0)" }
     }
 
-    /// Schedule a BEST-EFFORT repeating daily backup wake notification for the smart alarm (#4 + #6).
-    ///
-    /// The strap firmware alarm is one absolute instant and the mirror in `postSmartAlarm` only posts
-    /// AFTER the strap reports it fired, so if the buzz fails or the phone is suspended past day one there
-    /// was previously no OS-level wake at all. This adds a repeating `UNCalendarNotificationTrigger` that
-    /// "lives in the notification center, not our process" (the WindDownNudge idiom), so it survives
-    /// relaunch and keeps firing each chosen morning even with the app killed.
-    ///
-    /// HONEST: this is NOT a guaranteed loud alarm. A sideloaded build has no critical-alert entitlement,
-    /// so iOS Focus / silent mode can still suppress the sound. The UI copy says to keep a real backup.
-    ///
-    /// Gated on the ALARM being enabled (its sole caller `applySmartAlarm()` already enforces that) plus
-    /// notification permission — NOT the wrist-alerts master (#34): a wake backup must not depend on the
-    /// unrelated HR/strain-alerts switch. When permission is undetermined the user is prompted here (they
-    /// just enabled the alarm) and scheduled on grant, so the FIRST night is covered. Always removes the
-    /// prior set first, so a re-arm replaces rather than stacks. `weekdays` empty = every day (single daily
-    /// trigger); a non-empty set fans out to one weekday-pinned trigger per selected day. No-op on macOS.
-    /// `log` (optional): strap-log sink for the not-authorized bail (#401 close-out) — a silent no-op left a
-    /// user whose backup never fired with nothing in the log. The caller wraps the sink in a main-actor hop
-    /// (the auth check completes off-main). Diagnostic only.
-    ///
-    /// #1864: `overrides` carries the per-weekday wake-time overrides (#554 / `WindDownNudge.perDayWakeOverrides`).
-    /// A weekday with an override fires at ITS OWN time, not the shared `minutes` — so a user who sets
-    /// "Tuesday 03:30" on the alarm screen is woken at 03:30 on Tuesday, not at the default time with only
-    /// the wind-down reminder shifting. An empty map (the default) is byte-for-byte the old path. Mirrors
-    /// Android's `SmartAlarmScheduler.arm` which reads `SmartAlarmStore.targetOverrides` per weekday.
+    /// Best-effort iPhone reminders for the next 28 selected wake occurrences. Stable request ids
+    /// replace prior coverage, and the same date resolver omits one skipped occurrence. Focus,
+    /// silent mode and denied notification permission can suppress delivery. No-op on macOS.
     static func scheduleSmartAlarmBackupNotification(minutes: Int, weekdays: Set<Int>,
                                                      overrides: [Int: Int] = [:],
+                                                     skippedOccurrence: String = "",
+                                                     from now: Date = Date(),
                                                      log: ((String) -> Void)? = nil) {
         #if os(iOS)
         let center = UNUserNotificationCenter.current()
-        // Always clear BOTH the single and the per-day ids so switching modes (or editing the weekday set)
-        // never leaves an orphaned trigger or double-fires.
+        let revision = UUID().uuidString
+        UserDefaults.standard.set(revision, forKey: "sleepPlanner.backupRevision")
         center.removePendingNotificationRequests(withIdentifiers: smartAlarmBackupIds)
-        // #34: the backup follows THE ALARM, not the wrist-alerts master. This is only reached from
-        // applySmartAlarm() with the alarm enabled, so the alarm being on IS the correct gate — a user who
-        // sets a smart alarm but never turned on the separate wrist HR/strain alerts must still get a backup
-        // wake. The old `notif.masterEnabled` guard suppressed it for exactly those users, so a strap that
-        // couldn't arm left them with nothing.
-        let valid = weekdays.filter { (1...7).contains($0) }
-        // A non-empty selection that filters to nothing (only out-of-range numbers) has no day to fire on.
-        if !weekdays.isEmpty && valid.isEmpty { return }
-        // #1864: only valid override entries (day 1…7, minute in [0, 1440)) count; a day without an override
-        // uses the default `minutes`. When the map is empty this is byte-for-byte the old path.
-        let cleanOverrides = overrides.filter { (1...7).contains($0.key) && (0..<24 * 60).contains($0.value) }
-
-        // Build + add the repeating trigger(s). Factored so the already-authorized and the just-granted
-        // paths schedule identically.
+        var dates: [Date] = []
+        var cursor = now
+        for _ in 0..<28 {
+            guard let next = nextSmartAlarmDate(minutes: minutes, weekdays: weekdays, overrides: overrides,
+                                                skippedOccurrence: skippedOccurrence, from: cursor) else { break }
+            dates.append(next)
+            cursor = next
+        }
+        let scheduledDates = dates
         func addRequests() {
+            guard UserDefaults.standard.string(forKey: "sleepPlanner.backupRevision") == revision,
+                  UserDefaults.standard.bool(forKey: "behavior.smartAlarmEnabled") else { return }
             let content = UNMutableNotificationContent()
-            content.title = String(localized: "Smart alarm")
-            content.body = String(localized: "Backup wake: your smart alarm time is here.")
+            content.title = String(localized: "Wake reminder")
+            content.body = String(localized: "Your planned wake time is here. Use your Clock alarm as a backup.")
             content.sound = .default
-            if weekdays.isEmpty {
-                // Every day. When overrides exist, fan out to per-weekday triggers (each at its own time)
-                // so an override on a day the weekday set doesn't restrict still fires at the right time.
-                // Without overrides this stays the single daily trigger (byte-for-byte the old path).
-                if cleanOverrides.isEmpty {
-                    let hour = minutes / 60
-                    let minute = minutes % 60
-                    var comps = DateComponents()
-                    comps.hour = hour
-                    comps.minute = minute
-                    let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
-                    center.add(UNNotificationRequest(identifier: smartAlarmBackupId, content: content, trigger: trigger))
-                } else {
-                    for weekday in 1...7 {
-                        let m = cleanOverrides[weekday] ?? minutes
-                        var comps = DateComponents()
-                        comps.weekday = weekday
-                        comps.hour = m / 60
-                        comps.minute = m % 60
-                        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
-                        center.add(UNNotificationRequest(identifier: "\(smartAlarmBackupId)-d\(weekday)",
-                                                         content: content, trigger: trigger))
-                    }
-                }
-            } else {
-                for weekday in valid {
-                    let m = cleanOverrides[weekday] ?? minutes
-                    var comps = DateComponents()
-                    comps.weekday = weekday   // Calendar weekday 1=Sun…7=Sat , fires weekly on that day
-                    comps.hour = m / 60
-                    comps.minute = m % 60
-                    let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
-                    center.add(UNNotificationRequest(identifier: "\(smartAlarmBackupId)-d\(weekday)",
-                                                     content: content, trigger: trigger))
-                }
+            for (index, date) in scheduledDates.enumerated() {
+                let parts = Self.sleepPlannerNotificationComponents(date)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
+                center.add(UNNotificationRequest(identifier: "\(smartAlarmBackupId)-occurrence\(index)",
+                                                 content: content, trigger: trigger))
             }
         }
-
         center.getNotificationSettings { settings in
             switch settings.authorizationStatus {
-            case .authorized:
+            case .authorized, .provisional, .ephemeral:
                 addRequests()
             case .notDetermined:
-                // The user just enabled the alarm but was never asked for notification permission (nothing
-                // else prompted — wrist alerts, which used to, may be off). Ask now, then schedule on grant
-                // so the FIRST night is covered rather than only after some later re-arm.
                 center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
                     if granted { addRequests() }
                     else { log?("Smart alarm: backup notification NOT scheduled (notification permission denied)") }
@@ -1652,26 +1615,12 @@ final class AppModel: ObservableObject {
     /// Cancel the smart-alarm backup wake notification(s). Called on disarm. No-op on macOS.
     static func cancelSmartAlarmBackupNotification() {
         #if os(iOS)
+        UserDefaults.standard.set(UUID().uuidString, forKey: "sleepPlanner.backupRevision")
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: smartAlarmBackupIds)
         #endif
     }
 
-    /// Arm (or clear) the strap's firmware alarm from the smart-alarm settings. The firmware alarm
-    /// fires even if the Mac is asleep / NOOP is closed. No-op until bonded (send is gated on bond).
-    ///
-    /// On iOS this ALSO (dis)arms the best-effort backup wake notification (#4 + #6): a repeating daily
-    /// `UNCalendarNotificationTrigger` that survives suspend/relaunch, so a missed strap buzz still gets
-    /// an OS-level wake. macOS keeps just the firmware alarm (the static helpers are no-ops there).
-    ///
-    /// #1864: the per-weekday wake-time overrides (`WindDownNudge.perDayWakeOverrides`, #554) now flow
-    /// through to BOTH the strap firmware alarm and the backup notification — so a user who sets
-    /// "Tuesday 03:30" on the alarm screen is woken at 03:30 on Tuesday, not at the default time with
-    /// only the wind-down reminder shifting. Before this, the overrides had exactly two readers
-    /// (`wakeMinutes(forWeekday:)` → the nudge fan-out, and `SmartAlarmView` which edits them) and the
-    /// alarm backup took a single time plus a day set, so the control on the alarm screen silently moved
-    /// only the evening reminder. Mirrors Android's `reconcileStrapAlarm` which passes `dayOverrides`
-    /// to `nextSmartAlarmEpochSec`, and `SmartAlarmScheduler.arm` which reads `targetOverrides`.
     /// Warn about a strap last seen LOW that has not been heard from since (#2556).
     ///
     /// The crossings wired into `live.onBatteryUpdate` only run when a reading ARRIVES, so a strap that
@@ -1693,8 +1642,25 @@ final class AppModel: ObservableObject {
             enabled: behavior.batteryAlerts)
     }
 
-    func applySmartAlarm() {
+    /// Arm (or clear) the strap's firmware alarm from the smart-alarm settings. The firmware alarm
+    /// fires even if the Mac is asleep / NOOP is closed. No-op until bonded (send is gated on bond).
+    ///
+    /// On iOS this also refreshes best-effort backup notifications for the next 28 selected wakes
+    /// (#4 + #6). Permission, Focus and silent mode can suppress delivery. macOS keeps the firmware
+    /// alarm; the phone-notification helpers are no-ops there.
+    ///
+    /// #1864: the per-weekday wake-time overrides (`WindDownNudge.perDayWakeOverrides`, #554) now flow
+    /// through to BOTH the strap firmware alarm and the backup notification — so a user who sets
+    /// "Tuesday 03:30" on the alarm screen is woken at 03:30 on Tuesday, not at the default time with
+    /// only the wind-down reminder shifting. Before this, the overrides had exactly two readers
+    /// (`wakeMinutes(forWeekday:)` → the nudge fan-out, and `SmartAlarmView` which edits them) and the
+    /// alarm backup took a single time plus a day set, so the control on the alarm screen silently moved
+    /// only the evening reminder. Mirrors Android's `reconcileStrapAlarm` which passes `dayOverrides`
+    /// to `nextSmartAlarmEpochSec`, and `SmartAlarmScheduler.arm` which reads `targetOverrides`.
+    func applySmartAlarm(from now: Date = Date()) {
+        WindDownNudge.reschedule(from: now)
         let overrides = WindDownNudge.perDayWakeOverrides
+        let skipped = SleepPlannerSettings.shared.skippedOccurrence
         guard behavior.smartAlarmEnabled else {
             ble.disableStrapAlarm()
             Self.cancelSmartAlarmBackupNotification()
@@ -1702,7 +1668,8 @@ final class AppModel: ObservableObject {
         }
         guard let next = Self.nextSmartAlarmDate(minutes: behavior.smartAlarmMinutes,
                                                  weekdays: behavior.smartAlarmWeekdays,
-                                                 overrides: overrides) else {
+                                                 overrides: overrides,
+                                                 skippedOccurrence: skipped, from: now) else {
             // No enabled weekday in the next week (only possible from a corrupted set) , disarm rather
             // than arm a misleading time the user never asked for.
             ble.disableStrapAlarm()
@@ -1716,24 +1683,19 @@ final class AppModel: ObservableObject {
         Self.scheduleSmartAlarmBackupNotification(minutes: behavior.smartAlarmMinutes,
                                                   weekdays: behavior.smartAlarmWeekdays,
                                                   overrides: overrides,
+                                                  skippedOccurrence: skipped, from: now,
                                                   log: { [weak self] line in
                                                       Task { @MainActor in self?.live.append(log: line) }
                                                   })
     }
 
-    /// Compute the next fire date for the smart alarm, honouring the weekday selection.
-    /// - `minutes`: target wake time, minutes since local midnight.
-    /// - `weekdays`: Calendar weekday numbers (1 = Sun … 7 = Sat) the alarm may fire on. Empty = every
-    ///   day. Days outside 1…7 are ignored.
-    /// - `overrides`: per-weekday wake-time overrides (#554 / #1864). A weekday with an override uses
-    ///   ITS OWN time instead of `minutes`; a day without one falls back to `minutes`. Only valid
-    ///   entries (day 1…7, minute in [0, 1440)) count. An empty map is byte-for-byte the old path.
-    /// Returns the next strictly-future date matching the time on an enabled weekday, scanning today
-    /// plus the next 7 days, or nil if no enabled weekday falls in that range. Pure + side-effect-free
-    /// so it can be unit-tested against a fixed clock.
+    /// The next strictly future local wake, honoring selected weekdays, per-day times, and a single
+    /// skipped date/minute identity. Empty weekdays means every day; invalid selections have no wake.
+    /// Two weeks of candidates preserve the next occurrence of a skipped once-weekly alarm.
     nonisolated static func nextSmartAlarmDate(minutes: Int,
                                                weekdays: Set<Int>,
                                                overrides: [Int: Int] = [:],
+                                               skippedOccurrence: String = "",
                                                from now: Date = Date(),
                                                calendar cal: Calendar = .current) -> Date? {
         let valid = weekdays.filter { (1...7).contains($0) }
@@ -1743,9 +1705,8 @@ final class AppModel: ObservableObject {
         // #1864: only valid override entries (day 1…7, minute in [0, 1440)) count; a day without an
         // override uses the default `minutes`. When the map is empty this is byte-for-byte the old path.
         let cleanOverrides = overrides.filter { (1...7).contains($0.key) && (0..<24 * 60).contains($0.value) }
-        // Scan today (offset 0) through +7 days so a once-a-week alarm picked for "today, already
-        // passed" still resolves to the same weekday next week.
-        for offset in 0...7 {
+        // Scan two weeks so skipping a single weekly occurrence preserves the following one.
+        for offset in 0...14 {
             guard let day = cal.date(byAdding: .day, value: offset, to: now) else { continue }
             // Resolve this calendar day's weekday FIRST, so the per-day override time is applied BEFORE
             // the strictly-future check — a later override time on today can make today's occurrence
@@ -1753,10 +1714,9 @@ final class AppModel: ObservableObject {
             let dow = cal.component(.weekday, from: day)
             if !weekdays.isEmpty && !valid.contains(dow) { continue }
             let wakeMin = cleanOverrides[dow] ?? minutes
-            let hour = wakeMin / 60
-            let minute = wakeMin % 60
-            guard let fire = cal.date(bySettingHour: hour, minute: minute, second: 0, of: day) else { continue }
+            guard let fire = SleepPlanner.wakeDate(minutes: wakeMin, on: day, calendar: cal) else { continue }
             if fire <= now { continue }
+            if smartAlarmOccurrenceKey(fire, calendar: cal) == skippedOccurrence { continue }
             return fire
         }
         return nil
@@ -1940,16 +1900,33 @@ final class AppModel: ObservableObject {
         return (c.hour ?? 0) * 3600 + (c.minute ?? 0) * 60 + (c.second ?? 0)
     }
 
+    private var illnessEvaluationGeneration = 0
+
     private func evaluateIllness(_ days: [DailyMetric]) {
-        guard behavior.illnessWatch, days.count >= 14,
+        illnessEvaluationGeneration &+= 1
+        let generation = illnessEvaluationGeneration
+        guard behavior.illnessWatch, !intelligence.computing, days.count >= 14,
               let latestDay = days.last?.day, latestDay == repo.today?.day else {
             healthAlert = nil; illnessSignal = nil; illnessDistance = nil; return
         }
         Task { [weak self] in
             guard let self else { return }
+            let sourceIds = self.repo.computedReadIds
+            guard let firstDay = days.first?.day else { return }
+            let records: (hrv: [String: HealthSignalReliability.Record], resp: [String: HealthSignalReliability.Record])
+            do { records = try await self.repo.signalReliabilityByDay(from: firstDay, to: latestDay) }
+            catch { return }
+            var hrvByDay: [String: Double] = [:]
+            var respByDay: [String: Double] = [:]
+            for row in self.repo.vitalMetricRows.sorted(by: { $0.source.vitalPriority < $1.source.vitalPriority }) {
+                if hrvByDay[row.metric.day] == nil, let value = row.metric.avgHrv,
+                   records.hrv[row.metric.day]?.matches(value) == true { hrvByDay[row.metric.day] = value }
+                if respByDay[row.metric.day] == nil, let value = row.metric.respRateBpm,
+                   records.resp[row.metric.day]?.matches(value) == true { respByDay[row.metric.day] = value }
+            }
             // Confounder tags from the recent journal (within the last ~2 days). Read once, off the
             // engine's hot path , the engine only needs presence flags, not the rows.
-            let recentDays = Set(days.suffix(2).map(\.day))
+            let recentDays = Set(HealthSignalReliability.dayKeys(ending: latestDay, count: 2))
             let journal = await self.repo.journalEntries(days: 7)
             var ctxAlcohol = false, ctxHardWorkout = false, ctxAlreadyUnwell = false
             for e in journal where e.answeredYes && recentDays.contains(e.day) {
@@ -1958,8 +1935,9 @@ final class AppModel: ObservableObject {
                 if q.contains("workout") || q.contains("train") || q.contains("exercise") { ctxHardWorkout = true }
                 if q.contains("sick") || q.contains("ill") || q.contains("unwell") { ctxAlreadyUnwell = true }
             }
-            self.applyIllnessSignal(days, alcohol: ctxAlcohol, hardOrLateWorkout: ctxHardWorkout,
-                                    alreadyUnwell: ctxAlreadyUnwell)
+            guard sourceIds == self.repo.computedReadIds else { return }
+            self.applyIllnessSignal(days, hrvByDay: hrvByDay, respByDay: respByDay, generation: generation, alcohol: ctxAlcohol,
+                                    hardOrLateWorkout: ctxHardWorkout, alreadyUnwell: ctxAlreadyUnwell)
         }
     }
 
@@ -1976,43 +1954,58 @@ final class AppModel: ObservableObject {
 
     /// Run the `IllnessSignalEngine` from the day history + the journal-derived confounder context, then
     /// publish the result + the semantic `healthAlert` banner payload.
-    private func applyIllnessSignal(_ days: [DailyMetric], alcohol: Bool,
+    private func applyIllnessSignal(_ days: [DailyMetric], hrvByDay: [String: Double], respByDay: [String: Double], generation: Int, alcohol: Bool,
                                     hardOrLateWorkout: Bool, alreadyUnwell: Bool) {
         // A newer day can arrive while the journal read is in flight. Never publish the older
         // task's alert over that day's result.
-        guard days.last?.day == repo.days.last?.day, days.last?.day == repo.today?.day else { return }
-        let previous = healthAlert
-        let recent = Array(days.suffix(2))
-        let latest = days[days.count - 1]
-        let base = Array(days.suffix(31).dropLast(3))    // ~28 days ending 3 days ago
-        func mean(_ vals: [Double]) -> Double? { vals.isEmpty ? nil : vals.reduce(0, +) / Double(vals.count) }
-        func rm(_ kp: (DailyMetric) -> Double?) -> Double? { mean(recent.compactMap(kp)) }
+        guard !Task.isCancelled, generation == illnessEvaluationGeneration,
+              behavior.illnessWatch, !intelligence.computing, days == repo.days,
+              let latest = days.last, latest.day == repo.today?.day else { return }
+        let byDay = Dictionary(days.map { ($0.day, $0) }, uniquingKeysWith: { _, last in last })
+        let recentKeys = HealthSignalReliability.dayKeys(ending: latest.day, count: 2)
+        let baseKeys = HealthSignalReliability.dayKeys(ending: latest.day, count: 28, daysAgo: 3)
+        let recent = recentKeys.compactMap { byDay[$0] }
+        func mean(_ values: [Double]) -> Double? { values.isEmpty ? nil : values.reduce(0, +) / Double(values.count) }
+        func rm(_ value: (DailyMetric) -> Double?) -> Double? { mean(recent.compactMap(value)) }
+        let hrvEpoch = Baselines.hrvBaselineEpoch()
+        let recoveryEpoch = Baselines.recoveryBaselineEpoch()
+        var signalBaselines: [String: Double] = [:]
 
-        // Build each signal's illness-ward z against the personal baseline (Baselines.deviation). The
-        // baseline is folded over the full pre-recent history; a trusted baseline (≥14 nights) is the
-        // engine's gate for actually raising. Skin-temp is already a stored DEVIATION (°C), so it's
-        // z-scored against a zero-centred personal spread; the others z-score the raw column.
-        func signal(_ kp: (DailyMetric) -> Double?, cfgKey: String, illnessUp: Bool) -> (IllnessSignalEngine.SignalReading, Bool)? {
-            guard let cfg = Baselines.metricCfg[cfgKey], let recentMean = rm(kp),
-                  let latestValue = kp(latest) else { return nil }
-            let state = Baselines.foldHistory(base.map(kp), cfg: cfg)
-            guard state.usable else { return (IllnessSignalEngine.SignalReading(zIllnessward: 0, present: false), false) }
+        // Trust belongs to each signal. Missing civil days and recalibration epochs enter the same fold.
+        func signal(_ value: (DailyMetric) -> Double?, cfgKey: String, illnessUp: Bool) -> (IllnessSignalEngine.SignalReading, Bool)? {
+            guard let cfg = Baselines.metricCfg[cfgKey] else { return nil }
+            func eligible(_ row: DailyMetric) -> Double? {
+                guard let number = value(row), number.isFinite, number >= cfg.minVal,
+                      number <= cfg.maxVal else { return nil }
+                return number
+            }
+            let history = baseKeys.map { byDay[$0].flatMap(eligible) }
+            let state = Baselines.foldHistory(history, dayKeys: baseKeys, cfg: cfg,
+                                              baselineEpoch: cfgKey == "hrv" ? hrvEpoch : recoveryEpoch)
+            guard state.trusted, let recentMean = mean(recent.compactMap(eligible)),
+                  let latestValue = eligible(latest) else { return nil }
+            signalBaselines[cfgKey] = state.baseline
             let dev = Baselines.deviation(recentMean, state: state)
             let latestDev = Baselines.deviation(latestValue, state: state)
-            // Keep the two-night smoothing, but only count a signal while the newest night
-            // independently clears the same illness-ward threshold (#2533).
             let z = illnessUp ? min(dev.z, latestDev.z) : min(-dev.z, -latestDev.z)
-            return (IllnessSignalEngine.SignalReading(zIllnessward: z), state.trusted)
+            return (IllnessSignalEngine.SignalReading(zIllnessward: z), true)
         }
 
         let rhr = signal({ $0.restingHr.map(Double.init) }, cfgKey: "resting_hr", illnessUp: true)
-        let hrv = signal({ $0.avgHrv }, cfgKey: "hrv", illnessUp: false)
-        let resp = signal({ $0.respRateBpm }, cfgKey: "resp", illnessUp: true)
-        // Skin-temp deviation: a stored °C delta. Build a small zero-centred state from its own recent
-        // spread so a +0.6 °C reads as a meaningful z without needing a separate baseline column.
+        let hrv = signal({ hrvByDay[$0.day] }, cfgKey: "hrv", illnessUp: false)
+        let resp = signal({ respByDay[$0.day] }, cfgKey: "resp", illnessUp: true)
+        let skinCfg = VitalBands.skinTempDeviationCfg
+        let skinValue: (DailyMetric) -> Double? = { row in
+            row.skinTempDevC.flatMap {
+                $0.isFinite && $0 >= skinCfg.minVal && $0 <= skinCfg.maxVal && !VitalBands.isAbsoluteSkinTemp($0) ? $0 : nil
+            }
+        }
+        let skinState = Baselines.foldHistory(baseKeys.map { byDay[$0].flatMap(skinValue) },
+            dayKeys: baseKeys, cfg: skinCfg, baselineEpoch: recoveryEpoch)
         var skin: (IllnessSignalEngine.SignalReading, Bool)? = nil
-        if let recentSkin = rm({ $0.skinTempDevC }), let latestSkin = latest.skinTempDevC {
-            let z = min(recentSkin, latestSkin) / 0.3 // ~0.3 °C ≈ one personal spread
+        if skinState.trusted, let recentSkin = rm(skinValue), let latestSkin = skinValue(latest) {
+            // Keep the established local +0.6 °C threshold; it is a wellness heuristic.
+            let z = min(recentSkin, latestSkin) / 0.3
             skin = (IllnessSignalEngine.SignalReading(zIllnessward: z), true)
         }
 
@@ -2043,11 +2036,11 @@ final class AppModel: ObservableObject {
 
         // Caller-rendered phrases for the signals that fire (the engine surfaces only the firing ones).
         var labels: [String: String] = [:]
-        if let r = latest.restingHr.map(Double.init), let b = mean(base.compactMap { $0.restingHr.map(Double.init) }), r > b {
+        if let r = latest.restingHr.map(Double.init), let b = signalBaselines["resting_hr"], r > b {
             let delta = Int((r - b).rounded())
             labels["restingHR"] = String(localized: "RHR +\(delta)")
         }
-        if let r = latest.avgHrv, let b = mean(base.compactMap { $0.avgHrv }), b > 0, r < b {
+        if let r = hrvByDay[latest.day], let b = signalBaselines["hrv"], b > 0, r < b {
             let percent = Int(((1 - r / b) * 100).rounded())
             labels["hrv"] = String(localized: "HRV −\(percent)%")
         }
@@ -2068,7 +2061,7 @@ final class AppModel: ObservableObject {
                 locale: AppLanguage.activeLocale)
             labels["skinTemp"] = String(localized: "Skin temperature \(temperature)")
         }
-        if let r = latest.respRateBpm, let b = mean(base.compactMap { $0.respRateBpm }), r > b {
+        if let r = respByDay[latest.day], let b = signalBaselines["resp"], r > b {
             labels["respiration"] = String(localized: "Respiration up")
         }
 
@@ -2086,10 +2079,9 @@ final class AppModel: ObservableObject {
         case .quiet, .mild, .suppressed:
             healthAlert = nil
         }
-        if healthAlert != nil, previous == nil {
-            // Notifications retain their established copy contract; Home renders the semantic result.
-            IllnessNotifier.post(result.copy)
-        }
+        let presentSignals = [rhr?.0, hrv?.0, skin?.0, resp?.0].compactMap { $0 }.filter(\.present).count
+        IllnessNotifier.onEvaluated(healthAlert == nil ? nil : result.copy,
+            enabled: behavior.illnessWatch, valid: trusted && presentSignals >= IllnessSignalEngine.minCorroboratingSignals)
     }
 
     /// #593: once-a-day "optimal strain reached" nudge. Reads the resolved today-row (the same

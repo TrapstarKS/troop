@@ -15,6 +15,7 @@ internal object PhysiologicalStepCycleEngine {
         val cycleStepsByWakeDay: Map<String, Int>,
         val cycleStrainByWakeDay: Map<String, Double>,
         val cycleCaloriesByWakeDay: Map<String, Double>,
+        val cycleActiveCaloriesByWakeDay: Map<String, Double> = emptyMap(),
         val cycleWorkoutCountByWakeDay: Map<String, Int>,
         val boundaryOnsetByWakeDay: Map<String, Long>,
         val firstCycleWakeDay: String?,
@@ -33,7 +34,7 @@ internal object PhysiologicalStepCycleEngine {
     private val cache = HashMap<String, CachedCycleSteps>()
 
     /** A cycle's Effort and calories, with the key of the inputs they were computed from. */
-    private data class CachedLoad(val key: String, val strain: Double?, val calories: Double?)
+    private data class CachedLoad(val key: String, val strain: Double?, val calories: Double?, val activeCalories: Double?)
 
     /** Same lifetime and serialization as [cache]. */
     private val loadCache = HashMap<String, CachedLoad>()
@@ -68,7 +69,16 @@ internal object PhysiologicalStepCycleEngine {
         effortMethod: StrainScorer.Method,
     ): Result {
         if (dayCycleMode == DayCycleMode.MIDNIGHT) {
-            return Result(emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyMap(), null, emptyList())
+            return Result(
+                cycleStepsByWakeDay = emptyMap(),
+                cycleStrainByWakeDay = emptyMap(),
+                cycleCaloriesByWakeDay = emptyMap(),
+                cycleActiveCaloriesByWakeDay = emptyMap(),
+                cycleWorkoutCountByWakeDay = emptyMap(),
+                boundaryOnsetByWakeDay = emptyMap(),
+                firstCycleWakeDay = null,
+                recoveredOwnerMarkerRows = emptyList(),
+            )
         }
         val editedRowsByDay = editedRows.groupBy {
             AnalyticsEngine.dayString(it.endTs, tzOffsetSeconds)
@@ -204,6 +214,7 @@ internal object PhysiologicalStepCycleEngine {
         val stepsByWakeDay = HashMap<String, Int>()
         val strainByWakeDay = HashMap<String, Double>()
         val caloriesByWakeDay = HashMap<String, Double>()
+        val activeCaloriesByWakeDay = HashMap<String, Double>()
         val workoutCountByWakeDay = HashMap<String, Int>()
         val windows = PhysiologicalSteps.cycleWindows(boundaries, nowSeconds)
         val allDetectedSleep = sleepContext.distinctBy { it.start to it.end }
@@ -226,16 +237,19 @@ internal object PhysiologicalStepCycleEngine {
                 val cycleHr = repo.hrSamplesUnion(
                     fallbackOwner, window.onset, window.endExclusive - 1L, 200_000,
                 )
+                val energy = cycleHr.takeIf { it.isNotEmpty() }?.let {
+                    Calories.estimateDayEnergy(it, profile, effectiveMaxHr, restingHr)
+                }
                 CachedLoad(
                     key = loadKey,
                     strain = StrainScorer.strain(cycleHr, effectiveMaxHr, restingHr, effortMethod, profile.sex),
-                    calories = if (cycleHr.isNotEmpty()) {
-                        Calories.estimateDayCalories(cycleHr, profile, effectiveMaxHr, restingHr)
-                    } else null,
+                    calories = energy?.totalKcal,
+                    activeCalories = energy?.activeKcal,
                 ).also { loadCache[window.sleepId] = it }
             }
             load.strain?.let { strainByWakeDay[wakeDay] = it }
             load.calories?.let { caloriesByWakeDay[wakeDay] = it }
+            load.activeCalories?.let { activeCaloriesByWakeDay[wakeDay] = it }
             // Count the persisted all-source workout union, not only analyzer-detected bouts. Repository
             // reads are inclusive, while ownership is [onset, nextOnset).
             val workoutEndInclusive = window.endExclusive - 1L
@@ -372,6 +386,7 @@ internal object PhysiologicalStepCycleEngine {
             cycleStepsByWakeDay = stepsByWakeDay,
             cycleStrainByWakeDay = strainByWakeDay,
             cycleCaloriesByWakeDay = caloriesByWakeDay,
+            cycleActiveCaloriesByWakeDay = activeCaloriesByWakeDay,
             cycleWorkoutCountByWakeDay = workoutCountByWakeDay,
             boundaryOnsetByWakeDay = boundaries.mapNotNull { boundary ->
                 dayBySleepId[boundary.sleepId]?.let { it to boundary.onset }

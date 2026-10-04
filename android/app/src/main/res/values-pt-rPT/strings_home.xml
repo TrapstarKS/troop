@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_previous_day">Dia anterior</string>
+    <string name="home_next_day">Dia seguinte</string>
+    <string name="home_profile">Abrir perfil</string>
+    <string name="home_device_connected">Dispositivo ligado</string>
+    <string name="home_device_disconnected">Dispositivo desligado</string>
+    <string name="home_sleep">Sono</string>
+    <string name="home_recovery">Recuperação</string>
+    <string name="home_strain">Esforço</string>
+    <string name="home_status_disconnected">Desligado</string>
+    <string name="home_status_scanning">A procurar dispositivo</string>
+    <string name="home_status_backfill">A sincronizar histórico</string>
+    <string name="home_status_capture">Registo em direto</string>
+    <string name="home_status_connected_no_data">Ligado · ainda sem dados</string>
+    <string name="home_status_idle">Ligado · inativo</string>
+    <string name="home_health_monitor">Monitor de saúde</string>
+    <string name="home_stress_monitor">Monitor de stress</string>
+    <string name="home_metrics_available">Métricas disponíveis</string>
+    <string name="home_stress_unavailable">Sem leitura para este dia</string>
+    <string name="home_stress_local">Estimativa diária local</string>
+    <string name="home_my_day">O meu dia</string>
+    <string name="home_add_activity">Adicionar atividade</string>
+    <string name="home_sleep_duration">%1$dh %2$dmin</string>
+    <string name="home_no_sleep_yet">Ainda sem sono registado</string>
+    <string name="home_activity_time">%1$s – %2$s</string>
+    <string name="home_no_activities">Sem atividades registadas para este dia</string>
+    <string name="home_my_plan">O meu plano</string>
+    <string name="home_weekly_plan">Plano semanal</string>
+    <string name="home_plan_summary">Veja objetivos, hábitos e progresso locais.</string>
+    <string name="home_my_dashboard">O meu painel</string>
+    <string name="home_save">Guardar</string>
+    <string name="home_sleep_pending_sync">Pontuação do sono a aguardar sincronização</string>
+    <string name="home_daily_guidance">Orientação diária</string>
+    <string name="home_avatar" translatable="false">N</string>
+    <string name="home_no_value" translatable="false">—</string>
+    <string name="home_metrics_count" translatable="false">%1$d/5</string>
+    <string name="home_dial_label" translatable="false">%1$s ›</string>
+    <string name="home_status_capture_experimental">Registo em direto · histórico experimental</string>
+    <string name="home_dashboard_edit_description">Escolhe os elementos de O meu painel. Arrasta para ordenar ou usa as setas.</string>
+</resources>

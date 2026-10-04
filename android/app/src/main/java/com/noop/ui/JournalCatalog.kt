@@ -28,18 +28,29 @@ sealed class JournalKind {
  * change). Mirrors macOS `JournalGroup` value-for-value. The enum name is the stable persisted key;
  * [title] is the display label.
  */
-enum class JournalGroup(val title: String) {
+enum class JournalGroup(private val defaultTitle: String) {
     Supplements("Supplements"),
     Nutrition("Nutrition"),
     Lifestyle("Lifestyle"),
+    Environment("Environment"),
     Health("Health"),
     Behaviour("Behaviour"),
     Other("Other");
 
+    val title: String get() = uiString(when (this) {
+        Supplements -> com.noop.R.string.plan_group_supplements
+        Nutrition -> com.noop.R.string.plan_group_nutrition
+        Lifestyle -> com.noop.R.string.plan_group_lifestyle
+        Environment -> com.noop.R.string.plan_group_environment
+        Health -> com.noop.R.string.nav_health
+        Behaviour -> com.noop.R.string.plan_group_behaviour
+        Other -> com.noop.R.string.plan_group_other
+    })
+
     companion object {
         /** Fixed display order (matches macOS). Empty groups hide outside edit mode. */
         val displayOrder: List<JournalGroup> =
-            listOf(Nutrition, Supplements, Lifestyle, Health, Behaviour, Other)
+            listOf(Nutrition, Supplements, Lifestyle, Environment, Health, Behaviour, Other)
 
         fun fromKey(key: String): JournalGroup =
             entries.firstOrNull { it.name == key } ?: Other
@@ -72,18 +83,15 @@ data class JournalCatalogItem(
  * The default group for each starter question (canonical -> group). Mirrors macOS
  * JournalCatalogStore.starterGroups value-for-value. Anything not listed falls to Other.
  */
-val STARTER_JOURNAL_GROUPS: Map<String, JournalGroup> = mapOf(
-    "Did you drink any alcohol?" to JournalGroup.Nutrition,
-    "Did you have caffeine late in the day?" to JournalGroup.Nutrition,
-    "Did you eat close to bedtime?" to JournalGroup.Nutrition,
-    "Did you take magnesium?" to JournalGroup.Supplements,
-    "Did you view a screen in bed?" to JournalGroup.Lifestyle,
-    "Did you use a sauna?" to JournalGroup.Lifestyle,
-    "Did you share your bed?" to JournalGroup.Lifestyle,
-    "Did you read before bed?" to JournalGroup.Lifestyle,
-    "Did you feel sick or ill?" to JournalGroup.Health,
-    "Did you feel stressed?" to JournalGroup.Behaviour,
-)
+val STARTER_JOURNAL_GROUPS: Map<String, JournalGroup> = JournalFactor.all.associate {
+    it.canonical to JournalGroup.entries.firstOrNull { group -> group.name.lowercase() == it.groupKey }!!
+}
+
+private fun defaultJournalKind(question: String): JournalKind =
+    JournalFactor.find(question)?.unit?.let { JournalKind.Numeric(it) } ?: JournalKind.Bool
+
+private fun defaultJournalGroup(question: String): JournalGroup =
+    JournalFactor.find(question)?.let { factor -> JournalGroup.entries.firstOrNull { it.name.lowercase() == factor.groupKey } } ?: JournalGroup.Other
 
 // MARK: - Pure catalog logic (JVM-testable; mirrors macOS)
 
@@ -113,8 +121,8 @@ fun migrateLegacyJournalCatalog(custom: List<String>, hidden: List<String>): Lis
         if (idx >= 0) {
             out[idx] = out[idx].copy(hidden = true)   // a hidden custom question
         } else if (seen.add(key)) {
-            out.add(JournalCatalogItem(canonical = t, kind = JournalKind.Bool,
-                group = STARTER_JOURNAL_GROUPS[t] ?: JournalGroup.Other,
+            out.add(JournalCatalogItem(canonical = t, kind = defaultJournalKind(t),
+                group = defaultJournalGroup(t),
                 sortIndex = i, hidden = true, custom = false))
             i++
         }
@@ -148,8 +156,8 @@ fun resolveJournalItems(
         if (saved != null) {
             out.add(saved)
         } else {
-            out.add(JournalCatalogItem(canonical = t, kind = JournalKind.Bool,
-                group = STARTER_JOURNAL_GROUPS[t] ?: JournalGroup.Other,
+            out.add(JournalCatalogItem(canonical = t, kind = defaultJournalKind(t),
+                group = defaultJournalGroup(t),
                 sortIndex = fallbackIndex, hidden = false, custom = false))
             fallbackIndex++
         }
@@ -237,8 +245,8 @@ private fun editJournalItem(
     }
     val t = canonical.trim()
     val next = (items.maxOfOrNull { it.sortIndex } ?: -1) + 1
-    val fresh = JournalCatalogItem(canonical = t,
-        group = STARTER_JOURNAL_GROUPS[t] ?: JournalGroup.Other,
+    val fresh = JournalCatalogItem(canonical = t, kind = defaultJournalKind(t),
+        group = defaultJournalGroup(t),
         sortIndex = next, hidden = false, custom = false)
     return items + mutate(fresh)
 }

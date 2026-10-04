@@ -1,6 +1,8 @@
 package com.noop.ui
 
 import android.content.Context
+import com.noop.notif.LocalNotificationContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -45,7 +47,7 @@ import androidx.compose.material.icons.filled.Hexagon
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.MonitorHeart
-import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.automirrored.filled.Rule
@@ -75,6 +77,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.noop.R
 import com.noop.analytics.FusionSource
@@ -121,11 +124,27 @@ import com.noop.push.SelfHostedPushScreen
 
 // MARK: - Navigation model
 //
-// The macOS app's sidebar holds many sections; on Android (mirroring the iOS RootTabView) we surface
-// them through a unified floating "glass" bottom bar (Today · Trends · Sleep · More) for the everyday
-// screens, with a "More" sheet that lists the full grouped set — so every destination is one tap away
-// without a global hamburger/drawer. Destinations are grouped exactly as the sidebar groups them.
-// Routes whose screens belong to later waves point at a ComingSoon placeholder so the app compiles today.
+// Home, Health, Plan and More share one NavHost. Coach is a separate orb.
+// Existing routes remain stable for local feature links and the demo harness.
+
+/** Stable detail hooks backed by local feature screens. */
+object WhoopRoute {
+    const val recoveryDetail = "recovery_detail"
+    const val strainDetail = "strain_detail"
+    const val sleepDetail = "sleep"
+    const val sleepDetailForDay = "sleep/{dayKey}"
+    const val sleepPlanner = "smart_alarm"
+    const val healthMonitor = "vital_signs"
+    const val healthspan = "healthspan"
+    const val stressMonitor = "stress"
+    const val weeklyPlan = "weekly_plan"
+    const val journal = "insights"
+    const val localBriefing = "local_briefing"
+    const val localNotifications = "local_notifications"
+
+    /** Selected ISO wake day belongs to this entry; the bare Sleep route still opens the latest night. */
+    fun sleepForDay(dayKey: String): String = "$sleepDetail/$dayKey"
+}
 
 /** A single drawer destination: stable route, display title (localized via [titleRes]), sidebar icon. */
 internal enum class Destination(
@@ -134,7 +153,12 @@ internal enum class Destination(
     val icon: ImageVector,
 ) {
     // Group: Today
-    Today("today", R.string.nav_today, Icons.Filled.Home),
+    Today("today", R.string.whoop_nav_home, Icons.Filled.Home),
+    Plan("plan", R.string.whoop_nav_plan, Icons.Filled.Edit),
+    RecoveryDetail(WhoopRoute.recoveryDetail, R.string.l10n_health_screen_recovery_ea924f72, Icons.Filled.FavoriteBorder),
+    StrainDetail(WhoopRoute.strainDetail, R.string.nav_workouts, Icons.Filled.FitnessCenter),
+    Healthspan(WhoopRoute.healthspan, R.string.whoop_nav_healthspan, Icons.Filled.MonitorHeart),
+    WeeklyPlan(WhoopRoute.weeklyPlan, R.string.whoop_nav_weekly_plan, Icons.Filled.Edit),
     Intelligence("intelligence", R.string.nav_intelligence, Icons.Filled.Psychology),
     // Optional, default-OFF (task #43): the Coupled view (WHOOP-style day read). Reached ONLY via the
     // Today dashboard "Coupled view" card tap-through, so it is deliberately NOT in any [DrawerGroup].
@@ -159,6 +183,8 @@ internal enum class Destination(
     // it is deliberately absent from every [DrawerGroup]: the drawer groups mirror the iOS More list
     // one-for-one, and the iOS twin hangs off Coach in the same way.
     CoachSettings("coach_settings", R.string.coach_settings, Icons.Filled.Tune),
+    LocalBriefing(WhoopRoute.localBriefing, R.string.local_outlook, Icons.Filled.AutoAwesome),
+    LocalNotifications(WhoopRoute.localNotifications, R.string.nav_notifications, Icons.Filled.Notifications),
     InsightsHub("insights_hub", R.string.nav_insights_hub, Icons.Filled.Insights),
     Insights("insights", R.string.nav_insights, Icons.Filled.Insights),
     Explore("explore", R.string.nav_explore, Icons.Filled.Explore),
@@ -203,9 +229,13 @@ internal enum class Destination(
 
     // The "More" tab: its own navigated page (mirroring the iOS More tab) that hosts the full
     // grouped destination list. It is NOT itself in any [DrawerGroup] — it's the door to them.
-    More("more", R.string.nav_more, Icons.Filled.MoreHoriz);
+    More("more", R.string.nav_more, Icons.Filled.Menu);
 
     companion object {
+        /** Details retain their caller's tab; only an exact root changes its selection. */
+        fun rootForRoute(route: String?): Destination? =
+            listOf(Today, Health, Plan, More).firstOrNull { it.route == route }
+
         /** Resolve the destination owning the current back-stack route (defaults to Today). */
         fun forRoute(route: String?): Destination =
             entries.firstOrNull {
@@ -229,21 +259,15 @@ internal data class DrawerGroup(
     val defaultExpanded: Boolean,
 )
 
-// Mirrors the iOS RootTabView `moreTab` grouping + order one-for-one. Today / Trends / Sleep / Coach
-// are NOT listed (they're bottom-bar tabs, exactly as on iOS). Android-only screens (Vital Signs, Wake
-// Window, Notifications, Devices) are slotted into the matching iOS group.
+// More retains existing feature destinations after Sleep and Trends move out of the primary tabs.
 internal val drawerGroups: List<DrawerGroup> = listOf(
     DrawerGroup("Insights", R.string.more_group_insights, listOf(
-        // Coach is a bottom-bar tab now and is deliberately absent here, matching iOS: "K3: Coach
-        // promoted to a top-level tab — no longer listed under More." Leaving it would have put the
-        // same destination in two places at once, which is the duplication the note above says this
-        // list exists to avoid. (#2218)
         Destination.InsightsHub, Destination.Intelligence,
-        Destination.Insights, Destination.Explore, Destination.Compare,
+        Destination.Insights, Destination.Trends, Destination.WeeklyPlan, Destination.Explore, Destination.Compare,
     ), defaultExpanded = true),
     DrawerGroup("Body", R.string.more_group_body, listOf(
-        Destination.Live, Destination.Workouts, Destination.Health, Destination.VitalSigns,
-        Destination.LabBook, Destination.Stress, Destination.Breathe, Destination.Intervals,
+        Destination.Sleep, Destination.Live, Destination.Workouts, Destination.VitalSigns,
+        Destination.LabBook, Destination.Healthspan, Destination.Stress, Destination.Breathe, Destination.Intervals,
         Destination.Rhythm,
     ), defaultExpanded = true),
     DrawerGroup("Data", R.string.more_group_data, listOf(
@@ -499,24 +523,59 @@ object BottomBarStyleStore {
 }
 
 /**
- * App shell: a single [Scaffold] with a floating [GlassBottomBar] (Today · Trends · Sleep · Coach · More)
- * driving one [NavHost], mirroring the iOS RootTabView. There is NO global toolbar and no nav drawer
- * — every screen self-titles via [ScreenScaffold], and the "More" sheet (opened from the bar) reaches
+ * App shell: Home, Health, Plan and More with a separate Coach orb, driving one [NavHost].
+ * Every screen self-titles via [ScreenScaffold], and the More index reaches
  * every destination in [drawerGroups], so nothing is lost. A single [AppViewModel] is created here and
  * shared with every screen, so the BLE connection and cached metrics stay app-wide singletons.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppRoot(viewModel: AppViewModel = viewModel()) {
+fun AppRoot(
+    viewModel: AppViewModel = viewModel(),
+    localNotificationRoute: String? = null,
+    onLocalNotificationRouteConsumed: (String) -> Unit = {},
+    notificationContext: LocalNotificationContext? = null,
+    onNotificationContextConsumed: (LocalNotificationContext) -> Unit = {},
+) {
     val nav = rememberNavController()
+    val coachOwner = requireNotNull(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current)
 
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val current = Destination.forRoute(currentRoute)
+    var selectedTabRoute by rememberSaveable { mutableStateOf(Destination.Today.route) }
+    LaunchedEffect(currentRoute) {
+        Destination.rootForRoute(currentRoute)?.let { selectedTabRoute = it.route }
+    }
+    val selectedTab = Destination.forRoute(selectedTabRoute)
     var showQuickActions by remember { mutableStateOf(false) }
     // The Updates inbox sheet (opened by the Today header bell). The store is a process singleton so
     // the Today cards and the import path post to the same inbox this sheet renders.
     val context = androidx.compose.ui.platform.LocalContext.current
+    val openCoach = {
+        val route = coachDestination(com.noop.ai.AiKeyStore.hasKey(context))
+        if (route != currentRoute) nav.navigate(route) { launchSingleTop = true }
+    }
+    LaunchedEffect(localNotificationRoute) {
+        localNotificationRoute?.let { route ->
+            localNotificationDestination(route, com.noop.ai.AiKeyStore.hasKey(context))?.let { target ->
+                selectedTabRoute = target.root
+                nav.navigateShellDetail(target)
+            }
+            onLocalNotificationRouteConsumed(route)
+        }
+    }
+    LaunchedEffect(notificationContext) {
+        notificationContext?.let { notice ->
+            datedNotificationDestination(notice.route)?.let { target ->
+                selectedTabRoute = target.root
+                nav.navigateShellDetail(target)
+                if (target.detail == LOCAL_NOTICE_ROUTE) {
+                    nav.currentBackStackEntry?.savedStateHandle?.set("localNotificationContext", HashMap(notice.wireFields))
+                }
+                onNotificationContextConsumed(notice)
+            }
+        }
+    }
     val updateStore = remember { UpdateStore.from(context) }
     var showUpdatesInbox by remember { mutableStateOf(false) }
     // #984: the changelog sheet a What's New inbox row opens. Held here (not inside the inbox) so it
@@ -574,18 +633,18 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
         Scaffold(
             containerColor = Palette.surfaceBase,
             bottomBar = {
-                // One unified "glass" bar: four evenly-spaced tabs — Today · Trends · Sleep · More
-                // (matches the iOS FloatingTabBar). The quick-action "+" lives in the Today header's
-                // top-right (balancing the avatar), so the bar is clean tabs only. "More" navigates to
-                // its own page (mirroring the iOS More tab) that reaches every grouped destination, so no
-                // destination is lost without the drawer.
+                // The capsule and Coach orb share the measured bottom inset in both layout modes.
                 // DEFAULT path: the shipped reserved slot, unchanged. Empty only when the overlay is
                 // on, where the bar is drawn below as a sibling and the slot must reserve nothing.
                 if (!BottomBarStyleStore.overlay) {
                     GlassBottomBar(
-                        current = current,
+                        current = selectedTab,
                         onTabSelected = { dest ->
-                            if (dest.route != currentRoute) nav.navigateTopLevel(dest.route)
+                            if (dest != Destination.Coach) selectedTabRoute = dest.route
+                            if (dest.route != currentRoute) {
+                                if (dest == Destination.Coach) openCoach()
+                                else if (!nav.popBackStack(dest.route, false)) nav.navigateTopLevel(dest.route)
+                            }
                         },
                     )
                 }
@@ -638,7 +697,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         onOpenUpdates = { showUpdatesInbox = true },
                         // The leading profile avatar opens Settings (where the photo is set/changed),
                         // mirroring iOS's avatar-leading Today header. The drawer hamburger is unchanged.
-                        onOpenSettings = { nav.navigateTopLevel(Destination.Settings.route) },
+                        onOpenSettings = { nav.navigate("settings/${SettingsCategory.PROFILE.name}") },
                         // The opt-in Hydration card (only shown when Hydration tracking is on) pushes its
                         // detail. A normal push so the back-stack returns to Today.
                         onOpenHydration = { nav.navigate(Destination.Hydration.route) },
@@ -653,11 +712,12 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         // Settings. A normal push returns Back to Today (#1515).
                         onOpenStepsCalibration = { nav.navigate(Destination.StepsCalibration.route) },
                         onOpenSleep = { nav.navigateTopLevel(Destination.Sleep.route) },
+                        onOpenSleepForDay = { dayKey -> nav.navigate(WhoopRoute.sleepForDay(dayKey)) },
                         // Optional Coupled view card (task #43): a normal push so back returns to Today.
                         onOpenCoupled = { nav.navigate(Destination.CoupledView.route) },
                         // #1862: the Coach launcher hands off here. Without this the sheet's buttons
                         // would fall back to the parameter's no-op default and silently do nothing.
-                        onOpenCoach = { nav.navigateTopLevel(Destination.Coach.route) },
+                        onOpenCoach = { openCoach() },
                         // The "workout in progress" indicator: raise the one-shot the Live screen consumes to
                         // re-open the in-exercise overlay, then route to Live. One tap from Today (iOS parity).
                         onOpenActiveWorkout = {
@@ -672,6 +732,15 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         onOpenJournal = { nav.navigateTopLevel(Destination.Insights.route) },
                     )
                 }
+                composable(Destination.Plan.route) { PlanLanding(onNavigate = { nav.navigate(it) }) }
+                composable(Destination.WeeklyPlan.route) { WeeklyPlanScreen(viewModel) }
+                composable(Destination.RecoveryDetail.route) {
+                    RecoveryDetailScreen(vm = viewModel, onBack = { nav.popBackStack() })
+                }
+                composable(Destination.StrainDetail.route) {
+                    StrainDetailScreen(vm = viewModel, onBack = { nav.popBackStack() })
+                }
+                composable(Destination.Healthspan.route) { HealthspanScreen(viewModel, onCoach = { nav.navigate(Destination.Coach.route) }) }
                 composable(Destination.Live.route) {
                     LiveScreen(
                         viewModel = viewModel,
@@ -681,6 +750,14 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.Sleep.route) {
                     SleepScreen(
                         vm = viewModel,
+                        onOpenJournal = { nav.navigateTopLevel(Destination.Insights.route) },
+                        onOpenAlarms = { nav.navigate(Destination.SmartAlarm.route) },
+                    )
+                }
+                composable(WhoopRoute.sleepDetailForDay) { entry ->
+                    SleepScreen(
+                        vm = viewModel,
+                        initialDayKey = entry.arguments?.getString("dayKey"),
                         onOpenJournal = { nav.navigateTopLevel(Destination.Insights.route) },
                         onOpenAlarms = { nav.navigate(Destination.SmartAlarm.route) },
                     )
@@ -696,20 +773,12 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.Breathe.route) { BreatheScreen(viewModel) }
                 composable(Destination.Coach.route) {
                     // A normal push, so Back returns to the conversation (#2243).
-                    CoachScreen(onOpenSettings = { nav.navigate(Destination.CoachSettings.route) })
+                    CoachScreen(vm = viewModel(viewModelStoreOwner = coachOwner),
+                        onOpenSettings = { nav.navigate(Destination.CoachSettings.route) })
                 }
                 composable(Destination.CoachSettings.route) {
-                    // The SAME CoachViewModel the conversation is using, not a fresh one.
-                    // `viewModel()` resolves against LocalViewModelStoreOwner, which under
-                    // Navigation Compose is the NavBackStackEntry, so the default would hand this
-                    // destination its own instance. CoachViewModel keeps consent in memory
-                    // (`_consent`, seeded once at construction) and `send` passes that value to
-                    // `chatStream`, so a revoke made against a second instance would persist to
-                    // storage and still leave the conversation sending on the old one until its
-                    // entry was destroyed. Coach is always below this on the back stack: this
-                    // destination is reachable only from the strip on that screen.
-                    val coachEntry = remember(it) { nav.getBackStackEntry(Destination.Coach.route) }
-                    CoachSettingsScreen(vm = viewModel(coachEntry))
+                    // Settings and restored conversations observe the same consent and configuration.
+                    CoachSettingsScreen(vm = viewModel(viewModelStoreOwner = coachOwner))
                 }
                 composable(Destination.Explore.route) { TrendsExploreScreen(viewModel) }
                 composable(Destination.Automations.route) { AutomationsScreen(viewModel) }
@@ -717,11 +786,11 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.Workouts.route) { WorkoutsScreen(viewModel) }
                 composable(Destination.Intelligence.route) { IntelligenceScreen(viewModel) }
 
-                // --- Placeholder routes (later waves fill these in) ---
+                // Existing local feature destinations.
                 composable(Destination.Stress.route) {
-                    StressScreen(
+                    StressMonitorScreen(
                         vm = viewModel,
-                        onBreathe = { nav.navigateTopLevel(Destination.Breathe.route) },
+                        onBreathe = { nav.navigate(Destination.Breathe.route) },
                     )
                 }
                 composable(Destination.Trends.route) { TrendsScreen(viewModel) }
@@ -730,6 +799,9 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.Health.route) {
                     HealthScreen(
                         vm = viewModel,
+                        onOpenHealthMonitor = { nav.navigate(WhoopRoute.healthMonitor) },
+                        onOpenHealthspan = { nav.navigate(WhoopRoute.healthspan) },
+                        onOpenStress = { nav.navigate(WhoopRoute.stressMonitor) },
                         onVitalClick = { nav.navigate("vital_detail/$it") },
                         onOpenLabBook = { nav.navigateTopLevel(Destination.LabBook.route) },
                         onOpenFusedRecord = { nav.navigateTopLevel(Destination.FusedRecord.route) },
@@ -738,9 +810,10 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 }
                 composable(Destination.Hydration.route) { HydrationScreen(viewModel) }
                 composable(Destination.VitalSigns.route) {
-                    VitalSignsScreen(
+                    HealthMonitorScreen(
                         vm = viewModel,
                         onVitalClick = { nav.navigate("vital_detail/$it") },
+                        onOpenLiveHr = { nav.navigate(Destination.Live.route) },
                     )
                 }
                 composable(Destination.VitalSignsDetail.route) { backStackEntry ->
@@ -768,14 +841,39 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 composable(Destination.BackupSync.route) { BackupSyncScreen() }
                 composable(Destination.Notifications.route) { NotificationsSettingsScreen(viewModel) }
                 composable(Destination.PowerSaving.route) { PowerSavingScreen(viewModel) }
-                composable(Destination.Settings.route) {
-                    SettingsScreen(
-                        viewModel,
-                        onOpenTestCentre = { nav.navigate(Destination.TestCentre.route) },
-                        onOpenBackupSync = { nav.navigate(Destination.BackupSync.route) },
-                        onOpenSelfHostedPush = { nav.navigate(Destination.SelfHostedPush.route) },
-                        onOpenStepsCalibration = { nav.navigate(Destination.StepsCalibration.route) },
-                    )
+                composable(Destination.Settings.route) { ShellSettings(viewModel, nav) }
+                composable("settings/{category}") { entry ->
+                    ShellSettings(viewModel, nav,
+                        SettingsCategory.entries.find { it.name == entry.arguments?.getString("category") })
+                }
+                composable(Destination.LocalNotifications.route) {
+                    LocalNotificationsScreen(viewModel,
+                        onOpenWristAlerts = { nav.navigate(Destination.Notifications.route) },
+                        onOpenAutomations = { nav.navigate(Destination.Automations.route) },
+                        onOpenAlarms = { nav.navigate(WhoopRoute.sleepPlanner) },
+                        onOpenCoachSettings = { nav.navigate(Destination.CoachSettings.route) })
+                }
+                composable(LOCAL_NOTICE_ROUTE) { entry ->
+                    val fields by entry.savedStateHandle
+                        .getStateFlow<HashMap<String, String>?>("localNotificationContext", null)
+                        .collectAsStateWithLifecycle()
+                    val notice = remember(fields) { fields?.let { LocalNotificationContext.fromWireFields(it) } }
+                    notice?.let {
+                        if (it.route == "local_briefing") {
+                            LocalBriefingScreen(viewModel,
+                                onOpenCoach = { nav.navigate(Destination.Coach.route) },
+                                onOpenCoachSettings = { nav.navigate(Destination.CoachSettings.route) },
+                                onOpenAlarms = { nav.navigate(WhoopRoute.sleepPlanner) }, notificationContext = it)
+                        } else {
+                            LocalRecordedNoticeScreen(it)
+                        }
+                    }
+                }
+                composable(Destination.LocalBriefing.route) {
+                    LocalBriefingScreen(viewModel,
+                        onOpenCoach = { nav.navigate(Destination.Coach.route) },
+                        onOpenCoachSettings = { nav.navigate(Destination.CoachSettings.route) },
+                        onOpenAlarms = { nav.navigate(WhoopRoute.sleepPlanner) })
                 }
                 composable(Destination.StepsCalibration.route) {
                     val profile = remember(context) { ProfileStore.from(context) }
@@ -801,7 +899,8 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 // full grouped destination list (was a pull-up sheet). A row pushes its destination so
                 // Android Back returns to More instead of skipping straight to Today.
                 composable(Destination.More.route) {
-                    MoreScreen(onNavigate = { nav.navigate(it) })
+                    MoreHubScreen(viewModel, onNavigate = { nav.navigate(it) },
+                        onOpenSettings = { nav.navigate("settings/${it.name}") })
                 }
             }
         }
@@ -901,11 +1000,10 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         if (key == UpdateStore.WHATS_NEW_DEEP_LINK) {
                             showWhatsNewFromInbox = true
                         } else {
-                            val route = when (key) {
-                                "trends" -> Destination.Trends.route
-                                else -> null
+                            updatesDestination(key)?.let { target ->
+                                selectedTabRoute = target.root
+                                nav.navigateShellDetail(target)
                             }
-                            if (route != null && route != currentRoute) nav.navigateTopLevel(route)
                         }
                     },
                     onRestore = { cardId ->
@@ -939,9 +1037,13 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
         // Dropping it at the end of the animation removes both. Safe precisely because it is an overlay —
         // it reserves no space, so composing or not composing it never reflows content.
         if (BottomBarStyleStore.overlay && barPresent) GlassBottomBar(
-            current = current,
+            current = selectedTab,
             onTabSelected = { dest ->
-                if (dest.route != currentRoute) nav.navigateTopLevel(dest.route)
+                if (dest != Destination.Coach) selectedTabRoute = dest.route
+                if (dest.route != currentRoute) {
+                    if (dest == Destination.Coach) openCoach()
+                    else if (!nav.popBackStack(dest.route, false)) nav.navigateTopLevel(dest.route)
+                }
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -1092,48 +1194,20 @@ private fun MoreRow(dest: Destination, onClick: () -> Unit) {
     }
 }
 
-// MARK: - Glass bottom bar
-//
-// The signature bar, ported from iOS's FloatingTabBar: ONE rounded "glass" island holding four
-// evenly-spaced inline slots — Today · Trends · Sleep · More. The quick-action "+" now lives in the
-// Today header's top-right (it left the bar to balance the avatar), so the bar is clean tabs only.
-// The "glass" feel is a translucent raised surface with a low elevation and a subtle hairline border
-// — frosted, not a hard opaque slab and not a glow. Each nav slot is an icon over a small label;
-// active = gold accent, inactive = textSecondary. All routing is unchanged: the four tabs switch the
-// same destinations.
+// MARK: - Four-tab capsule and Coach orb
 
 /** A single bottom-bar nav slot: the destination it switches to, plus the bar-specific icon/label. */
 internal data class BarTab(val dest: Destination, val icon: ImageVector, @StringRes val labelRes: Int)
 
-/** The nav slots in iOS order: Today · Trends · Sleep · Coach · More.
- *  More is special-cased (it opens the sheet rather than a route), so it is appended at the call site. */
 internal val barLeadingTabs = listOf(
-    BarTab(Destination.Today, Icons.Outlined.GridView, R.string.nav_today),
-    // chart.line.uptrend.xyaxis on iOS — the rising-trend glyph, not a flat bar chart.
-    BarTab(Destination.Trends, Icons.AutoMirrored.Filled.TrendingUp, R.string.nav_trends),
+    BarTab(Destination.Today, Icons.Filled.Home, R.string.whoop_nav_home),
+    BarTab(Destination.Health, Icons.Filled.FavoriteBorder, R.string.nav_health),
 )
-/**
- * The trailing tabs, as shipped. [barTrailingTabsFor] is what the bar actually draws: Coach is
- * conditional, so this list is the full set rather than the visible one.
- */
 internal val barTrailingTabs = listOf(
-    BarTab(Destination.Sleep, Icons.Filled.Bedtime, R.string.nav_sleep),
-    // #2218: Coach was promoted to a top-level tab on iOS and this side did not follow, so it sat in
-    // the More list while the comment above claimed the two bars matched. AutoAwesome is the sparkles
-    // glyph iOS uses, and the same one the More row already shows, so the entry a wearer has learned
-    // keeps its face when it moves up.
-    BarTab(Destination.Coach, Icons.Filled.AutoAwesome, R.string.nav_coach),
+    BarTab(Destination.Plan, Icons.Filled.Edit, R.string.whoop_nav_plan),
 )
 
-/**
- * The trailing tabs to draw for a given Coach setting.
- *
- * A function rather than a filter written inline at the bar so the Kotlin unit tests can assert the
- * two shapes directly, and so every surface that needs "which tabs are there" agrees by construction
- * instead of by two copies of the same predicate.
- */
-internal fun barTrailingTabsFor(coachEnabled: Boolean): List<BarTab> =
-    if (coachEnabled) barTrailingTabs else barTrailingTabs.filterNot { it.dest == Destination.Coach }
+internal fun barTrailingTabsFor(coachEnabled: Boolean): List<BarTab> = barTrailingTabs
 
 @Composable
 private fun GlassBottomBar(
@@ -1141,138 +1215,48 @@ private fun GlassBottomBar(
     onTabSelected: (Destination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // One binding, used by BOTH the slots and the More-lit predicate below. #2218's note applies here
-    // twice over: a second copy of "which tabs exist" is what let Coach light two slots at once, and a
-    // conditional tab makes that failure available again to anyone who filters in one place only.
-    val visibleTrailing = barTrailingTabsFor(BottomBarStyleStore.coachEnabled)
-    val barShape = RoundedCornerShape(50)
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            // Clear the gesture-nav bar (home indicator) first, then add breathing room so the capsule
-            // floats free of the bottom edge rather than jamming against it — iOS clears the home-indicator
-            // safe area + 4pt; here navigationBarsPadding + 12dp gives the same lift.
-            .navigationBarsPadding()
-            .padding(horizontal = 22.dp)
-            .padding(top = 4.dp, bottom = Metrics.space12),
-        contentAlignment = Alignment.Center,
-    ) {
-        Surface(
-            shape = barShape,
-            // "Glass": a translucent raised surface — a frosted island, not a hard slab. Compose has no
-            // cheap blur, so translucency (≈0.80) + a hairline rim is the Liquid-Glass stand-in. A soft,
-            // low drop shadow reads as floating without a glow.
-            // The glass alpha is the user's transparency step; 0.80 was the shipped constant and remains
-            // the default (step 6), so an untouched install is unchanged.
-            color = Palette.surfaceRaised.copy(alpha = BottomBarStyleStore.barAlpha),
-            tonalElevation = 2.dp,
-            shadowElevation = 4.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                // Cap the width so the pill stays a centred floating island on tablets, not a full-bleed bar.
-                .widthIn(max = 480.dp)
-                .border(0.5.dp, Palette.hairline.copy(alpha = 0.6f), barShape),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // Scaling the PADDING and the slot contents grows the bar honestly - the touch
-                    // targets grow with it, and `barHeight` is measured afterwards so screens keep
-                    // clearing the bar at any size. A graphics scale would blur it and leave the hit
-                    // areas behind.
-                    .padding(horizontal = 8.dp, vertical = 7.dp * BottomBarStyleStore.scale),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                barLeadingTabs.forEach { tab ->
-                    BarSlot(
-                        icon = tab.icon,
-                        label = stringResource(tab.labelRes),
-                        active = current == tab.dest,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onTabSelected(tab.dest) },
-                    )
+    val tabs = barLeadingTabs + barTrailingTabs + BarTab(Destination.More, Icons.Filled.Menu, R.string.nav_more)
+    Row(modifier.fillMaxWidth().navigationBarsPadding()
+        .padding(horizontal = Metrics.space16)
+        .padding(top = Metrics.space4, bottom = Metrics.space12),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Metrics.space10)) {
+        TabCapsule(
+            items = tabs.map { TabCapsuleItem(it.dest.route, stringResource(it.labelRes), it.icon) },
+            selectedID = current.route,
+            onSelect = { route -> onTabSelected(Destination.forRoute(route)) },
+            modifier = Modifier.weight(1f).widthIn(max = Metrics.tabMaxWidth),
+        )
+        if (BottomBarStyleStore.coachEnabled) {
+            CoachOrb(label = stringResource(R.string.nav_coach), onTap = { onTabSelected(Destination.Coach) })
+        }
+    }
+}
+
+@Composable
+private fun PlanLanding(onNavigate: (String) -> Unit) {
+    ScreenScaffold(title = stringResource(R.string.whoop_nav_plan),
+        topBackground = screenBackdropSlot(false, false),
+        fullBleedBackground = screenBackdropFullBleed(false, false)) {
+        listOf(Destination.WeeklyPlan, Destination.Insights, Destination.Trends, Destination.InsightsHub,
+            Destination.SmartAlarm).forEach { destination ->
+            NoopCard(modifier = Modifier.clickable { onNavigate(destination.route) }) {
+                Row(Modifier.fillMaxWidth().height(Metrics.contributorMinHeight),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                    Icon(destination.icon, null, tint = Palette.textSecondary, modifier = Modifier.size(Metrics.space24))
+                    Text(stringResource(destination.titleRes), style = NoopType.headline,
+                        color = Palette.textPrimary, modifier = Modifier.weight(1f))
+                    Icon(Icons.Filled.ChevronRight, null, tint = Palette.textSecondary)
                 }
-                visibleTrailing.forEach { tab ->
-                    BarSlot(
-                        icon = tab.icon,
-                        label = stringResource(tab.labelRes),
-                        active = current == tab.dest,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onTabSelected(tab.dest) },
-                    )
-                }
-                BarSlot(
-                    icon = Icons.Filled.MoreHoriz,
-                    label = stringResource(R.string.nav_more),
-                    // Selected on the More page itself, and also kept lit whenever the current screen is
-                    // one reached THROUGH More (i.e. not one of the bar's own tabs) — so drilling into
-                    // any grouped destination still reads as "you're in More", never "nowhere".
-                    //
-                    // Derived from the bar's own lists rather than restated. Spelling the tabs out here
-                    // is what made adding Coach a two-part change: the slot alone would have lit Coach
-                    // AND More together, because this predicate had never heard of it. (#2218)
-                    active = barLeadingTabs.none { it.dest == current } &&
-                        visibleTrailing.none { it.dest == current },
-                    modifier = Modifier.weight(1f),
-                    onClick = { onTabSelected(Destination.More) },
-                )
             }
         }
     }
 }
 
-/** One nav slot: an icon over a small label. Active = gold accent (semibold), inactive = textSecondary.
- *  No selection pill, no glow — just the colour swap, matching the iOS bar. */
-@Composable
-private fun BarSlot(
-    icon: ImageVector,
-    label: String,
-    active: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val tint = if (active) Palette.accent else Palette.textSecondary
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(vertical = 3.dp * BottomBarStyleStore.scale)
-            .semantics { contentDescription = label },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        // Icon and label scale together with the padding above, so the slot grows as one piece rather
-        // than a bigger box around the same small glyph.
-        Icon(icon, contentDescription = null, tint = tint,
-             modifier = Modifier.size(Metrics.iconSmall * BottomBarStyleStore.scale))
-        Text(
-            label,
-            style = NoopType.footnote.copy(
-                fontSize = 10.sp * BottomBarStyleStore.scale,
-                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-            ),
-            color = tint,
-            // #2218: one line, always. A fifth slot takes about a fifth off every label's width, and the
-            // bar scale goes to 2x, so the longest of them can no longer be assumed to fit on a narrow
-            // phone. Wrapping would not break anything, since `barHeight` is measured afterwards and
-            // screens clear whatever it comes to, but a two-line nav bar at one size and a one-line bar
-            // at the next is the kind of thing nobody reports and everybody notices.
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/** A centre-FAB quick action: a display title, an icon and the destination route it opens. */
+/** A quick action that opens an existing destination. */
 private data class QuickAction(@StringRes val titleRes: Int, val icon: ImageVector, val route: String)
 
-/** The quick actions on the gold centre FAB, each routing to an existing destination. Live HR leads
- *  — it moved off the bottom bar (so the FAB no longer overlaps a tab) but stays one tap away here. */
 private val quickActions: List<QuickAction> = listOf(
     QuickAction(R.string.action_live_hr, Destination.Live.icon, Destination.Live.route),
     QuickAction(R.string.action_start_workout, Icons.Filled.FitnessCenter, Destination.Workouts.route),
@@ -1329,6 +1313,25 @@ internal fun BrandMark(size: Dp = 22.dp) {
         // Solid WHITE "on-device core" dot at the centre (green ring + white core — iOS parity, no gold).
         drawCircle(color = Color.White, radius = stroke * 0.62f, center = center)
     }
+}
+
+@Composable
+private fun ShellSettings(vm: AppViewModel, nav: NavHostController, category: SettingsCategory? = null) {
+    SettingsScreen(vm,
+        initialCategory = category,
+        onOpenTestCentre = { nav.navigate(Destination.TestCentre.route) },
+        onOpenBackupSync = { nav.navigate(Destination.BackupSync.route) },
+        onOpenSelfHostedPush = { nav.navigate(Destination.SelfHostedPush.route) },
+        onOpenStepsCalibration = { nav.navigate(Destination.StepsCalibration.route) })
+}
+
+/** Install the owning tab before pushing an external destination; reselect can then pop to that root. */
+private fun NavHostController.navigateShellDetail(target: ShellDetailDestination) {
+    navigate(target.root) {
+        popUpTo(graph.findStartDestination().id)
+        launchSingleTop = true
+    }
+    navigate(target.detail) { launchSingleTop = true }
 }
 
 /** Navigate to a top-level destination with single-top + state save/restore. */
