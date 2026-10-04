@@ -62,6 +62,8 @@ struct DetailStrainContributors: View {
     let row: DailyMetric?
     let history: [DailyMetric]
     let dayKey: String
+    var strengthSeconds: Double? = nil
+    var steps: Double? = nil
 
     private func duration(_ indices: Range<Int>) -> String {
         guard let minutes, minutes.count == 5,
@@ -76,12 +78,12 @@ struct DetailStrainContributors: View {
                 Divider().overlay(StrandPalette.hairline)
                 DetailContributorRow(label: String(localized: "Time in Zones 4–5"), value: duration(3..<5), systemImage: "heart.fill")
                 Divider().overlay(StrandPalette.hairline)
-                DetailContributorRow(label: String(localized: "Strength duration"), value: "—", systemImage: "dumbbell")
+                DetailContributorRow(label: String(localized: "Strength duration"), value: RecoveryStrainDetailLogic.durationMinutes(seconds: strengthSeconds).map { $0 >= 60 ? String(localized: "\($0 / 60)h \($0 % 60)m") : String(localized: "\($0)m") } ?? "—", systemImage: "dumbbell")
                 Divider().overlay(StrandPalette.hairline)
                 let baseline = RecoveryStrainDetailLogic.priorMean(dayKeys: history.map(\.day),
                     values: history.map { $0.steps.map(Double.init) },
                     fromDay: RecoveryStrainDetailLogic.startKey(selectedDay: dayKey, days: 30), selectedDay: dayKey)
-                DetailComparisonRow(label: String(localized: "Steps"), value: row?.steps.map(Double.init),
+                DetailComparisonRow(label: String(localized: "Steps"), value: steps,
                     baseline: baseline, unit: "", systemImage: "figure.walk", decimals: 0)
                 DetailComparisonLegend()
             }

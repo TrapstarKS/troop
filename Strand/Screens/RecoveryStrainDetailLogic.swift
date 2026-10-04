@@ -1,4 +1,5 @@
 import Foundation
+import StrandAnalytics
 
 enum RecoveryStrainDetailLogic {
     enum TargetStatus: String {
@@ -60,6 +61,13 @@ enum RecoveryStrainDetailLogic {
 
     static func durationMinutes(seconds: Double?, fallbackSeconds: Double? = nil) -> Int64? {
         (seconds ?? fallbackSeconds).flatMap { wholeNumber($0 / 60) }
+    }
+
+    /// Summed seconds of the strength sessions, nil when none. Kotlin twin: `strengthSeconds`.
+    static func strengthSeconds(_ rows: [(sport: String, source: String, durationS: Double?, startTs: Int, endTs: Int)]) -> Double? {
+        let strength = rows.filter { HealthspanHistory.isStrength(sport: $0.sport, source: $0.source) }
+        guard !strength.isEmpty else { return nil }
+        return strength.reduce(0) { $0 + ($1.durationS ?? Double($1.endTs - $1.startTs)) }
     }
 
     static func recoveryPercent(_ score: Double?) -> Int? {

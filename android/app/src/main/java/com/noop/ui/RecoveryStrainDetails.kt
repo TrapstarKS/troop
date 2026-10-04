@@ -53,6 +53,7 @@ import com.noop.R
 import com.noop.analytics.Baselines
 import com.noop.analytics.DayCycleIntelligenceIntegration
 import com.noop.analytics.DayCycleMode
+import com.noop.analytics.HealthspanPresentation
 import com.noop.analytics.HrZones
 import com.noop.analytics.RestScorer
 import com.noop.analytics.SkinTempDisplay
@@ -207,6 +208,7 @@ fun StrainDetailScreen(
     var hr by remember(selectedKey, windowDayKey, activeId, mode) { mutableStateOf<List<HrBucket>>(emptyList()) }
     var zones by remember(selectedKey, windowDayKey, activeId, mode) { mutableStateOf<List<Double>?>(null) }
     var belowZone1 by remember(selectedKey, windowDayKey, activeId, mode) { mutableStateOf<Double?>(null) }
+    var steps by remember(selectedKey, activeId) { mutableStateOf<Double?>(null) }
     var window by remember(selectedKey, windowDayKey, activeId, mode) { mutableStateOf<LongRange?>(null) }
     var activity by remember { mutableStateOf<WorkoutRow?>(null) }
     var showGuide by remember { mutableStateOf(false) }
@@ -240,6 +242,17 @@ fun StrainDetailScreen(
         val split = samples.takeIf { it.isNotEmpty() }?.let { HrZones.timeInZone(it, profile.hrZoneSet) }
         zones = split?.seconds?.map { it / 60 }
         belowZone1 = split?.belowZone1?.div(60)
+        // Same per-day step resolver as Healthspan (measured first, else the larger imported count).
+        steps = runCatching {
+            val measured = vm.repo.resolvedSeries("steps", "my-whoop", selectedKey, selectedKey, strapDeviceId = activeId).points
+                .map { HealthspanPresentation.StepSample(it.day, it.value, it.source) }
+            val imported = listOf("apple-health", "health-connect").flatMap { source ->
+                vm.repo.appleDaily(source, selectedKey, selectedKey).mapNotNull { row ->
+                    row.steps?.let { HealthspanPresentation.StepSample(row.day, it.toDouble(), source) }
+                }
+            }
+            HealthspanPresentation.latestSteps(measured, imported, selectedKey, selectedKey)?.count
+        }.getOrNull()
     }
     activity?.let { row ->
         ActivityDetailScreen(vm, row) { activity = null }
@@ -267,7 +280,7 @@ fun StrainDetailScreen(
                     color = Palette.textSecondary)
             }
         }
-        item { DetailStrainSummary(zones, selected, days, selectedKey) }
+        item { DetailStrainSummary(zones, days, selectedKey, RecoveryStrainDetailLogic.strengthSeconds(workouts), steps) }
         if (effort == null) item { InsightCallout(uiString(R.string.d2b_missing_strain)) }
         if (band == null) item { InsightCallout(uiString(R.string.d2b_missing_target)) }
         item {
@@ -446,7 +459,7 @@ private fun DetailComparisonLegend() {
 }
 
 @Composable
-private fun DetailStrainSummary(minutes: List<Double>?, row: DailyMetric?, days: List<DailyMetric>, selectedKey: String) {
+private fun DetailStrainSummary(minutes: List<Double>?, days: List<DailyMetric>, selectedKey: String, strengthSeconds: Double?, steps: Double?) {
     fun duration(indices: IntRange): String {
         val values = minutes?.takeIf { it.size == 5 } ?: return uiString(R.string.d2b_no_value)
         return detailDuration(indices.fold(0.0) { total, index -> total + values[index] } * 60)
@@ -457,9 +470,9 @@ private fun DetailStrainSummary(minutes: List<Double>?, row: DailyMetric?, days:
             DetailDivider()
             DetailContributorRow(uiString(R.string.d2b_zone_group_high), duration(3..4), icon = Icons.Filled.MonitorHeart)
             DetailDivider()
-            DetailContributorRow(uiString(R.string.d2b_strength_duration), uiString(R.string.d2b_no_value), icon = Icons.Filled.FitnessCenter)
+            DetailContributorRow(uiString(R.string.d2b_strength_duration), detailDuration(strengthSeconds), icon = Icons.Filled.FitnessCenter)
             DetailDivider()
-            DetailContributor(uiString(R.string.today_metric_steps), row?.steps?.toDouble(), "", days, selectedKey,
+            DetailContributor(uiString(R.string.today_metric_steps), steps, "", days, selectedKey,
                 { it.steps?.toDouble() }, decimals = 0, icon = Icons.Filled.DirectionsWalk)
             DetailComparisonLegend()
         }

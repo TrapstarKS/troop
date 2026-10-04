@@ -229,4 +229,18 @@ class RecoveryStrainDetailLogicTest {
             assertEquals(effort, strain / UnitFormatter.EFFORT_SCALE_FACTOR, 1e-12)
         }
     }
+
+    @Test
+    fun strengthSecondsSumsOnlyStrengthSessions() {
+        fun r(sport: String, source: String, d: Double?, s: Long, e: Long) = com.noop.data.WorkoutRow("x", s, e, sport, source, durationS = d)
+        val cases = listOf(
+            emptyList(),
+            listOf(r("Running", "manual", 1800.0, 0, 1800)),
+            listOf(r("Strength", "manual", 1500.0, 0, 9999)),
+            listOf(r("Functional Strength Training", "apple-health", null, 100, 700),
+                r("Yoga", "lifting", 300.0, 0, 300), r("Cycling", "manual", 900.0, 0, 900)),
+        )
+        val out = cases.joinToString(",") { RecoveryStrainDetailLogic.strengthSeconds(it)?.toInt()?.toString() ?: "none" }
+        assertEquals("none,none,1500,900", out)
+    }
 }
