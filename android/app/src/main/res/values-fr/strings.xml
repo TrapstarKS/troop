@@ -2984,4 +2984,5 @@
     <string name="weekly_plan_calibration_body">Sept récupérations complètes ouvrent le suivi hebdomadaire et les bilans.</string>
     <string name="weekly_plan_recoveries_complete">%1$d récupérations complètes sur 7</string>
     <string name="weekly_plan_recoveries_remaining">Récupérations restantes : %1$d</string>
+    <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 et le tableau de bord troop</string>
 </resources>

@@ -2964,4 +2964,5 @@
     <string name="weekly_plan_calibration_body">完成七次恢复评估后，即可查看每周进度和回顾。</string>
     <string name="weekly_plan_recoveries_complete">已完成 %1$d 次恢复评估，共需 7 次</string>
     <string name="weekly_plan_recoveries_remaining">仍需完成的恢复评估：%1$d</string>
+    <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">上游 12.0.0 与 troop 仪表盘</string>
 </resources>

@@ -1,13 +1,13 @@
 import Foundation
 
 /// Single source of truth for the in-app "What's New" screen and the expectation-setting copy used
-/// in onboarding. Mirrored byte-for-byte by the Android `AppChangelog.kt` and the repo CHANGELOG.md
+/// in onboarding. Mirrored byte-for-byte by the Android `AppChangelog.kt` and the release notes under docs/releases/
 /// so every surface tells the same story.
 enum AppChangelog {
 
     /// Bump this when you add a release below. The "What's New" sheet shows automatically when the
     /// stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
-    static let currentVersion = "11.8.0"
+    static let currentVersion = "12.0.0"
 
     struct Release: Identifiable {
         let version: String
@@ -19,6 +19,18 @@ enum AppChangelog {
 
     /// Newest first.
     static let releases: [Release] = [
+        Release(
+            version: "12.0.0",
+            title: "Upstream 12.0.0 and the troop dashboard",
+            date: "October 2026",
+            items: [
+                "**Home, Health, Plan and More.** The troop fork adds a four-tab shell, daily Sleep / Recovery / Strain dials, day navigation, dashboard customization and a floating Coach. Recovery and activity details follow the selected day; Strain uses a 0–21 display mapping of local Effort.",
+                "**Sleep and local health.** Selected-night sleep details, naps, Sleep Planner and haptic alarm controls join Health Monitor, Healthspan and Stress Monitor. Unavailable or stale measurements remain visibly unavailable. These local estimates are not medical measurements.",
+                "**Plan and reminders.** Journal, Behavior Insights, Weekly Plan, Trends and Monthly Performance stay on-device. Local Coach, weekly-plan and battery notifications open their matching destinations.",
+                "**Upstream fixes and performance.** The 12.0.0 update aligns Charge breakdown baselines, expands Russian plurals, improves Apple chart and HealthKit performance, adds GPX / FIT route Shortcuts and improves Android workout charts. Existing fork fixes for Apple Health exports and Android accents are retained.",
+                "**A separate fork installation.** Stable Android uses a private release signer and the troop package identity. The iOS app is named NOOP and uses the fork bundle identity for user provisioning. Export a .noopbak before migration or identity changes. Real-device installation and strap behavior still require validation.",
+            ]
+        ),
         Release(
             version: "11.8.0",
             title: "A gym log book on your wrist, a Coach you can switch off, and a Sync Strap shortcut",
