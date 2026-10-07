@@ -152,9 +152,9 @@ jobs:
             fi
             {
               printf '\n---\n\n**Downloads** — troop fork identities; export/import .noopbak when migrating from upstream or staging. See docs/INSTALL.md.\n'
-              printf -- '- **Android** — `NOOP-android-v%s.apk` (`com.trapstarks.troop`, privately signed)\n' "$NEW"
-              printf -- '- **macOS** — `NOOP-macos-v%s.zip` (unzip, then right-click → Open)\n' "$NEW"
-              printf -- '- **iOS** — `NOOP-ios-unsigned-v%s.ipa` (SideStore / AltStore Classic; user provisioning required)\n' "$NEW"
+              printf -- '- **Android** — `NOOP-android-v%s.apk` (`com.trapstarks.troop`, privately signed) — installs beside upstream NOOP with separate data.\n' "$NEW"
+              printf -- '- **macOS** — `NOOP-macos-v%s.zip` (`com.trapstarks.troop.noop.staging`; unzip, then right-click → Open) — separate bundle identity from upstream NOOP.\n' "$NEW"
+              printf -- '- **iOS** — `NOOP-ios-unsigned-v%s.ipa` (`com.trapstarks.troop.noop`; SideStore / AltStore Classic) — installs beside upstream NOOP under the fork identity. An update replaces the same provisioned fork app; back up before changing sideloaders, accounts, or bundle IDs.\n' "$NEW"
             } >> "$BODY"
             REMOTE_TAG=$(git ls-remote --tags origin "refs/tags/$TAG" "refs/tags/$TAG^{}")
             test -z "$REMOTE_TAG" || { echo "::error::Remote tag appeared during build preparation"; exit 1; }
