@@ -18,6 +18,7 @@ struct StressMonitorView: View {
     @State private var workouts: [WorkoutRow] = []
     @State private var stored: [(day: String, value: Double)] = []
     @State private var loading = true
+    @State private var readFailed = false
     @State private var showBreathing = false
     @State private var selectedTs: Int?
     @State private var observedEnd = 0
@@ -31,13 +32,15 @@ struct StressMonitorView: View {
     private var startTs: Int { Int(Calendar.current.startOfDay(for: date).timeIntervalSince1970) }
     private var endTs: Int { Int(Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: date)!).timeIntervalSince1970) }
     private var selected: DaytimeStress.HourPoint? { selectedTs.flatMap { ts in result.timeline.first { $0.startTs == ts } } }
-    private var latest: DaytimeStress.HourPoint? { result.timeline.last { $0.level != nil } }
+    private var reading: StressMonitorReading.Reading {
+        let visible = sourceLoaded && loadedDay == startTs
+        return (visible ? result : .empty).monitorReading(
+            latestSampleTs: visible ? latestSampleTs : nil, now: Int(clock.timeIntervalSince1970),
+            isToday: startTs == Int(Calendar.current.startOfDay(for: clock).timeIntervalSince1970),
+            selectedStartTs: selectedTs)
+    }
     private var current: DaytimeStress.HourPoint? {
-        guard sourceLoaded, loadedDay == startTs else { return nil }
-        if let selected { return selected }
-        guard let latest, let latestSampleTs else { return nil }
-        let windowEnd = min(latest.startTs + DaytimeStress.bucketSeconds, latestSampleTs)
-        return date < Calendar.current.startOfDay(for: clock) || Int(clock.timeIntervalSince1970) - windowEnd <= 900 ? latest : nil
+        reading.window.flatMap { window in result.timeline.first { $0.startTs == window.startTs } }
     }
     private var daily: (day: String, value: Double)? { (sourceLoaded ? stored : []).first { $0.value.isFinite && (0...3).contains($0.value) && healthspanDaysAgo($0.day, reference: date) == 0 } }
     private var minutes: [Int] {
@@ -53,10 +56,16 @@ struct StressMonitorView: View {
                 healthspanDateSelector(reference: date, previous: { selectedDate = max(earliestDate, Calendar.current.date(byAdding: .day, value: -1, to: selectedDate)!); selectedTs = nil }, next: { selectedDate = min(Calendar.current.startOfDay(for: clock), Calendar.current.date(byAdding: .day, value: 1, to: selectedDate)!); selectedTs = nil }, canAdvance: selectedDate < Calendar.current.startOfDay(for: clock), canGoBack: selectedDate > earliestDate)
                 StressMonitorGauge(value: current?.level)
                 VStack(spacing: NoopMetrics.space2) {
-                    Text(current == nil ? (loading ? String(localized: "Loading…") : String(localized: "No current reading")) : (selected == nil ? String(localized: "Latest recorded window") : String(localized: "Selected window")))
+                    Text(loading ? String(localized: "Loading…") : readFailed ? String(localized: "Stored samples could not be read.") : selected != nil ? String(localized: "Selected window") : reading.state.message)
                         .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
-                    if let point = current {
-                        Text(Date(timeIntervalSince1970: Double(point.startTs)), style: .time).font(StrandFont.captionNumber)
+                    if let window = reading.window, window.level != nil {
+                        HStack {
+                            Text(Date(timeIntervalSince1970: Double(window.startTs)), style: .time)
+                            Text("–")
+                            Text(Date(timeIntervalSince1970: Double(window.endTs)), style: .time)
+                        }.font(StrandFont.captionNumber)
+                    } else if selected != nil {
+                        Text(reading.state.message).font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                     }
                 }
                 if sourceLoaded && loadedDay == startTs && !result.timeline.isEmpty { timeline }
@@ -73,7 +82,7 @@ struct StressMonitorView: View {
                     VStack(alignment: .leading, spacing: NoopMetrics.space4) {
                         Text("Time in stress zones").font(StrandFont.headline)
                         if minutes.reduce(0, +) == 0 {
-                            Text("Unavailable").font(StrandFont.body).foregroundStyle(StrandPalette.textSecondary)
+                            Text(reading.state.message).font(StrandFont.body).foregroundStyle(StrandPalette.textSecondary)
                         } else {
                             ForEach(0..<3) { index in
                                 HStack {
@@ -171,29 +180,41 @@ struct StressMonitorView: View {
 
     @MainActor private func load() async {
         loading = true
+        readFailed = false
         let source = sourceID
         guard await healthspanAwaitSource(source, repo: repo) else { return }
         let revision = repo.refreshSeq
         let selectedDate = date
         let from = startTs
-        let to = min(Int(Date().timeIntervalSince1970), endTs - 1)
+        let now = Date()
+        let to = min(Int(now.timeIntervalSince1970), endTs - 1)
         if loadedSource != source || loadedDay != from {
             result = .empty; latestSampleTs = nil; firstSampleTs = nil; selectedTs = nil; stored = []
         }
         let dailyValues = await repo.series(key: "stress", source: "my-whoop")
-        let hr = await repo.hrSamples(from: from, to: to, limit: 200_000)
-        guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
-        guard hr.count >= DaytimeStress.minHourHRSamples else {
-            result = .empty; latestSampleTs = nil; firstSampleTs = nil; selectedTs = nil
-            workouts = []; sleeps = []; observedEnd = 0; stored = dailyValues; loadedDay = from; loadedSource = source; loading = false
-            return
+        let resolved: DaytimeStress.Result
+        let first: Int?
+        let last: Int?
+        if from == Int(Calendar.current.startOfDay(for: now).timeIntervalSince1970) {
+            guard let snapshot = await StressDayCurve.today(repo: repo, now: now,
+                personalBaseline: PuffinExperiment.stressPersonalBaselineEnabled) else {
+                guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
+                readFailed = true; loading = false
+                return
+            }
+            resolved = snapshot.result; first = snapshot.firstSampleTs; last = snapshot.latestSampleTs
+        } else {
+            let hr = await repo.hrSamples(from: from, to: to, limit: 200_000)
+            let enoughHR = hr.count >= DaytimeStress.minHourHRSamples
+            let rr = enoughHR ? await repo.rrIntervals(from: from, to: to, limit: 200_000) : []
+            let gravity = enoughHR ? await repo.gravitySamplesUnion(from: from, to: to, limit: 200_000) : []
+            let mode: DaytimeStress.ScoringMode = enoughHR
+                ? await DaytimeStressMode.selected(repo: repo, startOfToday: selectedDate, personalBaseline: PuffinExperiment.stressPersonalBaselineEnabled) : .dayRelative
+            let noon = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: selectedDate) ?? selectedDate
+            let offset = TimeZone.current.secondsFromGMT(for: noon)
+            resolved = await runUnescalated(priority: .userInitiated) { DaytimeStress.analyze(hr: hr, rr: rr, gravity: gravity, tzOffsetSeconds: offset, mode: mode, includeTimeline: true) }
+            first = hr.map(\.ts).min(); last = hr.map(\.ts).max()
         }
-        let rr = await repo.rrIntervals(from: from, to: to, limit: 200_000)
-        let gravity = await repo.gravitySamplesUnion(from: from, to: to, limit: 200_000)
-        let mode = await DaytimeStressMode.selected(repo: repo, startOfToday: selectedDate, personalBaseline: PuffinExperiment.stressPersonalBaselineEnabled)
-        let noon = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: selectedDate) ?? selectedDate
-        let offset = TimeZone.current.secondsFromGMT(for: noon)
-        let resolved = await runUnescalated(priority: .userInitiated) { DaytimeStress.analyze(hr: hr, rr: rr, gravity: gravity, tzOffsetSeconds: offset, mode: mode, includeTimeline: true) }
         let sleepFrom = Int(Calendar.current.date(byAdding: .day, value: -2, to: selectedDate)!.timeIntervalSince1970)
         let importedSleep = await repo.sleepSessions(from: sleepFrom, to: to)
         let computedSleep = await repo.computedSleepSessions(from: sleepFrom, to: to)
@@ -203,8 +224,8 @@ struct StressMonitorView: View {
         }
         let events = await repo.workoutRows(days: 4000)
         guard healthspanSourceIsCurrent(source, model: model, repo: repo), revision == repo.refreshSeq else { return }
-        firstSampleTs = hr.map(\.ts).min()
-        latestSampleTs = hr.map(\.ts).max()
+        firstSampleTs = first
+        latestSampleTs = last
         observedEnd = min(to + 1, (latestSampleTs ?? from) + 1)
         result = resolved; workouts = events; sleeps = resolvedSleep; stored = dailyValues; loadedDay = from; loadedSource = source; loading = false
     }
@@ -243,7 +264,7 @@ private struct StressMonitorGauge: View {
             }
             VStack(spacing: NoopMetrics.space2) {
                 Text(value.map { String(format: "%.1f", locale: .current, $0) } ?? "—").font(StrandFont.display())
-                Text(value.map { StressBand(score: $0).title } ?? String(localized: "Unavailable"))
+                Text(value.map { StressBand(score: $0).title } ?? String(localized: "No estimate yet"))
                     .font(StrandFont.headline).foregroundStyle(value.map(StressMonitorRamp.color) ?? StrandPalette.textSecondary)
             }
             VStack { Spacer(); HStack { Text("0.0"); Spacer(); Text("3.0") }.font(StrandFont.captionNumber).padding(.horizontal, NoopMetrics.space10) }

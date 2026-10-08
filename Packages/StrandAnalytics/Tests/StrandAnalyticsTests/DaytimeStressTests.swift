@@ -120,6 +120,29 @@ final class DaytimeStressTests: XCTestCase {
         XCTAssertTrue(r.scored.isEmpty, "an under-gate hour must not be scored")
     }
 
+    func testPartialTodayScoresAtTheMinimumWithoutRRAndSurvivesSyncDelay() {
+        let hr = hourHR(9, bpm: 70)
+        let result = DaytimeStress.analyze(hr: hr, rr: [], includeTimeline: true)
+        let reading = result.monitorReading(latestSampleTs: hr.last!.ts,
+                                            now: hr.last!.ts + 901, isToday: true)
+        XCTAssertEqual(reading.window?.level, 1.5)
+        XCTAssertEqual(reading.state, .delayed)
+        let historical = result.monitorReading(latestSampleTs: hr.last!.ts,
+                                               now: 86_400, isToday: false)
+        XCTAssertEqual(reading.window, historical.window)
+    }
+
+    func testPartialTodayExplainsMissingWakingSamples() {
+        let sparse = hourHR(9, bpm: 70, n: DaytimeStress.minHourHRSamples - 1)
+        let result = DaytimeStress.analyze(hr: sparse, rr: [], includeTimeline: true)
+        XCTAssertEqual(result.monitorReading(latestSampleTs: sparse.last!.ts,
+                                              now: sparse.last!.ts, isToday: true).state, .insufficientSamples)
+        let night = hourHR(3, bpm: 60)
+        XCTAssertEqual(DaytimeStress.analyze(hr: night, rr: [], includeTimeline: true)
+            .monitorReading(latestSampleTs: night.last!.ts, now: night.last!.ts, isToday: true).state,
+                       .noWakingHeartRate)
+    }
+
     func testScoresMapOntoZeroToThree() {
         // Three calm hours + one tense hour (high HR). All scored values stay within 0…3.
         var hr: [HRSample] = []

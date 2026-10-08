@@ -710,6 +710,55 @@
       "platform": "kotlin",
       "rationale": "WeeklyPlanEligibility.requiredRecoveries has the same role in the excluded Swift app layer. Actual paired eligibility oracle output pins the seven distinct completed recovery requirement, including duplicates, invalid values and subsequent refresh; this disposition records only the inventory boundary.",
       "twin_path": "Strand/Data/WeeklyPlan.swift"
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-constant",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::STRESS_FINGERPRINT_SQL",
+      "identity_sha256": "6e848cb7e2990ba61d2d31b3ebfda54f79f63025cd6fb04ad98a91adf1c6166b",
+      "platform": "kotlin",
+      "rationale": "Room uses an annotation-compatible SQL constant for the HR, PPG, R-R and gravity witness; GRDB builds its equivalent indexed aggregates inline in WhoopStore.Reads. The opaque cache witnesses have no cross-platform byte contract."
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-constant",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::STRESS_HR_FINGERPRINT_SQL",
+      "identity_sha256": "b04e28b7a7a35481489ccbfe2b1d8c0af182982ebac9bfa86d0b382801e9c2a0",
+      "platform": "kotlin",
+      "rationale": "Room needs a separate annotation-compatible HR/PPG query; the GRDB witness selects those tables through includeContext. Both baseline caches include the same input streams without sharing a serialized witness."
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::stressFingerprint/3#1",
+      "identity_sha256": "fa3eb7649244acc0850bb155e9e6804299dd668be8ed51fe6f65a55f65cb3d56",
+      "platform": "kotlin",
+      "rationale": "Room exposes a generated suspend DAO query for the full stress witness; GRDB performs those aggregates inline in WhoopStore.stressFingerprint. Database adapters encode their local cache witnesses differently."
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::stressHrFingerprint/3#1",
+      "identity_sha256": "3d7ce7f832a84d90ecbb2b34c67cc28068dcb3ca66e97f013c66acc2ce9bf7be",
+      "platform": "kotlin",
+      "rationale": "Room exposes a second generated DAO query for the HR/PPG-only witness; GRDB uses the includeContext argument on WhoopStore.stressFingerprint. This is a platform database adapter, not a stored value."
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-function",
+      "identity": "swift\u0000Packages/WhoopStore/Sources/WhoopStore/Reads.swift::stressFingerprint/4#1",
+      "identity_sha256": "a8d16f9c21acbc85deba861a3d47b044f98cafe33a7ab5fefcfde5134478c865",
+      "platform": "swift",
+      "rationale": "GRDB runs indexed aggregates for the selected raw streams in one includeContext-aware read closure; Room uses separate generated DAO methods and SQL constants. Tests on both platforms cover independently arriving PPG, R-R and gravity; the opaque witnesses are process-local."
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::stressFingerprintUnion/4#1",
+      "identity_sha256": "fde9660959953dd111d84a9ab0be9f2f1a43ea714f44bb9fdada16dddd6aba72",
+      "platform": "kotlin",
+      "rationale": "Swift Repository.stressFingerprintUnion has the same raw-source union witness role in the excluded app layer. The cache witness encodings are local and this disposition does not assert byte identity.",
+      "twin_path": "Strand/Data/Repository.swift"
     }
   ]
 }

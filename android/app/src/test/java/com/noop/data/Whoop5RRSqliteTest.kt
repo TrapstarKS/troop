@@ -215,6 +215,10 @@ class Whoop5RRSqliteTest {
                 "analysisFingerprint" -> query(ANALYSIS_FINGERPRINT_SQL) { it.getString(1) }.single()
                 "dayStreamFingerprint" -> query(DAY_STREAM_FINGERPRINT_SQL,
                     listOf("deviceId", "from", "to").zip(args.take(3)).toMap()) { it.getString(1) }.single()
+                "stressFingerprint", "stressHrFingerprint" -> query(
+                    if (method.name == "stressFingerprint") STRESS_FINGERPRINT_SQL else STRESS_HR_FINGERPRINT_SQL,
+                    listOf("deviceId", "from", "to").zip(args.take(3)).toMap(),
+                ) { it.getString(1) }.single()
                 "stepSamples", "ppgHrSamples", "spo2Samples",
                 "skinTempSamples", "respSamples", "sleepStateSamples", "events" -> emptyList<Any>()
                 else -> error("Unimplemented DAO call: ${method.name}")
@@ -868,6 +872,48 @@ class Whoop5RRSqliteTest {
         assertNotEquals(day, repo.dayStreamFingerprint(id, 0, 1000))
         registry("4.0")
         assertEquals(listOf(1000), read().map { it.rrMs })
+    }
+
+    @Test fun stressWitnessCoversMeasuredPpgAliasRrAndGravityBackfills() = runBlocking {
+        registry("4.0", owner = "stress-active")
+        registry("4.0", owner = "stress-alias")
+        suspend fun fingerprint(context: Boolean = true) =
+            repo.stressFingerprintUnion("stress-active", 100L, 500L, includeContext = context)
+
+        var previous = fingerprint()
+        assertEquals(previous, fingerprint())
+        for ((owner, table) in listOf(
+            "stress-active" to "hrSample",
+            "stress-active" to "ppgHrSample",
+            "stress-alias" to "hrSample",
+            "my-whoop" to "ppgHrSample",
+            "stress-alias" to "rrInterval",
+            "my-whoop" to "gravitySample",
+        )) {
+            val hrOnly = fingerprint(context = false)
+            val insert = when (table) {
+                "hrSample" -> "INSERT INTO hrSample VALUES('$owner',200,65)"
+                "rrInterval" -> "INSERT INTO rrInterval VALUES('$owner',200,1000,0,0,NULL,NULL,NULL)"
+                else -> "INSERT INTO $table VALUES('$owner',200)"
+            }
+            sql(insert)
+            val next = fingerprint()
+            assertNotEquals("$table under $owner must invalidate stress", previous, next)
+            assertEquals(next, fingerprint())
+            if (table == "rrInterval" || table == "gravitySample") {
+                assertEquals("an HR-only baseline must ignore contextual streams", hrOnly, fingerprint(context = false))
+            } else {
+                assertNotEquals("the baseline must include both HR tables", hrOnly, fingerprint(context = false))
+            }
+            previous = next
+        }
+
+        sql("INSERT INTO hrSample VALUES('stress-alias',150,66)")
+        assertNotEquals("an older backfill must move COUNT even when MAX is unchanged", previous, fingerprint())
+        val inRange = fingerprint()
+        sql("INSERT INTO hrSample VALUES('stress-alias',99,66)")
+        sql("INSERT INTO ppgHrSample VALUES('stress-active',501)")
+        assertEquals("rows outside the scored window must not invalidate it", inRange, fingerprint())
     }
 
     @Test fun actualRestagingGuardsLegacyAliasAndKeepsConfirmedWhoop4() = runBlocking {

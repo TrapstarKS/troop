@@ -114,4 +114,9 @@
     <string name="healthspan_vo2_driver">VO₂max</string>
     <string name="healthspan_back">Retour</string>
     <string name="healthspan_range_30">30 jours</string>
+    <string name="stress_monitor_no_heart_rate">Aucune fréquence cardiaque enregistrée pour ce jour.</string>
+    <string name="stress_monitor_no_waking_heart_rate">Aucune fréquence cardiaque enregistrée dans la plage diurne de 06:00–22:00.</string>
+    <string name="stress_monitor_insufficient_samples">Une fenêtre nécessite au moins 300 échantillons de fréquence cardiaque enregistrés.</string>
+    <string name="stress_monitor_activity_excluded">Les fenêtres enregistrées ont été exclues pendant une activité.</string>
+    <string name="stress_monitor_delayed">La fenêtre enregistrée date de plus de 15 minutes.</string>
 </resources>

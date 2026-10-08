@@ -17,15 +17,15 @@ final class StressPersonalBaselineSurfaceTests: XCTestCase {
         let producer = try source("Strand/Data/StressDayCurve.swift")
         let today = try source("Strand/Screens/TodayView.swift")
         let liquidToday = try source("Strand/Liquid/LiquidTodayView.swift")
+        let hostedCard = try source("Strand/Screens/StressTodayCurveCard.swift")
 
         XCTAssertTrue(detail.contains("let mode = await DaytimeStressMode.selected("))
         XCTAssertTrue(producer.contains("let mode = await DaytimeStressMode.selected("))
         XCTAssertTrue(producer.contains("tzOffsetSeconds: tz, mode: mode,"))
         for body in [today, liquidToday] {
-            XCTAssertTrue(body.contains(
-                "personalBaseline: PuffinExperiment.stressPersonalBaselineEnabled"
-            ))
+            XCTAssertTrue(body.contains("case .stressToday: StressTodayCurveCard()"))
         }
+        XCTAssertTrue(hostedCard.contains("personalBaseline: PuffinExperiment.stressPersonalBaselineEnabled"))
         // A slot per lens, not one slot that compares the lens: comparing made the two surfaces evict
         // each other on every alternation, so the fingerprint gate never held with the toggle on.
         XCTAssertTrue(producer.contains("memos[personalBaseline]"))

@@ -114,4 +114,9 @@
     <string name="healthspan_vo2_driver">VO₂max</string>
     <string name="healthspan_back">Zurück</string>
     <string name="healthspan_range_30">30 Tage</string>
+    <string name="stress_monitor_no_heart_rate">Für diesen Tag ist keine Herzfrequenz aufgezeichnet.</string>
+    <string name="stress_monitor_no_waking_heart_rate">Im Tageszeitfenster von 06:00–22:00 ist keine Herzfrequenz aufgezeichnet.</string>
+    <string name="stress_monitor_insufficient_samples">Ein Zeitfenster benötigt mindestens 300 aufgezeichnete Herzfrequenzmessungen.</string>
+    <string name="stress_monitor_activity_excluded">Aufgezeichnete Zeitfenster wurden wegen Aktivität ausgeschlossen.</string>
+    <string name="stress_monitor_delayed">Das aufgezeichnete Zeitfenster ist über 15 Minuten alt.</string>
 </resources>

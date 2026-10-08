@@ -388,12 +388,6 @@ struct TodayView: View {
     // when a sleep-origin card is hosted. Twin of the LiquidTodayView `hostedSleepModel`.
     @State private var hostedSleepModel: SleepModel? = nil
 
-    // #2040: today's scored stress for the hosted curve card. Loaded only when that card is hosted, the
-    // same "hosting none pays nothing" rule the sleep model follows. `StressDayCurve` self-gates on a
-    // cheap heart-rate fingerprint, so a refresh that changed nothing costs one indexed COUNT and no
-    // rows, and the iOS widget shares the same computation rather than scoring the day twice.
-    @State private var hostedStressHours: [DaytimeStress.HourPoint] = []
-    @State private var hostedStressActivityMaskedHours = 0
 
     // TODAY's in-progress Effort (NOOP 0–100 axis), recomputed over the day's HR (local-midnight→now)
     // each load so the gauge tracks today as it accumulates rather than waiting on the heavy daily pass
@@ -2462,31 +2456,7 @@ struct TodayView: View {
             // points. `HostedTrendData` walks the `days` already in hand, so unlike the sleep model and
             // the stress curve there is no read behind these and nothing to gate.
             HostedTrendCard(card: card, days: repo.days, effortScale: effortScale)
-        case .stressToday:
-            // READ-ONLY, like `stages`: the Stress tab keeps the interactive timeline and this mirrors
-            // only the display. `DaytimeLoadLine` is the tab's OWN line, so the host cannot drift into
-            // a second drawing of the same day.
-            NoopCard(tint: StressRamp.calm) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Stress through the day").strandOverline()
-                    if hostedStressHours.contains(where: { $0.level != nil }) {
-                        DaytimeLoadLine(hours: hostedStressHours)
-                    } else {
-                        // The honest blank: only waking hours score and an hour needs enough heart
-                        // rate, so early morning is empty by construction rather than by failure.
-                        Text("Calibrating")
-                            .font(StrandFont.subhead)
-                            .foregroundStyle(StrandPalette.textTertiary)
-                            .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
-                    }
-                    if let maskedCaption = stressActivityMaskedHoursCaption(hostedStressActivityMaskedHours) {
-                        Text(maskedCaption)
-                            .font(StrandFont.footnote)
-                            .foregroundStyle(StrandPalette.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
+        case .stressToday: StressTodayCurveCard()
         case .asleepDuration: AsleepDurationCard(data: AsleepDurationData.build(days: repo.days))
         case .stagesVsTypical:
             // Renders from the shared SleepModel built in loadAll() (same inputs as the Sleep tab). Until the
@@ -4517,7 +4487,6 @@ struct TodayView: View {
         // (before the cache-restore short-circuit below), so the card survives a tab-away/return; the gate
         // inside makes it a no-op unless a sleep card is actually hosted.
         await loadHostedSleepModel()
-        await loadHostedStress()
         guard !Task.isCancelled else { return }
         // #849: a bare Today RE-MOUNT (tab-away + return, or an Apple-Health import that recreates the view)
         // re-fires this task with TodayView's `@State` reset, so the heavy history-wide pass re-ran in full
@@ -4561,34 +4530,7 @@ struct TodayView: View {
         announceNewDaysIfNeeded()
     }
 
-    /// #today-hosted-cards: build the shared SleepModel backing the hosted sleep cards, ONLY when a
-    /// sleep-origin card is actually hosted (else Today pays no extra cost). Loads the inputs the SAME way
-    /// SleepView does (`allSleepSessions` / `habitualMidsleepSec` / `sessionMotions`) and hands them to the
-    /// SAME pure `SleepModel.build`, so a hosted card's numbers match the Sleep tab. Twin of the
-    /// LiquidTodayView hostedSleepModel build.
-    /// #2040: today's scored stress for the hosted curve card, ONLY when that card is hosted.
-    ///
-    /// The same "hosting none pays nothing" rule the sleep model above follows. `StressDayCurve` does
-    /// the gating: it reads nothing until a cheap heart-rate fingerprint says today's heart rate moved,
-    /// and it memoises. The foreground lens is part of that memo's identity: Today shares the default
-    /// computation with the widget when the toggle is off, and recomputes with the selected personal
-    /// lens when it is on so this card and Stress detail cannot disagree.
-    private func loadHostedStress() async {
-        guard HostedCardPrefs.decodeEnabled(hostedCardsRaw).contains(.stressToday) else {
-            hostedStressHours = []
-            hostedStressActivityMaskedHours = 0
-            return
-        }
-        // `timeline`, not `hours`: the half-step display series, so the curve tracks the day rather
-        // than stepping through it, matching the widget and the Android card.
-        let result = await StressDayCurve.today(
-            repo: repo,
-            personalBaseline: PuffinExperiment.stressPersonalBaselineEnabled
-        )?.result
-        hostedStressHours = result?.timeline ?? []
-        hostedStressActivityMaskedHours = result?.activityMaskedHours ?? 0
-    }
-
+    /// Builds hosted sleep cards from the same inputs as SleepView, only while a sleep card is hosted.
     private func loadHostedSleepModel() async {
         let sleepOrigin = String(localized: "Sleep")
         guard HostedCardPrefs.decodeEnabled(hostedCardsRaw).contains(where: { $0.origin == sleepOrigin }) else {

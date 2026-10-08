@@ -3609,13 +3609,14 @@ private fun HostedCardsSection(
     }
     // Today's stress curve, loaded only when the card is actually hosted — the same "hosting none pays
     // nothing" rule the sleep model above follows. Routed through the SAME gated producer the stress
-    // widget publishes from, so an unchanged day costs one indexed COUNT. The foreground card passes
+    // widget publishes from, so an unchanged day costs only index aggregates. The foreground card passes
     // the user's selected lens; background widget callers deliberately keep the cheaper default lens.
     val needsStressCurve = cards.contains(HostedCard.STRESS_TODAY)
-    var stressCurve by remember { mutableStateOf<List<StressPoint>>(emptyList()) }
-    var stressActivityMaskedHours by remember { mutableStateOf(0) }
+    var stressCurve by remember(viewModel.activeStrapId) { mutableStateOf<StressWidgetProducer.Curve?>(null) }
+    var stressSeed by remember(viewModel.activeStrapId) { mutableStateOf<List<StressPoint>>(emptyList()) }
+    var stressNowSeconds by remember { mutableStateOf(System.currentTimeMillis() / 1000L) }
     // SEEDED from the curve already on disk, so an app update does not show "Calibrating" for a day it
-    // has already scored. `stressCurve` starts empty on a cold process, and the card reads an empty
+    // has already scored. The curve starts empty on a cold process, and the card reads an empty
     // curve as an unscored day, which is honest for a genuinely unscored one and wrong the moment the
     // app is merely restarted. The first compute usually fills it, but not always in time: the strap id
     // it needs comes from the source coordinator and is blank for a moment after launch, and a blank id
@@ -3627,12 +3628,12 @@ private fun HostedCardsSection(
     // or indefinitely if no active strap id arrives. Read once, off the main thread, and only while
     // nothing better has arrived, so a compute that already landed is never overwritten by a stale copy.
     LaunchedEffect(Unit) {
-        if (stressCurve.isNotEmpty()) return@LaunchedEffect
+        if (stressCurve != null || stressSeed.isNotEmpty()) return@LaunchedEffect
         if (NoopPrefs.stressPersonalBaseline(context)) return@LaunchedEffect
         val banked = withContext(Dispatchers.IO) {
             runCatching { WidgetSnapshotStore.load(context).stressSeries }.getOrDefault(emptyList())
         }
-        if (banked.isNotEmpty() && stressCurve.isEmpty()) stressCurve = banked
+        if (banked.isNotEmpty() && stressCurve == null && stressSeed.isEmpty()) stressSeed = banked
     }
     // #2144: this used to score ONCE, when these keys last moved, and none of them tracks incoming
     // heart rate — `days` is the daily rows, not the intraday samples the curve is built from. So a
@@ -3641,10 +3642,19 @@ private fun HostedCardsSection(
     // against 2pm there at twenty past four. This asks again on the producer's shared cadence; the
     // foreground lens is passed below so Today's curve also matches Stress detail when personal mode is on.
     val stressLifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(needsStressCurve, stressLifecycleOwner) {
+        if (!needsStressCurve) return@LaunchedEffect
+        stressLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                stressNowSeconds = System.currentTimeMillis() / 1000L
+                delay(60_000L)
+            }
+        }
+    }
     LaunchedEffect(needsStressCurve, days, viewModel.activeStrapId, stressLifecycleOwner) {
         if (!needsStressCurve) {
-            stressCurve = emptyList()
-            stressActivityMaskedHours = 0
+            stressCurve = null
+            stressSeed = emptyList()
             return@LaunchedEffect
         }
         // Gated on STARTED, the same reason HealthScreen's live-HR tick is: a LaunchedEffect is tied to
@@ -3660,19 +3670,27 @@ private fun HostedCardsSection(
                 // producer documents as keep-what-you-had rather than "today scored nothing". Holding
                 // the last curve matters more here than for a single pass: blanking the card on one bad
                 // tick would be a visible flicker on a screen that is sitting open.
+                val now = System.currentTimeMillis() / 1000L
+                stressNowSeconds = now
                 StressWidgetProducer.todayCurve(
                     viewModel.repo,
                     viewModel.activeStrapId,
                     personalBaseline = NoopPrefs.stressPersonalBaseline(context),
+                    nowSeconds = now,
                 )
                     ?.let {
-                        stressCurve = it.points
-                        stressActivityMaskedHours = it.activityMaskedHours
+                        stressCurve = it
+                        stressSeed = emptyList()
                     }
                 delay(StressWidgetProducer.RESCORE_INTERVAL_MS)
             }
         }
     }
+    val stressTodayEpochDay = Instant.ofEpochSecond(stressNowSeconds).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+    val currentStressCurve = stressCurve?.takeIf { it.epochDay == stressTodayEpochDay }
+    val currentStressSeed = stressSeed.takeIf { points ->
+        points.firstOrNull()?.let { Instant.ofEpochSecond(it.ts).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() } == stressTodayEpochDay
+    }.orEmpty()
     // Turning the card's own destination into the callback that reaches it. The mapping itself lives
     // on `HostedCard` so a test can assert it; this is only the wiring, which cannot be tested and does
     // not need to be.
@@ -3718,7 +3736,15 @@ private fun HostedCardsSection(
                     .then(if (open != null) Modifier.clickable(onClick = open) else Modifier),
             ) {
             when (card) {
-                HostedCard.STRESS_TODAY -> StressTodayCard(stressCurve, stressActivityMaskedHours)
+                HostedCard.STRESS_TODAY -> StressTodayCard(
+                    currentStressCurve?.points ?: currentStressSeed,
+                    currentStressCurve?.activityMaskedHours ?: 0,
+                    reading = currentStressCurve?.daytime?.monitorReading(
+                        latestSampleTs = currentStressCurve?.observationTo,
+                        now = stressNowSeconds,
+                        isToday = true,
+                    ),
+                )
                 // The Trends-origin trends. `resolveMetric` walks the `days` already in hand, so these
                 // need no model build and no gate, unlike the sleep and stress cards above.
                 HostedCard.TREND_HRV, HostedCard.TREND_RESTING_HR, HostedCard.TREND_EFFORT ->

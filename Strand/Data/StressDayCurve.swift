@@ -9,8 +9,8 @@ import StrandAnalytics
 /// bounded at 200 000 rows each, which is the work the Stress screen does when you open it. The screen
 /// does that once, on a deliberate act. A widget producer runs on the publish path, which fires when
 /// the app becomes active and after every Health sync, so nothing is read until `Repository`'s cheap
-/// heart-rate fingerprint — a COUNT and a MAX over an indexed column — says today's heart rate actually
-/// moved. A publish that changed nothing costs that one query and reuses the previous curve.
+/// stream fingerprint — indexed COUNT/MAX queries for measured and PPG-derived HR, R-R and gravity —
+/// says the scoring inputs moved. A publish that changed nothing reuses the previous curve.
 ///
 /// SCORING MODE. Background callers keep the `.dayRelative` default: resolving the personal lens reads
 /// trailing days of heart rate, which a foreground screen can afford and an unprompted publish cannot.
@@ -25,11 +25,15 @@ enum StressDayCurve {
     /// against. Both callers are `@MainActor` today, so the window is narrow, but an immutable holder
     /// closes it for free.
     private struct Memo {
-        let count: Int
-        let maxTs: Int
+        let sourceID: String
+        let zone: String
+        let fingerprint: String
+        let mode: DaytimeStress.ScoringMode
         let day: Int
         let personalBaseline: Bool
         let result: DaytimeStress.Result
+        let firstSampleTs: Int?
+        let latestSampleTs: Int?
     }
 
     /// ONE SLOT PER LENS, not one slot carrying the lens.
@@ -55,38 +59,32 @@ enum StressDayCurve {
     @MainActor
     static func today(repo: Repository, now: Date = Date(),
                       calendar: Calendar = .current,
-                      personalBaseline: Bool = false) async -> (result: DaytimeStress.Result, day: Int)? {
+                      personalBaseline: Bool = false) async -> (result: DaytimeStress.Result, day: Int, firstSampleTs: Int?, latestSampleTs: Int?)? {
         let startOfDay = calendar.startOfDay(for: now)
         let from = Int(startOfDay.timeIntervalSince1970)
         let to = Int(now.timeIntervalSince1970)
         let day = localDayNumber(now, calendar: calendar)
+        let sourceID = repo.deviceId
+        let zone = calendar.timeZone.identifier
 
-        guard let fingerprint = await repo.hrFingerprint(from: from, to: to) else { return nil }
-        // Same day, same heart rate: nothing can have changed the score, so nothing is read. The day is
-        // part of the check because a fingerprint that happened to match across midnight would otherwise
-        // serve yesterday's curve as today's.
-        // Foreground Today and the widget publisher can call in either order. Include the requested
-        // lens so an unchanged HR fingerprint can never replay one surface's result into the other.
-        if let memo = memos[personalBaseline], memo.day == day,
-           memo.count == fingerprint.count, memo.maxTs == fingerprint.maxTs {
-            return (memo.result, day)
+        guard let fingerprint = await repo.stressFingerprintUnion(from: from, to: to) else { return nil }
+        let mode = await DaytimeStressMode.selected(repo: repo, startOfToday: startOfDay,
+                                                   calendar: calendar, personalBaseline: personalBaseline)
+        // All scoring inputs and the selected reference must match, including a baseline backfill.
+        if let memo = memos[personalBaseline], memo.sourceID == sourceID, memo.day == day,
+           memo.zone == zone, memo.fingerprint == fingerprint, memo.mode == mode {
+            return (memo.result, day, memo.firstSampleTs, memo.latestSampleTs)
         }
 
         let hr = await repo.hrSamples(from: from, to: to, limit: 200_000)
-        var scored: DaytimeStress.Result = .empty
+        var scored: DaytimeStress.Result
         if hr.count >= DaytimeStress.minHourHRSamples {
             let rr = await repo.rrIntervals(from: from, to: to, limit: 200_000)
             // Wrist accelerometer for the motion gate, so an ambulatory hour reads as exertion rather
             // than as stress. Empty on hardware or imports without gravity, which degrades to no masking
             // exactly as the screen does.
             let gravity = await repo.gravitySamplesUnion(from: from, to: to, limit: 200_000)
-            let tz = TimeZone.current.secondsFromGMT(for: now)
-            let mode = await DaytimeStressMode.selected(
-                repo: repo,
-                startOfToday: startOfDay,
-                calendar: calendar,
-                personalBaseline: personalBaseline
-            )
+            let tz = calendar.timeZone.secondsFromGMT(for: now)
             // Scored OFF the main actor. `Repository` is `@MainActor`, so without this hop a day's worth
             // of hours would be bucketed and averaged on the main thread — and unlike the Stress screen,
             // which does this because the user asked for it and is waiting, this runs unprompted when
@@ -109,12 +107,20 @@ enum StressDayCurve {
                                       tzOffsetSeconds: tz, mode: mode,
                                       includeTimeline: true)
             }
+        } else {
+            scored = DaytimeStress.analyze(hr: hr, rr: [],
+                                          tzOffsetSeconds: calendar.timeZone.secondsFromGMT(for: now),
+                                          mode: mode,
+                                          includeTimeline: true)
         }
-        // Too little signal leaves an EMPTY result, which is a real answer about today rather than a
-        // refusal: a reader should drop yesterday's line rather than keep drawing it.
-        memos[personalBaseline] = Memo(count: fingerprint.count, maxTs: fingerprint.maxTs, day: day,
-                                       personalBaseline: personalBaseline, result: scored)
-        return (scored, day)
+        // Preserve under-gate windows so readers can explain why today has no estimate yet.
+        guard !Task.isCancelled, repo.deviceId == sourceID else { return nil }
+        let firstSampleTs = hr.map(\.ts).min()
+        let latestSampleTs = hr.map(\.ts).max()
+        memos[personalBaseline] = Memo(sourceID: sourceID, zone: zone, fingerprint: fingerprint, mode: mode, day: day,
+                                       personalBaseline: personalBaseline, result: scored,
+                                       firstSampleTs: firstSampleTs, latestSampleTs: latestSampleTs)
+        return (scored, day, firstSampleTs, latestSampleTs)
     }
 
     /// Days since the epoch on the LOCAL calendar.

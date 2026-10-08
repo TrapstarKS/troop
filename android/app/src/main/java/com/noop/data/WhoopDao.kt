@@ -40,6 +40,27 @@ internal const val ANALYSIS_FINGERPRINT_SQL =
         "'|registry' || (SELECT COALESCE(GROUP_CONCAT(identity, ';'), '') FROM " +
         "(SELECT QUOTE(id) || ':' || QUOTE(brand) || ':' || QUOTE(model) || ':' || QUOTE(status) AS identity FROM pairedDevice ORDER BY id))"
 
+/** HR input witness includes both tables the scored HR read coalesces. */
+internal const val STRESS_HR_FINGERPRINT_SQL =
+    "SELECT 'h' || h.c || ':' || h.m || '|p' || p.c || ':' || p.m FROM " +
+        "(SELECT COUNT(*) AS c, COALESCE(MAX(ts), 0) AS m FROM hrSample " +
+        "WHERE deviceId = :deviceId AND ts >= :from AND ts <= :to) h CROSS JOIN " +
+        "(SELECT COUNT(*) AS c, COALESCE(MAX(ts), 0) AS m FROM ppgHrSample " +
+        "WHERE deviceId = :deviceId AND ts >= :from AND ts <= :to) p"
+
+/** Index aggregates for every stream read by daytime stress, including PPG-only HR. */
+internal const val STRESS_FINGERPRINT_SQL =
+    "SELECT 'h' || h.c || ':' || h.m || '|p' || p.c || ':' || p.m || " +
+        "'|r' || r.c || ':' || r.m || '|g' || g.c || ':' || g.m FROM " +
+        "(SELECT COUNT(*) AS c, COALESCE(MAX(ts), 0) AS m FROM hrSample " +
+        "WHERE deviceId = :deviceId AND ts >= :from AND ts <= :to) h CROSS JOIN " +
+        "(SELECT COUNT(*) AS c, COALESCE(MAX(ts), 0) AS m FROM ppgHrSample " +
+        "WHERE deviceId = :deviceId AND ts >= :from AND ts <= :to) p CROSS JOIN " +
+        "(SELECT COUNT(*) AS c, COALESCE(MAX(ts), 0) AS m FROM rrInterval " +
+        "WHERE deviceId = :deviceId AND ts >= :from AND ts <= :to) r CROSS JOIN " +
+        "(SELECT COUNT(*) AS c, COALESCE(MAX(ts), 0) AS m FROM gravitySample " +
+        "WHERE deviceId = :deviceId AND ts >= :from AND ts <= :to) g"
+
 /** Per-day, per-owner witness of every scored stream the HR fingerprint does NOT cover (#29).
  *
  * [ANALYSIS_FINGERPRINT_SQL] answers "did anything change anywhere"; the analyzeRecent per-day reuse cache
@@ -1445,6 +1466,13 @@ interface WhoopDao : DeviceRegistryDao {
     // HR-only scan it was scored from, and that HRV-less scan was re-served for the rest of the process.
     @Query(DAY_STREAM_FINGERPRINT_SQL)
     suspend fun dayStreamFingerprint(deviceId: String, from: Long, to: Long): String
+
+    @Query(STRESS_FINGERPRINT_SQL)
+    suspend fun stressFingerprint(deviceId: String, from: Long, to: Long): String
+
+    @Query(STRESS_HR_FINGERPRINT_SQL)
+    suspend fun stressHrFingerprint(deviceId: String, from: Long, to: Long): String
+
     @Query("SELECT COUNT(*) FROM rrInterval") suspend fun countRr(): Int
     @Query("SELECT COUNT(*) FROM event") suspend fun countEvents(): Int
     @Query("SELECT COUNT(*) FROM battery") suspend fun countBattery(): Int

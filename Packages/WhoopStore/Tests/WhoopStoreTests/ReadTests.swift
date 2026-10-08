@@ -53,6 +53,30 @@ final class ReadTests: XCTestCase {
         XCTAssertEqual(empty.maxTs, 0)
     }
 
+    func testStressFingerprintSeesPPGRRAndMotionAndKeepsTheBaselineHROnly() async throws {
+        let store = try await seeded()
+        var previous = try await store.stressFingerprint(deviceId: "dev1", from: 0, to: 1000)
+        let commits = [
+            Streams(ppgHr: [PpgHrSample(ts: 400, bpm: 62, conf: 0.9)]),
+            Streams(rr: [RRInterval(ts: 401, rrMs: 800)]),
+            Streams(gravity: [GravitySample(ts: 402, x: 0, y: 0, z: 1)]),
+        ]
+        for (index, streams) in commits.enumerated() {
+            let baselineBefore = try await store.stressFingerprint(deviceId: "dev1", from: 0, to: 1000, includeContext: false)
+            _ = try await store.insert(streams, deviceId: "dev1")
+            let current = try await store.stressFingerprint(deviceId: "dev1", from: 0, to: 1000)
+            XCTAssertNotEqual(previous, current)
+            let baselineAfter = try await store.stressFingerprint(deviceId: "dev1", from: 0, to: 1000, includeContext: false)
+            if index == 0 { XCTAssertNotEqual(baselineBefore, baselineAfter) }
+            else { XCTAssertEqual(baselineBefore, baselineAfter) }
+            previous = current
+        }
+        _ = try await store.insert(Streams(hr: [HRSample(ts: 403, bpm: 60)]), deviceId: "other")
+        _ = try await store.insert(Streams(hr: [HRSample(ts: 5000, bpm: 60)]), deviceId: "dev1")
+        let unchanged = try await store.stressFingerprint(deviceId: "dev1", from: 0, to: 1000)
+        XCTAssertEqual(previous, unchanged)
+    }
+
     // #1392 — the CROSS-DEVICE change-detector the re-score gate must use: NO deviceId filter, so it folds
     // EVERY device's HR (dev1's 100/200/300 + the "other" decoy's 200). This is what lets a night landing
     // under a non-"my-whoop" id (an Oura ring, an Apple Watch, a re-added WHOOP) still advance the analyze
