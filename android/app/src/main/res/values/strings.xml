@@ -2984,4 +2984,5 @@
     <string name="weekly_plan_calibration_body">Seven completed recoveries unlock weekly progress and reviews.</string>
     <string name="weekly_plan_recoveries_complete">%1$d of 7 recoveries complete</string>
     <string name="weekly_plan_recoveries_remaining">Recoveries still needed: %1$d</string>
+    <string name="today_customize_live_session_availability">Appears today when Live Sessions is enabled in Settings or a session is active.</string>
 </resources>

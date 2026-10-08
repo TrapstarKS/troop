@@ -2984,4 +2984,5 @@
     <string name="weekly_plan_calibration_body">Sette recuperi completi abilitano i progressi settimanali e i riepiloghi.</string>
     <string name="weekly_plan_recoveries_complete">%1$d recuperi completi su 7</string>
     <string name="weekly_plan_recoveries_remaining">Recuperi ancora necessari: %1$d</string>
+    <string name="today_customize_live_session_availability">Compare oggi se le sessioni in diretta sono attivate nelle Impostazioni o una sessione è attiva.</string>
 </resources>

@@ -1,6 +1,7 @@
 package com.noop.ui
 
 import com.noop.R
+import com.noop.data.HrBucket
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -87,6 +88,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
@@ -1476,7 +1478,8 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
     // prefer the imported per-workout percentages (a WHOOP-computed split); only when the row carries
     // none do we derive zone-minutes from the strap's own raw HR — so we never overwrite a real
     // imported split with an on-device approximation.
-    var hrCurve by remember(row, activeId) { mutableStateOf<List<Double>>(emptyList()) }
+    var hrCurve by remember(row, activeId) { mutableStateOf<List<HrBucket>>(emptyList()) }
+    var zoneColorsEnabled by remember(row, activeId) { mutableStateOf(false) }
     var zoneMinutes by remember(row, activeId) { mutableStateOf<List<Double>?>(null) }
     var zonesFromImport by remember(row, activeId) { mutableStateOf(false) }
     var heartRateRecovery by remember(row, activeId) { mutableStateOf<HeartRateRecovery.Result?>(null) }
@@ -1484,7 +1487,7 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
     // so it "fills in after sync". null for non-foot sports or when no strap counter covers the window.
     var steps by remember(row, activeId) { mutableStateOf<Int?>(null) }
     LaunchedEffect(row, activeId) {
-        hrCurve = vm.workoutHrBuckets(row.startTs, row.endTs, row.source, row.deviceId, activeId).map { it.avgBpm }
+        hrCurve = vm.workoutHrBuckets(row.startTs, row.endTs, row.source, row.deviceId, activeId)
         steps = if (WorkoutSport.isOnFoot(row.sport)) vm.workoutSteps(row.startTs, row.endTs, activeId) else null
         val imported = parseZonePercents(row.zonesJSON)
         if (imported != null) {
@@ -1542,59 +1545,69 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
             steps?.let { DetailRow("Steps", "${grouped(it.toDouble())} steps") }  // #398, on-foot sports
             if (!row.notes.isNullOrBlank()) DetailRow("Notes", row.notes)
 
-            // Export the recorded GPS route as a GPX/FIT file (Strava / Garmin Connect / any GPS app).
-            // Only when a route with a drawable path was recorded; the file is built on-device and shared.
-            row.routePolyline?.let { poly ->
-                val track = remember(poly) { RouteMath.decode(poly) }
-                if (track.size >= 2) {
-                    val exportCtx = LocalContext.current
-                    val exportScope = rememberCoroutineScope()
-                    CardDivider()
-                    Text("Export route", style = NoopType.subhead, color = Palette.textPrimary)
-                    Text(
-                        "Save this GPS route as a file to import into Strava, Garmin Connect, or another app. " +
-                            "Built on your phone — nothing is uploaded until you choose to share it.",
-                        style = NoopType.footnote,
-                        color = Palette.textTertiary,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        NoopButton(
-                            text = "GPX",
-                            kind = NoopButtonKind.Secondary,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                exportScope.launch {
-                                    RouteExportShare.share(exportCtx, RouteExport.Format.GPX, track, row)
-                                }
-                            },
-                        )
-                        NoopButton(
-                            text = "FIT",
-                            kind = NoopButtonKind.Secondary,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                exportScope.launch {
-                                    RouteExportShare.share(exportCtx, RouteExport.Format.FIT, track, row)
-                                }
-                            },
-                        )
-                    }
-                }
-            }
 
             // HR curve over the session window (#410). A faint baseline shows under 2 points.
             if (hrCurve.size > 1) {
+                val hrValues = remember(hrCurve) { hrCurve.map { it.avgBpm } }
+                val hrTimes = remember(hrCurve) { hrCurve.map { it.bucket } }
+                val context = LocalContext.current
+                val profile = remember { ProfileStore.from(context.applicationContext) }
+                val zoneSet = remember(profile.hrMax, profile.hrZoneThresholds) { profile.hrZoneSet }
+                val zoneColors = remember(hrCurve, zoneSet, Palette.active, Palette.isClassic) {
+                    hrCurve.map { bucket ->
+                        val zone = zoneSet.zoneNumber(bucket.avgBpm)
+                        if (zone > 0) Palette.hrZoneColor(zone) else Palette.textTertiary
+                    }
+                }
                 CardDivider()
-                Overline("Heart rate")
-                LineChart(
-                    values = hrCurve,
-                    modifier = Modifier.height(Metrics.compactChartHeight),
-                    color = Palette.effortColor,
-                    fill = true,
-                )
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    val lo = hrCurve.minOrNull()?.roundToInt() ?: 0
-                    val hi = hrCurve.maxOrNull()?.roundToInt() ?: 0
+                val hrZonesLabel = uiString(R.string.l10n_workouts_screen_hr_zones_293d7175)
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Overline("Heart rate", modifier = Modifier.weight(1f))
+                    Text(hrZonesLabel, style = NoopType.footnote, color = Palette.textSecondary)
+                    Spacer(Modifier.width(Metrics.space8))
+                    Switch(checked = zoneColorsEnabled, onCheckedChange = { zoneColorsEnabled = it },
+                        modifier = Modifier.semantics { contentDescription = hrZonesLabel })
+                }
+                val lo = hrValues.minOrNull()?.roundToInt() ?: 0
+                val hi = hrValues.maxOrNull()?.roundToInt() ?: 0
+                // The plotted series auto-scales to its own range, so the Y labels use that
+                // same range. The X labels use the first and last actual HR bucket times.
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(
+                        modifier = Modifier.width(Metrics.chartAxisLabelWidth).height(Metrics.compactChartHeight),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.End,
+                    ) {
+                        Text(hi.toString(), style = NoopType.footnote, color = Palette.textTertiary)
+                        Text(uiString(R.string.today_unit_bpm), style = NoopType.footnote, color = Palette.textSecondary)
+                        Text(lo.toString(), style = NoopType.footnote, color = Palette.textTertiary)
+                    }
+                    Spacer(Modifier.width(Metrics.space6))
+                    LineChart(
+                        values = hrValues,
+                        modifier = Modifier.weight(1f).height(Metrics.compactChartHeight),
+                        color = Palette.effortColor,
+                        fill = true,
+                        selectionEnabled = true,
+                        selectionLabelTextSize = NoopType.body.fontSize,
+                        timestamps = hrTimes,
+                        pointColors = if (zoneColorsEnabled) zoneColors else null,
+                        formatValue = { value ->
+                            val zone = if (zoneColorsEnabled) zoneSet.zoneNumber(value) else 0
+                            "${value.roundToInt()} bpm" + if (zone > 0) " · Z$zone" else ""
+                        },
+                    )
+                }
+                Row(modifier = Modifier.fillMaxWidth().padding(start = Metrics.chartAxisLabelWidth + Metrics.space6)) {
+                    Text(timeLabel(hrTimes.first()), modifier = Modifier.weight(1f), style = NoopType.footnote,
+                        color = Palette.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(uiString(R.string.coach_morning_brief_time), modifier = Modifier.weight(1f),
+                        style = NoopType.footnote, color = Palette.textSecondary, textAlign = TextAlign.Center)
+                    Text(timeLabel(hrTimes.last()), modifier = Modifier.weight(1f), style = NoopType.footnote,
+                        color = Palette.textTertiary, textAlign = TextAlign.End, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Metrics.space12)) {
                     MiniStat("Avg", row.avgHr?.let { "$it bpm" } ?: "–", Modifier.weight(1f))
                     MiniStat("Peak", (row.maxHr ?: hi).let { "$it bpm" }, Modifier.weight(1f))
                     MiniStat("Low", "$lo bpm", Modifier.weight(1f))
@@ -1604,7 +1617,7 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
                 // When the typed average disagrees materially with this trace's own mean AND the row carries
                 // that captured strain/zones, say so plainly. We do NOT re-score from the typed number.
                 // Parity with macOS WorkoutDetailView.avgHrEditedDisclosure.
-                val traceMean = hrCurve.sum() / hrCurve.size
+                val traceMean = hrValues.sum() / hrValues.size
                 val captured = row.strain != null || !row.zonesJSON.isNullOrEmpty()
                 if (captured && row.avgHr != null && kotlin.math.abs(row.avgHr - traceMean) > 3.0) {
                     Text(
@@ -1650,6 +1663,46 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
             heartRateRecovery?.let {
                 CardDivider()
                 HeartRateRecoveryCard(it)
+            }
+
+            // Export the recorded GPS route as a GPX/FIT file (Strava / Garmin Connect / any GPS app).
+            // Only when a route with a drawable path was recorded; the file is built on-device and shared.
+            row.routePolyline?.let { poly ->
+                val track = remember(poly) { RouteMath.decode(poly) }
+                if (track.size >= 2) {
+                    val exportCtx = LocalContext.current
+                    val exportScope = rememberCoroutineScope()
+                    CardDivider()
+                    Text("Export route", style = NoopType.subhead, color = Palette.textPrimary)
+                    Text(
+                        "Save this GPS route as a file to import into Strava, Garmin Connect, or another app. " +
+                            "Built on your phone — nothing is uploaded until you choose to share it.",
+                        style = NoopType.footnote,
+                        color = Palette.textTertiary,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(Metrics.space12)) {
+                        NoopButton(
+                            text = "GPX",
+                            kind = NoopButtonKind.Secondary,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                exportScope.launch {
+                                    RouteExportShare.share(exportCtx, RouteExport.Format.GPX, track, row)
+                                }
+                            },
+                        )
+                        NoopButton(
+                            text = "FIT",
+                            kind = NoopButtonKind.Secondary,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                exportScope.launch {
+                                    RouteExportShare.share(exportCtx, RouteExport.Format.FIT, track, row)
+                                }
+                            },
+                        )
+                    }
+                }
             }
         }
     }

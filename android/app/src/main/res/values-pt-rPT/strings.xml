@@ -2984,4 +2984,5 @@
     <string name="weekly_plan_calibration_body">Sete recuperações completas permitem acompanhar o progresso semanal e os balanços.</string>
     <string name="weekly_plan_recoveries_complete">%1$d de 7 recuperações completas</string>
     <string name="weekly_plan_recoveries_remaining">Recuperações ainda necessárias: %1$d</string>
+    <string name="today_customize_live_session_availability">Aparece hoje quando as sessões em direto estão ativadas nas Definições ou existe uma sessão ativa.</string>
 </resources>

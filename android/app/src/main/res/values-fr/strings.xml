@@ -2984,4 +2984,5 @@
     <string name="weekly_plan_calibration_body">Sept récupérations complètes ouvrent le suivi hebdomadaire et les bilans.</string>
     <string name="weekly_plan_recoveries_complete">%1$d récupérations complètes sur 7</string>
     <string name="weekly_plan_recoveries_remaining">Récupérations restantes : %1$d</string>
+    <string name="today_customize_live_session_availability">Apparaît aujourd’hui si les sessions en direct sont activées dans Paramètres ou si une session est active.</string>
 </resources>
