@@ -16,6 +16,11 @@ import com.noop.ui.NoopPrefs
 import com.noop.ui.AppLanguagePrefs
 import com.noop.push.SelfHostedPushScheduler
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 
 /**
  * Application entry point.
@@ -52,6 +57,14 @@ class NoopApplication(
         // #1008: pin the pre-change Overnight-only default for existing installs before anything
         // reads it. Idempotent; a no-op on fresh installs and on every launch after the first.
         com.noop.ui.NoopPrefs.migrateContinuousHrvOvernightDefault(this)
+        val experiments = com.noop.ble.PuffinExperiment.from(this)
+        experiments.applyFamilyDefaults(null, null, null)
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            repository.pairedDevicesFlow().collect { devices ->
+                val active = devices.firstOrNull { it.status == "active" }
+                experiments.applyFamilyDefaults(active?.id, active?.model, active?.brand)
+            }
+        }
         // #2185: a stress widget placed by an older version fired its `onEnabled` long before the
         // scheduler existed, so the receiver hook alone would never reach it. Enqueued with KEEP, so
         // this is a no-op once a schedule exists, and the worker retires itself when no widget is

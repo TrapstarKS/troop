@@ -1489,7 +1489,7 @@ private struct FeatureFlagProbeSheets: ViewModifier {
 /// the start flow: `SELECT_WRIST` writes strap state that survives a disconnect. The right/left mapping
 /// is no longer a guess (right=1/left=2, from the official parser and the firmware constructor), but a
 /// persistent write NOOP has not verified on its own hardware still costs a deliberate extra tap.
-private struct EcgProbeSheets: ViewModifier {
+struct EcgProbeSheets: ViewModifier {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var live: LiveState
     @Binding var target: PairedDevice?
@@ -1502,7 +1502,10 @@ private struct EcgProbeSheets: ViewModifier {
                                                      set: { if !$0 { target = nil } }),
                                 titleVisibility: .visible,
                                 presenting: target) { device in
-                Button("Start ECG capture") { model.ecgStartCapture(); target = nil }
+                Button("Start ECG capture") {
+                    UserDefaults.standard.set(true, forKey: PuffinExperiment.ecgKey)
+                    model.ecgStartCapture(); target = nil
+                }
                 Button("Stop ECG capture") { model.ecgStopCapture(); target = nil }
                 Button("Set which wrist you wear it on…") { target = nil; wristTarget = device }
                 Button("Cancel", role: .cancel) { target = nil }

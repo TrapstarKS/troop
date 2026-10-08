@@ -2,6 +2,9 @@ package com.noop.ble
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.noop.protocol.DeviceFamily
+import com.noop.protocol.WhoopFamilyDefaults
+import org.json.JSONArray
 
 /**
  * Opt-in switch for the EXPERIMENTAL WHOOP 5.0/MG ("puffin") protocol probes.
@@ -23,6 +26,37 @@ class PuffinExperiment(
      *  site there is, so nothing is served by making it skippable. */
     private val noopPrefs: SharedPreferences,
 ) {
+    init {
+        synchronized(familyDefaultsLock) {
+            if (!prefs.contains(KEY_CAPTURE) && prefs.contains(LEGACY_KEY_CAPTURE)) {
+                prefs.edit().putBoolean(KEY_CAPTURE, prefs.getBoolean(LEGACY_KEY_CAPTURE, false)).apply()
+            }
+        }
+    }
+
+    /** Apply only local recording defaults, once per confirmed registry identity. */
+    fun applyFamilyDefaults(activeStrapId: String?, model: String?, brand: String?) = synchronized(familyDefaultsLock) {
+        val family = WhoopFamilyDefaults.family(model, brand)
+        val applied = runCatching {
+            val array = JSONArray(prefs.getString(WhoopFamilyDefaults.appliedStrapIdsKey, "[]"))
+            (0 until array.length()).map { array.getString(it) }.toSet()
+        }.getOrDefault(emptySet())
+        val familyValue = when (family) {
+            DeviceFamily.WHOOP4 -> 4
+            DeviceFamily.WHOOP5 -> 5
+            null -> 0
+        }
+        val editor = prefs.edit().putInt(WhoopFamilyDefaults.activeFamilyKey, familyValue)
+        if (WhoopFamilyDefaults.shouldApply(activeStrapId, family, applied)) {
+            if (WhoopFamilyDefaults.shouldEnable(prefs.contains(KEY_CAPTURE),
+                    prefs.getBoolean(WhoopFamilyDefaults.touchedKey(KEY_CAPTURE), false))) {
+                editor.putBoolean(KEY_CAPTURE, true)
+            }
+            editor.putString(WhoopFamilyDefaults.appliedStrapIdsKey,
+                JSONArray((applied + activeStrapId!!).sorted()).toString())
+        }
+        editor.apply()
+    }
 
     /** True if the user opted in to the WHOOP 5/MG protocol probes (default false). */
     var isEnabled: Boolean
@@ -30,11 +64,18 @@ class PuffinExperiment(
         set(v) = prefs.edit().putBoolean(KEY, v).apply()
 
     /** True if the user opted in to recording raw 5/MG backfill frames to a shareable JSONL file
-     *  (default false). SEPARATE from [isEnabled]: probes SEND commands at the strap; capture only
+     *  (enabled locally for a newly identified 5/MG unless the user already chose). SEPARATE from
+     *  [isEnabled]: probes SEND commands at the strap; capture only
      *  RECORDS what arrives — different risk profiles, so different switches. (#78 fork) */
     var isCaptureEnabled: Boolean
-        get() = prefs.getBoolean(KEY_CAPTURE, false)
-        set(v) = prefs.edit().putBoolean(KEY_CAPTURE, v).apply()
+        get() = WhoopFamilyDefaults.captureEnabled(prefs.getBoolean(KEY_CAPTURE, false),
+            if (prefs.getInt(WhoopFamilyDefaults.activeFamilyKey, 0) == 5) DeviceFamily.WHOOP5 else null)
+        set(v) {
+            synchronized(familyDefaultsLock) {
+                prefs.edit().putBoolean(KEY_CAPTURE, v)
+                    .putBoolean(WhoopFamilyDefaults.touchedKey(KEY_CAPTURE), true).apply()
+            }
+        }
 
     /** True if the user opted in to the WHOOP 5/MG "R22" deep-data unlock — the one probe that WRITES
      *  a persistent feature flag to the strap (the `enable_r22_*` SET_CONFIG sequence). Kept distinct
@@ -263,7 +304,7 @@ class PuffinExperiment(
      * held six). Called on a strap FAMILY switch (WHOOP 4.0 ↔ 5/MG) so a 5/MG-only option can never linger
      * enabled and get applied to a strap it doesn't belong to. One atomic edit.
      *
-     * The line is "does it SEND something to the strap": these arm probes, raw-capture writes, the R22
+     * The line is "does it SEND something to the strap": these arm probes, the R22
      * deep-data write, the broadcast-HR write, the ECG gate, an explicit pairing and the unbonded offload
      * probe, all of which target hardware that may not support
      * them. Pure analysis flags are deliberately left alone even when they only do anything on one
@@ -287,6 +328,8 @@ class PuffinExperiment(
         set(v) { prefs.edit().putBoolean(KEY_CLEAR_STALE_BOND, v).apply() }
 
     companion object {
+        private val familyDefaultsLock = Any()
+
         /** Persisted preferences file. Internal so a UI screen can observe external writes to it. */
         internal const val PREFS = "noop_experiments"
 
@@ -294,7 +337,8 @@ class PuffinExperiment(
         const val KEY = "noopPuffinExperiments"
 
         /** 5/MG raw backfill capture (research aid for the puffin biometric decode). */
-        const val KEY_CAPTURE = "noopWhoop5Capture"
+        const val KEY_CAPTURE = WhoopFamilyDefaults.captureKey
+        internal const val LEGACY_KEY_CAPTURE = "noopWhoop5Capture"
 
         /** 5/MG R22 deep-data unlock opt-in (mirrors macOS `PuffinExperiment.deepDataKey`). */
         const val KEY_DEEP_DATA = "noopWhoop5DeepData"
@@ -336,8 +380,8 @@ class PuffinExperiment(
         /** The 5/MG-only probe keys, in ONE place: [resetFiveMGGatedProbes] clears exactly these, and
          *  SettingsScreen watches exactly these for external writes. Two lists would drift. */
         internal val FIVE_MG_GATED_KEYS =
-            listOf(KEY, KEY_CAPTURE, KEY_DEEP_DATA, KEY_BROADCAST_HR, KEY_ECG, KEY_ECG_RAW_DATA, KEY_EXPLICIT_BOND,
-                   KEY_UNBONDED_OFFLOAD, KEY_CLEAR_STALE_BOND)
+            listOf(KEY, KEY_DEEP_DATA, KEY_BROADCAST_HR, KEY_ECG, KEY_ECG_RAW_DATA, KEY_EXPLICIT_BOND,
+                   KEY_UNBONDED_OFFLOAD, KEY_CLEAR_STALE_BOND, KEY_HELLO_DESPITE_REFUSAL)
 
         /** "Experimental sleep staging (V2)" opt-in (mirrors macOS `PuffinExperiment.experimentalSleepV2Key`). */
         const val KEY_EXPERIMENTAL_SLEEP_V2 = "noopExperimentalSleepV2"

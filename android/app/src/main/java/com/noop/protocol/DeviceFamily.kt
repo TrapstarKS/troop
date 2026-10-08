@@ -84,8 +84,8 @@ enum class DeviceFamily {
         fun confirmedRegistryFamily(model: String?, brand: String?): DeviceFamily? {
             if (!brand.isNullOrEmpty() && !brand.equals("WHOOP", ignoreCase = true)) return null
             return when (model?.lowercase(java.util.Locale.ROOT)) {
-                "4.0", "whoop 4.0" -> WHOOP4
-                "5.0", "5.0 mg", "whoop 5.0", "whoop 5.0 / mg", "mg", "whoop5" -> WHOOP5
+                "4.0", "whoop 4.0", "5.0", "5.0 mg", "whoop 5.0", "whoop 5.0 mg",
+                "whoop 5.0 / mg", "mg", "whoop mg", "whoop5" -> forRegistryModel(model)
                 else -> null
             }
         }
@@ -105,8 +105,8 @@ enum class DeviceFamily {
          * positively-identified 4.0 changes scale (#938). Mirrors the Swift
          * `DeviceFamily.forRegistryModel`.
          */
-        fun forRegistryModel(model: String?): DeviceFamily = when (model) {
-            "4.0", "WHOOP 4.0" -> WHOOP4
+        fun forRegistryModel(model: String?): DeviceFamily = when (model?.lowercase(java.util.Locale.ROOT)) {
+            "4.0", "whoop 4.0" -> WHOOP4
             else -> WHOOP5
         }
 

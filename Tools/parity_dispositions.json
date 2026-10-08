@@ -759,6 +759,24 @@
       "platform": "kotlin",
       "rationale": "Swift Repository.stressFingerprintUnion has the same raw-source union witness role in the excluded app layer. The cache witness encodings are local and this disposition does not assert byte identity.",
       "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopDao.kt::pairedDevicesFlow/0#1",
+      "identity_sha256": "b8d2d725e27520c6df23691c5c67e6e3bb03d90568aa732107fdf99ccbed6ae6",
+      "platform": "kotlin",
+      "rationale": "Room emits paired registry rows as a Flow, including same-ID model corrections. The role twin is DeviceRegistry\u2019s published devices cache in the excluded Swift app layer; this observer does not change stored values or analytics formulas.",
+      "twin_path": "Strand/Data/DeviceRegistry.swift"
+    },
+    {
+      "type": "out_of_scope_twin",
+      "kind": "add-unpaired-function",
+      "identity": "kotlin\u0000android/app/src/main/java/com/noop/data/WhoopRepository.kt::pairedDevicesFlow/0#1",
+      "identity_sha256": "5c3e2282c4ba19cbea170c3f4f1a62015c342cb109ee7ef51c380408eded569d",
+      "platform": "kotlin",
+      "rationale": "Room emits paired registry rows as a Flow, including same-ID model corrections. The role twin is DeviceRegistry\u2019s published devices cache in the excluded Swift app layer; this observer does not change stored values or analytics formulas.",
+      "twin_path": "Strand/Data/DeviceRegistry.swift"
     }
   ]
 }

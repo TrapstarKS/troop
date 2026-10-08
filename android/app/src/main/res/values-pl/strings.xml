@@ -3029,4 +3029,25 @@
     <string name="weekly_plan_recoveries_remaining">Pozostałe pomiary regeneracji: %1$d</string>
     <string name="today_customize_live_session_availability">Pojawia się dzisiaj, gdy sesje na żywo są włączone w Ustawieniach lub trwa sesja.</string>
     <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 i pulpit troop</string>
+    <string name="whoop_optional_features_title">Opcjonalne funkcje opaski</string>
+    <string name="whoop_detected_model">Wykryto: %1$s</string>
+    <string name="whoop_model_unidentified">Jeszcze nie zidentyfikowano</string>
+    <string name="whoop_model_unconfirmed_variant">WHOOP 5.0 / MG (niepotwierdzony wariant)</string>
+    <string name="whoop_optional_features_detail">Dla nowo zidentyfikowanej opaski 5/MG lokalnie włączane jest tylko pasywne przechwytywanie historii. Dotychczasowe wybory zostają zachowane. Zapisy do opaski pozostają opcjonalne.</string>
+    <string name="whoop_protocol_probes_consent">Sondy protokołu mogą wysyłać eksperymentalne zapytania i uzbrajać skonfigurowany alarm 5/MG po sparowaniu. Pozostają włączone, dopóki ich nie wyłączysz.</string>
+    <string name="whoop_broadcast_reconnect">Nadawanie tętna jest ponownie włączane po ponownym połączeniu tej opaski.</string>
+    <string name="whoop_ecg_controls">Włącz sterowanie EKG w WHOOP MG</string>
+    <string name="whoop_ecg_controls_consent">Włącza sterowanie sesją EKG w MG. Rozpoczęcie przechwytywania nadal wymaga potwierdzenia.</string>
+    <string name="whoop_apply_strap_change">Zastosować tę zmianę do opaski?</string>
+    <string name="whoop_enable">Włącz</string>
+    <string name="whoop_passive_capture_detail">Zapisuje w ograniczonym lokalnym śladzie ramki, które i tak docierają podczas synchronizacji historii. Nie uruchamia żadnego czujnika.</string>
+    <string name="whoop_r22_detail">Nie wykazano, aby zaakceptowane zapisy włączały osobny strumień na żywo. Nie są wymagane do normalnej synchronizacji ani przechwytywania surowych danych.</string>
+    <string name="whoop_ecg_research_detail">Badania protokołu tylko dla MG. To instrumentacja, a nie medyczna funkcja EKG.</string>
+    <string name="whoop_ecg_start_consent">Wysyła trzy przełączniki sesji EKG w MG i nasłuchuje przez 30 s. Przez cały ten czas trzymaj obie elektrody zapięcia drugą ręką. Instrumentacja, a nie medyczna funkcja EKG.</string>
+    <string name="whoop_raw_start_consent">Rozpoczyna ograniczoną sesję surowych danych i może uruchomić strumień IMU na połączonej opasce 5/MG. Zatrzymanie kończy żądanie do czujnika; nic nie jest przesyłane na serwer.</string>
+    <string name="whoop_apply">Zastosuj</string>
+    <string name="whoop_ecg_stop_consent">Zatrzymuje przełączniki sesji EKG w MG. Przechwytywanie może pozostać aktywne, dopóki opaska nie zaakceptuje poleceń zatrzymania.</string>
+    <string name="whoop_explicit_bond_consent">Przy następnym ponownym połączeniu spełniającym warunki pozwala NOOP poprosić Androida o trwałe sparowanie, co może wyświetlić systemowe okno parowania. Odmowa parowania może odroczyć uzgadnianie połączenia o jedno połączenie. Wyłączenie tylko cofa zgodę; istniejące parowania telefonu pozostają.</string>
+    <string name="whoop_unbonded_offload_consent">Przy następnym ponownym połączeniu spełniającym warunki odczytuje zegar opaski bez parowania. Jeśli opaska odpowie, NOOP ustawia jej zegar i żąda historii. Włączenie usuwa też zapisane odmowy i resetuje limity ponownych prób dla połączeń bez odpowiedzi lub bez jednoznacznego wyniku dla wszystkich opasek. Wyłączenie tylko cofa zgodę.</string>
+    <string name="whoop_clear_stale_bond_consent">Pozwala NOOP usunąć parowanie telefonu, gdy pięć kolejnych połączeń ze sparowaną opaską zostanie zerwanych przed rozpoczęciem sesji. Robi to raz, aż opaska zostanie ponownie sparowana. Instrukcja ręcznego ponownego parowania pojawia się po dwóch niepowodzeniach. Wyłączenie tylko cofa zgodę; nie przywraca usuniętego parowania.</string>
 </resources>

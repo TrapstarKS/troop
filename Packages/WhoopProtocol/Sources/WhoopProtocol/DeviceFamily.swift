@@ -140,8 +140,8 @@ public extension DeviceFamily {
     static func confirmedRegistryFamily(model: String?, brand: String?) -> DeviceFamily? {
         if let brand, !brand.isEmpty, brand.caseInsensitiveCompare("WHOOP") != .orderedSame { return nil }
         switch model?.lowercased() {
-        case "4.0", "whoop 4.0": return .whoop4
-        case "5.0", "5.0 mg", "whoop 5.0", "whoop 5.0 / mg", "mg", "whoop5": return .whoop5
+        case "4.0", "whoop 4.0", "5.0", "5.0 mg", "whoop 5.0", "whoop 5.0 mg",
+             "whoop 5.0 / mg", "mg", "whoop mg", "whoop5": return forRegistryModel(model)
         default: return nil
         }
     }
@@ -159,8 +159,8 @@ public extension DeviceFamily {
     /// labels (non-WHOOP imports whose skin temp is already °C) — only a positively-identified 4.0
     /// changes scale (#938). Mirrors the Kotlin `DeviceFamily.forRegistryModel`.
     static func forRegistryModel(_ model: String?) -> DeviceFamily {
-        switch model {
-        case "4.0", "WHOOP 4.0": return .whoop4
+        switch model?.lowercased() {
+        case "4.0", "whoop 4.0": return .whoop4
         default: return .whoop5
         }
     }

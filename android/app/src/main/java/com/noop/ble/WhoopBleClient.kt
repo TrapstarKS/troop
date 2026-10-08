@@ -6168,11 +6168,14 @@ class WhoopBleClient(
      *  it positively identifies a 5-generation strap but the active registry row still resolves to WHOOP
      *  4.0 — a wrong Add-Device pick, or a legacy "4.0" row — correct the model so the Devices display and
      *  the forRegistryModel-driven skin-temp raw->°C scale (#938) stop treating a 5.0 as a 4.0. Extends the
-     *  #716 stamp (which only fixed the "WHOOP" placeholder). ONE-DIRECTIONAL: attestation can only upgrade
-     *  4.0->5.0, never the reverse, and once corrected the guard no longer matches, so it self-limits.
+     *  #716 stamp (which only fixed the "WHOOP" placeholder). Persists the attested MG/5.0 variant too,
+     *  so offline settings never guess that a combined 5.0/MG wizard label proves ECG hardware.
      *  Twin of Swift `reconcileModelFromAttestation`. */
     private fun reconcileModelFromAttestation(variant: Whoop5Variant) {
-        if (variant == Whoop5Variant.UNKNOWN) return
+        val contradictory = variant == Whoop5Variant.UNKNOWN &&
+            Whoop5Variant.from(disSerial) == Whoop5Variant.MG &&
+            Whoop5Variant.from(null, hardwareRevision = disHwRev) == Whoop5Variant.FIVE_ZERO
+        if (variant == Whoop5Variant.UNKNOWN && !contradictory) return
         val attestingAddress = lastDeviceAddress
         if (attestingAddress == null) {
             // Should not happen - the attestation arrives on a connected link - but a silent return here
@@ -6211,9 +6214,20 @@ class WhoopBleClient(
                     " and none carries this strap's address, so it cannot be attributed")
                 return@launch
             }
-            if (DeviceFamily.forRegistryDevice(attesting.model, attesting.brand) == DeviceFamily.WHOOP4) {
-                repository.setDeviceModel(attesting.id, "WHOOP 5.0 / MG")
-                log("Corrected device model \"${attesting.model}\" -> \"WHOOP 5.0 / MG\" from DIS attestation (variant=${variant.label})")
+            if (lastDeviceAddress != attestingAddress) return@launch
+            val currentVariant = whoop5Variant()
+            val currentContradiction = currentVariant == Whoop5Variant.UNKNOWN &&
+                Whoop5Variant.from(disSerial) == Whoop5Variant.MG &&
+                Whoop5Variant.from(null, hardwareRevision = disHwRev) == Whoop5Variant.FIVE_ZERO
+            if (currentVariant == Whoop5Variant.UNKNOWN && !currentContradiction) return@launch
+            val model = when (currentVariant) {
+                Whoop5Variant.MG -> "WHOOP MG"
+                Whoop5Variant.FIVE_ZERO -> "WHOOP 5.0"
+                Whoop5Variant.UNKNOWN -> "WHOOP 5.0 / MG"
+            }
+            if (DeviceFamily.forRegistryDevice(attesting.model, attesting.brand) != null && attesting.model != model) {
+                repository.setDeviceModel(attesting.id, model)
+                log("Corrected device model \"${attesting.model}\" -> \"$model\" from DIS attestation (variant=${currentVariant.label})")
             }
         }
     }
@@ -6372,7 +6386,7 @@ class WhoopBleClient(
      *  noop_prefs store; failures are non-fatal (the rotation still worked this session). (PR#195)
      *
      *  On a genuine FAMILY switch (4.0 ↔ 5/MG) it also clears the 5/MG-only experimental toggles via
-     *  [PuffinExperiment.resetFiveMGGatedProbes], so a 5/MG-only probe (raw capture, R22 deep-data
+     *  [PuffinExperiment.resetFiveMGGatedProbes], so a 5/MG-only probe (R22 deep-data
      *  write, broadcast-HR write) can't stay enabled across a switch and get applied to the wrong,
      *  unsupported strap. Same-family reconnects don't reset (the previous == new guard). */
     private fun persistSelectedModel(model: WhoopModel) {
@@ -6395,7 +6409,7 @@ class WhoopBleClient(
                 runCatching { PuffinExperiment.from(context).resetFiveMGGatedProbes() }
                     .onSuccess {
                         log("Strap family switched ($previous → ${model.name}) — reset 5/MG-only " +
-                            "experimental toggles (protocol probes, raw capture, deep-data, broadcast HR) to off.")
+                            "experimental toggles (protocol probes, deep-data, broadcast HR) to off.")
                     }
                     .onFailure {
                         log("Strap family switched ($previous → ${model.name}) but couldn't reset the " +
@@ -6452,22 +6466,6 @@ class WhoopBleClient(
                     ),
                 )
             }
-            // #716: the seeded "my-whoop" device has model "WHOOP" (no generation). Once a live
-            // scan confirms which service family the strap advertises, stamp the correct model so
-            // forRegistryModel returns the right DeviceFamily (fixes skin-temp ADC scale + display).
-            if (!modelStamped) {
-                modelStamped = true
-                ioScope.launch {
-                    val stale = repository.pairedDevices().firstOrNull {
-                        it.status == "active" && it.model == "WHOOP"
-                    }
-                    if (stale != null) {
-                        val correct = if (selectedModel == WhoopModel.WHOOP4) "WHOOP 4.0" else "WHOOP 5.0 / MG"
-                        repository.setDeviceModel(stale.id, correct)
-                        log("Updated device model from \"WHOOP\" to \"$correct\" (#716)")
-                    }
-                }
-            }
             val advertisedServiceUuids = result.scanRecord?.serviceUuids
                 ?.map { it.uuid.toString().lowercase() }
                 .orEmpty()
@@ -6502,6 +6500,26 @@ class WhoopBleClient(
             if (preferred != null && !device.address.equals(preferred, ignoreCase = true)) {
                 log("Discovered $safeName (${device.address}) — not the preferred strap; ignoring")
                 return
+            }
+            // #716: the seeded "my-whoop" device has model "WHOOP" (no generation). Once a live
+            // scan confirms which service family the strap advertises, stamp the correct model so
+            // forRegistryModel returns the right DeviceFamily (fixes skin-temp ADC scale + display).
+            val advertisedModel = selectedModel
+            val advertisedAddress = device.address
+            val advertisedDeviceId = deviceId
+            if (!modelStamped && advertisedServiceUuids.contains(advertisedModel.service.toString().lowercase())) {
+                modelStamped = true
+                ioScope.launch {
+                    val stale = repository.pairedDevices().firstOrNull {
+                        it.id == advertisedDeviceId && it.status == "active" && it.model == "WHOOP" &&
+                            (it.peripheralId == null || it.peripheralId.equals(advertisedAddress, ignoreCase = true))
+                    }
+                    if (stale != null) {
+                        val correct = if (advertisedModel == WhoopModel.WHOOP4) "WHOOP 4.0" else "WHOOP 5.0 / MG"
+                        repository.setDeviceModel(stale.id, correct)
+                        log("Updated device model from \"WHOOP\" to \"$correct\" (#716)")
+                    }
+                }
             }
             log("Discovered $safeName (rssi ${result.rssi}) — connecting")
             // Found it: cancel the not-found timeout AND the family-rotation fallback, then reflect

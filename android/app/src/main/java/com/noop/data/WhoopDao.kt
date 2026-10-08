@@ -310,6 +310,8 @@ internal const val HRV_PROVENANCE_SQL =
  */
 @Dao
 interface WhoopDao : DeviceRegistryDao {
+    @Query("SELECT * FROM pairedDevice ORDER BY addedAt ASC")
+    fun pairedDevicesFlow(): Flow<List<PairedDeviceRow>>
 
     // MARK: - Device
 

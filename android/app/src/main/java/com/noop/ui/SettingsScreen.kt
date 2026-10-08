@@ -540,6 +540,7 @@ fun SettingsScreen(
     vm: AppViewModel,
     initialCategory: SettingsCategory? = null,
     onOpenTestCentre: () -> Unit = {},
+    onOpenGroundTruthCollector: () -> Unit = {},
     onOpenBackupSync: () -> Unit = {},
     onOpenSelfHostedPush: () -> Unit = {},
     onOpenStepsCalibration: () -> Unit = {},
@@ -689,19 +690,9 @@ fun SettingsScreen(
     // step density, so it is a no-op on a sparse (e.g. WHOOP 4.0) night regardless of this switch.
     var motionAwareWake by remember { mutableStateOf(puffinExperiment.motionAwareWake) }
 
-    // Whether to surface the WHOOP 5/MG-only probes (puffin / R22 / broadcast-HR / frame-capture). Gated
-    // so a confident 4.0 owner never sees 5/MG controls that can't touch their strap (#22). The model
-    // preference DEFAULTS to WHOOP4, so we deliberately do NOT hide on the raw default alone — the same
-    // "noop.selectedWhoopModel" key is rewritten to the family that actually advertised when a strap
-    // connects (WhoopBleClient.persistSelectedModel, PR#195), so a real 5/MG owner who never opened the
-    // model picker still flips this true once their strap is discovered. We also show it whenever a 5/MG
-    // is live-detected this session. Hide only when the user is confidently on a 4.0 (pref says WHOOP4
-    // AND nothing 5/MG is connected). Mirrors the macOS SettingsView `showFiveMGControls` gate.
-    val selectedModelName = remember(rev) {
-        context.getSharedPreferences(NoopPrefs.NAME, Context.MODE_PRIVATE)
-            .getString("noop.selectedWhoopModel", null)
-    }
-    val showFiveMGControls = selectedModelName == WhoopModel.WHOOP5_MG.name || live.whoop5Detected
+    val activeRegistryDevice by vm.activeRegistryDevice.collectAsStateWithLifecycle()
+    val showFiveMGControls = com.noop.protocol.WhoopFamilyDefaults.family(
+        activeRegistryDevice?.model, activeRegistryDevice?.brand) == com.noop.protocol.DeviceFamily.WHOOP5
 
     // "Keep connected in the background" — drives WhoopConnectionService (foreground service). Default
     // on. SharedPreferences isn't reactive, so the Switch mirrors into a local state.
@@ -2127,6 +2118,8 @@ fun SettingsScreen(
             blurb = "NOOP pairs directly with your WHOOP over Bluetooth: no WHOOP app, no cloud.",
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(stringResource(R.string.whoop_detected_model, detectedWhoopModel(vm)),
+                    style = NoopType.subhead, color = Palette.textSecondary)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2693,7 +2686,7 @@ fun SettingsScreen(
             }
         }
 
-
+        WhoopOptionalFeaturesCard(vm, onOpenGroundTruthCollector)
         }
 
         if (category in setOf(SettingsCategory.ALL, SettingsCategory.DEVICE, SettingsCategory.DATA)) {

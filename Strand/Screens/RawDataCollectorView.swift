@@ -1,6 +1,7 @@
 import SwiftUI
 import StrandDesign
 import WhoopStore
+import WhoopProtocol
 
 /// iOS/macOS parity twin of Android's 5/MG Raw Data Collector screen.
 struct RawDataCollectorView: View {
@@ -17,6 +18,8 @@ struct RawDataCollectorView: View {
     @State private var historicalFrom = Date().addingTimeInterval(-3_600)
     @State private var historicalTo = Date()
     @State private var markerDraft: MarkerDraft?
+    @State private var confirmStart = false
+    private var canCapture: Bool { model.activeWhoopLinkIsBonded }
 
     private struct MarkerDraft: Identifiable {
         let id = UUID()
@@ -42,11 +45,22 @@ struct RawDataCollectorView: View {
         .task {
             // Restore a session after navigation/process lifecycle changes. The BLE layer rejects a
             // duplicate arm, so this is safe when capture never stopped.
-            if let active = store.active, live.bonded { _ = model.ble.startGroundTruthRawCapture(sessionId: active.id) }
+            if canCapture, let active = store.active, active.deviceId == model.activeWhoopDevice?.id {
+                _ = model.ble.startGroundTruthRawCapture(sessionId: active.id)
+            }
             await refreshImuCoverage()
         }
         .onChangeCompat(of: live.bonded) { bonded in
-            if bonded, let active = store.active { _ = model.ble.startGroundTruthRawCapture(sessionId: active.id) }
+            if canCapture, bonded, let active = store.active, active.deviceId == model.activeWhoopDevice?.id {
+                _ = model.ble.startGroundTruthRawCapture(sessionId: active.id)
+            }
+        }
+        .onChangeCompat(of: model.activeWhoopDevice?.id) { _ in confirmStart = false }
+        .confirmationDialog("Apply this strap change?", isPresented: $confirmStart, titleVisibility: .visible) {
+            Button("Start raw-data session") { start() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Starts a bounded 100 Hz motion session by sending reversible sensor commands to the connected strap. Stop the session to undo the change.")
         }
         .confirmationDialog("Delete this session?", isPresented: Binding(
             get: { deleteCandidate != nil }, set: { if !$0 { deleteCandidate = nil } }
@@ -108,8 +122,8 @@ struct RawDataCollectorView: View {
                        fullWidth: true) { Task { await stop() } }
         } else {
             NoopButton("Start raw-data session", systemImage: "record.circle", kind: .primary,
-                       fullWidth: true) { start() }
-                .disabled(!live.bonded)
+                       fullWidth: true) { confirmStart = true }
+                .disabled(!canCapture)
         }
     }
 
@@ -279,7 +293,8 @@ struct RawDataCollectorView: View {
     }
 
     private func start() {
-        guard let session = store.start(deviceId: model.ble.deviceId) else { return }
+        guard canCapture, let activeId = model.activeWhoopDevice?.id else { return }
+        guard let session = store.start(deviceId: activeId) else { return }
         guard model.ble.startGroundTruthRawCapture(sessionId: session.id) else {
             store.stop(); store.removeMetadata(session.id); return
         }

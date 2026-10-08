@@ -504,6 +504,8 @@ class WhoopRepository(
     /** #716: read all paired devices (thin pass-through for the BLE scan fix). */
     suspend fun pairedDevices(): List<PairedDeviceRow> = dao.pairedDevices()
 
+    fun pairedDevicesFlow(): Flow<List<PairedDeviceRow>> = dao.pairedDevicesFlow()
+
     /** Raw biometric sample counts per device id in a window - see [WhoopDao.rawSampleCountsByDevice]. */
     suspend fun rawSampleCountsByDevice(from: Long, to: Long): List<Pair<String, Int>> =
         dao.rawSampleCountsByDevice(from, to).map { it.deviceId to it.total }

@@ -2987,4 +2987,25 @@
     <string name="weekly_plan_recoveries_remaining">Recuperações ainda necessárias: %1$d</string>
     <string name="today_customize_live_session_availability">Aparece hoje quando as sessões em direto estão ativadas nas Definições ou existe uma sessão ativa.</string>
     <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 e o painel troop</string>
+    <string name="whoop_optional_features_title">Funcionalidades opcionais da pulseira</string>
+    <string name="whoop_detected_model">Detetado: %1$s</string>
+    <string name="whoop_model_unidentified">Ainda não identificado</string>
+    <string name="whoop_model_unconfirmed_variant">WHOOP 5.0 / MG (variante não confirmada)</string>
+    <string name="whoop_optional_features_detail">Num 5/MG recém-identificado, só é ativada localmente a captura passiva do histórico. As tuas escolhas existentes são mantidas. As escritas na pulseira continuam a ser opcionais.</string>
+    <string name="whoop_protocol_probes_consent">As sondas de protocolo podem enviar consultas experimentais e armar o alarme 5/MG configurado após o emparelhamento. Permanecem ativadas até as desativares.</string>
+    <string name="whoop_broadcast_reconnect">A transmissão da frequência cardíaca é reaplicada quando esta pulseira volta a ligar-se.</string>
+    <string name="whoop_ecg_controls">Ativar controlos de ECG do WHOOP MG</string>
+    <string name="whoop_ecg_controls_consent">Ativa os controlos de sessão de ECG do MG. Iniciar uma captura continua a exigir confirmação.</string>
+    <string name="whoop_apply_strap_change">Aplicar esta alteração à pulseira?</string>
+    <string name="whoop_enable">Ativar</string>
+    <string name="whoop_passive_capture_detail">Regista num rastreio local limitado as tramas que já chegam durante a sincronização do histórico. Não inicia qualquer sensor.</string>
+    <string name="whoop_r22_detail">Não foi demonstrado que as escritas aceites ativem um fluxo em direto separado. Não são necessárias para a sincronização normal nem para a captura de dados em bruto.</string>
+    <string name="whoop_ecg_research_detail">Investigação do protocolo apenas para MG. É instrumentação, não uma funcionalidade médica de ECG.</string>
+    <string name="whoop_ecg_start_consent">Envia os três interruptores de sessão de ECG do MG e escuta durante 30 s. Segura ambos os elétrodos do fecho com a outra mão durante todo o intervalo. Instrumentação, não uma funcionalidade médica de ECG.</string>
+    <string name="whoop_raw_start_consent">Inicia uma sessão limitada de dados em bruto e pode iniciar o fluxo IMU numa pulseira 5/MG ligada. Parar termina o pedido ao sensor; nada é carregado.</string>
+    <string name="whoop_apply">Aplicar</string>
+    <string name="whoop_ecg_stop_consent">Para os interruptores de sessão de ECG do MG. Uma captura pode manter-se ativa até a pulseira aceitar os comandos de paragem.</string>
+    <string name="whoop_explicit_bond_consent">Na próxima reconexão que cumpra as condições, permite ao NOOP pedir ao Android para criar um emparelhamento persistente, o que pode mostrar uma caixa de diálogo de emparelhamento do sistema. Uma recusa de emparelhamento pode adiar a negociação inicial por uma conexão. Desativar apenas retira a permissão; os emparelhamentos existentes do telefone mantêm-se.</string>
+    <string name="whoop_unbonded_offload_consent">Na próxima reconexão que cumpra as condições, lê o relógio da pulseira sem emparelhamento. Se a pulseira responder, o NOOP acerta o relógio e pede o histórico. Ativar também limpa as recusas guardadas e repõe os limites de tentativas para conexões sem resposta ou sem resultado conclusivo de todas as pulseiras. Desativar apenas retira a permissão.</string>
+    <string name="whoop_clear_stale_bond_consent">Permite ao NOOP remover o emparelhamento do telefone se cinco conexões consecutivas com uma pulseira emparelhada forem interrompidas antes de uma sessão começar. Fá-lo uma vez, até a pulseira voltar a ser emparelhada. O guia de novo emparelhamento manual aparece após duas falhas. Desativar apenas retira a permissão; não restaura um emparelhamento removido.</string>
 </resources>

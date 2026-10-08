@@ -2,6 +2,28 @@ import Foundation
 import CoreBluetooth
 import WhoopProtocol
 
+struct PuffinCaptureBudget {
+    static let maxBytes = 10 * 1024 * 1024
+    static let maxRecords = 40_000
+    private(set) var estimatedBytes = 0
+    private(set) var records = 0
+    private(set) var isFull = false
+
+    mutating func reserve(frameBytes: Int) -> Bool {
+        guard !isFull else { return false }
+        // Hex doubles the raw size; 512 bytes covers the fixed metadata and JSON whitespace.
+        let available = Self.maxBytes - estimatedBytes
+        guard records < Self.maxRecords, frameBytes >= 0, available >= 512,
+              frameBytes <= (available - 512) / 2 else {
+            isFull = true
+            return false
+        }
+        estimatedBytes += frameBytes * 2 + 512
+        records += 1
+        return true
+    }
+}
+
 /// App-side glue around the pure `PuffinCapture`: gates on a user toggle, stamps each frame with a
 /// wall-clock time and the live (standard-profile) heart rate, and persists the growing capture to a
 /// JSON file under Application Support. Read-only with respect to the strap — it only records frames
@@ -19,20 +41,21 @@ import WhoopProtocol
 final class PuffinFrameRecorder {
     /// UserDefaults flag, mirrored by the Settings toggle (`@AppStorage`). Separate from the puffin
     /// *probe* switch (`PuffinExperiment`): capturing is passive/safe, probing actively guesses.
-    static let enabledKey = "noopPuffinCapture"
+    static let enabledKey = WhoopFamilyDefaults.captureKey
 
     /// Flush to disk every this-many frames so a crash/yank loses at most a handful of frames.
     private static let flushEvery = 25
 
     /// Soft cap on the total size of the puffin-captures directory (#27). One file is written per app
-    /// launch and never trimmed, so without a cap the directory grows without bound — an experimental
-    /// capture toggle a 5/MG user left on reached 19 GB. After each flush, oldest files are evicted
-    /// (by filename, which is timestamp-sorted) until the total is back under the cap. Never deletes
-    /// the file the current session is still writing.
+    /// launch, bounded by `PuffinCaptureBudget`. After each flush, oldest files are evicted (by filename,
+    /// which is timestamp-sorted) until the total is back under the cap. Never deletes the file the
+    /// current session is still writing.
     private nonisolated static let directorySoftCapBytes = 50 * 1024 * 1024
 
     private weak var state: LiveState?
     private let buffer = PuffinCapture()
+    private var budget = PuffinCaptureBudget()
+    private var captureLimitLogged = false
     private var sinceFlush = 0
     private var fileURL: URL?
 
@@ -51,7 +74,7 @@ final class PuffinFrameRecorder {
         self.state = state
     }
 
-    private var isEnabled: Bool { UserDefaults.standard.bool(forKey: Self.enabledKey) }
+    private var isEnabled: Bool { WhoopFamilyDefaultsStore.captureEnabled() }
 
     /// `<AppSupport>/OpenWhoop/puffin-captures/`, created on demand. `nonisolated` so the background
     /// `fileWriter` actor can call it (via `evictOldCaptures`) without hopping back to the main actor.
@@ -71,6 +94,13 @@ final class PuffinFrameRecorder {
     /// awaited (see `flush()`).
     func capture(frame: [UInt8], char: CBUUID) {
         guard isEnabled else { return }
+        guard budget.reserve(frameBytes: frame.count) else {
+            if !captureLimitLogged {
+                captureLimitLogged = true
+                state?.append(log: "Passive protocol trace reached its bounded session limit; further bulk frames are paused until the next app launch. Existing trace remains available to export.")
+            }
+            return
+        }
         let tsMs = Int(Date().timeIntervalSince1970 * 1000)
         buffer.record(frame: frame, char: char.uuidString.lowercased(),
                       tsMs: tsMs, hr: state?.heartRate)

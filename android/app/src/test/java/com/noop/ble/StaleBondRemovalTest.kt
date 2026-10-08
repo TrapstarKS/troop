@@ -89,18 +89,27 @@ class StaleBondRemovalTest {
      * the sibling "Ask Android to pair" row sits in the same dead block and appears to work only
      * because its pref persists from before that block was disabled.
      *
-     * So this reads the source: the switch must be wired in Test Centre, and Test Centre must not have
-     * grown a disabled block of its own.
+     * So this reads the source: Test Centre must reach the shared optional-features card, which owns
+     * the switch and its confirmation. Neither surface may hide its controls in a disabled block.
      */
     @Test
     fun `the toggle is wired somewhere a user can actually reach`() {
         val testCentre = uiSource("TestCentreScreen.kt")
-        assertTrue("the toggle must be wired in Test Centre, which is where 5/MG switches live",
-                   testCentre.contains("R.string.raw_diag_clear_stale_bond"))
-        assertTrue("and bound to the experiment it gates",
-                   testCentre.contains("puffinExperiment.clearStaleBond = it"))
+        val card = uiSource("WhoopOptionalFeaturesCard.kt")
+        assertTrue("Test Centre must reach the shared 5/MG controls",
+                   testCentre.contains("WhoopOptionalFeaturesCard(vm, onOpenGroundTruthCollector)"))
+        assertTrue("the shared card must expose the pairing-removal opt-in",
+                   card.contains("R.string.raw_diag_clear_stale_bond"))
+        assertTrue("turning it on must request confirmation, while off only withdraws permission",
+                   card.contains("if (it) pending = StrapChange.CLEAR_STALE_BOND else experiments.clearStaleBond = false"))
+        val enable = "experiments.clearStaleBond = true"
+        assertEquals("permission must have one enable path", 1, Regex(Regex.escape(enable)).findAll(card).count())
+        val confirmationButton = card.indexOf("confirmButton =")
+        assertTrue("that path must be inside the confirmation button",
+                   confirmationButton >= 0 && card.indexOf(enable) > confirmationButton)
         assertFalse("Test Centre must not grow a disabled block the way Settings did",
                     testCentre.contains("if (false"))
+        assertFalse("the shared card must not hide its opt-ins", card.contains("if (false"))
 
         // And it must NOT have been added to the retained-but-dead Settings copy: a row that never
         // shipped there needs no compatibility copy, and one would only be more to delete later.

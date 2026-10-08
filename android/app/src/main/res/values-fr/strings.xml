@@ -2987,4 +2987,25 @@
     <string name="weekly_plan_recoveries_remaining">Récupérations restantes : %1$d</string>
     <string name="today_customize_live_session_availability">Apparaît aujourd’hui si les sessions en direct sont activées dans Paramètres ou si une session est active.</string>
     <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 et le tableau de bord troop</string>
+    <string name="whoop_optional_features_title">Fonctions facultatives du bracelet</string>
+    <string name="whoop_detected_model">Détecté : %1$s</string>
+    <string name="whoop_model_unidentified">Pas encore identifié</string>
+    <string name="whoop_model_unconfirmed_variant">WHOOP 5.0 / MG (variante non confirmée)</string>
+    <string name="whoop_optional_features_detail">Pour un 5/MG nouvellement identifié, seule la capture passive de l’historique est activée localement. Vos choix existants sont conservés. Les écritures sur le bracelet restent facultatives.</string>
+    <string name="whoop_protocol_probes_consent">Les sondes de protocole peuvent envoyer des requêtes expérimentales et armer l’alarme 5/MG configurée après l’appairage. Elles restent activées jusqu’à leur désactivation.</string>
+    <string name="whoop_broadcast_reconnect">La diffusion de la fréquence cardiaque est réappliquée lorsque ce bracelet se reconnecte.</string>
+    <string name="whoop_ecg_controls">Activer les commandes ECG du WHOOP MG</string>
+    <string name="whoop_ecg_controls_consent">Active les commandes de session ECG du MG. Le démarrage d’une capture nécessite toujours une confirmation.</string>
+    <string name="whoop_apply_strap_change">Appliquer cette modification au bracelet ?</string>
+    <string name="whoop_enable">Activer</string>
+    <string name="whoop_passive_capture_detail">Enregistre dans une trace locale limitée les trames qui arrivent déjà pendant la synchronisation de l’historique. Ne démarre aucun capteur.</string>
+    <string name="whoop_r22_detail">Il n’a pas été démontré que les écritures acceptées activent un flux en direct distinct. Elles ne sont pas nécessaires à la synchronisation normale ni à la capture des données brutes.</string>
+    <string name="whoop_ecg_research_detail">Recherche sur le protocole réservée au MG. Il s’agit d’instrumentation, pas d’une fonction ECG médicale.</string>
+    <string name="whoop_ecg_start_consent">Envoie les trois commutateurs de session ECG du MG et écoute pendant 30 s. Tenez les deux électrodes du fermoir avec l’autre main pendant toute la durée. Instrumentation, pas une fonction ECG médicale.</string>
+    <string name="whoop_raw_start_consent">Démarre une session de données brutes limitée et peut lancer le flux IMU sur un bracelet 5/MG connecté. L’arrêt termine la requête au capteur ; rien n’est téléversé.</string>
+    <string name="whoop_apply">Appliquer</string>
+    <string name="whoop_ecg_stop_consent">Arrête les commutateurs de session ECG du MG. Une capture peut rester active jusqu’à ce que le bracelet accepte les commandes d’arrêt.</string>
+    <string name="whoop_explicit_bond_consent">À la prochaine reconnexion remplissant les conditions, autorise NOOP à demander à Android de créer un appairage durable, ce qui peut afficher une boîte de dialogue système. Un refus d’appairage peut reporter l’échange initial d’une connexion. La désactivation retire seulement l’autorisation ; les appairages existants du téléphone sont conservés.</string>
+    <string name="whoop_unbonded_offload_consent">À la prochaine reconnexion remplissant les conditions, lit l’horloge du bracelet sans appairage. Si le bracelet répond, NOOP règle son horloge et demande l’historique. L’activation efface aussi les refus enregistrés et réinitialise les limites de nouvelle tentative pour les connexions sans réponse ou sans résultat concluant de tous les bracelets. La désactivation retire seulement l’autorisation.</string>
+    <string name="whoop_clear_stale_bond_consent">Autorise NOOP à supprimer l’appairage du téléphone si cinq connexions consécutives avec un bracelet appairé se coupent avant le début d’une session. Cela se produit une seule fois, jusqu’au prochain appairage du bracelet. Le guide de réappairage manuel apparaît après deux échecs. La désactivation retire seulement l’autorisation ; elle ne restaure pas un appairage supprimé.</string>
 </resources>

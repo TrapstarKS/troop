@@ -577,6 +577,7 @@ public final class BLEManager: NSObject, ObservableObject {
     /// (`DeviceRegistry`, and the coordinator that watches it) follows too — the store write above is not
     /// observable, so without this the UI would keep showing the old id until relaunch.
     var onSerialIdentityAdopted: ((String) -> Void)?
+    var onRegistryModelChanged: (() -> Void)?
     private var registryStore: DeviceRegistryStore?
     /// #716: true once the seeded "WHOOP" model has been stamped to the correct family.
     private var modelStamped = false
@@ -1057,9 +1058,10 @@ public final class BLEManager: NSObject, ObservableObject {
 
     private var disSerial: String?
     private var disHwRev: String?
+    private var disModelNumber: String?
     /// #1635 follow-up: the DIS identity extras (firmware, manufacturer, model, software revision) as
-    /// discovered. Held as a list rather than one property each because nothing branches on them
-    /// individually — they are read as a set and reported as a set.
+    /// discovered. Their characteristics are held as a list because they are read as a set; the model
+    /// number's returned value also participates in MG attestation.
     private var disExtraCharacteristics: [CBCharacteristic] = []
     /// The DIS firmware string (0x2A26), which is the ONLY firmware source an unbonded 5/MG has: the
     /// puffin report needs the bond that never happens. Published only as a fallback, never as an
@@ -1299,7 +1301,7 @@ public final class BLEManager: NSObject, ObservableObject {
     /// off until the hardware actually attests to itself.
     var whoop5Variant: Whoop5Variant {
         guard selectedModel.deviceFamily == .whoop5 else { return .unknown }
-        return Whoop5Variant.from(serial: disSerial, hardwareRevision: disHwRev)
+        return Whoop5Variant.from(serial: disSerial, hardwareRevision: disHwRev, modelNumber: disModelNumber)
     }
 
     /// True only for a POSITIVELY identified WHOOP MG — the one variant with ECG electrodes. Gates the
@@ -5065,6 +5067,7 @@ public final class BLEManager: NSObject, ObservableObject {
         disRead = false
         disSerial = nil
         disHwRev = nil
+        disModelNumber = nil
         disFirmware = nil
         whoop5NotifyCharacteristics.removeAll()
     }
@@ -5361,10 +5364,11 @@ public final class BLEManager: NSObject, ObservableObject {
     /// The serial is a device identifier, so ONLY its 3-character prefix is logged (that is the entire
     /// information content here) — never the full string, which would land in a shareable strap log.
     private func noteWhoop5VariantFromDIS() {
-        let variant = Whoop5Variant.from(serial: disSerial, hardwareRevision: disHwRev)
+        let variant = Whoop5Variant.from(serial: disSerial, hardwareRevision: disHwRev, modelNumber: disModelNumber)
         let prefix = (disSerial?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
             .map { String($0.prefix(3)) } ?? "?"
-        log("DIS: serialPrefix=\(prefix) hwRev=\(disHwRev ?? "?") -> variant=\(variant.label)")
+        let modelNumber = (disModelNumber?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "MG") ? "MG" : "?"
+        log("DIS: serialPrefix=\(prefix) hwRev=\(disHwRev ?? "?") modelNumber=\(modelNumber) -> variant=\(variant.label)")
         // Publish it so an MG-only capability can gate on attested hardware. Still diagnostic for every
         // existing consumer — nothing about framing or decode reads this.
         state.whoop5Variant = variant.label
@@ -5435,13 +5439,14 @@ public final class BLEManager: NSObject, ObservableObject {
     }
 
     /// The strap's own DIS attestation is ground truth (a WHOOP 4.0 never attests a 5AM/5AG serial). When
-    /// it positively identifies a 5-generation strap but the active registry row still resolves to WHOOP
-    /// 4.0 — a wrong Add-Device pick, or a legacy "4.0" row — correct the model so the Devices display and
-    /// the `forRegistryModel`-driven skin-temp raw→°C scale (#938) stop treating a 5.0 as a 4.0. Extends the
-    /// #716 stamp (which only fixed the "WHOOP" placeholder). ONE-DIRECTIONAL: attestation can only upgrade
-    /// 4.0→5.0, never the reverse, and once corrected the guard below no longer matches, so it self-limits.
+    /// it positively identifies a 5-generation strap, retain its precise variant in the attributed row.
+    /// This also corrects a wrong Add-Device family pick or a legacy "4.0" row for unit conversion (#938).
+    /// Attestation never downgrades a 5-generation device to 4.0.
     private func reconcileModelFromAttestation(_ variant: Whoop5Variant) {
-        guard variant != .unknown, let rs = registryStore else { return }
+        let contradictory = variant == .unknown
+            && Whoop5Variant.from(serial: disSerial) == .mg
+            && Whoop5Variant.from(serial: nil, hardwareRevision: disHwRev) == .fiveZero
+        guard variant != .unknown || contradictory, let rs = registryStore else { return }
         guard let attestingId = peripheral?.identifier.uuidString else {
             // Should not happen — the attestation arrives on a connected link — but a silent return is one
             // more path that goes quiet exactly when something is off.
@@ -5453,10 +5458,6 @@ public final class BLEManager: NSObject, ObservableObject {
         // alongside a 5/MG and leaves the 4.0 active — at which point relabelling by status rewrites the
         // 4.0's row as "WHOOP 5.0 / MG" on the strength of the OTHER strap's DIS block.
         //
-        // Unreachable today, because `Whoop5Variant.from` here is never given a model number and a real MG
-        // reports a serial prefix and hardware revision matching neither heuristic — so this returns on
-        // `.unknown` every time. Fixed anyway: the Android twin's identical bug went live the moment its
-        // resolver was widened, and twinning the DIS model-number read would do exactly that here (#520).
         let devices = (try? rs.all())?.filter { $0.status != .archived } ?? []
         let byId = devices.first { $0.peripheralId?.caseInsensitiveCompare(attestingId) == .orderedSame }
         // The sole non-archived device is not a guess: there is nothing else the attestation could have
@@ -5473,10 +5474,16 @@ public final class BLEManager: NSObject, ObservableObject {
                 + " and none carries this strap's id, so it cannot be attributed")
             return
         }
-        guard DeviceFamily.forRegistryDevice(model: attesting.model, brand: attesting.brand) == .whoop4
-        else { return }
-        try? rs.setModel(attesting.id, model: "WHOOP 5.0 / MG")
-        log("Corrected device model \"\(attesting.model ?? "nil")\" → \"WHOOP 5.0 / MG\" from DIS attestation (variant=\(variant.label))")
+        guard DeviceFamily.forRegistryDevice(model: attesting.model, brand: attesting.brand) != nil else { return }
+        let attestedModel = contradictory ? "WHOOP 5.0 / MG" : (variant == .mg ? "WHOOP MG" : "WHOOP 5.0")
+        guard attesting.model != attestedModel else { return }
+        do {
+            try rs.setModel(attesting.id, model: attestedModel)
+        } catch {
+            return
+        }
+        onRegistryModelChanged?()
+        log("Corrected device model \"\(attesting.model ?? "nil")\" → \"\(attestedModel)\" from DIS attestation (variant=\(variant.label))")
     }
 
     private func requestNotify(_ c: CBCharacteristic, on p: CBPeripheral, reason: String) {
@@ -5946,16 +5953,6 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
                     advertisementData[CBAdvertisementDataLocalNameKey] as? String),
                 connectable: (advertisementData[CBAdvertisementDataIsConnectable] as? NSNumber)?.boolValue ?? true))
         }
-        // #716: the seeded "my-whoop" device has model "WHOOP" (no generation). Once a live scan
-        // confirms which service family the strap advertises, stamp the correct model so
-        // forRegistryModel returns the right DeviceFamily (fixes skin-temp ADC scale + display).
-        if !modelStamped, let rs = registryStore,
-           let stale = try? rs.all().first(where: { $0.status == .active && $0.model == "WHOOP" }) {
-            let correct = selectedModel == .whoop4 ? "WHOOP 4.0" : "WHOOP 5.0 / MG"
-            try? rs.setModel(stale.id, model: correct)
-            log("Updated device model from \"WHOOP\" to \"\(correct)\" (#716)")
-            modelStamped = true
-        }
         let advertisedServiceUUIDs = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? [])
             .map { $0.uuidString.lowercased() }
         let scanDecision = whoopGattScanDecision(
@@ -5990,6 +5987,18 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
         if let preferred = preferredPeripheralUUID, peripheral.identifier != preferred {
             log("Discovered \(safeName) (\(peripheral.identifier)) — not the preferred strap; ignoring")
             return
+        }
+        // Only a matching advertised service identifies a generation; the scan picker is a preference.
+        if !modelStamped, advertisedServiceUUIDs.contains(selectedModel.scanService.uuidString.lowercased()),
+           let rs = registryStore,
+           let stale = try? rs.all().first(where: { $0.status == .active && $0.model == "WHOOP"
+               && ($0.peripheralId == nil || $0.peripheralId?.caseInsensitiveCompare(peripheral.identifier.uuidString) == .orderedSame) }) {
+            let correct = selectedModel == .whoop4 ? "WHOOP 4.0" : "WHOOP 5.0 / MG"
+            if (try? rs.setModel(stale.id, model: correct)) != nil {
+                log("Updated device model from \"WHOOP\" to \"\(correct)\" (#716)")
+                modelStamped = true
+                onRegistryModelChanged?()
+            }
         }
         // No gate here for the same reason as `startScan`: reaching a discovery means a scan is running,
         // and a scan only runs because the user asked or because the gated system entry allowed it.
@@ -7407,7 +7416,11 @@ extension BLEManager: @preconcurrency CBPeripheralDelegate {
                 let shown = (disFirmware?.isEmpty ?? true) ? "?" : (disFirmware ?? "?")
                 log("DIS: firmware=\(shown) not published — a decoded value already stands")
             }
-        case BLEManager.disManufacturerChar, BLEManager.disModelNumberChar, BLEManager.disSwRevChar:
+        case BLEManager.disModelNumberChar:
+            disModelNumber = String(decoding: bytes, as: UTF8.self)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\0").union(.whitespacesAndNewlines))
+            noteWhoop5VariantFromDIS()
+        case BLEManager.disManufacturerChar, BLEManager.disSwRevChar:
             // Diagnostic only: nothing gates on these, but they cost one read each and are exactly what
             // is missing when someone reports an unidentified strap.
             let v = String(decoding: bytes, as: UTF8.self)

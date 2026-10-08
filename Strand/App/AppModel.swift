@@ -74,6 +74,42 @@ final class AppModel: ObservableObject {
     /// `@Published` so the Devices screen re-renders the moment the registry is wired in (it observes
     /// `model.deviceRegistry`); nested `registry.$devices` changes are observed by the screen directly.
     @Published private(set) var deviceRegistry: DeviceRegistry?
+    @Published private(set) var activeWhoopDevice: PairedDevice?
+
+    var activeWhoopFamily: DeviceFamily? {
+        WhoopFamilyDefaults.family(model: activeWhoopDevice?.model, brand: activeWhoopDevice?.brand)
+    }
+
+    var activeWhoopLinkIsBonded: Bool {
+        activeWhoopFamily == .whoop5 && live.encryptedBond && ble.isWhoop5
+            && activeWhoopDevice?.peripheralId?.caseInsensitiveCompare(ble.connectedPeripheralUUID ?? "") == .orderedSame
+    }
+
+    var activeWhoopVariant: Whoop5Variant {
+        guard activeWhoopFamily == .whoop5, let device = activeWhoopDevice else { return .unknown }
+        if live.connected, device.peripheralId?.caseInsensitiveCompare(ble.connectedPeripheralUUID ?? "") == .orderedSame {
+            return Whoop5Variant.allCases.first { $0.label == live.whoop5Variant } ?? .unknown
+        }
+        let model = device.model.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        switch model {
+        case "WHOOP MG", "MG": return .mg
+        case "WHOOP 5.0", "5.0": return .fiveZero
+        default: return .unknown
+        }
+    }
+
+    var activeWhoopModelLabel: String {
+        switch activeWhoopFamily {
+        case .whoop4: return WhoopModel.whoop4.displayName
+        case .whoop5:
+            switch activeWhoopVariant {
+            case .mg: return "WHOOP MG"
+            case .fiveZero: return "WHOOP 5.0"
+            case .unknown: return String(localized: "WHOOP 5.0 / MG (unconfirmed variant)")
+            }
+        case nil: return String(localized: "Not identified yet")
+        }
+    }
     /// Runs exactly one device's live BLE at a time. DORMANT whenever WHOOP is active (the default and
     /// every no-strap case): it only acts when a non-WHOOP generic strap becomes the active device,
     /// pausing WHOOP and running the isolated `StandardHRSource`. nil until wired (post store-open).
@@ -243,12 +279,14 @@ final class AppModel: ObservableObject {
     /// session. Mirrors how `SourceCoordinator` drives the WRITE side off the same publisher. Retained for
     /// the app's lifetime (the registry outlives the session); `removeDuplicates` collapses redundant emits.
     private var readSpineCancellable: AnyCancellable?
+    private var whoopFamilyDefaultsCancellable: AnyCancellable?
     /// Daily re-arm timer for the single-instant firmware smart alarm (see scheduleDailySmartAlarmRearm).
     private var smartAlarmRearmTimer: Timer?
 
     private(set) var localNotifications: LocalNotificationDispatcher?
 
     init() {
+        UserDefaults.standard.set(0, forKey: WhoopFamilyDefaults.activeFamilyKey)
         let live = LiveState()
         self.live = live
         // SEED every subsystem with the same id (`deviceId`, "my-whoop" at launch). The store/registry
@@ -642,6 +680,17 @@ final class AppModel: ObservableObject {
         guard sourceCoordinator == nil, let store = await repo.storeHandle() else { return }
         let registry = DeviceRegistry(store: DeviceRegistryStore(dbQueue: store.registryWriter))
         registry.reload()
+        self.ble.onRegistryModelChanged = { [weak registry] in registry?.reload() }
+        whoopFamilyDefaultsCancellable = registry.$devices
+            .combineLatest(registry.$activeDeviceId)
+            .sink { [weak self] devices, activeId in
+                guard let self else { return }
+                let active = devices.first { $0.id == activeId && $0.status == .active }
+                self.activeWhoopDevice = active
+                WhoopFamilyDefaultsStore.apply(
+                    activeStrapId: active?.id,
+                    family: WhoopFamilyDefaults.family(model: active?.model, brand: active?.brand))
+            }
         let coordinator = SourceCoordinator(
             registry: registry,
             live: live,

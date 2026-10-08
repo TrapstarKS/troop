@@ -2987,4 +2987,25 @@
     <string name="weekly_plan_recoveries_remaining">Recoveries still needed: %1$d</string>
     <string name="today_customize_live_session_availability">Appears today when Live Sessions is enabled in Settings or a session is active.</string>
     <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 and the troop dashboard</string>
+    <string name="whoop_optional_features_title">Optional strap features</string>
+    <string name="whoop_detected_model">Detected: %1$s</string>
+    <string name="whoop_model_unidentified">Not identified yet</string>
+    <string name="whoop_model_unconfirmed_variant">WHOOP 5.0 / MG (unconfirmed variant)</string>
+    <string name="whoop_optional_features_detail">Only passive history capture is enabled locally for a newly identified 5/MG. Your existing choices are kept. Strap writes remain optional.</string>
+    <string name="whoop_protocol_probes_consent">Protocol probes can send experimental queries and arm the configured 5/MG alarm after bonding. They stay enabled until you turn them off.</string>
+    <string name="whoop_broadcast_reconnect">Broadcast heart rate is reapplied when this strap reconnects.</string>
+    <string name="whoop_ecg_controls">Enable WHOOP MG ECG controls</string>
+    <string name="whoop_ecg_controls_consent">Enables the MG ECG session controls. Starting a capture still requires confirmation.</string>
+    <string name="whoop_apply_strap_change">Apply this strap change?</string>
+    <string name="whoop_enable">Enable</string>
+    <string name="whoop_passive_capture_detail">Records frames that already arrive during history sync into a bounded local trace. It does not start any sensor.</string>
+    <string name="whoop_r22_detail">Accepted writes have not been shown to enable a separate live stream. Not required for normal sync or raw capture.</string>
+    <string name="whoop_ecg_research_detail">MG-only protocol research. This is instrumentation, not a medical ECG feature.</string>
+    <string name="whoop_ecg_start_consent">Sends the three MG ECG session toggles and listens for 30 s. Hold both clasp electrodes with your other hand for the whole window. Instrumentation, not a medical ECG feature.</string>
+    <string name="whoop_raw_start_consent">Starts a bounded raw-data session and may start IMU streaming on a connected 5/MG strap. Stop ends the sensor request; nothing is uploaded.</string>
+    <string name="whoop_apply">Apply</string>
+    <string name="whoop_ecg_stop_consent">Stops the MG ECG session toggles. A capture may remain active until the strap accepts the stop commands.</string>
+    <string name="whoop_explicit_bond_consent">On the next eligible reconnect, allows NOOP to ask Android to create a persistent pairing, which may show a system pairing dialog. A pairing refusal can defer the handshake for one connection. Turning this off only withdraws permission; existing phone pairings remain.</string>
+    <string name="whoop_unbonded_offload_consent">On the next eligible reconnect, reads the strap clock without pairing. If the strap replies, NOOP sets its clock and requests history. Enabling also clears saved refusals and resets the retry limits for silent or inconclusive connections on all straps. Turning this off only withdraws permission.</string>
+    <string name="whoop_clear_stale_bond_consent">Allows NOOP to remove the phone pairing after five consecutive paired connections drop before a session starts, once until the strap pairs again. The manual re-pair guide appears after two failures. Turning this off only withdraws permission; it does not restore a removed pairing.</string>
 </resources>

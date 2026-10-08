@@ -59,7 +59,7 @@
     },
     "bluetooth_reconnect_rearm": {
       "swift": ["onChangeCompat(of: live.bonded)", "rawCaptureInFlight = false"],
-      "kotlin": ["LaunchedEffect(state.active, state.sessionId, live.connected)", "startGroundTruthImuCapture"]
+      "kotlin": ["LaunchedEffect(state.active, state.sessionId, live.connected, activeDevice?.id, canCapture)", "state.deviceId == activeDevice?.id", "startGroundTruthImuCapture"]
     },
     "session_files_removed_with_session": {
       "swift": ["deleteFiles(sessionId", "removeItem(metadata)"],
