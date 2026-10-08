@@ -1,5 +1,12 @@
 # Publishing troop v12.0.0
 
+For v12.0.0, publication was authorized without a private Android signing key. The delivery uses
+locally validated Apple artifacts and a separately named public-testing-key Android APK, with
+`SHA256SUMS`. It uses `gh release create` after validating and pushing merged main; it does not run
+the complete stable workflow or create signing keys/secrets. The stable APK is omitted. See the
+[release notes](releases/v12.0.0.md) for the actual downloads. The original complete stable-channel
+plan below remains a reference for a future version with private Android signing configured.
+
 Phase 1 prepares source and notes only. Phase 2 starts after the coordinator merges and pushes
 all ports to `TrapstarKS/troop` main and authorizes publication. No release, remote tag, workflow
 dispatch or main merge is part of preparation.
