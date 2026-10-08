@@ -1553,7 +1553,7 @@ internal fun WorkoutDetailSheet(vm: AppViewModel, row: WorkoutRow, expandedDetai
                 val context = LocalContext.current
                 val profile = remember { ProfileStore.from(context.applicationContext) }
                 val zoneSet = remember(profile.hrMax, profile.hrZoneThresholds) { profile.hrZoneSet }
-                val zoneColors = remember(hrCurve, zoneSet) {
+                val zoneColors = remember(hrCurve, zoneSet, Palette.active, Palette.isClassic) {
                     hrCurve.map { bucket ->
                         val zone = zoneSet.zoneNumber(bucket.avgBpm)
                         if (zone > 0) Palette.hrZoneColor(zone) else Palette.textTertiary
