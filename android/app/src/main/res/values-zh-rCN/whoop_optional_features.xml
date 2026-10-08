@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whoop_optional_features_title">腕带可选功能</string>
+    <string name="whoop_detected_model">已识别：%1$s</string>
+    <string name="whoop_model_unidentified">尚未识别</string>
+    <string name="whoop_model_unconfirmed_variant">WHOOP 5.0 / MG（具体型号未确认）</string>
+    <string name="whoop_optional_features_detail">对于新识别的 5/MG，本地仅启用被动历史数据采集。你现有的选择会保留。向腕带写入仍为可选操作。</string>
+    <string name="whoop_protocol_probes_consent">协议探测可发送实验性查询，并在配对后启用已配置的 5/MG 闹钟。它们会保持启用，直到你将其关闭。</string>
+    <string name="whoop_broadcast_reconnect">此腕带重新连接时，会再次应用心率广播设置。</string>
+    <string name="whoop_ecg_controls">启用 WHOOP MG 心电图控制</string>
+    <string name="whoop_ecg_controls_consent">启用 MG 心电图会话控制。开始采集仍需确认。</string>
+    <string name="whoop_apply_strap_change">应用此腕带更改？</string>
+    <string name="whoop_enable">启用</string>
+    <string name="whoop_passive_capture_detail">将历史同步期间已收到的数据帧记录到大小受限的本地跟踪文件中。不会启动任何传感器。</string>
+    <string name="whoop_r22_detail">尚未证实腕带接受的写入操作能启用单独的实时数据流。正常同步或原始数据采集无需这些操作。</string>
+    <string name="whoop_ecg_research_detail">仅用于 MG 协议研究。这是仪器调试，并非医疗心电图功能。</string>
+    <string name="whoop_ecg_start_consent">发送三个 MG 心电图会话开关命令，并监听 30 秒。在整个时间段内，用另一只手握住表扣上的两个电极。用于仪器调试，并非医疗心电图功能。</string>
+    <string name="whoop_raw_start_consent">开始一次有时限的原始数据会话，并可能在已连接的 5/MG 腕带上启动 IMU 数据流。停止会结束传感器请求；不会上传任何数据。</string>
+    <string name="whoop_apply">应用</string>
+    <string name="whoop_ecg_stop_consent">停止 MG 心电图会话开关。腕带接受停止命令前，采集可能仍在进行。</string>
+    <string name="whoop_explicit_bond_consent">在下次符合条件的重新连接时，允许 NOOP 请求 Android 建立持久配对，这可能会显示系统配对对话框。若配对被拒绝，初始握手可能会推迟一次连接。关闭仅撤回授权；手机上已有的配对会保留。</string>
+    <string name="whoop_unbonded_offload_consent">在下次符合条件的重新连接时，无需配对即可读取腕带时钟。若腕带回应，NOOP 会设置其时钟并请求历史数据。启用还会清除所有腕带已保存的拒绝记录，并重置无回应或结果不明确的连接的重试次数限制。关闭仅撤回授权。</string>
+    <string name="whoop_clear_stale_bond_consent">若与已配对腕带的连接连续五次在会话开始前中断，允许 NOOP 移除手机上的配对。仅执行一次，直到腕带再次配对。两次失败后会显示手动重新配对指南。关闭仅撤回授权；不会恢复已移除的配对。</string>
+</resources>

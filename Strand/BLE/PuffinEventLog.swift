@@ -41,7 +41,7 @@ final class PuffinEventLog {
     private var disabled = false
 
     private var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: PuffinFrameRecorder.enabledKey)
+        WhoopFamilyDefaultsStore.captureEnabled()
     }
 
     /// `<AppSupport>/OpenWhoop/puffin-events.jsonl` — deliberately OUTSIDE `puffin-captures/`, whose

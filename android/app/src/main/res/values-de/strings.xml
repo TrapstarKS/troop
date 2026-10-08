@@ -2986,4 +2986,25 @@
     <string name="weekly_plan_recoveries_remaining">Noch benötigte Erholungswerte: %1$d</string>
     <string name="today_customize_live_session_availability">Erscheint heute, wenn Live Sessions in den Einstellungen aktiviert sind oder eine Session aktiv ist.</string>
     <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 und das troop-Dashboard</string>
+    <string name="whoop_optional_features_title">Optionale Armbandfunktionen</string>
+    <string name="whoop_detected_model">Erkannt: %1$s</string>
+    <string name="whoop_model_unidentified">Noch nicht identifiziert</string>
+    <string name="whoop_model_unconfirmed_variant">WHOOP 5.0 / MG (Variante unbestätigt)</string>
+    <string name="whoop_optional_features_detail">Für ein neu identifiziertes 5/MG wird lokal nur die passive Verlaufsaufzeichnung aktiviert. Deine bisherigen Einstellungen bleiben erhalten. Schreibzugriffe auf das Armband bleiben optional.</string>
+    <string name="whoop_protocol_probes_consent">Protokollabfragen können experimentelle Anfragen senden und nach der Kopplung den konfigurierten 5/MG-Wecker aktivieren. Sie bleiben eingeschaltet, bis du sie ausschaltest.</string>
+    <string name="whoop_broadcast_reconnect">Die Übertragung der Herzfrequenz wird erneut aktiviert, wenn sich dieses Armband wieder verbindet.</string>
+    <string name="whoop_ecg_controls">WHOOP MG EKG-Steuerung aktivieren</string>
+    <string name="whoop_ecg_controls_consent">Aktiviert die Steuerung für MG-EKG-Sitzungen. Der Start einer Aufzeichnung muss weiterhin bestätigt werden.</string>
+    <string name="whoop_apply_strap_change">Diese Änderung am Armband anwenden?</string>
+    <string name="whoop_enable">Aktivieren</string>
+    <string name="whoop_passive_capture_detail">Zeichnet Frames, die während der Verlaufssynchronisierung ohnehin eintreffen, in einer begrenzten lokalen Protokolldatei auf. Es wird kein Sensor gestartet.</string>
+    <string name="whoop_r22_detail">Es wurde nicht nachgewiesen, dass akzeptierte Schreibzugriffe einen separaten Live-Datenstrom aktivieren. Für normale Synchronisierung oder Rohdatenaufzeichnung nicht erforderlich.</string>
+    <string name="whoop_ecg_research_detail">Protokollforschung nur für MG. Dies ist Instrumentierung, keine medizinische EKG-Funktion.</string>
+    <string name="whoop_ecg_start_consent">Sendet die drei MG-EKG-Sitzungsschalter und empfängt 30 s lang. Halte beide Elektroden am Verschluss während der gesamten Zeit mit deiner anderen Hand. Instrumentierung, keine medizinische EKG-Funktion.</string>
+    <string name="whoop_raw_start_consent">Startet eine begrenzte Rohdatensitzung und kann das IMU-Streaming auf einem verbundenen 5/MG-Armband starten. Stoppen beendet die Sensoranfrage; es wird nichts hochgeladen.</string>
+    <string name="whoop_apply">Anwenden</string>
+    <string name="whoop_ecg_stop_consent">Stoppt die MG-EKG-Sitzungsschalter. Eine Aufzeichnung kann aktiv bleiben, bis das Armband die Stoppbefehle akzeptiert.</string>
+    <string name="whoop_explicit_bond_consent">Erlaubt NOOP bei der nächsten geeigneten Wiederverbindung, Android um eine dauerhafte Kopplung zu bitten. Dabei kann ein Kopplungsdialog des Systems erscheinen. Wird die Kopplung abgelehnt, kann der Handshake um eine Verbindung verschoben werden. Ausschalten entzieht nur die Erlaubnis; bestehende Kopplungen auf dem Telefon bleiben erhalten.</string>
+    <string name="whoop_unbonded_offload_consent">Liest bei der nächsten geeigneten Wiederverbindung die Uhr des Armbands ohne Kopplung aus. Antwortet das Armband, stellt NOOP seine Uhr und fordert den Verlauf an. Beim Aktivieren werden außerdem gespeicherte Ablehnungen gelöscht und die Wiederholungsgrenzen für Verbindungen ohne Antwort oder ohne eindeutiges Ergebnis für alle Armbänder zurückgesetzt. Ausschalten entzieht nur die Erlaubnis.</string>
+    <string name="whoop_clear_stale_bond_consent">Erlaubt NOOP, die Kopplung auf dem Telefon zu entfernen, wenn fünf aufeinanderfolgende Verbindungen mit einem gekoppelten Armband vor dem Sitzungsbeginn abbrechen. Dies geschieht einmal, bis das Armband wieder gekoppelt wird. Die Anleitung zum manuellen erneuten Koppeln erscheint nach zwei Fehlschlägen. Ausschalten entzieht nur die Erlaubnis und stellt keine entfernte Kopplung wieder her.</string>
 </resources>

@@ -41,17 +41,6 @@ struct SettingsView: View {
     @State private var showOversizeRestoreConfirm = false
     @State private var oversizeRestoreMessage = ""
 
-    /// Opt-in WHOOP 5/MG "R22" deep-data unlock (off by default) — the one probe that writes a
-    /// persistent feature flag to the strap. See [PuffinExperiment.deepDataKey]. (#174)
-    @AppStorage(PuffinExperiment.deepDataKey) private var deepDataEnabled = false
-
-    /// #174: set when the deep-data switch is turned OFF, so the app can OFFER to clear the flags on the
-    /// strap instead of silently leaving them set. The switch alone has never written anything in either
-    /// direction — it gates sends — so turning it off used to change nothing on the hardware while reading
-    /// like an undo. Asking is the right shape rather than writing automatically: the strap may not be
-    /// connected, and a write to bonded hardware is not something a toggle should do unannounced.
-    @State private var confirmingDeepDataDisable = false
-
     /// #103 opt-in: surfaces the WHOOP 5/MG `spo2_candidate_82` nightly mean in the Blood Oxygen tile
     /// as a "strap estimate (unverified)" fallback when no calibrated `spo2Pct` exists. Display-only —
     /// writes nothing to the strap. See [PuffinExperiment.spo2CandidateDisplayKey].
@@ -175,24 +164,11 @@ struct SettingsView: View {
     /// for as long as a strap history sync runs while this is on.
     @AppStorage(ScreenIdle.strapSyncKeepAwakeKey) private var syncKeepScreenOn = false
 
-    /// The strap model the user last picked (same key the scan pickers write). Gates the WHOOP 4.0-only
-    /// rename control in the strap card — renaming uses the Harvard command set, which a 5/MG doesn't share.
-    @AppStorage("selectedWhoopModel") private var selectedWhoopModelRaw = WhoopModel.whoop4.rawValue
     /// Draft text for the strap-rename field (strap card). Empty placeholder; never pre-seeded so the
     /// current name stays visible separately above it.
     @State private var strapNameDraft = ""
 
-    /// Whether to surface the WHOOP 5/MG-only probes (puffin/R22/broadcast-HR/frame-capture). Gated so a
-    /// confident 4.0 owner never sees 5/MG controls that can't touch their strap (#22). The model
-    /// preference DEFAULTS to whoop4, so we deliberately do NOT hide on the raw default alone — the same
-    /// `"selectedWhoopModel"` key is rewritten to the family that actually advertised when a strap
-    /// connects (BLEManager, PR#195), so a real 5/MG owner who never opened the model picker still flips
-    /// this true the moment their strap is discovered. We hide the 5/MG block only when the user is
-    /// confidently on a 4.0 (pref says whoop4 AND nothing 5/MG is connected). The always-on raw-CSV
-    /// diagnostic stays visible on every model regardless.
-    private var showFiveMGControls: Bool {
-        selectedWhoopModelRaw == WhoopModel.whoop5mg.rawValue
-    }
+    private var showFiveMGControls: Bool { model.activeWhoopFamily == .whoop5 }
 
     private var unitSystem: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
     private var distanceUnitSystem: UnitSystem {
@@ -305,16 +281,6 @@ struct SettingsView: View {
         } message: {
             Text("This restarts the roughly 4-night build-up for Charge and your HRV baseline. Your history stays. Use it if a bad first week, like wearing it while sick, set your baseline off.")
         }
-        // #174: the switch going OFF is the moment to offer the undo. Declining leaves the flags set and
-        // says so — which is still an improvement on the old behaviour, where the same tap silently left
-        // them set with no indication either way.
-        .confirmationDialog("Clear the R22 flags on your strap?",
-                            isPresented: $confirmingDeepDataDisable, titleVisibility: .visible) {
-            Button("Clear flags on strap") { model.ble.disableWhoop5DeepData() }
-            Button("Just stop sending", role: .cancel) { }
-        } message: {
-            Text("Turning this switch off only stops NOOP sending the unlock. The flags it already wrote stay on the strap until something clears them. NOOP can write the off value to all 16 now and read each one back so you can see what the strap actually stores. Needs the strap connected and bonded.")
-        }
         .confirmationDialog("Mark optical experiment phase",
                             isPresented: $showOpticalPhasePicker, titleVisibility: .visible) {
             ForEach(PuffinOpticalExperimentPhase.allCases, id: \.self) { phase in
@@ -358,6 +324,7 @@ struct SettingsView: View {
             appearanceCard
         case .device:
             strapCard
+            if showFiveMGControls { WhoopOptionalFeaturesCard() }
             hrvCard
             #if os(iOS)
             liveNotificationsCard
@@ -385,6 +352,7 @@ struct SettingsView: View {
                 unitsCard.staggeredAppear(index: 1)
                 appearanceCard.staggeredAppear(index: 2)
                 strapCard.staggeredAppear(index: 3)
+                if showFiveMGControls { WhoopOptionalFeaturesCard() }
                 #if os(iOS)
                 liveNotificationsCard.staggeredAppear(index: 3)
                 #endif
@@ -1465,6 +1433,8 @@ struct SettingsView: View {
             blurb: "NOOP pairs directly with your WHOOP over Bluetooth: no WHOOP app, no cloud."
         ) {
             VStack(alignment: .leading, spacing: 16) {
+                Text("Detected: \(model.activeWhoopModelLabel)")
+                    .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                 HStack(spacing: 12) {
                     StatePill("\(strapStatusTitle)", tone: strapTone, pulsing: live.connected)
                     if let pct = live.batteryPct {
@@ -1517,7 +1487,7 @@ struct SettingsView: View {
                 // wiring, just relocated as power-user tuning rather than shown here at all times.
 
                 // MARK: Strap name — rename the WHOOP 4.0's BLE advertising name (Harvard command set).
-                if live.connected && selectedWhoopModelRaw == WhoopModel.whoop4.rawValue {
+                if live.connected && model.activeWhoopFamily == .whoop4 {
                     rowDivider
                     strapNameControl
                 }
@@ -3060,6 +3030,7 @@ struct StepsCalibrationSheet: View {
     let repo: Repository
     let onClose: () -> Void
     @EnvironmentObject var profile: ProfileStore
+    @EnvironmentObject private var model: AppModel
 
     /// Recent days that have BOTH an estimate and a real phone step count, newest first — the accuracy table.
     @State private var comparison: [StepsComparisonRow] = []
@@ -3080,12 +3051,7 @@ struct StepsCalibrationSheet: View {
     /// banner had not appeared yet and the card explained nothing at all.
     private var strapHasNoMotion: Bool { didLoad && sampleMotion == nil }
 
-    /// #107: the sheet's guidance depends on the strap family. A WHOOP 4.0 streams motion automatically, so
-    /// "let it sync" is right; a 5/MG only streams motion once the experimental deep-data unlock is on, so
-    /// the 4.0 advice is futile there and the empty state must say so instead.
-    @AppStorage("selectedWhoopModel") private var selectedWhoopModelRaw = WhoopModel.whoop4.rawValue
-    @AppStorage(PuffinExperiment.deepDataKey) private var deepDataEnabled = false
-    private var is5MG: Bool { selectedWhoopModelRaw == WhoopModel.whoop5mg.rawValue }
+    private var is5MG: Bool { model.activeWhoopFamily == .whoop5 }
 
     /// The coefficient the slider's max anchors to — generous headroom over whatever the auto-fit found so
     /// a manual nudge in either direction is reachable. Floor keeps the slider usable before any fit.
@@ -3217,13 +3183,10 @@ struct StepsCalibrationSheet: View {
         return String(localized: "We're not seeing any motion from your strap yet. Steps are estimated from your WHOOP's banked motion history, so your strap needs to sync that history before NOOP has anything to count.")
     }
 
-    /// The "what to do" line — 5/MG points at the deep-data toggle (unless it's already on, then just sync).
+    /// Both families estimate steps from stored motion, without a legacy R22 write.
     private var noMotionAction: String {
-        if is5MG && !deepDataEnabled {
-            return String(localized: "Open NOOP near the strap and let WHOOP 5/MG history finish syncing. The step estimate and calibration fill in once enough stored motion has arrived; the legacy R22 experiment is not required.")
-        }
         if is5MG {
-            return String(localized: "Deep data is on — open NOOP near your strap and let it sync its motion history (a full first-run sync can take a while). Once a day or two of motion lands, your step estimate and the calibration below fill in.")
+            return String(localized: "Open NOOP near the strap and let WHOOP 5/MG history finish syncing. The step estimate and calibration fill in once enough stored motion has arrived; the legacy R22 experiment is not required.")
         }
         return String(localized: "Open NOOP near your strap and let it catch up (a full history sync can take a while on first run). Once a day or two of motion lands, your step estimate and the calibration below will start to fill in.")
     }

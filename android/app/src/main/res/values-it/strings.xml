@@ -2987,4 +2987,25 @@
     <string name="weekly_plan_recoveries_remaining">Recuperi ancora necessari: %1$d</string>
     <string name="today_customize_live_session_availability">Compare oggi se le sessioni in diretta sono attivate nelle Impostazioni o una sessione è attiva.</string>
     <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 e la dashboard troop</string>
+    <string name="whoop_optional_features_title">Funzioni facoltative del bracciale</string>
+    <string name="whoop_detected_model">Rilevato: %1$s</string>
+    <string name="whoop_model_unidentified">Non ancora identificato</string>
+    <string name="whoop_model_unconfirmed_variant">WHOOP 5.0 / MG (variante non confermata)</string>
+    <string name="whoop_optional_features_detail">Per un 5/MG appena identificato viene attivata localmente solo l’acquisizione passiva della cronologia. Le scelte esistenti vengono mantenute. Le scritture sul bracciale restano facoltative.</string>
+    <string name="whoop_protocol_probes_consent">Le sonde di protocollo possono inviare query sperimentali e attivare la sveglia 5/MG configurata dopo l’associazione. Restano attive finché non le disattivi.</string>
+    <string name="whoop_broadcast_reconnect">La trasmissione della frequenza cardiaca viene riapplicata quando questo bracciale si riconnette.</string>
+    <string name="whoop_ecg_controls">Attiva i controlli ECG di WHOOP MG</string>
+    <string name="whoop_ecg_controls_consent">Attiva i controlli della sessione ECG del MG. L’avvio di un’acquisizione richiede comunque conferma.</string>
+    <string name="whoop_apply_strap_change">Applicare questa modifica al bracciale?</string>
+    <string name="whoop_enable">Attiva</string>
+    <string name="whoop_passive_capture_detail">Registra in una traccia locale limitata i frame che già arrivano durante la sincronizzazione della cronologia. Non avvia alcun sensore.</string>
+    <string name="whoop_r22_detail">Non è stato dimostrato che le scritture accettate attivino un flusso in diretta separato. Non sono necessarie per la sincronizzazione normale o l’acquisizione dei dati grezzi.</string>
+    <string name="whoop_ecg_research_detail">Ricerca sul protocollo solo per MG. È strumentazione, non una funzione ECG medica.</string>
+    <string name="whoop_ecg_start_consent">Invia i tre interruttori della sessione ECG del MG e resta in ascolto per 30 s. Tieni entrambi gli elettrodi della chiusura con l’altra mano per l’intero intervallo. Strumentazione, non una funzione ECG medica.</string>
+    <string name="whoop_raw_start_consent">Avvia una sessione limitata di dati grezzi e può avviare il flusso IMU su un bracciale 5/MG connesso. L’arresto termina la richiesta al sensore; non viene caricato nulla.</string>
+    <string name="whoop_apply">Applica</string>
+    <string name="whoop_ecg_stop_consent">Arresta gli interruttori della sessione ECG del MG. Un’acquisizione può restare attiva finché il bracciale non accetta i comandi di arresto.</string>
+    <string name="whoop_explicit_bond_consent">Alla prossima riconnessione che soddisfa le condizioni, consente a NOOP di chiedere ad Android di creare un abbinamento permanente, che può mostrare una finestra di abbinamento del sistema. Un rifiuto dell’abbinamento può rimandare lo scambio iniziale di una connessione. Disattivare revoca solo l’autorizzazione; gli abbinamenti esistenti del telefono restano.</string>
+    <string name="whoop_unbonded_offload_consent">Alla prossima riconnessione che soddisfa le condizioni, legge l’orologio del bracciale senza abbinamento. Se il bracciale risponde, NOOP imposta il suo orologio e richiede la cronologia. L’attivazione cancella anche i rifiuti salvati e reimposta i limiti dei tentativi per le connessioni senza risposta o senza esito conclusivo di tutti i bracciali. Disattivare revoca solo l’autorizzazione.</string>
+    <string name="whoop_clear_stale_bond_consent">Consente a NOOP di rimuovere l’abbinamento del telefono se cinque connessioni consecutive con un bracciale abbinato si interrompono prima dell’inizio di una sessione. Lo fa una sola volta, finché il bracciale non viene abbinato di nuovo. La guida per il nuovo abbinamento manuale appare dopo due errori. Disattivare revoca solo l’autorizzazione; non ripristina un abbinamento rimosso.</string>
 </resources>

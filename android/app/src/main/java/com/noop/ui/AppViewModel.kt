@@ -161,6 +161,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** The process-wide device registry — the single source of paired devices + the active one. */
     val deviceRegistry: com.noop.data.DeviceRegistry get() = noopApp.deviceRegistry
 
+    val activeRegistryDevice: StateFlow<com.noop.data.PairedDeviceRow?> = repository.pairedDevicesFlow()
+        .map { devices -> devices.firstOrNull { it.status == "active" } }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
+
     /** All paired devices (oldest first), read fresh. The screen re-reads after every mutation. */
     suspend fun pairedDevices(): List<com.noop.data.PairedDeviceRow> = noopApp.deviceRegistry.all()
 

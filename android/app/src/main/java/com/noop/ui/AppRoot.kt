@@ -1326,6 +1326,7 @@ private fun ShellSettings(vm: AppViewModel, nav: NavHostController, category: Se
     SettingsScreen(vm,
         initialCategory = category,
         onOpenTestCentre = { nav.navigate(Destination.TestCentre.route) },
+        onOpenGroundTruthCollector = { nav.navigate(Destination.GroundTruthCollector.route) },
         onOpenBackupSync = { nav.navigate(Destination.BackupSync.route) },
         onOpenSelfHostedPush = { nav.navigate(Destination.SelfHostedPush.route) },
         onOpenStepsCalibration = { nav.navigate(Destination.StepsCalibration.route) })

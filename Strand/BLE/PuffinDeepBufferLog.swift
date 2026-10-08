@@ -84,7 +84,7 @@ final class PuffinDeepBufferLog {
     private var disabled = false
 
     private var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: PuffinFrameRecorder.enabledKey)
+        WhoopFamilyDefaultsStore.captureEnabled()
     }
 
     private struct MarkerLine: Encodable {

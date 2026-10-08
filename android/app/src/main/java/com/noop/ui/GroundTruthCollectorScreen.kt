@@ -38,6 +38,9 @@ fun GroundTruthCollectorScreen(vm: AppViewModel) {
     val collector = remember { GroundTruthCollector.from(context) }
     val scope = rememberCoroutineScope()
     val live by vm.live.collectAsStateWithLifecycle()
+    val activeDevice by vm.activeRegistryDevice.collectAsStateWithLifecycle()
+    val canCapture = com.noop.protocol.WhoopFamilyDefaults.family(
+        activeDevice?.model, activeDevice?.brand) == com.noop.protocol.DeviceFamily.WHOOP5
     val imuStatus by vm.ble.groundTruthImuStatus.collectAsStateWithLifecycle()
     var state by remember { mutableStateOf(collector.snapshot()) }
     var exportingSessionId by remember { mutableStateOf<String?>(null) }
@@ -48,6 +51,7 @@ fun GroundTruthCollectorScreen(vm: AppViewModel) {
     var markerEditor by remember { mutableStateOf<MarkerEditor?>(null) }
     var sessionPendingDelete by remember { mutableStateOf<GroundTruthCollector.SessionSummary?>(null) }
     var confirmDeleteAll by remember { mutableStateOf(false) }
+    var confirmStart by remember(activeDevice?.id, canCapture) { mutableStateOf(false) }
 
     LaunchedEffect(vm.activeStrapId) {
         while (true) {
@@ -61,8 +65,10 @@ fun GroundTruthCollectorScreen(vm: AppViewModel) {
     }
 
     // Re-arm after a BLE reconnect or Android process restart while the manual session is still active.
-    LaunchedEffect(state.active, state.sessionId, live.connected) {
-        if (state.active && live.connected) state.sessionId?.let(vm.ble::startGroundTruthImuCapture)
+    LaunchedEffect(state.active, state.sessionId, live.connected, activeDevice?.id, canCapture) {
+        if (state.active && live.connected && canCapture && state.deviceId == activeDevice?.id) {
+            state.sessionId?.let(vm.ble::startGroundTruthImuCapture)
+        }
     }
 
     ScreenScaffold(
@@ -130,18 +136,15 @@ fun GroundTruthCollectorScreen(vm: AppViewModel) {
             NoopButton(
                 text = stringResource(R.string.ground_truth_start),
                 fullWidth = true,
-                enabled = vm.activeStrapId.isNotBlank(),
-                onClick = {
-                    state = collector.start(vm.activeStrapId)
-                    sessions = collector.sessions()
-                },
+                enabled = canCapture,
+                onClick = { confirmStart = true },
             )
         }
         NoopButton(
             text = stringResource(R.string.ground_truth_add_historical),
             kind = NoopButtonKind.Secondary,
             fullWidth = true,
-            enabled = !state.active && vm.activeStrapId.isNotBlank(),
+            enabled = !state.active && canCapture,
             onClick = {
                 val end = System.currentTimeMillis()
                 collector.createHistoricalSession(vm.activeStrapId, end - 60 * 60 * 1_000L, end)
@@ -207,6 +210,29 @@ fun GroundTruthCollectorScreen(vm: AppViewModel) {
                 )
             }
         }
+    }
+
+    if (confirmStart) {
+        AlertDialog(
+            onDismissRequest = { confirmStart = false },
+            containerColor = Palette.surfaceOverlay,
+            title = { Text(stringResource(R.string.whoop_apply_strap_change), style = NoopType.title2,
+                color = Palette.textPrimary) },
+            text = { Text(stringResource(R.string.whoop_raw_start_consent), style = NoopType.body,
+                color = Palette.textSecondary) },
+            dismissButton = {
+                TextButton(onClick = { confirmStart = false }) {
+                    Text(stringResource(R.string.ground_truth_cancel), color = Palette.textSecondary)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = canCapture, onClick = {
+                    confirmStart = false
+                    activeDevice?.id?.let { state = collector.start(it) }
+                    sessions = collector.sessions()
+                }) { Text(stringResource(R.string.ground_truth_start), color = Palette.accent) }
+            },
+        )
     }
 
     sessionPendingDelete?.let { session ->

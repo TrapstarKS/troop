@@ -2987,4 +2987,25 @@
     <string name="weekly_plan_recoveries_remaining">Recuperaciones pendientes: %1$d</string>
     <string name="today_customize_live_session_availability">Aparece hoy si Live Sessions está activado en Ajustes o hay una sesión activa.</string>
     <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 y el panel de troop</string>
+    <string name="whoop_optional_features_title">Funciones opcionales de la pulsera</string>
+    <string name="whoop_detected_model">Detectado: %1$s</string>
+    <string name="whoop_model_unidentified">Aún sin identificar</string>
+    <string name="whoop_model_unconfirmed_variant">WHOOP 5.0 / MG (variante sin confirmar)</string>
+    <string name="whoop_optional_features_detail">Para un 5/MG recién identificado, solo se activa localmente la captura pasiva del historial. Se mantienen tus elecciones anteriores. Las escrituras en la pulsera siguen siendo opcionales.</string>
+    <string name="whoop_protocol_probes_consent">Las consultas de protocolo pueden enviar consultas experimentales y activar la alarma 5/MG configurada tras el emparejamiento. Permanecen activadas hasta que las desactives.</string>
+    <string name="whoop_broadcast_reconnect">La transmisión de la frecuencia cardíaca se vuelve a aplicar cuando esta pulsera se reconecta.</string>
+    <string name="whoop_ecg_controls">Activar controles de ECG de WHOOP MG</string>
+    <string name="whoop_ecg_controls_consent">Activa los controles de sesión de ECG del MG. Iniciar una captura sigue requiriendo confirmación.</string>
+    <string name="whoop_apply_strap_change">¿Aplicar este cambio a la pulsera?</string>
+    <string name="whoop_enable">Activar</string>
+    <string name="whoop_passive_capture_detail">Registra las tramas que ya llegan durante la sincronización del historial en una traza local limitada. No inicia ningún sensor.</string>
+    <string name="whoop_r22_detail">No se ha demostrado que las escrituras aceptadas activen un flujo en directo separado. No son necesarias para la sincronización normal ni la captura de datos sin procesar.</string>
+    <string name="whoop_ecg_research_detail">Investigación del protocolo solo para MG. Es instrumentación, no una función médica de ECG.</string>
+    <string name="whoop_ecg_start_consent">Envía los tres interruptores de sesión de ECG del MG y escucha durante 30 s. Sujeta ambos electrodos del cierre con la otra mano durante todo el intervalo. Instrumentación, no una función médica de ECG.</string>
+    <string name="whoop_raw_start_consent">Inicia una sesión limitada de datos sin procesar y puede iniciar la transmisión de la IMU en una pulsera 5/MG conectada. Detener finaliza la solicitud al sensor; no se sube nada.</string>
+    <string name="whoop_apply">Aplicar</string>
+    <string name="whoop_ecg_stop_consent">Detiene los interruptores de sesión de ECG del MG. Una captura puede seguir activa hasta que la pulsera acepte los comandos de parada.</string>
+    <string name="whoop_explicit_bond_consent">En la próxima reconexión que cumpla las condiciones, permite que NOOP pida a Android crear una vinculación permanente, lo que puede mostrar un diálogo de vinculación del sistema. Si se rechaza la vinculación, el intercambio inicial puede aplazarse una conexión. Desactivar solo retira el permiso; las vinculaciones existentes del teléfono se mantienen.</string>
+    <string name="whoop_unbonded_offload_consent">En la próxima reconexión que cumpla las condiciones, lee el reloj de la pulsera sin vinculación. Si la pulsera responde, NOOP ajusta su reloj y solicita el historial. Activar también borra los rechazos guardados y restablece los límites de reintento de las conexiones sin respuesta o sin resultado concluyente para todas las pulseras. Desactivar solo retira el permiso.</string>
+    <string name="whoop_clear_stale_bond_consent">Permite que NOOP elimine la vinculación del teléfono si cinco conexiones consecutivas con una pulsera vinculada se interrumpen antes de iniciar una sesión. Lo hace una vez hasta que la pulsera vuelva a vincularse. La guía de revinculación manual aparece tras dos fallos. Desactivar solo retira el permiso; no restaura una vinculación eliminada.</string>
 </resources>
