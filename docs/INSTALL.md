@@ -1,8 +1,8 @@
 # Install troop
 
-Checked 2026-10-02. troop is a fork of [NOOP](https://github.com/ryanbr/noop). It stores strap data on-device, without a troop account or telemetry. Installation tools contact Apple, GitHub, or their own signing services; those services are separate from troop. A real phone and strap are required for Bluetooth.
+Checked 2026-10-08. troop is a fork of [NOOP](https://github.com/ryanbr/noop). It stores strap data on-device, without a troop account or telemetry. Installation tools contact Apple, GitHub, or their own signing services; those services are separate from troop. A real phone and strap are required for Bluetooth.
 
-**Distribution is being prepared locally. No new stable release or source has been published by this change.** The fork's source starts with no versions rather than advertising upstream downloads. Use the source route after the maintainer publishes its first validated stable release; until then, build from source. Old fork prereleases are staging builds, not the private-key stable channel described below.
+**[v12.0.0 is available](https://github.com/TrapstarKS/troop/releases/tag/v12.0.0):** an iOS IPA for user provisioning, a universal ad-hoc macOS app, and an Android public-testing-key APK. The stable privately signed Android APK is omitted because no private key was supplied. The iOS source points only to this fork's verified IPA. Physical-device installation, upgrades and strap behavior remain unvalidated.
 
 ## iPhone: SideStore (primary)
 
@@ -12,7 +12,7 @@ Requires iOS 17+, a free Apple Account, a computer for initial USB setup, and Wi
 2. Connect the unlocked phone by USB, trust the computer, open iloader, sign in with your Apple Account, select the phone, and choose **Install SideStore (Stable)**.
 3. On the phone, trust the developer under Settings → General → VPN & Device Management. Enable Developer Mode under Privacy & Security and complete the restart/confirmation when required. Wording differs by iOS version.
 4. Connect to Wi-Fi, enable LocalDevVPN, open SideStore, and sign in with the same Apple Account. In **My Apps**, manually refresh **SideStore itself** immediately to finish setup. These steps follow the [SideStore installation guide](https://docs.sidestore.io/docs/installation/install).
-5. After a stable fork release is available, open SideStore's Browse/Sources screen, choose Add Source, and paste the raw JSON URL:
+5. Open SideStore's Browse/Sources screen, choose Add Source, and paste the raw JSON URL:
 
    `https://raw.githubusercontent.com/TrapstarKS/troop/main/altstore-source.json`
 
@@ -29,17 +29,23 @@ If signing expires, re-provision the same app with the same account/identity; av
 - **AltStore Classic:** follow [AltServer setup](https://faq.altstore.io/altstore-classic/altserver), install Classic with your account, add the same raw source, or import the IPA. Traditional refresh uses a running AltServer over USB/same Wi-Fi; [Remote AltServers](https://faq.altstore.io/altstore-classic/remote-altservers) are another tooling option. Check expiry manually; refresh and upgrading are separate. AltStore PAL is a different notarized distribution channel and cannot install this ordinary IPA as a PAL app.
 - **Sideloadly:** install from [the official site](https://sideloadly.io/), trust/connect the phone, select it and your Apple Account, load the verified IPA, and start provisioning. Preserve extensions/capabilities and the bundle identity for updates. Its refresh daemon needs the computer/device reachable; a new version requires its new IPA. See the [official FAQ](https://sideloadly.io/faq). Extension/HealthKit compatibility requires device testing.
 
-## Android: signed Full APK
+## Android: public-testing-key Full APK
 
-Requires Android 8+. Download **`NOOP-android-v<VERSION>.apk`** and **`SHA256SUMS`** from [stable fork releases](https://github.com/TrapstarKS/troop/releases). Select a fixed `vX.Y.Z` release, not `testing-latest`, Demo, or a debug APK. Verify the checksum, allow Install unknown apps for your downloader/file manager, open the APK, and follow the package installer. Managed-device/OEM policy can restrict sideloading. No troop or Play account is needed by the app.
+For v12.0.0, download **`NOOP-android-public-testing-key-v12.0.0.apk`** and **`SHA256SUMS`** from [the fixed release](https://github.com/TrapstarKS/troop/releases/tag/v12.0.0). Requires Android 8+. Verify the checksum, allow Install unknown apps for your downloader/file manager, open the APK, and follow the package installer. Its package is **`com.trapstarks.troop.staging`**, version **12.0.0-staging**, versionCode **551**.
 
-The stable package is **`com.trapstarks.troop`**, signed with one durable private maintainer key. Each release includes `NOOP-android-v<VERSION>-metadata.json` with the public signing certificate SHA-256, versionCode, package, and APK digest. Verify against the established certificate fingerprint before updates; obtaining the APK and its checksum from the same compromised source does not establish publisher authenticity. A private signature establishes update continuity, not reproducible-build equivalence. Android signing/updates have no seven-day refresh. Keep the same package/signer and increase versionCode; export `.noopbak` before upgrading.
+The signing key is public and committed in this repository; it does not establish a private publisher identity. `NOOP-android-public-testing-key-v12.0.0-metadata.json` records the package, version, signer certificate and APK digest. This build installs beside upstream NOOP and a future stable troop app. Export `.noopbak` before migration or replacing an installed app. No new signing key or repository secret was created for this release.
+
+### Future private-key stable channel
+
+No stable privately signed APK is available in v12.0.0. Once that channel is configured, its files will be **`NOOP-android-v<VERSION>.apk`** and **`SHA256SUMS`** in a fixed `vX.Y.Z` release. Managed-device/OEM policy can restrict sideloading. No troop or Play account is needed by the app.
+
+The stable channel requires package **`com.trapstarks.troop`**, signed with one durable private maintainer key, and `NOOP-android-v<VERSION>-metadata.json` with the public signing certificate SHA-256, versionCode, package, and APK digest. Verify against the established certificate fingerprint before updates; obtaining the APK and its checksum from the same compromised source does not establish publisher authenticity. A private signature establishes update continuity, not reproducible-build equivalence. Android signing/updates have no seven-day refresh. Keep the same package/signer and increase versionCode; export `.noopbak` before upgrading.
 
 **Migrating from upstream or the old public-key staging app:** first export a `.noopbak` from the old app and copy it somewhere accessible outside that app. Install the stable fork beside it, import the backup using troop's existing backup/restore flow, relaunch as directed, and verify your history/settings before removing the old app. The previous `com.noop.whoop.staging` public-key build cannot update in place to this new identity/signer. New staging builds use `com.trapstarks.troop.staging`; debug uses `.debug`. Neither is the stable channel. A backup is the supported migration boundary, not a guarantee that OS permissions or pairing transfer.
 
 ### Optional Obtainium updates
 
-Install [Obtainium](https://github.com/ImranR98/Obtainium), add `https://github.com/TrapstarKS/troop`, turn **prereleases off**, and use this APK filter:
+The stable filter below deliberately excludes v12.0.0's public-testing-key APK. Use it only after the private-key stable channel is available. Install [Obtainium](https://github.com/ImranR98/Obtainium), add `https://github.com/TrapstarKS/troop`, turn **prereleases off**, and use this APK filter:
 
 `^NOOP-android-v[0-9]+\.[0-9]+\.[0-9]+\.apk$`
 
@@ -52,6 +58,10 @@ As of this guide's date, Google's [developer verification rollout](https://devel
 ## Check downloads
 
 Download files and `SHA256SUMS` from the **same fixed release**. On macOS use `shasum -a 256 <filename>`; on Linux use `sha256sum <filename>`; on Windows PowerShell use `Get-FileHash <filename> -Algorithm SHA256`. Compare the entire digest with that filename's line in `SHA256SUMS`. Stop if it differs. Re-signing the iOS app changes its bytes; verify the downloaded IPA before handing it to a sideloader.
+
+## macOS
+
+Download `NOOP-macos-v12.0.0.zip` from the fixed release and verify its checksum. It contains **NOOP Staging** for Intel and Apple Silicon, bundle `com.trapstarks.troop.noop.staging`, build **199**. Extract the app before opening it. The app is ad-hoc signed and not notarized, so macOS may require approval in Privacy & Security. Installation and Bluetooth behavior still need physical-device validation.
 
 ## Maintainer: one-time setup and release boundary
 
@@ -72,4 +82,4 @@ Tools/update-altstore-source.sh --repo TrapstarKS/troop --source /tmp/altstore-s
 python3 Tools/verify-release-artifacts.py checksums NOOP-ios-unsigned-v11.8.0.ipa
 ```
 
-Copy the tracked empty manifest to `/tmp/altstore-source.json` before the example. Packaging copies the app, removes Watch/personal profiles/debug artifacts, scrubs builder home paths while unsigned, then applies the existing replaceable app/widget capability templates and verifies device metadata. It refuses to overwrite an output IPA. The generator requires explicit repo/source/asset arguments, rejects version/identity mismatches and version/build regression, and never downloads or publishes anything. Python 3.11+ is required for the scripts.
+Use an empty fork manifest in `/tmp/altstore-source.json` for the historical 11.8.0 example; the tracked source now contains 12.0.0 and rejects version regression. Packaging copies the app, removes Watch/personal profiles/debug artifacts, scrubs builder home paths while unsigned, then applies the existing replaceable app/widget capability templates and verifies device metadata. It refuses to overwrite an output IPA. The generator requires explicit repo/source/asset arguments, rejects version/identity mismatches and version/build regression, and never downloads or publishes anything. Python 3.11+ is required for the scripts.

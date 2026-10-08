@@ -63,7 +63,7 @@ maintainers. For the real project, community and support, go to
 | **Plan** | Journal, Behavior Insights, **Weekly Plan**, Trends (week / month / 6 months), Monthly Performance. See [WHOOP_PLAN.md](docs/WHOOP_PLAN.md). |
 | **More & notifications** | WHOOP-style More / Settings; local notifications (Coach brief, Weekly Plan, battery) that open the right screen. See [LOCAL_NOTIFICATIONS.md](docs/LOCAL_NOTIFICATIONS.md). |
 | **Firmware** | Shows the strap's firmware version with guidance. The update flow exists **only as a simulation** tested with mocks — it never flashes a real strap. See [FIRMWARE.md](docs/FIRMWARE.md). |
-| **Install** | Separate app identity (`com.trapstarks.troop` on Android) so it installs beside upstream NOOP; SideStore / signed-APK instructions. See [INSTALL.md](docs/INSTALL.md). |
+| **Install** | Separate fork identities so it installs beside upstream NOOP; SideStore / testing-APK instructions. See [INSTALL.md](docs/INSTALL.md). |
 
 Plus a batch of quality-of-life and bug fixes picked from NOOP's open issues and PRs.
 
@@ -81,13 +81,19 @@ Honest state of this fork:
 
 ## Install
 
-There are no published releases yet — build from source (below), then follow [INSTALL.md](docs/INSTALL.md):
+Download [v12.0.0](https://github.com/TrapstarKS/troop/releases/tag/v12.0.0), verify its
+`SHA256SUMS`, and follow [INSTALL.md](docs/INSTALL.md):
 
 - **iPhone (recommended): SideStore** with a free Apple Account. Free provisioning expires every
   7 days, so refresh in SideStore before then. Alternatives: Xcode with a Personal Team, AltStore,
   Sideloadly.
-- **Android: the signed `Full` APK** (Android 8+), optionally tracked with Obtainium. Installs
-  beside upstream NOOP; move data across with a `.noopbak` export / import.
+- **Android: the public-testing-key `Full` APK** (Android 8+), package
+  `com.trapstarks.troop.staging`. The stable privately signed APK is omitted because no private
+  signing key was supplied. The stable Obtainium filter does not select this testing build.
+- **macOS: the universal app zip** for Intel and Apple Silicon, ad-hoc signed and not notarized.
+
+These builds have passed software checks; installation and strap behavior still need real-device
+validation. They install beside upstream NOOP; move data across with a `.noopbak` export / import.
 
 > Export a `.noopbak` backup before removing or replacing any installed build — uninstalling deletes
 > its local data.

@@ -2,8 +2,8 @@
   "name": "troop",
   "identifier": "com.trapstarks.troop.altstore",
   "sourceURL": "https://raw.githubusercontent.com/TrapstarKS/troop/main/altstore-source.json",
-  "subtitle": "A standalone WHOOP app \u2014 your strap, your device, fully offline.",
-  "description": "SideStore / AltStore Classic source for troop, a fork of NOOP. Versions are added only after a validated stable fork release. The app stores strap data on-device. Not affiliated with WHOOP.",
+  "subtitle": "A standalone WHOOP app — your strap, your device, fully offline.",
+  "description": "SideStore / AltStore Classic source for troop, a fork of NOOP. Versions are added only after a published fork IPA is verified. The app stores strap data on-device. Not affiliated with WHOOP.",
   "iconURL": "https://github.com/TrapstarKS/troop/raw/main/Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512.png",
   "website": "https://github.com/TrapstarKS/troop",
   "tintColor": "44E2B0",
@@ -18,7 +18,17 @@
       "tintColor": "44E2B0",
       "category": "lifestyle",
       "screenshotURLs": [],
-      "versions": [],
+      "versions": [
+        {
+          "version": "12.0.0",
+          "buildVersion": "432",
+          "date": "2026-10-08",
+          "localizedDescription": "troop 12.0.0. See the release notes for changes.",
+          "downloadURL": "https://github.com/TrapstarKS/troop/releases/download/v12.0.0/NOOP-ios-unsigned-v12.0.0.ipa",
+          "size": 23349202,
+          "minOSVersion": "17.0"
+        }
+      ],
       "appPermissions": {
         "entitlements": [
           "com.apple.developer.healthkit",
@@ -30,11 +40,18 @@
           "NSHealthShareUsageDescription": "NOOP reads your own Apple Health data on-device to compute recovery, strain, and sleep. Nothing leaves your device.",
           "NSHealthUpdateUsageDescription": "NOOP writes the metrics it computes from your strap back into Apple Health, on-device and only when you allow it.",
           "NSLocationWhenInUseUsageDescription": "NOOP records your route during an outdoor workout to show distance, pace, and a map, and keeps recording while the screen is off. The route stays on your device. Nothing leaves it.",
+          "NSMicrophoneUsageDescription": "NOOP uses the microphone to let you ask the coach a question by voice. The audio is transcribed on-device and never leaves your iPhone.",
           "NSMotionUsageDescription": "NOOP reads your iPhone's step count for a walking or running workout to show steps in the activity summary. It stays on your device. Nothing leaves it.",
-          "NSSpeechRecognitionUsageDescription": "NOOP transcribes your question on-device so you can ask the coach out loud instead of typing. Audio never leaves your iPhone.",
-          "NSMicrophoneUsageDescription": "NOOP uses the microphone to let you ask the coach a question by voice. The audio is transcribed on-device and never leaves your iPhone."
+          "NSSpeechRecognitionUsageDescription": "NOOP transcribes your question on-device so you can ask the coach out loud instead of typing. Audio never leaves your iPhone."
         }
-      }
+      },
+      "version": "12.0.0",
+      "buildVersion": "432",
+      "versionDate": "2026-10-08",
+      "versionDescription": "troop 12.0.0. See the release notes for changes.",
+      "downloadURL": "https://github.com/TrapstarKS/troop/releases/download/v12.0.0/NOOP-ios-unsigned-v12.0.0.ipa",
+      "size": 23349202,
+      "minOSVersion": "17.0"
     }
   ],
   "news": []
