@@ -5216,9 +5216,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ ↔ %2$@: r = %3$@ (%4$@ %5$@) за %6$lld общих дней."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@ ↔ %2$@: r = %3$@ (%4$@ %5$@) за %6$lld общий день."
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@ ↔ %2$@: r = %3$@ (%4$@ %5$@) за %6$lld общих дня."
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@ ↔ %2$@: r = %3$@ (%4$@ %5$@) за %6$lld общих дней."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@ ↔ %2$@: r = %3$@ (%4$@ %5$@) за %6$lld общих дня."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -6293,9 +6317,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@, последнее %2$@, %3$lld измерений"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, последнее %2$@, %3$lld измерение"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, последнее %2$@, %3$lld измерения"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, последнее %2$@, %3$lld измерений"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@, последнее %2$@, %3$lld измерения"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -7154,9 +7202,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@: %2$@ прошлой ночью, %3$lld процентов ночи"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процент ночи"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процента ночи"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процентов ночи"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процента ночи"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -7283,9 +7355,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@: %2$@ прошлой ночью, %3$lld процентов ночи, обычно %4$@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процент ночи, обычно %4$@"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процента ночи, обычно %4$@"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процентов ночи, обычно %4$@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@ прошлой ночью, %3$lld процента ночи, обычно %4$@"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -7923,9 +8019,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@: %2$@, %3$lld процентов ночи"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@, %3$lld процент ночи"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@, %3$lld процента ночи"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@, %3$lld процентов ночи"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$@: %2$@, %3$lld процента ночи"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -8854,9 +8974,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld приложений включено"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld приложение включено"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld приложения включены"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld приложений включено"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld приложения включены"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -9098,9 +9242,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld вдохов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вдох"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вдоха"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вдохов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вдоха"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -9156,9 +9324,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld вдохов · %@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вдох · %@"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вдоха · %@"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вдохов · %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вдоха · %@"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -9272,9 +9464,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld фрагментов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld фрагмент"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld фрагмента"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld фрагментов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld фрагментов"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -9330,9 +9546,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld фрагментов получено"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld фрагмент получен"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld фрагмента получено"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld фрагментов получено"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld фрагментов получено"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -9688,9 +9928,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld дней назад"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld день назад"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld дня назад"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld дней назад"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld дня назад"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -9746,9 +10010,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld дней без этого"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld день без этого"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld дня без этого"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld дней без этого"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld дней без этого"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -9804,9 +10092,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld дней, которые также посчитал телефон"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld день, который также посчитал телефон"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld дня, которые также посчитал телефон"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld дней, которые также посчитал телефон"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld дней, которые также посчитал телефон"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -10246,9 +10558,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld устройств измеряют ваш пульс"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld устройство измеряет ваш пульс"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld устройства измеряют ваш пульс"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld устройств измеряют ваш пульс"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld устройства измеряют ваш пульс"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -10864,9 +11200,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld часов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld час"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld часа"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld часов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld часов"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -11044,9 +11404,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld приёмов всё ещё учитываются в оценке. Это лишь приблизительный ориентир на основе ваших записей."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld приём всё ещё учитывается в оценке. Это лишь приблизительный ориентир на основе ваших записей."
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld приёма всё ещё учитываются в оценке. Это лишь приблизительный ориентир на основе ваших записей."
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld приёмов всё ещё учитываются в оценке. Это лишь приблизительный ориентир на основе ваших записей."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld приёма всё ещё учитываются в оценке. Это лишь приблизительный ориентир на основе ваших записей."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -11102,9 +11486,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld отмеченных приёмов кофеина позже вашего порога отхода ко сну. Кофеин может ещё действовать и мешать уснуть. Просто предупреждение о времени."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отмеченный приём кофеина позже вашего порога отхода ко сну. Кофеин может ещё действовать и мешать уснуть. Просто предупреждение о времени."
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отмеченных приёма кофеина позже вашего порога отхода ко сну. Кофеин может ещё действовать и мешать уснуть. Просто предупреждение о времени."
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отмеченных приёмов кофеина позже вашего порога отхода ко сну. Кофеин может ещё действовать и мешать уснуть. Просто предупреждение о времени."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отмеченных приёма кофеина позже вашего порога отхода ко сну. Кофеин может ещё действовать и мешать уснуть. Просто предупреждение о времени."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -11160,9 +11568,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld отмеченных дней"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отмеченный день"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отмеченных дня"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отмеченных дней"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отмеченных дней"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -11388,9 +11820,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld маркеров отслеживается · 1 измерение"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld маркер отслеживается · 1 измерение"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld маркера отслеживаются · 1 измерение"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld маркеров отслеживается · 1 измерение"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld маркеров отслеживается · 1 измерение"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -11916,9 +12372,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld новых дней истории загружено. Откройте «Тренды», чтобы посмотреть."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld новый день истории загружен. Откройте «Тренды», чтобы посмотреть."
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld новых дня истории загружено. Откройте «Тренды», чтобы посмотреть."
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld новых дней истории загружено. Откройте «Тренды», чтобы посмотреть."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld новых дней истории загружено. Откройте «Тренды», чтобы посмотреть."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -11974,9 +12454,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld ночей назад"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ночь назад"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ночи назад"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ночей назад"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ночи назад"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -12032,9 +12536,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld ночей осталось"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Осталась %lld ночь"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Осталось %lld ночи"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Осталось %lld ночей"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Осталось %lld ночи"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -13399,9 +13927,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld пар"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld пара"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld пары"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld пар"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld пары"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -13457,9 +14009,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld процентов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld процент"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld процента"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld процентов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld процента"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -13573,9 +14149,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld баллов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld балл"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld балла"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld баллов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld баллов"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -13881,9 +14481,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld измерений набрано, но недостаточно вариативности, чтобы вычислить связь."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерение набрано, но недостаточно вариативности, чтобы вычислить связь."
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерения набрано, но недостаточно вариативности, чтобы вычислить связь."
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерений набрано, но недостаточно вариативности, чтобы вычислить связь."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерений набрано, но недостаточно вариативности, чтобы вычислить связь."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -14009,9 +14633,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld измерений · %2$@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld измерение · %2$@"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld измерения · %2$@"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld измерений · %2$@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld измерения · %2$@"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -14073,9 +14721,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld измерений · разреженно, расширено до %2$@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld измерение · разреженно, расширено до %2$@"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld измерения · разреженно, расширено до %2$@"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld измерений · разреженно, расширено до %2$@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld измерения · разреженно, расширено до %2$@"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -14131,9 +14803,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld измерений · ваши собственные записи"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерение · ваши собственные записи"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерения · ваши собственные записи"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерений · ваши собственные записи"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld измерений · ваши собственные записи"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -14504,11 +15200,35 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld повторений"
+        "variations": {
+          "plural": {
+            "one": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld повторение"
+              }
+            },
+            "few": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld повторения"
+              }
+            },
+            "many": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld повторений"
+              }
+            },
+            "other": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld повторений"
+              }
+            }
           }
-        },
+        }
+      },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -14562,9 +15282,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld строк пропущено"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld строка пропущена"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld строки пропущены"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld строк пропущено"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld строк пропущено"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -14626,9 +15370,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Осталось %1$lld секунд, %2$@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Осталась %1$lld секунда, %2$@"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Осталось %1$lld секунды, %2$@"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Осталось %1$lld секунд, %2$@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Осталось %1$lld секунды, %2$@"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -14684,9 +15452,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld рядов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ряд"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ряда"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld рядов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld рядов"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -14912,9 +15704,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld сессий · %2$@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld сессия · %2$@"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld сессии · %2$@"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld сессий · %2$@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld сессии · %2$@"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -14976,9 +15792,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld сессий · разреженно, расширено до %2$@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld сессия · разреженно, расширено до %2$@"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld сессии · разреженно, расширено до %2$@"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld сессий · разреженно, расширено до %2$@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%1$lld сессии · разреженно, расширено до %2$@"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -15034,11 +15874,35 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld подходов"
+        "variations": {
+          "plural": {
+            "one": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld подход"
+              }
+            },
+            "few": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld подхода"
+              }
+            },
+            "many": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld подходов"
+              }
+            },
+            "other": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld подходов"
+              }
+            }
           }
-        },
+        }
+      },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -15358,9 +16222,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld видов спорта"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вид спорта"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вида спорта"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld видов спорта"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld вида спорта"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -15916,11 +16804,35 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld рабочих подходов · сравнивай при повторе этой программы"
+        "variations": {
+          "plural": {
+            "one": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld рабочий подход · сравнивай при повторе этой программы"
+              }
+            },
+            "few": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld рабочих подхода · сравнивай при повторе этой программы"
+              }
+            },
+            "many": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld рабочих подходов · сравнивай при повторе этой программы"
+              }
+            },
+            "other": {
+              "stringUnit": {
+                "state": "translated",
+                "value": "%lld рабочих подходов · сравнивай при повторе этой программы"
+              }
+            }
           }
-        },
+        }
+      },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -16182,9 +17094,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld лет старше вашего возраста"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld год старше вашего возраста"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld года старше вашего возраста"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld лет старше вашего возраста"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld года старше вашего возраста"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -16240,9 +17176,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld лет младше вашего возраста"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld год младше вашего возраста"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld года младше вашего возраста"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld лет младше вашего возраста"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld года младше вашего возраста"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -16363,9 +17323,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld лет"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld год"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld года"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld лет"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld года"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -16421,9 +17405,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld лет старше"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld год старше"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld года старше"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld лет старше"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld года старше"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -16479,9 +17487,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld лет младше"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld год младше"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld года младше"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld лет младше"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld года младше"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -18023,9 +19055,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+%lld баллов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld балл"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld балла"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld баллов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld баллов"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -19198,9 +20254,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Отслеживается 1 маркер · %lld показаний"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Отслеживается 1 маркер · %lld показание"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Отслеживается 1 маркер · %lld показания"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Отслеживается 1 маркер · %lld показаний"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Отслеживается 1 маркер · %lld показаний"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -44860,9 +45940,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд батареи %lld процентов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Заряд батареи %lld процент"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Заряд батареи %lld процента"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Заряд батареи %lld процентов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Заряд батареи %lld процента"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -49458,9 +50562,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вдох на %lld секунд"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вдох на %lld секунду"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вдох на %lld секунды"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вдох на %lld секунд"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вдох на %lld секунды"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -49748,9 +50876,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Выдох на %lld секунд"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Выдох на %lld секунду"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Выдох на %lld секунды"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Выдох на %lld секунд"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Выдох на %lld секунды"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -120498,9 +121650,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Последние %lld ударов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Последний %lld удар"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Последние %lld удара"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Последние %lld ударов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Последние %lld удара"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -173587,9 +174763,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "RMSSD %lld миллисекунд"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "RMSSD %lld миллисекунда"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "RMSSD %lld миллисекунды"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "RMSSD %lld миллисекунд"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "RMSSD %lld миллисекунды"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -188355,12 +189555,7 @@
             "value": "Bateria do anel %lld por cento"
           }
         },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд кольца %lld процентов"
-          }
-        },
+        "ru": {"variations": {"plural": {"one": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процент"}}, "few": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процента"}}, "many": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процентов"}}, "other": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процента"}}}}},
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -188413,12 +189608,7 @@
             "value": "Bateria do anel %lld por cento, a carregar"
           }
         },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд кольца %lld процентов, заряжается"
-          }
-        },
+        "ru": {"variations": {"plural": {"one": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процент, заряжается"}}, "few": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процента, заряжается"}}, "many": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процентов, заряжается"}}, "other": {"stringUnit": {"state": "translated", "value": "Заряд кольца %lld процента, заряжается"}}}}},
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -188646,9 +189836,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Скользящее RMSSD %lld миллисекунд"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Скользящее RMSSD %lld миллисекунда"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Скользящее RMSSD %lld миллисекунды"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Скользящее RMSSD %lld миллисекунд"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Скользящее RMSSD %lld миллисекунды"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -206728,9 +207942,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Разреженно, расширено до %1$@ · %2$lld измерений"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Разреженно, расширено до %1$@ · %2$lld измерение"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Разреженно, расширено до %1$@ · %2$lld измерения"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Разреженно, расширено до %1$@ · %2$lld измерений"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Разреженно, расширено до %1$@ · %2$lld измерения"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -212516,12 +213754,7 @@
             "value": "Bateria da pulseira %lld por cento"
           }
         },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд ремешка %lld процентов"
-          }
-        },
+        "ru": {"variations": {"plural": {"one": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процент"}}, "few": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процента"}}, "many": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процентов"}}, "other": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процента"}}}}},
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -212581,9 +213814,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Батарея браслета: %1$lld процентов%2$@%3$@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Батарея браслета: %1$lld процент%2$@%3$@"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Батарея браслета: %1$lld процента%2$@%3$@"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Батарея браслета: %1$lld процентов%2$@%3$@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Батарея браслета: %1$lld процента%2$@%3$@"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -212638,12 +213895,7 @@
             "value": "Bateria da pulseira %lld por cento, a carregar"
           }
         },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд ремешка %lld процентов, заряжается"
-          }
-        },
+        "ru": {"variations": {"plural": {"one": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процент, заряжается"}}, "few": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процента, заряжается"}}, "many": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процентов, заряжается"}}, "other": {"stringUnit": {"state": "translated", "value": "Заряд ремешка %lld процента, заряжается"}}}}},
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -217643,9 +218895,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Синхронизировано · %lld блоков"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Синхронизировано · %lld блок"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Синхронизировано · %lld блока"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Синхронизировано · %lld блоков"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Синхронизировано · %lld блоков"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -218518,9 +219794,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Синхронизация… %lld блоков"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Синхронизация… %lld блок"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Синхронизация… %lld блока"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Синхронизация… %lld блоков"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Синхронизация… %lld блоков"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -240995,9 +242295,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Талия, %lld дюймов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Талия, %lld дюйм"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Талия, %lld дюйма"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Талия, %lld дюймов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Талия, %lld дюйма"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -245014,9 +246338,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вес, %lld фунтов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вес, %lld фунт"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вес, %lld фунта"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вес, %lld фунтов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вес, %lld фунта"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -261518,9 +262866,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "−%lld очков"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "−%lld очко"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "−%lld очка"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "−%lld очков"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "−%lld очков"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -265156,9 +266528,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "последний приём — примерно %1$@ назад · %2$lld приёмов всё ещё учитываются в оценке. Это лишь приблизительный ориентир на основе того, что вы записали."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "последний приём — примерно %1$@ назад · %2$lld приём всё ещё учитывается в оценке. Это лишь приблизительный ориентир на основе того, что вы записали."
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "последний приём — примерно %1$@ назад · %2$lld приёма всё ещё учитываются в оценке. Это лишь приблизительный ориентир на основе того, что вы записали."
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "последний приём — примерно %1$@ назад · %2$lld приёмов всё ещё учитываются в оценке. Это лишь приблизительный ориентир на основе того, что вы записали."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "последний приём — примерно %1$@ назад · %2$lld приёма всё ещё учитываются в оценке. Это лишь приблизительный ориентир на основе того, что вы записали."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -271371,9 +272767,33 @@
           }
         },
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "рост на %lld баллов"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "рост на %lld балл"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "рост на %lld балла"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "рост на %lld баллов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "рост на %lld баллов"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
