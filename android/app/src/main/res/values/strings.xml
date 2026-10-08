@@ -2986,4 +2986,5 @@
     <string name="weekly_plan_recoveries_complete">%1$d of 7 recoveries complete</string>
     <string name="weekly_plan_recoveries_remaining">Recoveries still needed: %1$d</string>
     <string name="today_customize_live_session_availability">Appears today when Live Sessions is enabled in Settings or a session is active.</string>
+    <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 and the troop dashboard</string>
 </resources>

@@ -3028,4 +3028,5 @@
     <string name="weekly_plan_recoveries_complete">Ukończono %1$d z 7 pomiarów regeneracji</string>
     <string name="weekly_plan_recoveries_remaining">Pozostałe pomiary regeneracji: %1$d</string>
     <string name="today_customize_live_session_availability">Pojawia się dzisiaj, gdy sesje na żywo są włączone w Ustawieniach lub trwa sesja.</string>
+    <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 i pulpit troop</string>
 </resources>

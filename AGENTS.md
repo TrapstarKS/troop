@@ -133,7 +133,13 @@ xcodegen generate && xcodebuild -project Strand.xcodeproj -scheme Strand \
 | `prune-stale-branches.yml` | Deletes branches whose PR merged or closed unmerged | ubuntu | **active**, weekly + dispatch |
 | `fork-testing-build.yml` / `fork-release.yml` | Staging / release builds (apk + mac + ios) | — | on dispatch |
 
-**Package tests do not compile app targets.** The active `app-build.yml` checks matching PRs, but app-target Swift changes still require a local app build (or an authorized dispatch) before claiming compile validation. Build shared files under both `Strand` and `NOOPiOS`; a package-only green result does not cover views, AppModel, or BLEManager.
+**Package tests do not compile app targets.** App-target Swift under `Strand/`, `StrandiOS/`,
+`StrandiOSShared/`, `StrandiOSWidgets/` and the watch targets is validated by **`app-build.yml`**,
+which runs automatically on relevant PRs and runs `StrandTests` on its macOS leg. App-target Swift
+changes still require a local app build (or an authorized dispatch) before claiming compile
+validation. Build shared files under both `Strand` and `NOOPiOS`; a green package suite alone does
+not cover views, AppModel, or BLEManager. The workflow has no push trigger; a direct non-release
+commit to `main` needs an on-demand dispatch. Record checks against the current head.
 
 ### Local walls (things that will *not* build where you expect)
 - **On Linux:** `WhoopProtocol` / `OuraProtocol` (pure) build & test with a bare toolchain. The
@@ -145,7 +151,8 @@ xcodegen generate && xcodebuild -project Strand.xcodeproj -scheme Strand \
   and a change can break it silently.
 - **App targets** (`Strand`, `NOOPiOS`) need **Xcode on macOS**; `StrandTests` runs only under
   `xcodebuild … test` on macOS — locally, or via `app-build.yml`, which does run it on the `Strand` leg.
-  The workflow runs on matching PRs and on dispatch; record the actual local or CI run rather than assuming writing tests means they ran.
+  The workflow runs automatically on relevant PRs and on dispatch; verify its macOS test step
+  passed on the current head. Writing app-target tests is not the same as having run them.
 - **BLE behavior cannot be CI- or Linux-tested.** Anything on the CoreBluetooth / offload / live-HR
   path (`Strand/BLE`, `Strand/Collect`, Android `com.noop.ble`) must be **validated on a real strap**;
   compile-success proves nothing about connection behavior. Say what you tested on hardware.

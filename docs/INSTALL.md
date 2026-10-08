@@ -64,7 +64,7 @@ Download files and `SHA256SUMS` from the **same fixed release**. On macOS use `s
 Local tooling examples (no publication):
 
 ```sh
-Tools/package-ios-ipa.sh 'build/Build/Products/Release-iphoneos/NOOP Staging.app' \
+Tools/package-ios-ipa.sh 'build/Build/Products/Release-iphoneos/NOOP.app' \
   NOOP-ios-unsigned-v11.8.0.ipa com.trapstarks.troop.noop 11.8.0
 Tools/update-altstore-source.sh --repo TrapstarKS/troop --source /tmp/altstore-source.json \
   --asset-url https://github.com/TrapstarKS/troop/releases/download/v11.8.0/NOOP-ios-unsigned-v11.8.0.ipa \

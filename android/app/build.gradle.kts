@@ -39,8 +39,8 @@ android {
         applicationId = "com.trapstarks.troop"
         minSdk = 26
         targetSdk = 34
-        versionCode = 550
-        versionName = "11.8.0"
+        versionCode = 551
+        versionName = "12.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

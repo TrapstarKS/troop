@@ -2985,4 +2985,5 @@
     <string name="weekly_plan_recoveries_complete">%1$d von 7 Erholungswerten abgeschlossen</string>
     <string name="weekly_plan_recoveries_remaining">Noch benötigte Erholungswerte: %1$d</string>
     <string name="today_customize_live_session_availability">Erscheint heute, wenn Live Sessions in den Einstellungen aktiviert sind oder eine Session aktiv ist.</string>
+    <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 und das troop-Dashboard</string>
 </resources>

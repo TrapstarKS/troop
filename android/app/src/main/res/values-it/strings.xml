@@ -2986,4 +2986,5 @@
     <string name="weekly_plan_recoveries_complete">%1$d recuperi completi su 7</string>
     <string name="weekly_plan_recoveries_remaining">Recuperi ancora necessari: %1$d</string>
     <string name="today_customize_live_session_availability">Compare oggi se le sessioni in diretta sono attivate nelle Impostazioni o una sessione è attiva.</string>
+    <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 e la dashboard troop</string>
 </resources>

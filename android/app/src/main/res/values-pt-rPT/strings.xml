@@ -2986,4 +2986,5 @@
     <string name="weekly_plan_recoveries_complete">%1$d de 7 recuperações completas</string>
     <string name="weekly_plan_recoveries_remaining">Recuperações ainda necessárias: %1$d</string>
     <string name="today_customize_live_session_availability">Aparece hoje quando as sessões em direto estão ativadas nas Definições ou existe uma sessão ativa.</string>
+    <string name="l10n_app_changelog_upstream_12_0_0_and_the_ccb7b49f">Upstream 12.0.0 e o painel troop</string>
 </resources>
