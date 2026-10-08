@@ -37,14 +37,16 @@ public enum NoopVisualStyle {
     public static let sectionGap: CGFloat = 24
 }
 
-/// Shared card/panel treatment: a quiet vertical gradient and a restrained divider edge.
+/// Shared card/panel treatment: a solid surface on iOS, with a restrained divider edge.
 /// `tint` is intentionally faint so metric identity never turns the whole card into a coloured tile.
 public struct NoopPanelSurface: View {
     public var tint: Color?
     public var cornerRadius: CGFloat
     public var elevated: Bool
     public var surfaceOpacity: Double
+    #if !os(iOS)
     @Environment(\.colorScheme) private var scheme
+    #endif
 
     public init(
         tint: Color? = nil,
@@ -60,6 +62,18 @@ public struct NoopPanelSurface: View {
 
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        #if os(iOS)
+        // Scrolling stacks contain many panels. Layered translucent gradients and blurred shadows
+        // multiply their compositing work, so iOS uses one theme-aware fill and a thin tinted rim.
+        // This changes decorative depth only; card geometry and the design-system colors stay the same.
+        shape
+            .fill(NoopVisualStyle.surface)
+            .overlay(shape.strokeBorder(
+                tint?.opacity(0.14) ?? NoopVisualStyle.borderHighlight.opacity(0.72),
+                lineWidth: 0.8
+            ))
+            .opacity(surfaceOpacity)
+        #else
         shape
             .fill(
                 LinearGradient(
@@ -96,6 +110,7 @@ public struct NoopPanelSurface: View {
                 y: elevated ? 6 : 0
             )
             .opacity(surfaceOpacity)
+        #endif
     }
 }
 

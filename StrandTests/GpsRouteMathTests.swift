@@ -183,6 +183,57 @@ final class GpsRouteMathTests: XCTestCase {
                                           from: defaults))
     }
 
+    func testRouteExportFindsNewestMeasuredRouteInSplitStore() {
+        let defaults = freshDefaults()
+        func route(_ start: Int) -> WorkoutRoute {
+            WorkoutRoute(polyline: RouteMath.encode([a, b]), distanceM: 451, points: [
+                WorkoutRoutePoint(lat: a.lat, lon: a.lon, accuracyM: 3, tMs: Int64(start) * 1_000),
+                WorkoutRoutePoint(lat: b.lat, lon: b.lon, accuracyM: 4, tMs: Int64(start) * 1_000 + 12_345),
+            ])
+        }
+        XCTAssertNil(RouteStore.newestExportableRoute(from: defaults))
+        RouteStore.store(route(9), startTs: 9, sport: "Running", into: defaults)
+        RouteStore.store(route(10), startTs: 10, sport: "Running|outdoor", into: defaults)
+        RouteStore.store(WorkoutRoute(polyline: "abc", distanceM: 100),
+                         startTs: 100, sport: "Walking", into: defaults)
+        XCTAssertNil(RouteStore.loadMap(from: defaults)["10|Running|outdoor"]?.points)
+        let selected = RouteStore.newestExportableRoute(from: defaults)
+        XCTAssertEqual(selected?.startTs, 10)
+        XCTAssertEqual(selected?.endTs, 22)
+        XCTAssertEqual(selected?.sport, "Running|outdoor")
+        XCTAssertEqual(selected?.distanceM, 451)
+        XCTAssertEqual(selected?.points, route(10).points)
+        RouteStore.remove(startTs: 10, sport: "Running|outdoor", from: defaults)
+        XCTAssertEqual(RouteStore.newestExportableRoute(from: defaults)?.startTs, 9)
+    }
+
+    func testRouteExportValidatesKeysAndMeasurementsInEmbeddedLegacyEntries() {
+        let defaults = freshDefaults()
+        let good = WorkoutRoute(polyline: "abc", distanceM: 451, points: [
+            WorkoutRoutePoint(lat: a.lat, lon: a.lon, accuracyM: 3, tMs: 10_000),
+            WorkoutRoutePoint(lat: b.lat, lon: b.lon, accuracyM: 4, tMs: 22_345),
+        ])
+        var invalid = good
+        invalid.points?[1].tMs = 10_000
+        defaults.set(RouteStore.encodeMap([
+            "9|Running": good,
+            "10|Running": invalid,
+            "100|Walking": good,
+            "11|": good,
+            "bad|Running": good,
+        ]), forKey: RouteStore.defaultsKey)
+        let selected = RouteStore.newestExportableRoute(from: defaults)
+        XCTAssertEqual(selected?.startTs, 9)
+        XCTAssertEqual(selected?.endTs, 22)
+        XCTAssertEqual(selected?.points, good.points)
+        var sidecar = good.points!
+        sidecar[1].tMs = 33_000
+        RoutePointStore.store(sidecar, for: "9|Running", into: defaults)
+        let updated = RouteStore.newestExportableRoute(from: defaults)
+        XCTAssertEqual(updated?.endTs, 33)
+        XCTAssertEqual(updated?.points, sidecar, "Separate point storage is authoritative when present")
+    }
+
     func testLegacyRouteWithoutPointMeasurementsRemainsReadableButCannotExport() throws {
         let key = RouteStore.key(startTs: 1_700_000_000, sport: "Running")
         let legacyJSON = #"{"\#(key)":{"polyline":"abc","distanceM":123.0}}"#.data(using: .utf8)

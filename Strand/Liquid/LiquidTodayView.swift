@@ -472,7 +472,10 @@ struct LiquidTodayView: View {
     /// Arm the refresh once the pull passes the threshold; FIRE it when the finger releases (the pull
     /// springs back toward zero). Guarded so it can't double-fire or re-trigger mid-refresh.
     private func handlePull(_ y: CGFloat) {
-        pullY = max(0, y)
+        let nextPullY = max(0, y)
+        // Normal upward scrolling keeps reporting negative offsets. Avoid invalidating the whole
+        // dashboard for every such frame when the visible pull indicator is already at zero.
+        if nextPullY != pullY { pullY = nextPullY }
         guard !refreshing else { return }
         // #1748 twin: gate the ARM, not the release. `syncNow()`'s own gate checks connected + bonded, and
         // `bonded` is set by the live-HR path for a 5/MG that has never completed a handshake — so the pull
@@ -2538,10 +2541,12 @@ private struct LiquidLiveHR: View {
             if series.count >= 2 {
                 ZStack {
                     LiquidHeartRateGrid()
+                    // Historical buckets cannot change between live ticks. Do not run the decorative
+                    // trace clock for this fallback; genuine live HR keeps its existing animation.
                     LiquidThread(bpm: series,
                                  segments: isLive ? nil : (fallbackSegments.count == series.count
                                                            ? fallbackSegments : nil),
-                                 tint: tint, height: 92, animated: animated)
+                                 tint: tint, height: 92, animated: animated && isLive)
                 }
                 .frame(height: 92)
                 .clipShape(RoundedRectangle(cornerRadius: NoopMetrics.space2, style: .continuous))
