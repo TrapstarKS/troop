@@ -16,9 +16,9 @@ import UniformTypeIdentifiers
 // the file leaves only when the wearer's own automation moves it, exactly like the share sheet.
 // Issue #2679 records why a direct Strava API client is a separate scope decision rather than this.
 //
-// It reads `RouteStore` (the UserDefaults side-store, since `WorkoutRow` has no route column on
-// Apple) rather than the database, so it needs no store handle and cannot contend with a running
-// sync. An App Intent declared in the app target runs in NOOP's own process, so the plain
+// It reads `RouteStore` and its per-workout `RoutePointStore` (UserDefaults side-stores, since
+// `WorkoutRow` has no route column on Apple), so it needs no database handle and cannot contend
+// with a running sync. An App Intent declared in the app target runs in NOOP's own process, so the plain
 // `UserDefaults` suite `RouteStore` writes is readable here.
 
 /// Why an export can fail. Only one case: a route either carries the per-point measurements an
@@ -70,7 +70,7 @@ struct ExportWorkoutRouteIntent: AppIntent {
     var format: RouteExportFormatChoice
 
     func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> & ProvidesDialog {
-        guard let newest = Self.newestExportableRoute() else {
+        guard let newest = RouteStore.newestExportableRoute() else {
             // A real thrown error, not a parameter-resolution prompt: the format is already valid, it
             // is the data that is missing, and Shortcuts should surface that as a failed step rather
             // than asking the wearer to pick GPX again.
@@ -99,44 +99,6 @@ struct ExportWorkoutRouteIntent: AppIntent {
         // a type the system does not actually know.
         return .result(value: IntentFile(data: data, filename: name, type: .data),
                        dialog: "Exported your most recent route.")
-    }
-
-    /// One exportable route, resolved from the side-store without touching the database.
-    struct Resolved {
-        let startTs: Int
-        let endTs: Int
-        let sport: String
-        let distanceM: Double
-        let points: [WorkoutRoutePoint]
-    }
-
-    /// The newest route that carries exportable measurements, or nil when none does.
-    ///
-    /// `RouteStore`'s keys are "<startTs>|<sport>", so the greatest leading `startTs` is the most
-    /// recent session without reading a workout row. `endTs` comes from the last point's own `tMs`
-    /// rather than being assumed, which is why only routes with point metadata qualify.
-    static func newestExportableRoute(from map: [String: WorkoutRoute]? = nil) -> Resolved? {
-        let routes = map ?? RouteStore.loadMap()
-        var best: Resolved?
-        for (key, route) in routes where route.hasExportableMeasurements {
-            guard let points = route.points, let last = points.last,
-                  let parsed = Self.parseKey(key) else { continue }
-            let endTs = Int(last.tMs / 1_000)
-            guard endTs > parsed.startTs else { continue }
-            let candidate = Resolved(startTs: parsed.startTs, endTs: endTs, sport: parsed.sport,
-                                     distanceM: route.distanceM, points: points)
-            if best == nil || candidate.startTs > best!.startTs { best = candidate }
-        }
-        return best
-    }
-
-    /// Split a `RouteStore` key back into its parts. A sport may itself contain "|" in principle, so
-    /// the split is bounded to the FIRST separator and the remainder is the sport, matching how
-    /// `RouteStore.key(startTs:sport:)` composes it.
-    static func parseKey(_ key: String) -> (startTs: Int, sport: String)? {
-        let parts = key.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
-        guard parts.count == 2, let startTs = Int(parts[0]), !parts[1].isEmpty else { return nil }
-        return (startTs, String(parts[1]))
     }
 }
 #endif

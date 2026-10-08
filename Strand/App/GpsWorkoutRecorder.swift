@@ -441,7 +441,37 @@ enum RouteStore {
         defaults.set(data, forKey: defaultsKey)
     }
 
-    /// The route WITH its recorded point measurements, for the one caller that needs them (the HealthKit
+    /// A measured route ready for file export, without consulting a workout database row.
+    struct ExportableRoute {
+        let startTs: Int
+        let endTs: Int
+        let sport: String
+        let distanceM: Double
+        let points: [WorkoutRoutePoint]
+    }
+
+    /// Resolve newest first from the lightweight map, loading heavy measurements only until one qualifies.
+    /// Legacy map entries may still carry embedded points; newer recordings use `RoutePointStore`.
+    static func newestExportableRoute(from defaults: UserDefaults = .standard) -> ExportableRoute? {
+        let routes = loadMap(from: defaults)
+        let candidates = routes.keys.compactMap { key -> (key: String, startTs: Int, sport: String)? in
+            let parts = key.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2, let startTs = Int(parts[0]), !parts[1].isEmpty else { return nil }
+            return (key, startTs, String(parts[1]))
+        }.sorted { $0.startTs == $1.startTs ? $0.key < $1.key : $0.startTs > $1.startTs }
+        for candidate in candidates {
+            guard var route = routes[candidate.key] else { continue }
+            route.points = RoutePointStore.load(for: candidate.key, from: defaults) ?? route.points
+            guard route.hasExportableMeasurements, let points = route.points, let last = points.last else { continue }
+            let endTs = Int(last.tMs / 1_000)
+            guard endTs > candidate.startTs else { continue }
+            return ExportableRoute(startTs: candidate.startTs, endTs: endTs, sport: candidate.sport,
+                                   distanceM: route.distanceM, points: points)
+        }
+        return nil
+    }
+
+    /// The route WITH its recorded point measurements, for readers that need them (such as the HealthKit
     /// route export). Everything that only draws the path uses `load`, which never touches the points.
     static func loadWithPoints(startTs: Int, sport: String,
                                from defaults: UserDefaults = .standard) -> WorkoutRoute? {
