@@ -263,6 +263,26 @@ object DaytimeStress {
         /** The scored hours only (level non-null), in time order. */
         val scored: List<HourPoint> get() = hours.filter { it.level != null }
 
+        fun monitorReading(
+            latestSampleTs: Long?,
+            now: Long,
+            isToday: Boolean,
+            selectedStartTs: Long? = null,
+        ): StressMonitorReading.Reading = StressMonitorReading.resolve(
+            windows = timeline.map {
+                StressMonitorReading.Window(
+                    startTs = it.startTs,
+                    endTs = minOf(it.startTs + DaytimeStress.bucketSeconds, latestSampleTs ?: it.startTs),
+                    level = it.level,
+                    maskedForActivity = it.maskedForActivity,
+                )
+            },
+            hasHeartRate = latestSampleTs != null,
+            now = now,
+            isToday = isToday,
+            selectedStartTs = selectedStartTs,
+        )
+
         companion object {
             /** Empty read — used when the day had no usable intraday HR at all. */
             val EMPTY = Result(emptyList(), sustainedHigh = false, sustainedRun = 0,

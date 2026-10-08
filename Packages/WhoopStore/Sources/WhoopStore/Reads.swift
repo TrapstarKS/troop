@@ -116,6 +116,21 @@ extension WhoopStore {
         }
     }
 
+    /// Change witness for every raw input read by daytime stress, including WHOOP 5 PPG-derived HR.
+    public func stressFingerprint(deviceId: String, from: Int, to: Int, includeContext: Bool = true) async throws -> String {
+        try syncRead { db in
+            let tables = ["hrSample", "ppgHrSample"] + (includeContext ? ["rrInterval", "gravitySample"] : [])
+            let parts = try tables.map { table -> String in
+                let row = try Row.fetchOne(db, sql: """
+                    SELECT COUNT(*) AS c, COALESCE(MAX(ts), 0) AS m FROM \(table)
+                    WHERE deviceId = ? AND ts >= ? AND ts <= ?
+                    """, arguments: [deviceId, from, to])!
+                return "\(table):\(row["c"] as Int):\(row["m"] as Int)"
+            }
+            return parts.joined(separator: "|")
+        }
+    }
+
     /// Whether `deviceId` has ANY heart rate in the window, as a scalar EXISTS rather than a row.
     ///
     /// The day-owner resolver asks this once per candidate per day, so a 60-day steps-calibration window

@@ -257,6 +257,17 @@ public enum DaytimeStress {
         /// The scored hours only (level non-nil), in time order.
         public var scored: [HourPoint] { hours.filter { $0.level != nil } }
 
+        /// Kotlin twin: `DaytimeStress.Result.monitorReading`.
+        public func monitorReading(latestSampleTs: Int?, now: Int, isToday: Bool,
+                                   selectedStartTs: Int? = nil) -> StressMonitorReading.Reading {
+            StressMonitorReading.resolve(windows: timeline.map {
+                .init(startTs: $0.startTs, endTs: min($0.startTs + DaytimeStress.bucketSeconds,
+                                                   latestSampleTs ?? $0.startTs),
+                      level: $0.level, maskedForActivity: $0.maskedForActivity)
+            }, hasHeartRate: latestSampleTs != nil, now: now, isToday: isToday,
+               selectedStartTs: selectedStartTs)
+        }
+
         /// Empty read — used when the day had no usable intraday HR at all.
         public static let empty = Result(hours: [], sustainedHigh: false, sustainedRun: 0,
                                          dayMean: nil, peak: nil, activityMaskedHours: 0,

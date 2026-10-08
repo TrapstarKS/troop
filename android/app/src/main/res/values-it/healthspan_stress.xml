@@ -114,4 +114,9 @@
     <string name="healthspan_vo2_driver">VO₂max</string>
     <string name="healthspan_back">Indietro</string>
     <string name="healthspan_range_30">30 giorni</string>
+    <string name="stress_monitor_no_heart_rate">Nessuna frequenza cardiaca registrata per questo giorno.</string>
+    <string name="stress_monitor_no_waking_heart_rate">Nessuna frequenza cardiaca registrata nella fascia diurna 06:00–22:00.</string>
+    <string name="stress_monitor_insufficient_samples">Un intervallo richiede almeno 300 campioni di frequenza cardiaca registrati.</string>
+    <string name="stress_monitor_activity_excluded">Gli intervalli registrati sono stati esclusi durante l’attività.</string>
+    <string name="stress_monitor_delayed">L’intervallo registrato risale a oltre 15 minuti fa.</string>
 </resources>

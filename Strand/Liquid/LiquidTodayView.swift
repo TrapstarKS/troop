@@ -84,12 +84,6 @@ struct LiquidTodayView: View {
     /// hosted sleep card pays none of the extra Repository work. nil until (and unless) it's built.
     @State private var hostedSleepModel: SleepModel? = nil
 
-    // #2040: today's scored stress for the hosted curve card. Loaded only when that card is hosted, the
-    // same "hosting none pays nothing" rule the sleep model follows. `StressDayCurve` self-gates on a
-    // cheap heart-rate fingerprint and memoises, so the widget, this shell and the other Today view all
-    // share one computation rather than scoring the day three times.
-    @State private var hostedStressHours: [DaytimeStress.HourPoint] = []
-    @State private var hostedStressActivityMaskedHours = 0
 
     // sheets / expanders
     @State private var guideSection: ScoreSection?
@@ -776,31 +770,7 @@ struct LiquidTodayView: View {
             // points. `HostedTrendData` walks the `days` already in hand, so unlike the sleep model and
             // the stress curve there is no read behind these and nothing to gate.
             HostedTrendCard(card: card, days: repo.days, effortScale: effortScale)
-        case .stressToday:
-            // READ-ONLY, like `stages`: the Stress tab keeps the interactive timeline and this mirrors
-            // only the display. `DaytimeLoadLine` is the tab's OWN line, so the host cannot drift into
-            // a second drawing of the same day.
-            NoopCard(tint: StressRamp.calm) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Stress through the day").strandOverline()
-                    if hostedStressHours.contains(where: { $0.level != nil }) {
-                        DaytimeLoadLine(hours: hostedStressHours)
-                    } else {
-                        // The honest blank: only waking hours score and an hour needs enough heart
-                        // rate, so early morning is empty by construction rather than by failure.
-                        Text("Calibrating")
-                            .font(StrandFont.subhead)
-                            .foregroundStyle(StrandPalette.textTertiary)
-                            .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
-                    }
-                    if let maskedCaption = stressActivityMaskedHoursCaption(hostedStressActivityMaskedHours) {
-                        Text(maskedCaption)
-                            .font(StrandFont.footnote)
-                            .foregroundStyle(StrandPalette.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
+        case .stressToday: StressTodayCurveCard()
         case .asleepDuration: AsleepDurationCard(data: AsleepDurationData.build(days: repo.days))
         case .stagesVsTypical:
             // Renders from the shared SleepModel built in load() (same inputs as the Sleep tab). Until that
@@ -1878,19 +1848,6 @@ struct LiquidTodayView: View {
                 motionByStart: hostedMotion))
         } else {
             hostedSleepModel = nil
-        }
-
-        // #2040: and today's stress, on the same "only when hosted" rule.
-        if HostedCardPrefs.decodeEnabled(hostedCardsRaw).contains(.stressToday) {
-            let result = await StressDayCurve.today(
-                repo: repo,
-                personalBaseline: PuffinExperiment.stressPersonalBaselineEnabled
-            )?.result
-            hostedStressHours = result?.timeline ?? []
-            hostedStressActivityMaskedHours = result?.activityMaskedHours ?? 0
-        } else {
-            hostedStressHours = []
-            hostedStressActivityMaskedHours = 0
         }
 
         // First load done — bring the hero gauges + sky to life now the launch churn has settled.

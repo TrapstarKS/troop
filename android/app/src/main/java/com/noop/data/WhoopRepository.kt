@@ -1236,10 +1236,8 @@ class WhoopRepository(
      * `Repository.hrFingerprintUnion` is a twin in ROLE only, encoding the same facts differently; there
      * is no byte-identity contract between them and no oracle asserting one.
      *
-     * The single union witness for both callers (#2566): the cycle load cache in
-     * [com.noop.analytics.PhysiologicalStepCycleEngine] and the daytime stress lens memo in
-     * [com.noop.ui.selectedDaytimeStressMode]. Two of these that were free to disagree is what #2566
-     * removed, so route a new caller here rather than adding a third.
+     * Used by the cycle load cache in [com.noop.analytics.PhysiologicalStepCycleEngine]. Stress uses
+     * [stressFingerprintUnion] because its read also includes PPG-derived HR, R-R and gravity.
      */
     suspend fun hrUnionFingerprint(activeDeviceId: String, from: Long, to: Long): String {
         // An explicit loop rather than joinToString: the per-id read suspends and that builder's lambda
@@ -1248,6 +1246,17 @@ class WhoopRepository(
         for (id in rawWhoopSourceIds(activeDeviceId)) {
             val (count, maxTs) = hrFingerprintWindow(id, from, to)
             parts += "$id=$count:$maxTs"
+        }
+        return parts.joinToString(",")
+    }
+
+    /** The same raw-source union as daytime stress reads, with all four input streams witnessed. */
+    suspend fun stressFingerprintUnion(activeDeviceId: String, from: Long, to: Long, includeContext: Boolean = true): String {
+        val parts = ArrayList<String>()
+        for (id in rawWhoopSourceIds(activeDeviceId)) {
+            val fingerprint = if (includeContext) dao.stressFingerprint(id, from, to)
+                else dao.stressHrFingerprint(id, from, to)
+            parts += "$id=$fingerprint"
         }
         return parts.joinToString(",")
     }

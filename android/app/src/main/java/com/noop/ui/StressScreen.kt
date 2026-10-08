@@ -61,6 +61,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.noop.analytics.DaytimeStress
 import com.noop.analytics.HrvFreqDomain
 import com.noop.analytics.StressIndex
+import com.noop.analytics.StressMonitorReading
 import com.noop.data.DailyMetric
 import com.noop.data.RrInterval
 import com.noop.widget.StressPoint
@@ -713,6 +714,7 @@ private fun StressDaytimeSection(
 internal fun StressTodayCard(
     points: List<StressPoint>,
     activityMaskedHours: Int,
+    reading: StressMonitorReading.Reading?,
     modifier: Modifier = Modifier,
 ) {
     val stats = remember(points) { StressTrace.stats(points) }
@@ -742,23 +744,8 @@ internal fun StressTodayCard(
             }
 
             if (stats == null) {
-                // Two states, two answers, which is the distinction the WIDGET already draws and this card
-                // did not. Outside the 06:00-22:00 scored window nothing is coming until morning, and at
-                // 1am the local day has just rolled over with no waking hour in it at all: saying
-                // "Calibrating" there claims the app is working on something it will not touch for hours.
-                // Inside the window it is the honest word, the day simply not having produced a scorable
-                // hour yet. Both strings already exist and are translated, so this borrows rather than
-                // adds. Honest blank either way, never a flat line at zero.
-                val outsideScoredWindow =
-                    !DaytimeStress.isWakingHourOfDay(java.time.LocalTime.now().hour)
                 Text(
-                    uiString(
-                        if (outsideScoredWindow) {
-                            R.string.l10n_stress_glance_widget_resumes_in_the_morning_a640b49f
-                        } else {
-                            R.string.l10n_today_screen_calibrating_37c2c9bd
-                        }
-                    ),
+                    stressMonitorReadingStatus(reading),
                     style = NoopType.footnote,
                     color = textTertiary,
                 )
@@ -890,6 +877,10 @@ internal fun StressTodayCard(
                     style = NoopType.footnote,
                     color = textTertiary,
                 )
+                if (reading != null) {
+                    Text(stressMonitorReadingStatus(reading), style = NoopType.footnote,
+                        color = if (reading.state == StressMonitorReading.State.DELAYED) Palette.stressHigh else textTertiary)
+                }
                 if (activityMaskedHours > 0) {
                     Text(
                         pluralStringResource(

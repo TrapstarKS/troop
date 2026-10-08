@@ -1355,6 +1355,16 @@ final class Repository: ObservableObject {
         return parts.joined(separator: "|")
     }
 
+    func stressFingerprintUnion(from: Int, to: Int, includeContext: Bool = true) async -> String? {
+        guard let store = await ensureStore() else { return nil }
+        var parts: [String] = []
+        for id in rawPhysiologyReadIds(store: store) {
+            guard let fingerprint = try? await store.stressFingerprint(deviceId: id, from: from, to: to, includeContext: includeContext) else { return nil }
+            parts.append("\(id):\(fingerprint)")
+        }
+        return parts.joined(separator: "|")
+    }
+
     func hrSamples(from: Int, to: Int, limit: Int = 8000) async -> [HRSample] {
         guard let store = await ensureStore() else { return [] }
         // UNION the active strap + canonical so the HR trend renders whether the landed day's raw sits under

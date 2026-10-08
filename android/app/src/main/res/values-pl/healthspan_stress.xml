@@ -114,4 +114,9 @@
     <string name="healthspan_vo2_driver">VO₂maks</string>
     <string name="healthspan_back">Wstecz</string>
     <string name="healthspan_range_30">30 dni</string>
+    <string name="stress_monitor_no_heart_rate">Brak zarejestrowanego tętna dla tego dnia.</string>
+    <string name="stress_monitor_no_waking_heart_rate">Brak zarejestrowanego tętna w dziennym przedziale 06:00–22:00.</string>
+    <string name="stress_monitor_insufficient_samples">Okno wymaga co najmniej 300 zarejestrowanych próbek tętna.</string>
+    <string name="stress_monitor_activity_excluded">Zarejestrowane okna zostały wykluczone podczas aktywności.</string>
+    <string name="stress_monitor_delayed">Zarejestrowane okno ma ponad 15 minut.</string>
 </resources>

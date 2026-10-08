@@ -114,4 +114,9 @@
     <string name="healthspan_vo2_driver">最大攝氧量</string>
     <string name="healthspan_back">返回</string>
     <string name="healthspan_range_30">30 天</string>
+    <string name="stress_monitor_no_heart_rate">這一天沒有記錄心率。</string>
+    <string name="stress_monitor_no_waking_heart_rate">06:00–22:00 日間時段沒有記錄心率。</string>
+    <string name="stress_monitor_insufficient_samples">一個時段至少需要 300 個已記錄的心率樣本。</string>
+    <string name="stress_monitor_activity_excluded">已記錄的時段因活動而被排除。</string>
+    <string name="stress_monitor_delayed">記錄的時段已超過 15 分鐘。</string>
 </resources>

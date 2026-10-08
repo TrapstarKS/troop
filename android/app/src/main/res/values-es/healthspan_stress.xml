@@ -114,4 +114,9 @@
     <string name="healthspan_vo2_driver">VO₂max</string>
     <string name="healthspan_back">Atrás</string>
     <string name="healthspan_range_30">30 días</string>
+    <string name="stress_monitor_no_heart_rate">No hay frecuencia cardíaca registrada para este día.</string>
+    <string name="stress_monitor_no_waking_heart_rate">No hay frecuencia cardíaca registrada en el intervalo diurno de 06:00–22:00.</string>
+    <string name="stress_monitor_insufficient_samples">Una ventana necesita al menos 300 muestras de frecuencia cardíaca registradas.</string>
+    <string name="stress_monitor_activity_excluded">Las ventanas registradas se excluyeron durante la actividad.</string>
+    <string name="stress_monitor_delayed">La ventana registrada tiene más de 15 minutos.</string>
 </resources>

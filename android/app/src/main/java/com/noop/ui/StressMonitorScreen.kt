@@ -52,6 +52,7 @@ import com.noop.R
 import com.noop.analytics.DaytimeStress
 import com.noop.analytics.HealthspanPresentation
 import com.noop.analytics.StrainScorer
+import com.noop.analytics.StressMonitorReading
 import com.noop.data.WhoopRepository
 import com.noop.data.WorkoutRow
 import com.noop.ingest.ActivityFileImporter
@@ -141,10 +142,18 @@ fun StressMonitorScreen(vm: AppViewModel, onBreathe: () -> Unit) {
         }
     }
 
+    val reading = data?.let {
+        it.daytime.monitorReading(
+            latestSampleTs = it.observationTo,
+            now = nowSeconds,
+            isToday = it.window.day == Instant.ofEpochSecond(nowSeconds).atZone(ZoneId.systemDefault()).toLocalDate(),
+            selectedStartTs = selectedTimestamp,
+        )
+    }
     LazyScreenScaffold(title = stringResource(R.string.stress_monitor_title), subtitle = stringResource(R.string.stress_monitor_subtitle)) {
         item { HealthDateNavigation(selectedDay) { selectedDay = it } }
-        item { StressMonitorHero(data, nowSeconds, selectedTimestamp) }
-        item { StressMonitorTimeline(data, selectedTimestamp) { selectedTimestamp = it } }
+        item { StressMonitorHero(data, reading, selectedTimestamp != null) }
+        item { StressMonitorTimeline(data, reading, selectedTimestamp) { selectedTimestamp = it } }
         item {
             InsightCallout(stringResource(R.string.stress_monitor_breathe_body),
                 actionLabel = stringResource(R.string.stress_monitor_breathe), onAction = onBreathe)
@@ -215,16 +224,19 @@ private suspend fun loadStressMonitorData(
     val zone = ZoneId.systemDefault()
     val window = stressLocalDayWindow(selectedDay, zone)
     val end = minOf(window.toEpochSecondInclusive, now)
-    val hr = vm.repo.hrSamplesUnion(strapId, window.fromEpochSecond, end, limit = 200_000)
-    val observationFrom = hr.minOfOrNull { it.ts }
-    val observationTo = hr.maxOfOrNull { it.ts }
+    val curve = if (selectedDay == Instant.ofEpochSecond(now).atZone(zone).toLocalDate()) {
+        checkNotNull(StressWidgetProducer.todayCurve(vm.repo, strapId, personalBaseline, now, zone))
+    } else null
+    val hr = if (curve == null) vm.repo.hrSamplesUnion(strapId, window.fromEpochSecond, end, limit = 200_000) else emptyList()
+    val observationFrom = curve?.observationFrom ?: hr.minOfOrNull { it.ts }
+    val observationTo = curve?.observationTo ?: hr.maxOfOrNull { it.ts }
     val rr = if (hr.size >= DaytimeStress.minHourHrSamples) vm.repo.rrIntervalsUnion(strapId, window.fromEpochSecond, end, limit = 200_000) else emptyList()
     val gravity = if (hr.size >= DaytimeStress.minHourHrSamples) vm.repo.gravitySamplesUnion(strapId, window.fromEpochSecond, end, limit = 200_000) else emptyList()
     val mode = if (hr.size >= DaytimeStress.minHourHrSamples) selectedDaytimeStressMode(vm.repo, strapId, selectedDay, zone, personalBaseline)
         else DaytimeStress.ScoringMode.DayRelative
-    val daytime = if (hr.size >= DaytimeStress.minHourHrSamples) {
-        DaytimeStress.analyze(hr, rr, gravity, window.offsetSeconds.toLong(), mode, includeTimeline = true)
-    } else DaytimeStress.Result.EMPTY
+    val daytime = curve?.daytime ?: DaytimeStress.analyze(
+        hr, rr, gravity, window.offsetSeconds.toLong(), mode, includeTimeline = true,
+    )
     val sleepFrom = selectedDay.minusDays(2).atStartOfDay(zone).toEpochSecond()
     val importedSleep = vm.repo.sleepSessionsUnion(strapId, sleepFrom, end)
     val computedSleep = vm.repo.computedSleepSessionsUnion(strapId, sleepFrom, end)
@@ -236,7 +248,8 @@ private suspend fun loadStressMonitorData(
         .map { it.copy(start = maxOf(it.start, window.fromEpochSecond), end = minOf(it.end, end)) }
     val stored = readStoredStress(vm, strapId, selectedDay, selectedDay)
     val dailyScore = stored[selectedDay.toString()]
-    StressMonitorData(window, daytime, observationFrom, observationTo, events, dailyScore, mode is DaytimeStress.ScoringMode.BaselineRelative)
+    StressMonitorData(window, daytime, observationFrom, observationTo, events, dailyScore,
+        curve?.personalBaselineApplied ?: (mode is DaytimeStress.ScoringMode.BaselineRelative))
 }
 
 internal suspend fun stressMonitorWorkoutRows(
@@ -269,20 +282,16 @@ private suspend fun readStoredStress(vm: AppViewModel, strapId: String, from: Lo
         .points.filter { it.value.isFinite() && it.value in 0.0..3.0 }.associate { it.day to it.value }
 
 @Composable
-private fun StressMonitorHero(data: StressMonitorData?, nowSeconds: Long, selectedTimestamp: Long?) {
-    val latest = data?.daytime?.timeline?.lastOrNull { it.level?.let { value -> value.isFinite() && value in 0.0..3.0 } == true }
-    val selected = selectedTimestamp?.let { stamp -> data?.daytime?.timeline?.minByOrNull { abs(it.startTs - stamp) } }
-    val latestEnd = latest?.let { minOf(it.startTs + DaytimeStress.bucketSeconds, data?.observationTo ?: it.startTs) }
-    val stale = data?.window?.day == LocalDate.now() && latestEnd != null && nowSeconds - latestEnd > StressWidgetProducer.RESCORE_INTERVAL_MS / 1000L
-    val current = selected ?: latest.takeUnless { stale }
-    val score = current?.level
+private fun StressMonitorHero(data: StressMonitorData?, reading: StressMonitorReading.Reading?, selected: Boolean) {
+    val current = reading?.window
+    val score = current?.level?.takeIf { it.isFinite() && it in 0.0..3.0 }
     val band = stressMonitorBandLabel(score)
     val state = when {
         data == null -> stringResource(R.string.stress_monitor_loading)
         data.readFailed -> stringResource(R.string.stress_monitor_read_failed)
-        current?.level == null -> stringResource(R.string.stress_monitor_no_current)
-        else -> stringResource(if (selected != null) R.string.stress_monitor_selected_window_time else R.string.stress_monitor_window,
-            stressMonitorTime(current.startTs), stressMonitorTime(minOf(current.startTs + DaytimeStress.bucketSeconds, data.observationTo ?: current.startTs)))
+        current == null -> stressMonitorReadingStatus(reading)
+        else -> stringResource(if (selected) R.string.stress_monitor_selected_window_time else R.string.stress_monitor_window,
+            stressMonitorTime(current.startTs), stressMonitorTime(current.endTs))
     }
     val description = stringResource(R.string.stress_monitor_gauge_accessible, score?.let(::healthspanNumber) ?: "—", band, state)
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Metrics.space12)) {
@@ -315,22 +324,35 @@ private fun StressMonitorHero(data: StressMonitorData?, nowSeconds: Long, select
             Text("3.0", style = NoopType.captionNumber, color = Palette.textSecondary)
         }
         Text(state, style = NoopType.caption, color = Palette.textSecondary, textAlign = TextAlign.Center)
-        if (data != null && !data.readFailed && current?.level == null && (!stale || selected != null)) {
-            Text(stringResource(if (selected?.maskedForActivity == true) R.string.stress_monitor_activity_masked
-                else if (selected != null) R.string.stress_monitor_gap else R.string.stress_monitor_calibrating),
-                style = NoopType.caption, color = Palette.textSecondary, textAlign = TextAlign.Center)
+        if (data != null && !data.readFailed && current != null && reading?.state != StressMonitorReading.State.RECORDED) {
+            Text(stressMonitorReadingStatus(reading), style = NoopType.caption,
+                color = if (reading?.state == StressMonitorReading.State.DELAYED) Palette.stressHigh else Palette.textSecondary,
+                textAlign = TextAlign.Center)
         }
         data?.observationTo?.let { last ->
-            Text(stringResource(if (stale) R.string.stress_monitor_stale else R.string.stress_monitor_recorded, stressMonitorTime(last)),
-                style = NoopType.caption, color = if (stale) Palette.stressHigh else Palette.textSecondary)
+            Text(stringResource(R.string.stress_monitor_recorded, stressMonitorTime(last)),
+                style = NoopType.caption, color = Palette.textSecondary)
         }
     }
 }
 
 @Composable
-private fun StressMonitorTimeline(data: StressMonitorData?, selectedTimestamp: Long?, onSelectTimestamp: (Long?) -> Unit) {
+internal fun stressMonitorReadingStatus(reading: StressMonitorReading.Reading?): String = stringResource(
+    when (reading?.state) {
+        null -> R.string.stress_monitor_loading
+        StressMonitorReading.State.RECORDED -> R.string.stress_monitor_latest
+        StressMonitorReading.State.DELAYED -> R.string.stress_monitor_delayed
+        StressMonitorReading.State.NO_HEART_RATE -> R.string.stress_monitor_no_heart_rate
+        StressMonitorReading.State.NO_WAKING_HEART_RATE -> R.string.stress_monitor_no_waking_heart_rate
+        StressMonitorReading.State.INSUFFICIENT_SAMPLES -> R.string.stress_monitor_insufficient_samples
+        StressMonitorReading.State.ACTIVITY_EXCLUDED -> R.string.stress_monitor_activity_excluded
+    },
+)
+
+@Composable
+private fun StressMonitorTimeline(data: StressMonitorData?, reading: StressMonitorReading.Reading?, selectedTimestamp: Long?, onSelectTimestamp: (Long?) -> Unit) {
     val points = data?.daytime?.timeline.orEmpty()
-    val selected = selectedTimestamp?.let { stamp -> points.minByOrNull { abs(it.startTs - stamp) } }
+    val selected = selectedTimestamp?.let { stamp -> points.firstOrNull { it.startTs == stamp } }
     val selectedText = selected?.let {
         val value = it.level?.let(::healthspanNumber) ?: stringResource(if (it.maskedForActivity) R.string.stress_monitor_activity_masked else R.string.stress_monitor_gap)
         stringResource(R.string.stress_monitor_selected, stressMonitorTime(it.startTs), value)
@@ -342,7 +364,7 @@ private fun StressMonitorTimeline(data: StressMonitorData?, selectedTimestamp: L
             when {
                 data == null -> InsetChartPlaceholder(stringResource(R.string.stress_monitor_loading))
                 data.readFailed -> InsetChartPlaceholder(stringResource(R.string.stress_monitor_read_failed))
-                points.isEmpty() -> InsetChartPlaceholder(stringResource(R.string.stress_monitor_no_timeline))
+                points.isEmpty() -> InsetChartPlaceholder(stressMonitorReadingStatus(reading))
                 else -> {
                     val from = data.window.fromEpochSecond
                     val to = data.window.toEpochSecondInclusive + 1

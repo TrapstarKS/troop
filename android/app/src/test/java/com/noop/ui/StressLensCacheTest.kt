@@ -38,8 +38,7 @@ class StressLensCacheTest {
         var dayReads = 0
         fun handle(name: String): Any? = when (name) {
             "pairedDevices" -> emptyList<Any>()
-            "countHrInWindow" -> windowCount
-            "maxHrTsInWindow" -> windowMaxTs
+            "stressHrFingerprint" -> "h$windowCount:$windowMaxTs|p0:0"
             "hrSamples" -> { dayReads++; emptyList<Any>() }
             else -> throw UnsupportedOperationException("resolver touched $name")
         }

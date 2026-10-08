@@ -114,4 +114,9 @@
     <string name="healthspan_vo2_driver">VO₂máx.</string>
     <string name="healthspan_back">Voltar</string>
     <string name="healthspan_range_30">30 dias</string>
+    <string name="stress_monitor_no_heart_rate">Não há frequência cardíaca registada para este dia.</string>
+    <string name="stress_monitor_no_waking_heart_rate">Não há frequência cardíaca registada no período diurno das 06:00 às 22:00.</string>
+    <string name="stress_monitor_insufficient_samples">Um período precisa de pelo menos 300 amostras de frequência cardíaca registadas.</string>
+    <string name="stress_monitor_activity_excluded">Os períodos registados foram excluídos durante a atividade.</string>
+    <string name="stress_monitor_delayed">O período registado tem mais de 15 minutos.</string>
 </resources>

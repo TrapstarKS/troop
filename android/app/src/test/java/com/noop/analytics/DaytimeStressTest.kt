@@ -31,6 +31,26 @@ class DaytimeStressTest {
     }
 
     @Test
+    fun aPartialWakingWindowScoresAt300SamplesWithoutRrOrHistory() {
+        for (count in listOf(299, 300)) {
+            val hr = hourHr(9, 65, count)
+            val result = DaytimeStress.analyze(hr, emptyList(), includeTimeline = true)
+            val lastTs = hr.last().ts
+            val reading = result.monitorReading(lastTs, lastTs, isToday = true)
+            assertTrue("unscored waking HR must retain its timeline evidence", result.timeline.isNotEmpty())
+            if (count == 299) {
+                assertEquals(StressMonitorReading.State.INSUFFICIENT_SAMPLES, reading.state)
+                assertNull(reading.window)
+            } else {
+                assertEquals(StressMonitorReading.State.RECORDED, reading.state)
+                assertEquals(9L * 3_600L, reading.window?.startTs)
+                assertEquals(lastTs, reading.window?.endTs)
+                assertEquals(1.5, reading.window!!.level!!, 0.0)
+            }
+        }
+    }
+
+    @Test
     fun timeline_matchesTheSwiftTwinValueForValue() {
         // ORACLE. These literals are the stdout of `DaytimeStress.swift` compiled standalone with
         // swiftc -O and run over this exact scenario (hours 7..11, HR 60/64/68/72/76, R-R 900±20, no

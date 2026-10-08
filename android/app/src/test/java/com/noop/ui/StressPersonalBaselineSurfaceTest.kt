@@ -87,6 +87,7 @@ class StressPersonalBaselineSurfaceTest {
         val producer = source("Strand/Data/StressDayCurve.swift")
         val today = source("Strand/Screens/TodayView.swift")
         val liquidToday = source("Strand/Liquid/LiquidTodayView.swift")
+        val hostedCard = source("Strand/Screens/StressTodayCurveCard.swift")
         val widget = source("StrandiOS/Widgets/WidgetPublish.swift")
 
         assertTrue(detail.contains("let mode = await DaytimeStressMode.selected("))
@@ -98,13 +99,14 @@ class StressPersonalBaselineSurfaceTest {
         )
         for ((name, body) in listOf("TodayView" to today, "LiquidTodayView" to liquidToday)) {
             assertTrue(
-                "$name must pass the selected personal-baseline preference",
-                Regex(
-                    "StressDayCurve\\.today\\([\\s\\S]*?" +
-                        "personalBaseline:\\s*PuffinExperiment\\.stressPersonalBaselineEnabled",
-                ).containsMatchIn(body),
+                "$name must host the shared stress card",
+                body.contains("case .stressToday: StressTodayCurveCard()"),
             )
         }
+        assertTrue(
+            "the shared Today card must pass the selected personal-baseline preference",
+            hostedCard.contains("personalBaseline: PuffinExperiment.stressPersonalBaselineEnabled"),
+        )
         assertTrue(
             "the Apple producer must keep a memo slot per lens, not one slot carrying the lens",
             producer.contains("memos[personalBaseline]"),

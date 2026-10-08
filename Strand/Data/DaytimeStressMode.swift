@@ -75,7 +75,8 @@ enum DaytimeStressMode {
         let spanStart = calendar.date(byAdding: .day, value: -baselineHistoryDays, to: startOfToday)
             .map { calendar.startOfDay(for: $0) } ?? startOfToday
         let spanEnd = Int(calendar.startOfDay(for: startOfToday).timeIntervalSince1970) - 1
-        let fingerprint = await repo.hrFingerprintUnion(from: Int(spanStart.timeIntervalSince1970), to: spanEnd)
+        guard let fingerprint = await repo.stressFingerprintUnion(from: Int(spanStart.timeIntervalSince1970), to: spanEnd,
+                                                                  includeContext: DaytimeStress.daytimeRMSSDScoringEnabled) else { return .dayRelative }
         let cacheKey = "\(repo.deviceId)|\(Int(calendar.startOfDay(for: startOfToday).timeIntervalSince1970))"
             + "|\(TimeZone.current.identifier)|\(fingerprint)"
         return await StressLensCache.shared.resolve(cacheKey) {
